@@ -1,4 +1,8 @@
+import { useParams } from 'react-router-dom';
+
 export default function Settings() {
+  const { companyId } = useParams();
+
   return (
     <div className="p-8">
       <div className="mb-8">

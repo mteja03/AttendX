@@ -36,12 +36,18 @@ const stats = [
   { title: 'Open Positions', value: '15', icon: BriefcaseIcon, subtitle: 'Currently hiring' },
 ];
 
+import { useParams } from 'react-router-dom';
+
 export default function Dashboard() {
+  const { companyId } = useParams();
+
   return (
     <div className="p-8">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-slate-800">Dashboard</h1>
-        <p className="text-slate-500 mt-1">Overview of your HR metrics</p>
+        <p className="text-slate-500 mt-1">
+          {companyId ? `Company overview` : 'HR Management Platform'}
+        </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => (
