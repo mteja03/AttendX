@@ -12,6 +12,7 @@ import TeamMembers from './pages/TeamMembers';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
 
 function ProtectedRoute({ children }) {
   const { currentUser, loading } = useAuth();
@@ -95,7 +96,9 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <ToastProvider>
+        <AppRoutes />
+      </ToastProvider>
     </AuthProvider>
   );
 }

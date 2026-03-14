@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { canAccessUserManagement } from '../utils/roles';
 
 const ROLE_OPTIONS = [
@@ -17,14 +18,22 @@ const ROLE_OPTIONS = [
   { value: 'manager', label: 'Manager' },
 ];
 
+function formatDate(v) {
+  if (!v) return '—';
+  const d = v?.toDate ? v.toDate() : new Date(v);
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 export default function AdminUsers() {
   const { currentUser, role } = useAuth();
+  const { success, error: showError } = useToast();
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterCompany, setFilterCompany] = useState('');
   const [filterRole, setFilterRole] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     email: '',
@@ -32,6 +41,9 @@ export default function AdminUsers() {
     role: 'hrmanager',
     companyId: '',
   });
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [removeConfirm, setRemoveConfirm] = useState(null);
 
   const isAdmin = canAccessUserManagement(role);
 
@@ -39,21 +51,31 @@ export default function AdminUsers() {
     if (!isAdmin) return;
     const load = async () => {
       setLoading(true);
-      const [usersSnap, companiesSnap] = await Promise.all([
-        getDocs(collection(db, 'users')),
-        getDocs(collection(db, 'companies')),
-      ]);
-      setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setCompanies(companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      try {
+        const [usersSnap, companiesSnap] = await Promise.all([
+          getDocs(collection(db, 'users')),
+          getDocs(collection(db, 'companies')),
+        ]);
+        setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setCompanies(companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        showError('Failed to load users');
+      }
       setLoading(false);
     };
     load();
-  }, [isAdmin]);
+  }, [isAdmin, showError]);
 
   const companyMap = useMemo(
     () => Object.fromEntries(companies.map((c) => [c.id, c.name])),
     [companies],
   );
+
+  const stats = useMemo(() => {
+    const active = users.filter((u) => u.isActive !== false).length;
+    const inactive = users.filter((u) => u.isActive === false).length;
+    return { total: users.length, active, inactive };
+  }, [users]);
 
   const filtered = useMemo(() => {
     let list = users;
@@ -65,52 +87,94 @@ export default function AdminUsers() {
           u.name?.toLowerCase().includes(term),
       );
     }
-    if (filterCompany) {
-      list = list.filter((u) => u.companyId === filterCompany);
-    }
-    if (filterRole) {
-      list = list.filter((u) => u.role === filterRole);
-    }
+    if (filterCompany) list = list.filter((u) => u.companyId === filterCompany);
+    if (filterRole) list = list.filter((u) => u.role === filterRole);
+    if (filterStatus === 'active') list = list.filter((u) => u.isActive !== false);
+    if (filterStatus === 'inactive') list = list.filter((u) => u.isActive === false);
     return list;
-  }, [users, search, filterCompany, filterRole]);
+  }, [users, search, filterCompany, filterRole, filterStatus]);
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    setFormError('');
   };
+
+  const isGmail = (email) => /^[^@]+@gmail\.com$/i.test((email || '').trim());
 
   const handleAddUser = async (e) => {
     e.preventDefault();
+    setFormError('');
     const email = form.email.trim().toLowerCase();
     if (!email) return;
-    const ref = doc(db, 'users', email);
-    await setDoc(ref, {
-      email,
-      name: form.name.trim(),
-      role: form.role,
-      companyId: form.companyId || null,
-      isActive: true,
-      createdAt: serverTimestamp(),
-      addedBy: currentUser?.email || '',
-    });
-    setUsers((prev) => [
-      { id: email, email, name: form.name.trim(), role: form.role, companyId: form.companyId || null, isActive: true, createdAt: new Date() },
-      ...prev.filter((u) => u.id !== email),
-    ]);
-    setShowForm(false);
-    setForm({ email: '', name: '', role: 'hrmanager', companyId: '' });
+    if (!isGmail(email)) {
+      setFormError('Please enter a valid @gmail.com address.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const ref = doc(db, 'users', email);
+      await setDoc(ref, {
+        email,
+        name: form.name.trim(),
+        role: form.role,
+        companyId: form.companyId || null,
+        isActive: true,
+        createdAt: serverTimestamp(),
+        photoURL: '',
+        addedBy: currentUser?.email || '',
+      });
+      setUsers((prev) => [
+        {
+          id: email,
+          email,
+          name: form.name.trim(),
+          role: form.role,
+          companyId: form.companyId || null,
+          isActive: true,
+          createdAt: new Date(),
+          photoURL: '',
+        },
+        ...prev.filter((u) => u.id !== email),
+      ]);
+      setShowForm(false);
+      setForm({ email: '', name: '', role: 'hrmanager', companyId: '' });
+      success('User added');
+    } catch (err) {
+      showError('Failed to add user');
+    }
+    setSaving(false);
   };
 
   const handleDeactivate = async (user) => {
-    const ref = doc(db, 'users', user.id);
-    await updateDoc(ref, { isActive: false });
-    setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, isActive: false } : u)));
+    try {
+      await updateDoc(doc(db, 'users', user.id), { isActive: false });
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, isActive: false } : u)));
+      success('User deactivated');
+    } catch (err) {
+      showError('Failed to deactivate');
+    }
+  };
+
+  const handleActivate = async (user) => {
+    try {
+      await updateDoc(doc(db, 'users', user.id), { isActive: true });
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, isActive: true } : u)));
+      success('User activated');
+    } catch (err) {
+      showError('Failed to activate');
+    }
   };
 
   const handleRemove = async (user) => {
-    const ref = doc(db, 'users', user.id);
-    await deleteDoc(ref);
-    setUsers((prev) => prev.filter((u) => u.id !== user.id));
+    try {
+      await deleteDoc(doc(db, 'users', user.id));
+      setUsers((prev) => prev.filter((u) => u.id !== user.id));
+      setRemoveConfirm(null);
+      success('User removed');
+    } catch (err) {
+      showError('Failed to remove user');
+    }
   };
 
   if (!isAdmin) {
@@ -145,11 +209,26 @@ export default function AdminUsers() {
         </div>
         <button
           type="button"
-          onClick={() => setShowForm(true)}
+          onClick={() => { setShowForm(true); setFormError(''); }}
           className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
         >
           Add User
         </button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <p className="text-slate-500 text-sm">Total Users</p>
+          <p className="text-xl font-semibold text-slate-800 mt-1">{stats.total}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <p className="text-slate-500 text-sm">Active</p>
+          <p className="text-xl font-semibold text-slate-800 mt-1">{stats.active}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <p className="text-slate-500 text-sm">Inactive</p>
+          <p className="text-xl font-semibold text-slate-800 mt-1">{stats.inactive}</p>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
@@ -181,51 +260,65 @@ export default function AdminUsers() {
           ))}
           <option value="admin">Admin</option>
         </select>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] w-32"
+        >
+          <option value="">All status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
       </div>
 
       {loading ? (
-        <div className="text-slate-500 text-sm py-8">Loading users...</div>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#378ADD] border-t-transparent" />
+        </div>
       ) : (
         <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
-                <th className="px-4 py-2 text-left font-medium">Avatar</th>
-                <th className="px-4 py-2 text-left font-medium">Name</th>
-                <th className="px-4 py-2 text-left font-medium">Email</th>
-                <th className="px-4 py-2 text-left font-medium">Role</th>
-                <th className="px-4 py-2 text-left font-medium">Company</th>
-                <th className="px-4 py-2 text-left font-medium">Status</th>
-                <th className="px-4 py-2 text-left font-medium">Actions</th>
+                <th className="px-4 py-3 text-left font-medium">Avatar + Name</th>
+                <th className="px-4 py-3 text-left font-medium">Email</th>
+                <th className="px-4 py-3 text-left font-medium">Role</th>
+                <th className="px-4 py-3 text-left font-medium">Company</th>
+                <th className="px-4 py-3 text-left font-medium">Status</th>
+                <th className="px-4 py-3 text-left font-medium">Added date</th>
+                <th className="px-4 py-3 text-left font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((u) => (
-                <tr key={u.id} className="border-t border-slate-100">
-                  <td className="px-4 py-2">
-                    <img
-                      src={u.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || u.email || 'U')}`}
-                      alt=""
-                      className="h-8 w-8 rounded-full object-cover"
-                    />
+                <tr key={u.id} className="border-t border-slate-100 hover:bg-slate-50/50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={u.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || u.email || 'U')}`}
+                        alt=""
+                        className="h-9 w-9 rounded-full object-cover"
+                      />
+                      <span className="font-medium text-slate-800">{u.name || '—'}</span>
+                    </div>
                   </td>
-                  <td className="px-4 py-2 font-medium text-slate-800">{u.name || '—'}</td>
-                  <td className="px-4 py-2 text-slate-700">{u.email}</td>
-                  <td className="px-4 py-2">{roleBadge(u.role)}</td>
-                  <td className="px-4 py-2 text-slate-700">{companyMap[u.companyId] || '—'}</td>
-                  <td className="px-4 py-2">
+                  <td className="px-4 py-3 text-slate-700">{u.email}</td>
+                  <td className="px-4 py-3">{roleBadge(u.role)}</td>
+                  <td className="px-4 py-3 text-slate-700">{companyMap[u.companyId] || '—'}</td>
+                  <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                         u.isActive !== false
                           ? 'bg-green-50 text-green-700 border border-green-100'
-                          : 'bg-slate-50 text-slate-500 border border-slate-100'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200'
                       }`}
                     >
                       {u.isActive !== false ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-4 py-2 space-x-2">
-                    {u.isActive !== false && (
+                  <td className="px-4 py-3 text-slate-600">{formatDate(u.createdAt)}</td>
+                  <td className="px-4 py-3 space-x-2">
+                    {u.isActive !== false ? (
                       <button
                         type="button"
                         onClick={() => handleDeactivate(u)}
@@ -233,10 +326,18 @@ export default function AdminUsers() {
                       >
                         Deactivate
                       </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleActivate(u)}
+                        className="text-xs font-medium text-green-600 hover:text-green-700"
+                      >
+                        Activate
+                      </button>
                     )}
                     <button
                       type="button"
-                      onClick={() => handleRemove(u)}
+                      onClick={() => setRemoveConfirm(u)}
                       className="text-xs font-medium text-red-600 hover:text-red-700"
                     >
                       Remove
@@ -246,7 +347,7 @@ export default function AdminUsers() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-center text-slate-500 text-sm" colSpan={7}>
+                  <td className="px-4 py-8 text-center text-slate-500 text-sm" colSpan={7}>
                     No users found.
                   </td>
                 </tr>
@@ -264,19 +365,23 @@ export default function AdminUsers() {
               <button type="button" onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
             <form onSubmit={handleAddUser} className="space-y-4">
+              {formError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>
+              )}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Gmail address</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Gmail address <span className="text-red-500">*</span></label>
                 <input
                   type="email"
                   name="email"
                   value={form.email}
                   onChange={handleFormChange}
+                  placeholder="user@gmail.com"
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Full Name</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Full Name <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   name="name"
@@ -314,10 +419,39 @@ export default function AdminUsers() {
                 </select>
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowForm(false)} className="text-sm text-slate-500 hover:text-slate-700">Cancel</button>
-                <button type="submit" className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2">Save</button>
+                <button type="button" onClick={() => setShowForm(false)} className="text-sm text-slate-500 hover:text-slate-700" disabled={saving}>Cancel</button>
+                <button type="submit" className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50" disabled={saving}>
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {removeConfirm && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">Remove user?</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              This will permanently delete <strong>{removeConfirm.name || removeConfirm.email}</strong>. They will lose access to AttendX.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setRemoveConfirm(null)}
+                className="text-sm text-slate-500 hover:text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRemove(removeConfirm)}
+                className="rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2"
+              >
+                Remove
+              </button>
+            </div>
           </div>
         </div>
       )}

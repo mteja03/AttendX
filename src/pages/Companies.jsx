@@ -2,34 +2,76 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   collection,
+  collectionGroup,
   doc,
   getDocs,
   setDoc,
   updateDoc,
   query,
   orderBy,
+  where,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { seedData } from '../firebase/seed';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 
 const COLOR_PRESETS = [
   { name: 'Blue', value: '#378ADD' },
   { name: 'Green', value: '#1D9E75' },
-  { name: 'Orange', value: '#E67E22' },
-  { name: 'Purple', value: '#9B59B6' },
-  { name: 'Red', value: '#E74C3C' },
-  { name: 'Teal', value: '#1ABC9C' },
+  { name: 'Orange', value: '#D85A30' },
+  { name: 'Purple', value: '#534AB7' },
+  { name: 'Red', value: '#A32D2D' },
+  { name: 'Teal', value: '#BA7517' },
 ];
+
+const INDUSTRIES = [
+  'IT', 'Manufacturing', 'Retail', 'Finance', 'Healthcare', 'Education',
+  'Media', 'Logistics', 'Real Estate', 'Other',
+];
+
+function StatSkeleton() {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4 animate-pulse">
+      <div className="h-4 bg-slate-200 rounded w-24 mb-2" />
+      <div className="h-7 bg-slate-200 rounded w-12" />
+    </div>
+  );
+}
+
+function CardSkeleton() {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col animate-pulse">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 rounded-full bg-slate-200" />
+          <div>
+            <div className="h-4 bg-slate-200 rounded w-32 mb-2" />
+            <div className="h-3 bg-slate-200 rounded w-24 mb-1" />
+            <div className="h-3 bg-slate-200 rounded w-20" />
+          </div>
+        </div>
+      </div>
+      <div className="h-4 bg-slate-200 rounded w-20 mt-3" />
+      <div className="h-9 bg-slate-200 rounded mt-4" />
+    </div>
+  );
+}
 
 export default function Companies() {
   const { currentUser } = useAuth();
+  const { success, error: showError } = useToast();
   const [companies, setCompanies] = useState([]);
   const [users, setUsers] = useState([]);
+  const [pendingLeavesCount, setPendingLeavesCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingCompany, setEditingCompany] = useState(null);
   const [menuCompanyId, setMenuCompanyId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [form, setForm] = useState({
     name: '',
     initials: '',
@@ -41,16 +83,23 @@ export default function Companies() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [companiesSnap, usersSnap] = await Promise.all([
-        getDocs(query(collection(db, 'companies'), orderBy('createdAt', 'desc'))),
-        getDocs(collection(db, 'users')),
-      ]);
-      setCompanies(companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      try {
+        const [companiesSnap, usersSnap, pendingSnap] = await Promise.all([
+          getDocs(query(collection(db, 'companies'), orderBy('createdAt', 'desc'))),
+          getDocs(collection(db, 'users')),
+          getDocs(query(collectionGroup(db, 'leave'), where('status', '==', 'Pending'))),
+        ]);
+        setCompanies(companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setPendingLeavesCount(pendingSnap.size);
+      } catch (err) {
+        console.error(err);
+        showError('Failed to load data');
+      }
       setLoading(false);
     };
     load();
-  }, []);
+  }, [showError]);
 
   const filteredCompanies = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -72,7 +121,7 @@ export default function Companies() {
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
-    if (name === 'name' && value.length >= 2) {
+    if (name === 'name' && value.length >= 2 && !editingCompany) {
       setForm((prev) => ({
         ...prev,
         initials: value.slice(0, 2).toUpperCase(),
@@ -80,35 +129,109 @@ export default function Companies() {
     }
   };
 
-  const handleAddCompany = async (e) => {
-    e.preventDefault();
-    const payload = {
-      name: form.name.trim(),
-      initials: (form.initials || form.name.slice(0, 2)).toUpperCase().slice(0, 2),
-      color: form.color,
-      industry: form.industry.trim(),
-      location: form.location.trim(),
-      employeeCount: 0,
-      isActive: true,
-      createdAt: serverTimestamp(),
-      createdBy: currentUser?.email || '',
-    };
-    const ref = doc(collection(db, 'companies'));
-    await setDoc(ref, payload);
-    setCompanies((prev) => [{ id: ref.id, ...payload, createdAt: new Date() }, ...prev]);
-    setShowAddModal(false);
-    setForm({ name: '', initials: '', color: COLOR_PRESETS[0].value, industry: '', location: '' });
-  };
-
-  const handleDeactivate = async (company) => {
-    await updateDoc(doc(db, 'companies', company.id), { isActive: false });
-    setCompanies((prev) =>
-      prev.map((c) => (c.id === company.id ? { ...c, isActive: false } : c)),
-    );
+  const openEdit = (company) => {
+    setEditingCompany(company);
+    setForm({
+      name: company.name || '',
+      initials: company.initials || company.name?.slice(0, 2)?.toUpperCase() || '',
+      color: company.color || COLOR_PRESETS[0].value,
+      industry: company.industry || '',
+      location: company.location || '',
+    });
     setMenuCompanyId(null);
   };
 
-  const pendingLeaves = 0; // placeholder; could aggregate from companies/{id}/leave
+  const closeModal = () => {
+    setShowAddModal(false);
+    setEditingCompany(null);
+    setForm({ name: '', initials: '', color: COLOR_PRESETS[0].value, industry: '', location: '' });
+  };
+
+  const handleSubmitCompany = async (e) => {
+    e.preventDefault();
+    const name = form.name.trim();
+    const initials = (form.initials || name.slice(0, 2)).toUpperCase().slice(0, 2);
+    const payload = {
+      name,
+      initials,
+      color: form.color,
+      industry: form.industry.trim(),
+      location: form.location.trim(),
+      employeeCount: editingCompany ? editingCompany.employeeCount : 0,
+      isActive: editingCompany ? editingCompany.isActive !== false : true,
+      createdBy: currentUser?.uid || currentUser?.email || '',
+    };
+    setSaving(true);
+    try {
+      if (editingCompany) {
+        await updateDoc(doc(db, 'companies', editingCompany.id), {
+          name: payload.name,
+          initials: payload.initials,
+          color: payload.color,
+          industry: payload.industry,
+          location: payload.location,
+        });
+        setCompanies((prev) =>
+          prev.map((c) =>
+            c.id === editingCompany.id
+              ? { ...c, ...payload, employeeCount: c.employeeCount }
+              : c,
+          ),
+        );
+        success('Company updated');
+      } else {
+        const ref = doc(collection(db, 'companies'));
+        await setDoc(ref, {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+        setCompanies((prev) => [{ id: ref.id, ...payload, createdAt: new Date(), employeeCount: 0 }, ...prev]);
+        success('Company added');
+      }
+      closeModal();
+    } catch (err) {
+      console.error(err);
+      showError(editingCompany ? 'Failed to update company' : 'Failed to add company');
+    }
+    setSaving(false);
+  };
+
+  const handleSeed = async () => {
+    setSeeding(true);
+    try {
+      const result = await seedData(currentUser?.uid || currentUser?.email || '');
+      if (result.seeded) {
+        const [companiesSnap, usersSnap, pendingSnap] = await Promise.all([
+          getDocs(query(collection(db, 'companies'), orderBy('createdAt', 'desc'))),
+          getDocs(collection(db, 'users')),
+          getDocs(query(collectionGroup(db, 'leave'), where('status', '==', 'Pending'))),
+        ]);
+        setCompanies(companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setPendingLeavesCount(pendingSnap.size);
+        success('Sample data seeded. Two companies with employees, leave and attendance added.');
+      } else {
+        success(result.message || 'Already seeded.');
+      }
+    } catch (err) {
+      console.error(err);
+      showError('Seed failed');
+    }
+    setSeeding(false);
+  };
+
+  const handleDeactivate = async (company) => {
+    try {
+      await updateDoc(doc(db, 'companies', company.id), { isActive: false });
+      setCompanies((prev) =>
+        prev.map((c) => (c.id === company.id ? { ...c, isActive: false } : c)),
+      );
+      setMenuCompanyId(null);
+      success('Company deactivated');
+    } catch (err) {
+      showError('Failed to deactivate');
+    }
+  };
 
   return (
     <div className="p-8">
@@ -119,7 +242,7 @@ export default function Companies() {
         </div>
         <button
           type="button"
-          onClick={() => setShowAddModal(true)}
+          onClick={() => { setEditingCompany(null); setShowAddModal(true); setForm({ name: '', initials: '', color: COLOR_PRESETS[0].value, industry: '', location: '' }); }}
           className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
         >
           Add Company
@@ -127,22 +250,28 @@ export default function Companies() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-slate-500 text-sm">Total Companies</p>
-          <p className="text-xl font-semibold text-slate-800 mt-1">{companies.length}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-slate-500 text-sm">Total Employees</p>
-          <p className="text-xl font-semibold text-slate-800 mt-1">{totalEmployees}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-slate-500 text-sm">Platform Users</p>
-          <p className="text-xl font-semibold text-slate-800 mt-1">{users.length}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-slate-500 text-sm">Pending Leaves</p>
-          <p className="text-xl font-semibold text-slate-800 mt-1">{pendingLeaves}</p>
-        </div>
+        {loading ? (
+          [...Array(4)].map((_, i) => <StatSkeleton key={i} />)
+        ) : (
+          <>
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <p className="text-slate-500 text-sm">Total Companies</p>
+              <p className="text-xl font-semibold text-slate-800 mt-1">{companies.length}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <p className="text-slate-500 text-sm">Total Employees</p>
+              <p className="text-xl font-semibold text-slate-800 mt-1">{totalEmployees}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <p className="text-slate-500 text-sm">Platform Users</p>
+              <p className="text-xl font-semibold text-slate-800 mt-1">{users.length}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <p className="text-slate-500 text-sm">Pending Leaves</p>
+              <p className="text-xl font-semibold text-slate-800 mt-1">{pendingLeavesCount}</p>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="mb-4">
@@ -156,18 +285,32 @@ export default function Companies() {
       </div>
 
       {loading ? (
-        <div className="text-slate-500 text-sm py-8">Loading...</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
       ) : filteredCompanies.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-12 text-center text-slate-500">
           <p className="font-medium text-slate-700">No companies yet.</p>
           <p className="text-sm mt-1">Add your first company to get started.</p>
-          <button
-            type="button"
-            onClick={() => setShowAddModal(true)}
-            className="mt-4 text-[#378ADD] text-sm font-medium hover:underline"
-          >
-            Add Company
-          </button>
+          <div className="mt-4 flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="text-[#378ADD] text-sm font-medium hover:underline"
+            >
+              Add your first company
+            </button>
+            <button
+              type="button"
+              onClick={handleSeed}
+              disabled={seeding}
+              className="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-medium px-4 py-2 disabled:opacity-50"
+            >
+              {seeding ? 'Seeding…' : 'Seed sample data (2 companies)'}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -179,13 +322,13 @@ export default function Companies() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div
-                    className="h-12 w-12 rounded-xl flex items-center justify-center text-white font-semibold text-lg"
+                    className="h-12 w-12 rounded-full flex items-center justify-center text-white font-semibold text-lg shrink-0"
                     style={{ backgroundColor: c.color || '#378ADD' }}
                   >
                     {c.initials || c.name?.slice(0, 2)?.toUpperCase() || '—'}
                   </div>
                   <div>
-                    <h2 className="font-semibold text-slate-800">{c.name || '—'}</h2>
+                    <h2 className="font-medium text-slate-800">{c.name || '—'}</h2>
                     <p className="text-slate-500 text-sm">{c.industry || '—'}</p>
                     <p className="text-slate-500 text-xs">{c.location || '—'}</p>
                   </div>
@@ -200,13 +343,13 @@ export default function Companies() {
                     <span className="text-lg leading-none">⋯</span>
                   </button>
                   {menuCompanyId === c.id && (
-                    <div className="absolute right-0 top-full mt-1 py-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 min-w-[120px]">
+                    <div className="absolute right-0 top-full mt-1 py-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 min-w-[140px]">
                       <button
                         type="button"
                         className="block w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-                        onClick={() => setMenuCompanyId(null)}
+                        onClick={() => openEdit(c)}
                       >
-                        Edit
+                        Edit Company
                       </button>
                       <button
                         type="button"
@@ -219,9 +362,11 @@ export default function Companies() {
                   )}
                 </div>
               </div>
-              <p className="text-slate-600 text-sm mt-2">
-                {c.employeeCount ?? 0} employee{(c.employeeCount ?? 0) !== 1 ? 's' : ''}
-              </p>
+              <div className="mt-2">
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                  {c.employeeCount ?? 0} employee{(c.employeeCount ?? 0) !== 1 ? 's' : ''}
+                </span>
+              </div>
               <div className="mt-4 flex gap-2">
                 <Link
                   to={`/company/${c.id}/dashboard`}
@@ -235,14 +380,16 @@ export default function Companies() {
         </div>
       )}
 
-      {showAddModal && (
+      {(showAddModal || editingCompany) && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Add Company</h2>
-            <form onSubmit={handleAddCompany} className="space-y-4">
+            <h2 className="text-lg font-semibold text-slate-800 mb-4">
+              {editingCompany ? 'Edit Company' : 'Add Company'}
+            </h2>
+            <form onSubmit={handleSubmitCompany} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Company Name
+                  Company Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -285,13 +432,17 @@ export default function Companies() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Industry</label>
-                <input
-                  type="text"
+                <select
                   name="industry"
                   value={form.industry}
                   onChange={handleFormChange}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-                />
+                >
+                  <option value="">— Select —</option>
+                  {INDUSTRIES.map((ind) => (
+                    <option key={ind} value={ind}>{ind}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Location</label>
@@ -306,16 +457,18 @@ export default function Companies() {
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={closeModal}
                   className="text-sm text-slate-500 hover:text-slate-700"
+                  disabled={saving}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
+                  disabled={saving}
+                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
                 >
-                  Save
+                  {saving ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </form>
