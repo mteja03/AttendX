@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   addDoc,
   updateDoc,
@@ -14,7 +15,7 @@ import {
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 
-const DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
+const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
 const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract'];
 
 const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
@@ -46,6 +47,7 @@ export default function Employees() {
   const { companyId } = useParams();
   const { success, error: showError } = useToast();
   const [employees, setEmployees] = useState([]);
+  const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
@@ -59,10 +61,12 @@ export default function Employees() {
     const load = async () => {
       setLoading(true);
       try {
-        const snap = await getDocs(
-          query(collection(db, 'companies', companyId, 'employees'), orderBy('createdAt', 'desc')),
-        );
-        setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        const [empSnap, companySnap] = await Promise.all([
+          getDocs(query(collection(db, 'companies', companyId, 'employees'), orderBy('createdAt', 'desc'))),
+          getDoc(doc(db, 'companies', companyId)),
+        ]);
+        setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        if (companySnap.exists()) setCompany({ id: companySnap.id, ...companySnap.data() });
       } catch (err) {
         showError('Failed to load employees');
       }
@@ -70,6 +74,8 @@ export default function Employees() {
     };
     load();
   }, [companyId, showError]);
+
+  const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
 
   const nextEmpId = useMemo(() => {
     const nums = employees
@@ -259,9 +265,9 @@ export default function Employees() {
                     </span>
                   </td>
                   <td className="px-4 py-3 space-x-2">
-                    <button type="button" className="text-[#378ADD] text-xs font-medium hover:underline">
+                    <Link to={`/company/${companyId}/employees/${emp.id}`} className="text-[#378ADD] text-xs font-medium hover:underline">
                       View Profile
-                    </button>
+                    </Link>
                     <button type="button" className="text-slate-600 text-xs font-medium hover:underline">
                       Edit
                     </button>
@@ -342,7 +348,7 @@ export default function Employees() {
                     <label className="block text-xs font-medium text-slate-600 mb-1">Department</label>
                     <select name="department" value={form.department} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
                       <option value="">—</option>
-                      {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                      {departments.map((d) => <option key={d} value={d}>{d}</option>)}
                     </select>
                   </div>
                   <div>

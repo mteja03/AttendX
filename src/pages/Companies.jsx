@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   collection,
@@ -8,6 +9,7 @@ import {
   onSnapshot,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   orderBy,
   where,
@@ -28,7 +30,7 @@ const COLOR_PRESETS = [
 ];
 
 const INDUSTRIES = [
-  'IT', 'Manufacturing', 'Retail', 'Finance', 'Healthcare', 'Education',
+  'IT', 'Manufacturing', 'Automobile', 'Retail', 'Finance', 'Healthcare', 'Education',
   'Media', 'Logistics', 'Real Estate', 'Other',
 ];
 
@@ -71,8 +73,13 @@ export default function Companies() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCompany, setEditingCompany] = useState(null);
   const [menuCompanyId, setMenuCompanyId] = useState(null);
+  const [menuCompany, setMenuCompany] = useState(null);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const [deactivateConfirm, setDeactivateConfirm] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     name: '',
     initials: '',
@@ -255,15 +262,59 @@ export default function Companies() {
     }
   };
 
-  const handleDeactivate = async (company) => {
+  const handleDeactivate = async () => {
+    const company = deactivateConfirm;
+    if (!company) return;
+    setDeactivateConfirm(null);
+    setMenuCompanyId(null);
     try {
       await updateDoc(doc(db, 'companies', company.id), { isActive: false });
-      setMenuCompanyId(null);
       success('Company deactivated');
-      // onSnapshot will update companies list automatically
     } catch (err) {
       showError('Failed to deactivate');
     }
+  };
+
+  const handleActivate = async (company) => {
+    setMenuCompanyId(null);
+    try {
+      await updateDoc(doc(db, 'companies', company.id), { isActive: true });
+      success('Company activated');
+    } catch (err) {
+      showError('Failed to activate');
+    }
+  };
+
+  async function deleteSubcollection(companyId, subcollectionName) {
+    const snap = await getDocs(collection(db, 'companies', companyId, subcollectionName));
+    await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+  }
+
+  const handleDelete = async () => {
+    const company = deleteConfirm;
+    if (!company) return;
+    setDeleting(true);
+    try {
+      const id = company.id;
+      await deleteSubcollection(id, 'attendance');
+      await deleteSubcollection(id, 'leave');
+      await deleteSubcollection(id, 'employees');
+      await deleteSubcollection(id, 'teamMembers');
+      await deleteDoc(doc(db, 'companies', id));
+      const usersSnap = await getDocs(collection(db, 'users'));
+      await Promise.all(
+        usersSnap.docs
+          .filter((d) => d.data().companyId === id)
+          .map((d) => updateDoc(doc(db, 'users', d.id), { companyId: null })),
+      );
+      setDeleteConfirm(null);
+      setMenuCompanyId(null);
+      success('Company deleted permanently');
+    } catch (err) {
+      console.error(err);
+      showError('Failed to delete company');
+    }
+    setDeleting(false);
   };
 
   return (
@@ -346,13 +397,23 @@ export default function Companies() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-visible">
           {filteredCompanies.map((c) => (
             <div
               key={c.id}
-              className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col"
+              className={`bg-white rounded-xl border border-slate-200 p-5 flex flex-col relative overflow-visible ${
+                c.isActive === false ? 'opacity-60' : ''
+              }`}
             >
-              <div className="flex items-start justify-between">
+              {c.isActive === false && (
+                <div className="absolute inset-0 rounded-xl bg-slate-100/50 pointer-events-none" aria-hidden />
+              )}
+              {c.isActive === false && (
+                <span className="absolute top-3 right-12 z-10 inline-flex items-center rounded-full bg-slate-500 px-2.5 py-0.5 text-xs font-medium text-white">
+                  Inactive
+                </span>
+              )}
+              <div className="flex items-start justify-between relative z-10">
                 <div className="flex items-center gap-3">
                   <div
                     className="h-12 w-12 rounded-full flex items-center justify-center text-white font-semibold text-lg shrink-0"
@@ -369,38 +430,31 @@ export default function Companies() {
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setMenuCompanyId(menuCompanyId === c.id ? null : c.id)}
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      if (menuCompanyId === c.id) {
+                        setMenuCompanyId(null);
+                        setMenuCompany(null);
+                        setMenuPosition(null);
+                      } else {
+                        setMenuCompany(c);
+                        setMenuCompanyId(c.id);
+                        setMenuPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                      }
+                    }}
                     className="p-1 rounded text-slate-400 hover:bg-slate-100"
                     aria-label="Menu"
                   >
                     <span className="text-lg leading-none">⋯</span>
                   </button>
-                  {menuCompanyId === c.id && (
-                    <div className="absolute right-0 top-full mt-1 py-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 min-w-[140px]">
-                      <button
-                        type="button"
-                        className="block w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-                        onClick={() => openEdit(c)}
-                      >
-                        Edit Company
-                      </button>
-                      <button
-                        type="button"
-                        className="block w-full text-left px-3 py-1.5 text-sm text-amber-600 hover:bg-slate-50"
-                        onClick={() => handleDeactivate(c)}
-                      >
-                        Deactivate
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
-              <div className="mt-2">
+              <div className="mt-2 relative z-10">
                 <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
                   {c.employeeCount ?? 0} employee{(c.employeeCount ?? 0) !== 1 ? 's' : ''}
                 </span>
               </div>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex gap-2 relative z-10">
                 <Link
                   to={`/company/${c.id}/dashboard`}
                   className="flex-1 inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium py-2"
@@ -411,6 +465,55 @@ export default function Companies() {
             </div>
           ))}
         </div>
+      )}
+
+      {menuCompany && menuPosition && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[90]"
+            aria-hidden
+            onClick={() => { setMenuCompanyId(null); setMenuCompany(null); setMenuPosition(null); }}
+          />
+          <div
+            className="fixed z-[100] py-1 bg-white border border-slate-200 rounded-lg shadow-xl min-w-[180px]"
+            style={{ top: menuPosition.top, right: menuPosition.right }}
+          >
+            <button
+              type="button"
+              className="block w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-t-lg"
+              onClick={() => { openEdit(menuCompany); setMenuCompanyId(null); setMenuCompany(null); setMenuPosition(null); }}
+            >
+              Edit Company
+            </button>
+            {menuCompany.isActive !== false ? (
+              <button
+                type="button"
+                className="block w-full text-left px-3 py-2 text-sm text-amber-600 hover:bg-slate-50"
+                onClick={() => { setMenuCompanyId(null); setMenuCompany(null); setMenuPosition(null); setDeactivateConfirm(menuCompany); }}
+              >
+                Deactivate Company
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="block w-full text-left px-3 py-2 text-sm text-green-600 hover:bg-slate-50"
+                onClick={() => { handleActivate(menuCompany); setMenuCompanyId(null); setMenuCompany(null); setMenuPosition(null); }}
+              >
+                Activate Company
+              </button>
+            )}
+            <div className="border-t border-slate-200 mt-0.5 pt-0.5">
+              <button
+                type="button"
+                className="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-b-lg font-medium"
+                onClick={() => { setMenuCompanyId(null); setMenuCompany(null); setMenuPosition(null); setDeleteConfirm(menuCompany); }}
+              >
+                Delete Company
+              </button>
+            </div>
+          </div>
+        </>,
+        document.body,
       )}
 
       {(showAddModal || editingCompany) && (
@@ -505,6 +608,65 @@ export default function Companies() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deactivateConfirm && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">Deactivate company?</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              Deactivating will prevent team members from accessing this company. Continue?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeactivateConfirm(null)}
+                className="text-sm text-slate-500 hover:text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeactivate}
+                className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium px-4 py-2"
+              >
+                Deactivate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">
+              Delete {deleteConfirm.name || 'this company'}?
+            </h3>
+            <p className="text-sm text-slate-600 mb-4">
+              This will permanently delete the company and ALL its data including employees, leave
+              records and attendance. This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => !deleting && setDeleteConfirm(null)}
+                className="text-sm text-slate-500 hover:text-slate-700"
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Delete Forever'}
+              </button>
+            </div>
           </div>
         </div>
       )}

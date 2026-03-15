@@ -6,8 +6,8 @@ import AdminUsers from './pages/AdminUsers';
 import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
 import Leave from './pages/Leave';
-import Attendance from './pages/Attendance';
 import Documents from './pages/Documents';
+import EmployeeProfile from './pages/EmployeeProfile';
 import TeamMembers from './pages/TeamMembers';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
@@ -81,8 +81,8 @@ function AppRoutes() {
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="employees" element={<Employees />} />
+          <Route path="employees/:empId" element={<EmployeeProfile />} />
           <Route path="leave" element={<Leave />} />
-          <Route path="attendance" element={<Attendance />} />
           <Route path="documents" element={<Documents />} />
           <Route path="team" element={<TeamMembers />} />
           <Route path="settings" element={<Settings />} />

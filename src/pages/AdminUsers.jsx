@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   updateDoc,
@@ -48,7 +49,7 @@ export default function AdminUsers() {
   const isAdmin = canAccessUserManagement(role);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || !currentUser) return;
     const load = async () => {
       setLoading(true);
       try {
@@ -56,7 +57,43 @@ export default function AdminUsers() {
           getDocs(collection(db, 'users')),
           getDocs(collection(db, 'companies')),
         ]);
-        setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        const allUsers = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const byEmail = {};
+        const keepUid = currentUser.uid;
+        allUsers.forEach((u) => {
+          const email = (u.email || '').toLowerCase().trim();
+          if (!email) return;
+          const existing = byEmail[email];
+          const uTime = u.createdAt?.toMillis?.() ?? u.createdAt?.getTime?.() ?? 0;
+          if (!existing) {
+            byEmail[email] = u;
+            return;
+          }
+          const existingTime = existing.createdAt?.toMillis?.() ?? existing.createdAt?.getTime?.() ?? 0;
+          const keep =
+            existing.id === keepUid
+              ? existing
+              : u.id === keepUid
+                ? u
+                : uTime >= existingTime
+                  ? u
+                  : existing;
+          byEmail[email] = keep;
+        });
+        const toDelete = allUsers.filter((u) => {
+          const email = (u.email || '').toLowerCase().trim();
+          return email && byEmail[email] && byEmail[email].id !== u.id;
+        });
+        for (const u of toDelete) {
+          try {
+            await deleteDoc(doc(db, 'users', u.id));
+          } catch (e) {
+            console.warn('Could not delete duplicate user doc', u.id, e);
+          }
+        }
+        const withEmail = Object.values(byEmail);
+        const noEmail = allUsers.filter((u) => !(u.email || '').trim());
+        setUsers([...withEmail, ...noEmail]);
         setCompanies(companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
         showError('Failed to load users');
@@ -64,7 +101,7 @@ export default function AdminUsers() {
       setLoading(false);
     };
     load();
-  }, [isAdmin, showError]);
+  }, [isAdmin, currentUser?.uid, showError]);
 
   const companyMap = useMemo(
     () => Object.fromEntries(companies.map((c) => [c.id, c.name])),
@@ -109,6 +146,12 @@ export default function AdminUsers() {
     if (!email) return;
     if (!isGmail(email)) {
       setFormError('Please enter a valid @gmail.com address.');
+      return;
+    }
+    const existsByDocId = await getDoc(doc(db, 'users', email));
+    const existsInList = users.some((u) => (u.email || '').toLowerCase() === email);
+    if (existsByDocId.exists() || existsInList) {
+      setFormError('A user with this email already exists.');
       return;
     }
     setSaving(true);
@@ -300,6 +343,11 @@ export default function AdminUsers() {
                         className="h-9 w-9 rounded-full object-cover"
                       />
                       <span className="font-medium text-slate-800">{u.name || '—'}</span>
+                      {(currentUser?.email || '').toLowerCase() === (u.email || '').toLowerCase() && (
+                        <span className="inline-flex items-center rounded-full bg-[#378ADD] px-2 py-0.5 text-xs font-medium text-white">
+                          You
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-slate-700">{u.email}</td>
@@ -318,30 +366,37 @@ export default function AdminUsers() {
                   </td>
                   <td className="px-4 py-3 text-slate-600">{formatDate(u.createdAt)}</td>
                   <td className="px-4 py-3 space-x-2">
-                    {u.isActive !== false ? (
-                      <button
-                        type="button"
-                        onClick={() => handleDeactivate(u)}
-                        className="text-xs font-medium text-amber-600 hover:text-amber-700"
-                      >
-                        Deactivate
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleActivate(u)}
-                        className="text-xs font-medium text-green-600 hover:text-green-700"
-                      >
-                        Activate
-                      </button>
+                    {u.role !== 'admin' && (
+                      <>
+                        {u.isActive !== false ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeactivate(u)}
+                            className="text-xs font-medium text-amber-600 hover:text-amber-700"
+                          >
+                            Deactivate
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleActivate(u)}
+                            className="text-xs font-medium text-green-600 hover:text-green-700"
+                          >
+                            Activate
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setRemoveConfirm(u)}
+                          className="text-xs font-medium text-red-600 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      </>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => setRemoveConfirm(u)}
-                      className="text-xs font-medium text-red-600 hover:text-red-700"
-                    >
-                      Remove
-                    </button>
+                    {u.role === 'admin' && (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -4,13 +4,10 @@ import {
   collection,
   doc,
   getDocs,
-  getDoc,
   updateDoc,
   query,
   orderBy,
-  where,
   serverTimestamp,
-  increment,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import StatCard from '../components/StatCard';
@@ -37,14 +34,6 @@ function UserAddIcon({ className }) {
     </svg>
   );
 }
-function CheckCircleIcon({ className }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  );
-}
-
 const LEAVE_TYPE_STYLE = {
   CL: 'bg-blue-100 text-blue-800',
   SL: 'bg-red-100 text-red-800',
@@ -66,7 +55,6 @@ export default function Dashboard() {
   const { success, error: showError } = useToast();
   const [employees, setEmployees] = useState([]);
   const [leaveList, setLeaveList] = useState([]);
-  const [attendanceToday, setAttendanceToday] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState(null);
 
@@ -74,16 +62,13 @@ export default function Dashboard() {
     if (!companyId) return;
     const load = async () => {
       setLoading(true);
-      const today = todayStr();
       try {
-        const [empSnap, leaveSnap, attSnap] = await Promise.all([
+        const [empSnap, leaveSnap] = await Promise.all([
           getDocs(query(collection(db, 'companies', companyId, 'employees'), orderBy('createdAt', 'desc'))),
           getDocs(query(collection(db, 'companies', companyId, 'leave'), orderBy('appliedAt', 'desc'))),
-          getDocs(query(collection(db, 'companies', companyId, 'attendance'), where('date', '==', today))),
         ]);
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setLeaveList(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setAttendanceToday(attSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
         console.error(err);
         showError('Failed to load dashboard data');
@@ -111,16 +96,14 @@ export default function Dashboard() {
       const end = (l.endDate || '').slice(0, 10);
       return todayStr() >= start && todayStr() <= end;
     }).length;
-    const presentToday = attendanceToday.filter((a) => a.status === 'Present').length;
     return {
       totalEmployees: total,
       activeEmployees: active,
       newJoiners,
       onLeaveToday,
       pendingLeaves,
-      presentToday,
     };
-  }, [employees, leaveList, attendanceToday]);
+  }, [employees, leaveList]);
 
   const recentLeave = useMemo(() => leaveList.slice(0, 5), [leaveList]);
 
@@ -171,7 +154,6 @@ export default function Dashboard() {
     { title: 'Total Employees', value: String(stats.totalEmployees), icon: UsersIcon, subtitle: `${stats.activeEmployees} active` },
     { title: 'On Leave Today', value: String(stats.onLeaveToday), icon: CalendarIcon, subtitle: 'Approved leaves' },
     { title: 'New Joiners (30 days)', value: String(stats.newJoiners), icon: UserAddIcon, subtitle: 'Last 30 days' },
-    { title: 'Present Today', value: String(stats.presentToday), icon: CheckCircleIcon, subtitle: 'Marked attendance' },
   ];
 
   return (
@@ -182,8 +164,8 @@ export default function Dashboard() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {[...Array(4)].map((_, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {[...Array(3)].map((_, i) => (
             <div key={i} className="bg-white rounded-xl border border-slate-200 p-6 animate-pulse">
               <div className="h-4 bg-slate-200 rounded w-24 mb-2" />
               <div className="h-8 bg-slate-200 rounded w-12" />
@@ -191,7 +173,7 @@ export default function Dashboard() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {statCards.map((stat) => (
             <StatCard key={stat.title} {...stat} />
           ))}
@@ -206,14 +188,6 @@ export default function Dashboard() {
         >
           <UserAddIcon className="w-4 h-4" />
           Add Employee
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate(`/company/${companyId}/attendance`)}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2"
-        >
-          <CheckCircleIcon className="w-4 h-4" />
-          Mark Attendance
         </button>
         <Link
           to={`/company/${companyId}/leave`}

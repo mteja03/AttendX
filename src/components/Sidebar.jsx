@@ -7,7 +7,6 @@ const COMPANY_NAV = [
   { to: 'dashboard', label: 'Dashboard' },
   { to: 'employees', label: 'Employees' },
   { to: 'leave', label: 'Leave' },
-  { to: 'attendance', label: 'Attendance' },
   { to: 'documents', label: 'Documents' },
   { to: 'team', label: 'Team Members' },
   { to: 'settings', label: 'Settings' },
@@ -81,7 +80,7 @@ function SettingsIcon({ className }) {
   );
 }
 
-const navIcons = { dashboard: DashboardIcon, employees: EmployeesIcon, leave: LeaveIcon, attendance: NavIcon, documents: DocumentsIcon, team: UsersIcon, settings: SettingsIcon };
+const navIcons = { dashboard: DashboardIcon, employees: EmployeesIcon, leave: LeaveIcon, documents: DocumentsIcon, team: UsersIcon, settings: SettingsIcon };
 
 export default function Sidebar() {
   const { currentUser, role, signOut } = useAuth();

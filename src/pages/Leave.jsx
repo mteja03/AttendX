@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   addDoc,
   updateDoc,
@@ -42,6 +43,7 @@ export default function Leave() {
   const { success, error: showError } = useToast();
   const [leaveList, setLeaveList] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [leavePolicy, setLeavePolicy] = useState({ cl: 12, sl: 12, el: 15 });
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('Pending');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -61,10 +63,12 @@ export default function Leave() {
     const load = async () => {
       setLoading(true);
       try {
-        const [leaveSnap, empSnap] = await Promise.all([
+        const [companySnap, leaveSnap, empSnap] = await Promise.all([
+          getDoc(doc(db, 'companies', companyId)),
           getDocs(query(collection(db, 'companies', companyId, 'leave'), orderBy('appliedAt', 'desc'))),
           getDocs(collection(db, 'companies', companyId, 'employees')),
         ]);
+        if (companySnap.exists() && companySnap.data().leavePolicy) setLeavePolicy(companySnap.data().leavePolicy);
         setLeaveList(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => (e.status || 'Active') !== 'Inactive'));
       } catch (err) {
@@ -208,18 +212,18 @@ export default function Leave() {
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Employee</th>
-                <th className="px-4 py-2 text-left font-medium text-slate-600">CL (used/12)</th>
-                <th className="px-4 py-2 text-left font-medium text-slate-600">SL (used/12)</th>
-                <th className="px-4 py-2 text-left font-medium text-slate-600">EL (used/15)</th>
+                <th className="px-4 py-2 text-left font-medium text-slate-600">CL (used/{leavePolicy.cl ?? 12})</th>
+                <th className="px-4 py-2 text-left font-medium text-slate-600">SL (used/{leavePolicy.sl ?? 12})</th>
+                <th className="px-4 py-2 text-left font-medium text-slate-600">EL (used/{leavePolicy.el ?? 15})</th>
               </tr>
             </thead>
             <tbody>
               {Object.entries(leaveBalance).map(([empId, row]) => (
                 <tr key={empId} className="border-t border-slate-100">
                   <td className="px-4 py-2 font-medium text-slate-800">{row.name}</td>
-                  <td className="px-4 py-2 text-slate-600">{row.CL || 0}/12</td>
-                  <td className="px-4 py-2 text-slate-600">{row.SL || 0}/12</td>
-                  <td className="px-4 py-2 text-slate-600">{row.EL || 0}/15</td>
+                  <td className="px-4 py-2 text-slate-600">{row.CL || 0}/{leavePolicy.cl ?? 12}</td>
+                  <td className="px-4 py-2 text-slate-600">{row.SL || 0}/{leavePolicy.sl ?? 12}</td>
+                  <td className="px-4 py-2 text-slate-600">{row.EL || 0}/{leavePolicy.el ?? 15}</td>
                 </tr>
               ))}
               {Object.keys(leaveBalance).length === 0 && (
