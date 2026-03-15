@@ -1,122 +1,134 @@
-import { google } from 'googleapis';
-
-const ROOT_FOLDER_NAME = 'AttendX HR Documents';
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-
-export { MAX_FILE_SIZE };
+const authHeader = (token) => ({
+  Authorization: `Bearer ${token}`,
+});
 
 /**
- * Get or create a folder. If parentFolderId is null, search in root (no parent).
+ * Find or create a folder. parentId = null means user's Drive root.
  */
-export async function getOrCreateFolder(accessToken, folderName, parentFolderId) {
-  if (!accessToken) throw new Error('Google Drive access token required. Please sign in again.');
-  const auth = new google.auth.OAuth2();
-  auth.setCredentials({ access_token: accessToken });
-  const drive = google.drive({ version: 'v3', auth });
-
-  const parentQuery = parentFolderId ? `'${parentFolderId}' in parents` : "'root' in parents";
-  const escapedName = folderName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  const res = await drive.files.list({
-    q: `${parentQuery} and name = '${escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-    fields: 'files(id, name)',
-    spaces: 'drive',
-  });
-  const existing = res.data.files?.[0];
-  if (existing) return existing.id;
-
-  const createRes = await drive.files.create({
-    requestBody: {
-      name: folderName,
-      mimeType: 'application/vnd.google-apps.folder',
-      parents: parentFolderId ? [parentFolderId] : ['root'],
-    },
-    fields: 'id',
-  });
-  return createRes.data.id;
-}
-
-/**
- * Upload a file to a Google Drive folder. file is a File (from input). Returns { fileId, fileName, webViewLink }.
- */
-export async function uploadFileToDrive(accessToken, file, fileName, folderId) {
-  if (!accessToken) throw new Error('Google Drive access token required. Please sign in again.');
-  if (file.size > MAX_FILE_SIZE) throw new Error('File size must be under 10MB');
-
-  const auth = new google.auth.OAuth2();
-  auth.setCredentials({ access_token: accessToken });
-  const drive = google.drive({ version: 'v3', auth });
-
-  const mimeType = file.type || 'application/octet-stream';
-  const res = await drive.files.create({
-    requestBody: {
-      name: fileName,
-      parents: [folderId],
-      mimeType,
-    },
-    media: {
-      mimeType,
-      body: file,
-    },
-    fields: 'id, name, webViewLink',
-  });
-
-  const fileId = res.data.id;
-  let webViewLink = res.data.webViewLink || null;
-  if (!webViewLink) {
-    const linkRes = await makeFileViewable(accessToken, fileId);
-    webViewLink = linkRes;
+export async function getOrCreateFolder(token, name, parentId = null) {
+  let query = `name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  if (parentId) {
+    query += ` and '${parentId}' in parents`;
+  } else {
+    query += ` and 'root' in parents`;
   }
-  return {
-    fileId,
-    fileName: res.data.name || fileName,
-    webViewLink: webViewLink || `https://drive.google.com/file/d/${fileId}/view`,
-  };
-}
 
-/**
- * Permanently delete a file from Drive.
- */
-export async function deleteFileFromDrive(accessToken, fileId) {
-  if (!accessToken) throw new Error('Google Drive access token required. Please sign in again.');
-  const auth = new google.auth.OAuth2();
-  auth.setCredentials({ access_token: accessToken });
-  const drive = google.drive({ version: 'v3', auth });
-  await drive.files.delete({ fileId });
-}
+  const searchRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)`,
+    { headers: authHeader(token) },
+  );
+  if (searchRes.status === 401 || searchRes.status === 403) throw new Error('Google Drive access expired');
+  const searchData = await searchRes.json();
+  if (searchData.error) throw new Error(searchData.error.message || 'Drive API error');
+  if (searchData.files?.length > 0) return searchData.files[0].id;
 
-/**
- * Set file permission to "anyone with link can view". Returns webViewLink.
- */
-export async function makeFileViewable(accessToken, fileId) {
-  if (!accessToken) throw new Error('Google Drive access token required. Please sign in again.');
-  const auth = new google.auth.OAuth2();
-  auth.setCredentials({ access_token: accessToken });
-  const drive = google.drive({ version: 'v3', auth });
-
-  await drive.permissions.create({
-    fileId,
-    requestBody: {
-      type: 'anyone',
-      role: 'reader',
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: {
+      ...authHeader(token),
+      'Content-Type': 'application/json',
     },
+    body: JSON.stringify({
+      name,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: parentId ? [parentId] : [],
+    }),
   });
-
-  const res = await drive.files.get({
-    fileId,
-    fields: 'webViewLink',
-  });
-  return res.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+  if (createRes.status === 401 || createRes.status === 403) throw new Error('Google Drive access expired');
+  const folder = await createRes.json();
+  if (folder.error) throw new Error(folder.error.message || 'Drive API error');
+  return folder.id;
 }
 
 /**
- * Build folder structure and return the final category folder ID.
- * Structure: AttendX HR Documents / {companyName} / {empId - empName} / {categoryName}
+ * Make file viewable by anyone with link. Returns webViewLink.
  */
-export async function getOrCreateEmployeeCategoryFolder(accessToken, companyName, empId, empName, categoryName) {
-  const rootId = await getOrCreateFolder(accessToken, ROOT_FOLDER_NAME, null);
-  const companyId = await getOrCreateFolder(accessToken, companyName, rootId);
+export async function makeViewable(token, fileId) {
+  const permRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}/permissions`,
+    {
+      method: 'POST',
+      headers: {
+        ...authHeader(token),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+    },
+  );
+  if (permRes.status === 401 || permRes.status === 403) throw new Error('Google Drive access expired');
+  if (!permRes.ok) {
+    const err = await permRes.json().catch(() => ({}));
+    throw new Error(err.error?.message || 'Failed to set permission');
+  }
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=webViewLink`,
+    { headers: authHeader(token) },
+  );
+  if (res.status === 401 || res.status === 403) throw new Error('Google Drive access expired');
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'Drive API error');
+  return data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+}
+
+/**
+ * Upload file using multipart. Returns { id, name, webViewLink }.
+ */
+export async function uploadFileToDrive(token, file, fileName, folderId) {
+  const metadata = { name: fileName, parents: [folderId] };
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', file);
+
+  const res = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',
+    {
+      method: 'POST',
+      headers: authHeader(token),
+      body: form,
+    },
+  );
+  if (res.status === 401 || res.status === 403) throw new Error('Google Drive access expired');
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'Upload failed');
+  return data;
+}
+
+/**
+ * Delete file from Drive.
+ */
+export async function deleteFileFromDrive(token, fileId) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+    method: 'DELETE',
+    headers: authHeader(token),
+  });
+  if (res.status === 401 || res.status === 403) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || 'Access expired');
+  }
+  if (!res.ok) throw new Error('Delete failed');
+}
+
+/**
+ * Build folder structure, upload file, make viewable. Returns { fileId, fileName, webViewLink, fileSize }.
+ */
+export async function uploadEmployeeDocument(token, file, companyName, empId, empName, category) {
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error('File too large. Maximum size is 10MB.');
+  }
+
+  const rootId = await getOrCreateFolder(token, 'AttendX HR Documents');
+  const companyFolderId = await getOrCreateFolder(token, companyName, rootId);
   const empFolderName = `${empId || 'Emp'} - ${empName || 'Employee'}`.replace(/[/\\?%*:|"<>]/g, '-');
-  const empFolderId = await getOrCreateFolder(accessToken, empFolderName, companyId);
-  const categoryId = await getOrCreateFolder(accessToken, categoryName, empFolderId);
-  return categoryId;
+  const empFolderId = await getOrCreateFolder(token, empFolderName, companyFolderId);
+  const categoryId = await getOrCreateFolder(token, category, empFolderId);
+
+  const uploaded = await uploadFileToDrive(token, file, file.name, categoryId);
+  const webViewLink = await makeViewable(token, uploaded.id);
+
+  return {
+    fileId: uploaded.id,
+    fileName: file.name,
+    webViewLink: webViewLink || `https://drive.google.com/file/d/${uploaded.id}/view`,
+    fileSize: file.size,
+  };
 }

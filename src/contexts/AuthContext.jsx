@@ -20,6 +20,7 @@ export function AuthProvider({ children }) {
         setRole(null);
         setCompanyId(null);
         setGoogleAccessToken(null);
+        try { localStorage.removeItem('gat'); } catch (_) {}
         setLoading(false);
         setAuthError('');
         return;
@@ -62,7 +63,12 @@ export function AuthProvider({ children }) {
           setCompanyId(data.companyId ?? null);
           setAuthError('');
           setLoading(false);
-          setGoogleAccessToken(firebaseUser.accessToken || null);
+          try {
+            const stored = localStorage.getItem('gat');
+            setGoogleAccessToken(stored || firebaseUser.accessToken || null);
+          } catch (_) {
+            setGoogleAccessToken(firebaseUser.accessToken || null);
+          }
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error checking users whitelist', error);
@@ -87,8 +93,10 @@ export function AuthProvider({ children }) {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (credential?.accessToken) {
-      setGoogleAccessToken(credential.accessToken);
+    const accessToken = credential?.accessToken;
+    if (accessToken) {
+      setGoogleAccessToken(accessToken);
+      try { localStorage.setItem('gat', accessToken); } catch (_) {}
     }
 
     if (user?.email?.toLowerCase() === 'mteja0852@gmail.com') {
@@ -111,6 +119,7 @@ export function AuthProvider({ children }) {
   };
 
   const signOutUser = async () => {
+    try { localStorage.removeItem('gat'); } catch (_) {}
     await signOut(auth);
   };
 

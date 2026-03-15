@@ -22,12 +22,7 @@ import {
   getDocById,
   acceptsFile,
 } from '../utils/documentTypes';
-import {
-  getOrCreateEmployeeCategoryFolder,
-  uploadFileToDrive,
-  deleteFileFromDrive,
-  MAX_FILE_SIZE,
-} from '../utils/googleDrive';
+import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDrive';
 
 const DEPT_COLOR = {
   Engineering: '#378ADD',
@@ -276,13 +271,19 @@ export default function EmployeeProfile() {
 
   const getCompanyName = () => company?.name || 'Company';
 
-  const handleUploadChecklistDoc = async (file, docId, docName, categoryName) => {
-    if (!employee || !googleAccessToken) {
-      showError('Google sign-in required for document upload. Please sign in again.');
-      return;
+  const driveAccessError = (err) => {
+    const code = err?.message || '';
+    if (code.includes('401') || code.includes('403') || code.includes('expired') || code.includes('Access')) {
+      showError('Google Drive access expired. Please sign out and sign in again.');
+    } else {
+      showError(err?.message || 'Upload failed');
     }
-    if (file.size > MAX_FILE_SIZE) {
-      showError('File size must be under 10MB');
+  };
+
+  const handleUploadChecklistDoc = async (file, docId, docName, categoryName) => {
+    if (!employee) return;
+    if (!googleAccessToken) {
+      showError('Please sign out and sign in again to enable Google Drive access');
       return;
     }
     const docSpec = getDocById(docId);
@@ -292,26 +293,26 @@ export default function EmployeeProfile() {
     }
     setUploadingDocId(docId);
     try {
-      const folderId = await getOrCreateEmployeeCategoryFolder(
+      const result = await uploadEmployeeDocument(
         googleAccessToken,
+        file,
         getCompanyName(),
         employee.empId,
         employee.fullName,
         categoryName,
       );
-      const { fileId, fileName, webViewLink } = await uploadFileToDrive(googleAccessToken, file, file.name, folderId);
       const entry = {
         id: docId,
         name: docName,
         category: categoryName,
-        fileName,
-        fileId,
-        webViewLink,
-        uploadedAt: serverTimestamp(),
+        fileName: result.fileName,
+        fileId: result.fileId,
+        webViewLink: result.webViewLink,
+        uploadedAt: new Date(),
         uploadedBy: currentUser?.email || null,
-        fileSize: file.size,
+        fileSize: result.fileSize,
       };
-      const nextDocs = [...(employee.documents || []).filter((d) => d.id !== docId), { ...entry, uploadedAt: new Date() }];
+      const nextDocs = [...(employee.documents || []).filter((d) => d.id !== docId), entry];
       const newMandatory = mandatoryUploaded + (docSpec?.mandatory && !docByType[docId] ? 1 : 0);
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
         documents: nextDocs,
@@ -321,8 +322,7 @@ export default function EmployeeProfile() {
       setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
       success(`${docName} uploaded successfully`);
     } catch (err) {
-      const msg = err?.message || 'Upload failed';
-      showError(msg.includes('token') || msg.includes('401') ? 'Session expired. Please sign in again.' : msg);
+      driveAccessError(err);
     }
     setUploadingDocId(null);
   };
@@ -331,10 +331,6 @@ export default function EmployeeProfile() {
     const docEntry = docByType[docId];
     if (!docEntry?.fileId || !googleAccessToken) return;
     const docSpec = getDocById(docId);
-    if (file.size > MAX_FILE_SIZE) {
-      showError('File size must be under 10MB');
-      return;
-    }
     if (docSpec && !acceptsFile(docSpec, file.name)) {
       showError(`Accepted formats: ${docSpec.accepts}`);
       return;
@@ -342,29 +338,29 @@ export default function EmployeeProfile() {
     setUploadingDocId(docId);
     try {
       await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
-      const folderId = await getOrCreateEmployeeCategoryFolder(
+      const result = await uploadEmployeeDocument(
         googleAccessToken,
+        file,
         getCompanyName(),
         employee.empId,
         employee.fullName,
         docEntry.category,
       );
-      const { fileId, fileName, webViewLink } = await uploadFileToDrive(googleAccessToken, file, file.name, folderId);
       const newEntry = {
         ...docEntry,
-        fileName,
-        fileId,
-        webViewLink,
+        fileName: result.fileName,
+        fileId: result.fileId,
+        webViewLink: result.webViewLink,
         uploadedAt: new Date(),
         uploadedBy: currentUser?.email || null,
-        fileSize: file.size,
+        fileSize: result.fileSize,
       };
       const nextDocs = (employee.documents || []).map((d) => (d.id === docId ? newEntry : d));
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { documents: nextDocs, updatedAt: serverTimestamp() });
       setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
       success(`${docEntry.name} replaced successfully`);
     } catch (err) {
-      showError(err?.message || 'Replace failed');
+      driveAccessError(err);
     }
     setUploadingDocId(null);
   };
@@ -383,40 +379,44 @@ export default function EmployeeProfile() {
       setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
       success('Document deleted');
     } catch (err) {
-      showError(err?.message || 'Delete failed');
+      driveAccessError(err);
     }
     setDeleteConfirm(null);
   };
 
+  const handleViewDoc = (docEntry) => {
+    if (docEntry?.webViewLink) window.open(docEntry.webViewLink, '_blank');
+  };
+
   const handleUploadAdditionalDoc = async () => {
-    if (!additionalDocName.trim() || !additionalDocFile || !googleAccessToken) {
+    if (!additionalDocName.trim() || !additionalDocFile) {
       showError('Name and file required');
       return;
     }
-    if (additionalDocFile.size > MAX_FILE_SIZE) {
-      showError('File size must be under 10MB');
+    if (!googleAccessToken) {
+      showError('Please sign out and sign in again to enable Google Drive access');
       return;
     }
     setUploadingDocId('additional');
     try {
-      const folderId = await getOrCreateEmployeeCategoryFolder(
+      const result = await uploadEmployeeDocument(
         googleAccessToken,
+        additionalDocFile,
         getCompanyName(),
         employee.empId,
         employee.fullName,
         additionalDocCategory,
       );
-      const { fileId, fileName, webViewLink } = await uploadFileToDrive(googleAccessToken, additionalDocFile, additionalDocFile.name, folderId);
       const entry = {
         id: `additional_${Date.now()}`,
         name: additionalDocName.trim(),
         category: additionalDocCategory,
-        fileName,
-        fileId,
-        webViewLink,
+        fileName: result.fileName,
+        fileId: result.fileId,
+        webViewLink: result.webViewLink,
         uploadedAt: new Date(),
         uploadedBy: currentUser?.email || null,
-        fileSize: additionalDocFile.size,
+        fileSize: result.fileSize,
       };
       const nextDocs = [...(employee.documents || []), entry];
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { documents: nextDocs, updatedAt: serverTimestamp() });
@@ -427,7 +427,7 @@ export default function EmployeeProfile() {
       setAdditionalDocFile(null);
       if (additionalFileInputRef.current) additionalFileInputRef.current.value = '';
     } catch (err) {
-      showError(err?.message || 'Upload failed');
+      driveAccessError(err);
     }
     setUploadingDocId(null);
   };
@@ -436,7 +436,7 @@ export default function EmployeeProfile() {
     const docEntry = additionalDocs[index];
     if (!docEntry?.fileId) return;
     if (!googleAccessToken) {
-      showError('Sign in with Google required');
+      showError('Please sign out and sign in again to enable Google Drive access');
       return;
     }
     try {
@@ -446,7 +446,7 @@ export default function EmployeeProfile() {
       setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
       success('Document deleted');
     } catch (err) {
-      showError(err?.message || 'Delete failed');
+      driveAccessError(err);
     }
     setDeleteConfirm(null);
   };
@@ -579,6 +579,13 @@ export default function EmployeeProfile() {
             </div>
           )}
 
+          {uploadingDocId && (
+            <div className="rounded-xl border border-[#378ADD] bg-[#378ADD]/10 p-3 text-sm text-[#378ADD] font-medium flex items-center gap-2">
+              <span className="animate-spin rounded-full h-4 w-4 border-2 border-[#378ADD] border-t-transparent" />
+              Uploading to Google Drive...
+            </div>
+          )}
+
           <div>
             <h3 className="text-sm font-semibold text-slate-800 mb-2">Document Completion</h3>
             <div className="flex items-center gap-3">
@@ -626,15 +633,15 @@ export default function EmployeeProfile() {
                               </div>
                               <div className="flex gap-2 shrink-0">
                                 {uploaded.webViewLink && (
-                                  <a href={uploaded.webViewLink} target="_blank" rel="noopener noreferrer" className="text-[#378ADD] text-xs font-medium hover:underline">View</a>
+                                  <button type="button" onClick={() => handleViewDoc(uploaded)} className="text-[#378ADD] text-xs font-medium hover:underline disabled:opacity-50" disabled={!!uploadingDocId}>View</button>
                                 )}
-                                <label className="text-xs font-medium text-slate-600 hover:underline cursor-pointer">
+                                <label className={`text-xs font-medium text-slate-600 hover:underline cursor-pointer ${uploadingDocId ? 'pointer-events-none opacity-50' : ''}`}>
                                   Replace
                                   <input
                                     type="file"
                                     className="hidden"
                                     accept={doc.accepts || '.pdf,.jpg,.jpeg,.png'}
-                                    disabled={uploading}
+                                    disabled={!!uploadingDocId}
                                     onChange={(e) => {
                                       const f = e.target.files?.[0];
                                       if (f) handleReplaceDoc(f, doc.id);
@@ -642,7 +649,7 @@ export default function EmployeeProfile() {
                                     }}
                                   />
                                 </label>
-                                <button type="button" onClick={() => setDeleteConfirm({ type: 'checklist', doc: uploaded })} className="text-red-600 text-xs font-medium hover:underline disabled:opacity-50" disabled={uploading}>Delete</button>
+                                <button type="button" onClick={() => setDeleteConfirm({ type: 'checklist', doc: uploaded })} className="text-red-600 text-xs font-medium hover:underline disabled:opacity-50" disabled={!!uploadingDocId}>Delete</button>
                               </div>
                             </>
                           ) : (
@@ -654,13 +661,13 @@ export default function EmployeeProfile() {
                                   {doc.mandatory ? 'Mandatory' : 'Optional'}
                                 </span>
                               </div>
-                              <label className="shrink-0 rounded-lg bg-[#378ADD] text-white text-xs font-medium px-3 py-1.5 cursor-pointer disabled:opacity-50">
+                              <label className={`shrink-0 rounded-lg bg-[#378ADD] text-white text-xs font-medium px-3 py-1.5 cursor-pointer ${uploadingDocId ? 'opacity-50 pointer-events-none' : ''}`}>
                                 {uploading ? 'Uploading…' : 'Upload'}
                                 <input
                                   type="file"
                                   className="hidden"
                                   accept={doc.accepts || '.pdf,.jpg,.jpeg,.png'}
-                                  disabled={uploading}
+                                    disabled={!!uploadingDocId}
                                   onChange={(e) => {
                                     const f = e.target.files?.[0];
                                     if (f) handleUploadChecklistDoc(f, doc.id, doc.name, cat.category);
@@ -736,7 +743,7 @@ export default function EmployeeProfile() {
                 <h3 className="text-lg font-semibold text-slate-800 mb-2">
                   Delete {deleteConfirm.type === 'checklist' ? deleteConfirm.doc.name : 'document'}?
                 </h3>
-                <p className="text-sm text-slate-600 mb-4">This will permanently remove the file from Google Drive.</p>
+                <p className="text-sm text-slate-600 mb-4">File will be removed from Google Drive.</p>
                 <div className="flex justify-end gap-3">
                   <button type="button" onClick={() => setDeleteConfirm(null)} className="text-slate-500 text-sm">Cancel</button>
                   <button
