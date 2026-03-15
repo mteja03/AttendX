@@ -12,6 +12,7 @@ import {
 import { db } from '../firebase/config';
 import StatCard from '../components/StatCard';
 import { useToast } from '../contexts/ToastContext';
+import { toDateString, toDisplayDate, toJSDate } from '../utils';
 
 function UsersIcon({ className }) {
   return (
@@ -44,10 +45,6 @@ const STATUS_STYLE = {
   Approved: 'bg-green-100 text-green-800',
   Rejected: 'bg-red-100 text-red-800',
 };
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export default function Dashboard() {
   const { companyId } = useParams();
@@ -85,17 +82,18 @@ export default function Dashboard() {
     const total = employees.length;
     const active = employees.filter((e) => (e.status || 'Active') !== 'Inactive').length;
     const newJoiners = employees.filter((e) => {
-      const j = e.joiningDate;
-      if (!j) return false;
-      const d = typeof j === 'string' ? new Date(j) : j?.toDate ? j.toDate() : new Date(j);
+      const d = toJSDate(e.joiningDate);
+      if (!d || Number.isNaN(d.getTime())) return false;
       return d >= thirtyDaysAgo;
     }).length;
     const pendingLeaves = leaveList.filter((l) => l.status === 'Pending').length;
+    const today = toDateString(new Date());
     const onLeaveToday = leaveList.filter((l) => {
       if (l.status !== 'Approved') return false;
-      const start = (l.startDate || '').slice(0, 10);
-      const end = (l.endDate || '').slice(0, 10);
-      return todayStr() >= start && todayStr() <= end;
+      const start = toDateString(l.startDate);
+      const end = toDateString(l.endDate);
+      if (!start || !end) return false;
+      return today >= start && today <= end;
     }).length;
     return {
       totalEmployees: total,
@@ -111,16 +109,11 @@ export default function Dashboard() {
   const birthdayData = useMemo(() => {
     const now = new Date();
     const todayMonth = now.getMonth();
-    const todayDate = now.getDate();
     const isLeapYear = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
-    const daysInMonth = (m, y) => new Date(y, m + 1, 0).getDate();
 
-    const withDob = employees.filter((e) => {
-      const d = e.dateOfBirth;
-      if (!d) return false;
-      const dt = typeof d === 'string' ? new Date(d) : d?.toDate ? d.toDate() : new Date(d);
-      return !isNaN(dt.getTime());
-    });
+    const withDob = employees
+      .map((e) => ({ ...e, _dob: toJSDate(e.dateOfBirth) }))
+      .filter((e) => e._dob && !Number.isNaN(e._dob.getTime()));
 
     const norm = (dt) => {
       const m = dt.getMonth();
@@ -131,44 +124,29 @@ export default function Dashboard() {
 
     const todayList = [];
     const upcomingList = [];
-    const thisMonthSet = new Set();
 
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 8; i += 1) {
       const d = new Date(now);
       d.setDate(d.getDate() + i);
-      const key = `${d.getMonth()}-${d.getDate()}`;
       if (i === 0) {
         withDob.forEach((emp) => {
-          const dt = typeof emp.dateOfBirth === 'string' ? new Date(emp.dateOfBirth) : emp.dateOfBirth?.toDate ? emp.dateOfBirth.toDate() : new Date(emp.dateOfBirth);
-          const { month, day } = norm(dt);
+          const { month, day } = norm(emp._dob);
           if (month === d.getMonth() && day === d.getDate()) {
             todayList.push(emp);
-            thisMonthSet.add(emp.id);
           }
         });
       } else {
         withDob.forEach((emp) => {
-          const dt = typeof emp.dateOfBirth === 'string' ? new Date(emp.dateOfBirth) : emp.dateOfBirth?.toDate ? emp.dateOfBirth.toDate() : new Date(emp.dateOfBirth);
-          const { month, day } = norm(dt);
+          const { month, day } = norm(emp._dob);
           if (month === d.getMonth() && day === d.getDate()) {
             upcomingList.push({ emp, daysAhead: i });
-            thisMonthSet.add(emp.id);
           }
         });
       }
     }
 
-    const thisMonthTotal = withDob.filter((emp) => {
-      const dt = typeof emp.dateOfBirth === 'string' ? new Date(emp.dateOfBirth) : emp.dateOfBirth?.toDate ? emp.dateOfBirth.toDate() : new Date(emp.dateOfBirth);
-      return dt.getMonth() === todayMonth;
-    }).length;
-
-    const thisMonthSample = withDob
-      .filter((emp) => {
-        const dt = typeof emp.dateOfBirth === 'string' ? new Date(emp.dateOfBirth) : emp.dateOfBirth?.toDate ? emp.dateOfBirth.toDate() : new Date(emp.dateOfBirth);
-        return dt.getMonth() === todayMonth;
-      })
-      .slice(0, 5);
+    const thisMonthSample = withDob.filter((emp) => emp._dob.getMonth() === todayMonth).slice(0, 5);
+    const thisMonthTotal = withDob.filter((emp) => emp._dob.getMonth() === todayMonth).length;
 
     return { todayList, upcomingList, thisMonthTotal, thisMonthSample };
   }, [employees]);
@@ -387,7 +365,7 @@ export default function Dashboard() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-600">
-                      {l.startDate} – {l.endDate}
+                      {toDisplayDate(l.startDate)} – {toDisplayDate(l.endDate)}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[l.status] || 'bg-slate-100'}`}>

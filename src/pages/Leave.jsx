@@ -12,9 +12,11 @@ import {
   where,
   serverTimestamp,
   increment,
+  Timestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
+import { toDateString, toDisplayDate, toJSDate } from '../utils';
 
 const LEAVE_TYPES = [
   { value: 'CL', label: 'Casual Leave', max: 12 },
@@ -22,9 +24,10 @@ const LEAVE_TYPES = [
   { value: 'EL', label: 'Earned Leave', max: 15 },
 ];
 
-function getDaysBetween(startStr, endStr) {
-  const start = new Date(startStr);
-  const end = new Date(endStr);
+function getDaysBetween(startVal, endVal) {
+  const start = toJSDate(startVal);
+  const end = toJSDate(endVal);
+  if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
   let count = 0;
   const d = new Date(start);
   while (d <= end) {
@@ -145,12 +148,14 @@ export default function Leave() {
     setSaving(true);
     try {
       const daysCount = getDaysBetween(form.startDate, form.endDate);
+      const startTs = Timestamp.fromDate(new Date(form.startDate));
+      const endTs = Timestamp.fromDate(new Date(form.endDate));
       await addDoc(collection(db, 'companies', companyId, 'leave'), {
         employeeId: form.employeeId,
         employeeName: emp.fullName,
         leaveType: form.leaveType,
-        startDate: form.startDate,
-        endDate: form.endDate,
+        startDate: startTs,
+        endDate: endTs,
         days: daysCount,
         reason: form.reason?.trim() || '',
         status: 'Approved',
@@ -163,8 +168,8 @@ export default function Leave() {
           employeeId: form.employeeId,
           employeeName: emp.fullName,
           leaveType: form.leaveType,
-          startDate: form.startDate,
-          endDate: form.endDate,
+          startDate: startTs,
+          endDate: endTs,
           days: daysCount,
           reason: form.reason?.trim() || '',
           status: 'Approved',
@@ -286,8 +291,8 @@ export default function Leave() {
                       {l.leaveType || '—'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-slate-700">{l.startDate || '—'}</td>
-                  <td className="px-4 py-3 text-slate-700">{l.endDate || '—'}</td>
+                  <td className="px-4 py-3 text-slate-700">{toDisplayDate(l.startDate)}</td>
+                  <td className="px-4 py-3 text-slate-700">{toDisplayDate(l.endDate)}</td>
                   <td className="px-4 py-3 text-slate-700">{l.days ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600 max-w-[180px] truncate" title={l.reason}>{l.reason || '—'}</td>
                   <td className="px-4 py-3">

@@ -11,9 +11,11 @@ import {
   orderBy,
   serverTimestamp,
   increment,
+  Timestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
+import { toDateString, toDisplayDate, toJSDate } from '../utils';
 
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
 const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
@@ -40,7 +42,7 @@ const initialForm = {
   designation: '',
   employmentType: 'Full-time',
   category: '',
-  joiningDate: new Date().toISOString().slice(0, 10),
+  joiningDate: toDateString(new Date()),
   reportingManager: '',
   ctcPerAnnum: '',
   basicSalary: '',
@@ -150,9 +152,8 @@ export default function Employees() {
     if (filterJoiningYear !== 'All Years') {
       const year = Number(filterJoiningYear);
       list = list.filter((e) => {
-        const j = e.joiningDate;
-        if (!j) return false;
-        const d = typeof j === 'string' ? new Date(j) : j?.toDate ? j.toDate() : new Date(j);
+        const d = toJSDate(e.joiningDate);
+        if (!d || Number.isNaN(d.getTime())) return false;
         return d.getFullYear() === year;
       });
     }
@@ -195,7 +196,7 @@ export default function Employees() {
         fullName: form.fullName.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
-        dateOfBirth: form.dateOfBirth || null,
+        dateOfBirth: form.dateOfBirth ? Timestamp.fromDate(new Date(form.dateOfBirth)) : null,
         gender: form.gender || null,
         address: form.address || null,
         empId: form.empId || nextEmpId,
@@ -205,7 +206,7 @@ export default function Employees() {
         employmentType: form.employmentType || 'Full-time',
         category: form.category || null,
         qualification: form.qualification || null,
-        joiningDate: form.joiningDate || null,
+        joiningDate: form.joiningDate ? Timestamp.fromDate(new Date(form.joiningDate)) : null,
         reportingManager: form.reportingManager || null,
         ctcPerAnnum: form.ctcPerAnnum ? Number(form.ctcPerAnnum) : null,
         basicSalary: form.basicSalary ? Number(form.basicSalary) : null,
@@ -238,12 +239,6 @@ export default function Employees() {
     } catch (err) {
       showError('Failed to deactivate');
     }
-  };
-
-  const formatDate = (v) => {
-    if (!v) return '—';
-    const d = v?.toDate ? v.toDate() : new Date(v);
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
   if (!companyId) return null;
@@ -387,7 +382,7 @@ export default function Employees() {
                   <td className="px-4 py-3 text-slate-700">{emp.department || '—'}</td>
                   <td className="px-4 py-3 text-slate-700">{emp.designation || '—'}</td>
                   <td className="px-4 py-3 text-slate-700">{emp.phone || '—'}</td>
-                  <td className="px-4 py-3 text-slate-700">{formatDate(emp.joiningDate)}</td>
+                  <td className="px-4 py-3 text-slate-700">{toDisplayDate(emp.joiningDate)}</td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${

@@ -24,6 +24,7 @@ import {
   acceptsFile,
 } from '../utils/documentTypes';
 import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDrive';
+import { toDisplayDate, toJSDate, toDateString } from '../utils';
 
 const DEPT_COLOR = {
   Engineering: '#378ADD',
@@ -44,20 +45,9 @@ const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 
 const LEAVE_TYPE_STYLE = { CL: 'bg-blue-100 text-blue-800', SL: 'bg-red-100 text-red-800', EL: 'bg-green-100 text-green-800' };
 const STATUS_STYLE = { Pending: 'bg-amber-100 text-amber-800', Approved: 'bg-green-100 text-green-800', Rejected: 'bg-red-100 text-red-800' };
 
-function formatDate(v) {
-  if (!v) return '—';
-  const d = v?.toDate ? v.toDate() : new Date(v);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-function formatDateDDMMYYYY(v) {
-  if (!v) return '—';
-  const d = v?.toDate ? v.toDate() : new Date(v);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
 function getAge(v) {
-  if (!v) return null;
-  const d = v?.toDate ? v.toDate() : new Date(v);
-  if (isNaN(d.getTime())) return null;
+  const d = toJSDate(v);
+  if (!d || Number.isNaN(d.getTime())) return null;
   const today = new Date();
   let age = today.getFullYear() - d.getFullYear();
   const m = today.getMonth() - d.getMonth();
@@ -204,7 +194,7 @@ export default function EmployeeProfile() {
       fullName: employee.fullName || '',
       email: employee.email || '',
       phone: employee.phone || '',
-      dateOfBirth: employee.dateOfBirth ? (typeof employee.dateOfBirth === 'string' ? employee.dateOfBirth : employee.dateOfBirth?.toDate?.()?.toISOString?.()?.slice(0, 10)) : '',
+      dateOfBirth: toDateString(employee.dateOfBirth),
       gender: employee.gender || '',
       address: employee.address || '',
       qualification: employee.qualification || '',
@@ -214,7 +204,7 @@ export default function EmployeeProfile() {
       designation: employee.designation || '',
       employmentType: employee.employmentType || 'Full-time',
       category: employee.category || '',
-      joiningDate: employee.joiningDate ? (typeof employee.joiningDate === 'string' ? employee.joiningDate : employee.joiningDate?.toDate?.()?.toISOString?.()?.slice(0, 10)) : '',
+      joiningDate: toDateString(employee.joiningDate),
       reportingManager: employee.reportingManager || '',
       ctcPerAnnum: employee.ctcPerAnnum ?? employee.ctc ?? '',
       basicSalary: employee.basicSalary ?? '',
@@ -500,11 +490,7 @@ export default function EmployeeProfile() {
     setDeleteConfirm(null);
   };
 
-  const formatDocDate = (v) => {
-    if (!v) return '—';
-    const d = v?.toDate ? v.toDate() : new Date(v);
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  };
+  const formatDocDate = (v) => toDisplayDate(v);
   const formatFileSize = (bytes) => (bytes ? `${(bytes / 1024).toFixed(1)} KB` : '—');
 
   if (loading) {
@@ -553,7 +539,7 @@ export default function EmployeeProfile() {
                 {employee.status || 'Active'}
               </span>
             </div>
-            <p className="text-slate-500 text-sm mt-1">Joined {formatDate(employee.joiningDate)}</p>
+            <p className="text-slate-500 text-sm mt-1">Joined {toDisplayDate(employee.joiningDate)}</p>
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={openEdit} className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2">Edit</button>
@@ -579,7 +565,7 @@ export default function EmployeeProfile() {
               <p><span className="text-slate-500 text-sm">Full Name</span><br />{employee.fullName || '—'}</p>
               <p><span className="text-slate-500 text-sm">Email</span><br />{employee.email || '—'}</p>
               <p><span className="text-slate-500 text-sm">Phone</span><br />{employee.phone || '—'}</p>
-              <p><span className="text-slate-500 text-sm">Date of Birth</span><br />{employee.dateOfBirth ? `${formatDate(employee.dateOfBirth)}${getAge(employee.dateOfBirth) != null ? ` (${getAge(employee.dateOfBirth)} years old)` : ''}` : '—'}</p>
+              <p><span className="text-slate-500 text-sm">Date of Birth</span><br />{employee.dateOfBirth ? `${toDisplayDate(employee.dateOfBirth)}${getAge(employee.dateOfBirth) != null ? ` (${getAge(employee.dateOfBirth)} years old)` : ''}` : '—'}</p>
               <p><span className="text-slate-500 text-sm">Gender</span><br />{employee.gender || '—'}</p>
               <p><span className="text-slate-500 text-sm">Highest Qualification</span><br />{employee.qualification || '—'}</p>
               <p><span className="text-slate-500 text-sm">Address</span><br />{employee.address || '—'}</p>
@@ -592,7 +578,7 @@ export default function EmployeeProfile() {
               <p><span className="text-slate-500 text-sm">Employment Type</span><br />{employee.employmentType || '—'}</p>
               <p><span className="text-slate-500 text-sm">Category</span><br />{employee.category || '—'}</p>
               <p><span className="text-slate-500 text-sm">Reporting Manager</span><br />{employee.reportingManager || '—'}</p>
-              <p><span className="text-slate-500 text-sm">Joining Date</span><br />{formatDateDDMMYYYY(employee.joiningDate)}</p>
+              <p><span className="text-slate-500 text-sm">Joining Date</span><br />{toDisplayDate(employee.joiningDate)}</p>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -883,7 +869,7 @@ export default function EmployeeProfile() {
           ) : (
             timeline.map((ev, i) => (
               <div key={i} className="flex gap-3 items-start">
-                <span className="text-slate-400 text-sm shrink-0">{formatDate(ev.date)}</span>
+                <span className="text-slate-400 text-sm shrink-0">{toDisplayDate(ev.date)}</span>
                 <span className="text-slate-700">{ev.text}</span>
               </div>
             ))
