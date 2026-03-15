@@ -25,7 +25,10 @@ const DEPT_COLOR = {
 const DEFAULT_DEPT_COLOR = '#64748b';
 
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
-const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract'];
+const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
+const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
+const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
+const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
 const DOC_TYPES = ['Appointment Letter', 'PAN Card', 'Aadhaar Card', 'Relieving Letter', 'Offer Letter', 'Experience Certificate', 'Education Certificate', 'Other'];
 
 const LEAVE_TYPE_STYLE = { CL: 'bg-blue-100 text-blue-800', SL: 'bg-red-100 text-red-800', EL: 'bg-green-100 text-green-800' };
@@ -60,9 +63,14 @@ export default function EmployeeProfile() {
 
   const deptColor = employee ? (DEPT_COLOR[employee.department] || DEFAULT_DEPT_COLOR) : DEFAULT_DEPT_COLOR;
   const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
+  const designations = company?.designations?.length ? company.designations : DEFAULT_DESIGNATIONS;
+  const employmentTypes = company?.employmentTypes?.length ? company.employmentTypes : DEFAULT_EMPLOYMENT_TYPES;
+  const branches = company?.branches?.length ? company.branches : DEFAULT_BRANCHES;
+  const qualifications = company?.qualifications?.length ? company.qualifications : DEFAULT_QUALIFICATIONS;
 
   useEffect(() => {
     if (!companyId || !empId) return;
+    console.log('EmployeeProfile empId (Firestore doc id):', empId);
     const load = async () => {
       setLoading(true);
       try {
@@ -117,8 +125,10 @@ export default function EmployeeProfile() {
       dateOfBirth: employee.dateOfBirth ? (typeof employee.dateOfBirth === 'string' ? employee.dateOfBirth : employee.dateOfBirth?.toDate?.()?.toISOString?.()?.slice(0, 10)) : '',
       gender: employee.gender || '',
       address: employee.address || '',
+      qualification: employee.qualification || '',
       empId: employee.empId || '',
       department: employee.department || '',
+      branch: employee.branch || '',
       designation: employee.designation || '',
       employmentType: employee.employmentType || 'Full-time',
       joiningDate: employee.joiningDate ? (typeof employee.joiningDate === 'string' ? employee.joiningDate : employee.joiningDate?.toDate?.()?.toISOString?.()?.slice(0, 10)) : '',
@@ -148,8 +158,10 @@ export default function EmployeeProfile() {
         address: form.address || null,
         empId: form.empId || null,
         department: form.department || null,
+        branch: form.branch || null,
         designation: form.designation || null,
         employmentType: form.employmentType || 'Full-time',
+        qualification: form.qualification || null,
         joiningDate: form.joiningDate || null,
         reportingManager: form.reportingManager || null,
         ctcPerAnnum: form.ctcPerAnnum ? Number(form.ctcPerAnnum) : null,
@@ -288,11 +300,13 @@ export default function EmployeeProfile() {
               <p><span className="text-slate-500 text-sm">Phone</span><br />{employee.phone || '—'}</p>
               <p><span className="text-slate-500 text-sm">Date of Birth</span><br />{formatDateDDMMYYYY(employee.dateOfBirth)}</p>
               <p><span className="text-slate-500 text-sm">Gender</span><br />{employee.gender || '—'}</p>
+              <p><span className="text-slate-500 text-sm">Highest Qualification</span><br />{employee.qualification || '—'}</p>
               <p><span className="text-slate-500 text-sm">Address</span><br />{employee.address || '—'}</p>
             </div>
             <div className="space-y-3">
               <p><span className="text-slate-500 text-sm">Emp ID</span><br />{employee.empId || '—'}</p>
               <p><span className="text-slate-500 text-sm">Department</span><br />{employee.department || '—'}</p>
+              <p><span className="text-slate-500 text-sm">Branch</span><br />{employee.branch || '—'}</p>
               <p><span className="text-slate-500 text-sm">Designation</span><br />{employee.designation || '—'}</p>
               <p><span className="text-slate-500 text-sm">Employment Type</span><br />{employee.employmentType || '—'}</p>
               <p><span className="text-slate-500 text-sm">Reporting Manager</span><br />{employee.reportingManager || '—'}</p>
@@ -428,9 +442,11 @@ export default function EmployeeProfile() {
                 <div><label className="block text-xs text-slate-600 mb-1">Gender</label><select value={form.gender} onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></div>
                 <div className="col-span-2"><label className="block text-xs text-slate-600 mb-1">Address</label><input value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Emp ID</label><input value={form.empId} onChange={(e) => setForm((p) => ({ ...p, empId: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
-                <div><label className="block text-xs text-slate-600 mb-1">Department</label><select value={form.department} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm">{departments.map((d) => <option key={d} value={d}>{d}</option>)}</select></div>
-                <div><label className="block text-xs text-slate-600 mb-1">Designation</label><input value={form.designation} onChange={(e) => setForm((p) => ({ ...p, designation: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
-                <div><label className="block text-xs text-slate-600 mb-1">Employment Type</label><select value={form.employmentType} onChange={(e) => setForm((p) => ({ ...p, employmentType: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm">{EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+                <div><label className="block text-xs text-slate-600 mb-1">Department</label><select value={form.department} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{departments.map((d) => <option key={d} value={d}>{d}</option>)}{!departments.includes('Other') && <option value="Other">Other</option>}</select></div>
+                <div><label className="block text-xs text-slate-600 mb-1">Branch</label><select value={form.branch} onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{branches.map((b) => <option key={b} value={b}>{b}</option>)}{!branches.includes('Other') && <option value="Other">Other</option>}</select></div>
+                <div><label className="block text-xs text-slate-600 mb-1">Designation</label><select value={form.designation} onChange={(e) => setForm((p) => ({ ...p, designation: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{designations.map((d) => <option key={d} value={d}>{d}</option>)}{!designations.includes('Other') && <option value="Other">Other</option>}</select></div>
+                <div><label className="block text-xs text-slate-600 mb-1">Employment Type</label><select value={form.employmentType} onChange={(e) => setForm((p) => ({ ...p, employmentType: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}{!employmentTypes.includes('Other') && <option value="Other">Other</option>}</select></div>
+                <div><label className="block text-xs text-slate-600 mb-1">Highest Qualification</label><select value={form.qualification} onChange={(e) => setForm((p) => ({ ...p, qualification: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{qualifications.map((q) => <option key={q} value={q}>{q}</option>)}{!qualifications.includes('Other') && <option value="Other">Other</option>}</select></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Joining Date</label><input type="date" value={form.joiningDate} onChange={(e) => setForm((p) => ({ ...p, joiningDate: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Reporting Manager</label><input value={form.reportingManager} onChange={(e) => setForm((p) => ({ ...p, reportingManager: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
                 <div><label className="block text-xs text-slate-600 mb-1">CTC</label><input type="number" value={form.ctcPerAnnum} onChange={(e) => setForm((p) => ({ ...p, ctcPerAnnum: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>

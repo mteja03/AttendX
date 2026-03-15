@@ -1,15 +1,27 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { collection, doc, getDoc, getDocs, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 
+const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal'];
+const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
+const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
+const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
 const INDUSTRIES = ['IT', 'Manufacturing', 'Automobile', 'Retail', 'Finance', 'Healthcare', 'Education', 'Media', 'Logistics', 'Real Estate', 'Other'];
 const COLOR_PRESETS = [
   { value: '#378ADD' }, { value: '#1D9E75' }, { value: '#D85A30' },
   { value: '#534AB7' }, { value: '#A32D2D' }, { value: '#BA7517' },
+];
+
+const SECTIONS = [
+  { key: 'branches', label: 'Branch', plural: 'Branches', field: 'branch', defaults: DEFAULT_BRANCHES },
+  { key: 'departments', label: 'Department', plural: 'Departments', field: 'department', defaults: DEFAULT_DEPARTMENTS },
+  { key: 'designations', label: 'Designation', plural: 'Designations', field: 'designation', defaults: DEFAULT_DESIGNATIONS },
+  { key: 'employmentTypes', label: 'Employment Type', plural: 'Employment Types', field: 'employmentType', defaults: DEFAULT_EMPLOYMENT_TYPES },
+  { key: 'qualifications', label: 'Qualification', plural: 'Qualifications', field: 'qualification', defaults: DEFAULT_QUALIFICATIONS },
 ];
 
 export default function Settings() {
@@ -22,7 +34,10 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [companyForm, setCompanyForm] = useState({ name: '', industry: '', location: '', initials: '', color: '#378ADD' });
   const [leavePolicy, setLeavePolicy] = useState({ cl: 12, sl: 12, el: 15 });
-  const [newDept, setNewDept] = useState('');
+  const [addingSection, setAddingSection] = useState(null);
+  const [addValue, setAddValue] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [sectionSearch, setSectionSearch] = useState({});
   const [deactivateConfirm, setDeactivateConfirm] = useState(false);
   const isAdmin = role === 'admin';
 
@@ -56,9 +71,48 @@ export default function Settings() {
     load();
   }, [companyId, showError]);
 
-  const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
+  const getList = (key, defaults) => (company?.[key]?.length ? company[key] : defaults);
+  const getCount = (field) => (value) => employees.filter((e) => (e[field] || '').trim() === value).length;
 
-  const departmentCount = (dept) => employees.filter((e) => (e.department || '').trim() === dept).length;
+  const handleAdd = async (sectionKey, defaults) => {
+    const name = addValue.trim();
+    if (!name) return;
+    const list = getList(sectionKey, defaults);
+    if (list.includes(name)) {
+      showError('Already exists');
+      return;
+    }
+    setSaving(true);
+    try {
+      const next = list.includes ? [...list] : [...defaults];
+      next.push(name);
+      await updateDoc(doc(db, 'companies', companyId), { [sectionKey]: next });
+      setCompany((prev) => (prev ? { ...prev, [sectionKey]: next } : null));
+      setAddValue('');
+      setAddingSection(null);
+      const section = SECTIONS.find((s) => s.key === sectionKey);
+      success(section ? `${section.label} added` : 'Added');
+    } catch (err) {
+      showError('Failed to add');
+    }
+    setSaving(false);
+  };
+
+  const handleRemove = async (sectionKey, name, defaults) => {
+    const section = SECTIONS.find((s) => s.key === sectionKey);
+    const count = getCount(section.field)(name);
+    if (count > 0) return;
+    try {
+      const list = getList(sectionKey, defaults);
+      const next = list.filter((x) => x !== name);
+      await updateDoc(doc(db, 'companies', companyId), { [sectionKey]: next });
+      setCompany((prev) => (prev ? { ...prev, [sectionKey]: next } : null));
+      setDeleteConfirm(null);
+      success(section ? `${section.label} removed` : 'Removed');
+    } catch (err) {
+      showError('Failed to remove');
+    }
+  };
 
   const handleSaveCompany = async (e) => {
     e.preventDefault();
@@ -91,34 +145,6 @@ export default function Settings() {
       showError('Failed to save policy');
     }
     setSaving(false);
-  };
-
-  const handleAddDepartment = async () => {
-    const name = newDept.trim();
-    if (!name || departments.includes(name)) return;
-    try {
-      const next = company?.departments?.length ? [...company.departments] : [...DEFAULT_DEPARTMENTS];
-      if (next.includes(name)) return;
-      next.push(name);
-      await updateDoc(doc(db, 'companies', companyId), { departments: next });
-      setCompany((prev) => (prev ? { ...prev, departments: next } : null));
-      setNewDept('');
-      success('Department added');
-    } catch (err) {
-      showError('Failed to add department');
-    }
-  };
-
-  const handleRemoveDepartment = async (dept) => {
-    if (departmentCount(dept) > 0) return;
-    const next = (company?.departments || DEFAULT_DEPARTMENTS).filter((d) => d !== dept);
-    try {
-      await updateDoc(doc(db, 'companies', companyId), { departments: next });
-      setCompany((prev) => (prev ? { ...prev, departments: next } : null));
-      success('Department removed');
-    } catch (err) {
-      showError('Failed to remove department');
-    }
   };
 
   const handleDeactivateCompany = async () => {
@@ -156,22 +182,59 @@ export default function Settings() {
         </form>
       </section>
 
-      <section className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-slate-800 mb-4">Department Management</h2>
-        <ul className="space-y-2 mb-4">
-          {departments.map((d) => (
-            <li key={d} className="flex items-center justify-between py-2 border-b border-slate-100">
-              <span className="font-medium text-slate-800">{d}</span>
-              <span className="text-slate-500 text-sm">{departmentCount(d)} employee(s)</span>
-              <button type="button" onClick={() => handleRemoveDepartment(d)} disabled={departmentCount(d) > 0} className="text-red-600 text-sm disabled:opacity-40 disabled:cursor-not-allowed">Delete</button>
-            </li>
-          ))}
-        </ul>
-        <div className="flex gap-2">
-          <input value={newDept} onChange={(e) => setNewDept(e.target.value)} placeholder="New department name" className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-48" />
-          <button type="button" onClick={handleAddDepartment} className="rounded-lg bg-[#378ADD] text-white text-sm font-medium px-4 py-2">Add Department</button>
-        </div>
-      </section>
+      {SECTIONS.map(({ key, label, plural, field, defaults }) => {
+        const list = getList(key, defaults);
+        const countFn = getCount(field);
+        const searchTerm = (sectionSearch[key] || '').toLowerCase();
+        const filteredList = searchTerm ? list.filter((x) => x.toLowerCase().includes(searchTerm)) : list;
+        const isAdding = addingSection === key;
+        return (
+          <section key={key} className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+            <h2 className="text-lg font-semibold text-slate-800 mb-1">{plural} Management</h2>
+            <p className="text-slate-500 text-sm mb-4">Used in Add Employee form. Each item shows employee count; delete only when 0.</p>
+            {list.length > 8 && (
+              <input
+                type="text"
+                value={sectionSearch[key] || ''}
+                onChange={(e) => setSectionSearch((p) => ({ ...p, [key]: e.target.value }))}
+                placeholder={`Search ${plural.toLowerCase()}...`}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-4"
+              />
+            )}
+            <ul className="space-y-2 mb-4">
+              {filteredList.map((item) => (
+                <li key={item} className="flex items-center justify-between py-2 border-b border-slate-100">
+                  <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-800">{item}</span>
+                  <span className="text-slate-500 text-sm">{countFn(item)} employee(s)</span>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirm({ section: key, name: item, defaults })}
+                    disabled={countFn(item) > 0}
+                    className="text-red-600 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:underline"
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {isAdding ? (
+              <div className="flex gap-2 flex-wrap items-center">
+                <input
+                  value={addValue}
+                  onChange={(e) => setAddValue(e.target.value)}
+                  placeholder={`New ${label.toLowerCase()} name`}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-48"
+                  autoFocus
+                />
+                <button type="button" onClick={() => handleAdd(key, defaults)} disabled={saving || !addValue.trim()} className="rounded-lg bg-[#378ADD] text-white text-sm font-medium px-4 py-2 disabled:opacity-50">Save</button>
+                <button type="button" onClick={() => { setAddingSection(null); setAddValue(''); }} className="text-slate-500 text-sm hover:underline">Cancel</button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => { setAddingSection(key); setAddValue(''); }} className="rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium px-4 py-2">Add {label}</button>
+            )}
+          </section>
+        );
+      })}
 
       <section className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
         <h2 className="text-lg font-semibold text-slate-800 mb-4">Leave Policy</h2>
@@ -191,6 +254,19 @@ export default function Settings() {
         </section>
       )}
 
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">Delete {deleteConfirm.name}?</h3>
+            <p className="text-sm text-slate-600 mb-4">This cannot be undone.</p>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setDeleteConfirm(null)} className="text-slate-500 text-sm">Cancel</button>
+              <button type="button" onClick={() => handleRemove(deleteConfirm.section, deleteConfirm.name, deleteConfirm.defaults)} className="rounded-lg bg-red-600 text-white text-sm font-medium px-4 py-2">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {deactivateConfirm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -205,3 +281,4 @@ export default function Settings() {
       )}
     </div>
   );
+}

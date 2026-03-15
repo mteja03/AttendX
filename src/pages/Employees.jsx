@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   collection,
   doc,
@@ -16,7 +16,10 @@ import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
-const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract'];
+const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
+const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
+const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
+const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
 
 const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const AADHAAR_REGEX = /^[0-9]{12}$/;
@@ -28,8 +31,10 @@ const initialForm = {
   dateOfBirth: '',
   gender: '',
   address: '',
+  qualification: '',
   empId: '',
   department: '',
+  branch: '',
   designation: '',
   employmentType: 'Full-time',
   joiningDate: new Date().toISOString().slice(0, 10),
@@ -45,6 +50,7 @@ const initialForm = {
 
 export default function Employees() {
   const { companyId } = useParams();
+  const navigate = useNavigate();
   const { success, error: showError } = useToast();
   const [employees, setEmployees] = useState([]);
   const [company, setCompany] = useState(null);
@@ -76,6 +82,10 @@ export default function Employees() {
   }, [companyId, showError]);
 
   const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
+  const designations = company?.designations?.length ? company.designations : DEFAULT_DESIGNATIONS;
+  const employmentTypes = company?.employmentTypes?.length ? company.employmentTypes : DEFAULT_EMPLOYMENT_TYPES;
+  const branches = company?.branches?.length ? company.branches : DEFAULT_BRANCHES;
+  const qualifications = company?.qualifications?.length ? company.qualifications : DEFAULT_QUALIFICATIONS;
 
   const nextEmpId = useMemo(() => {
     const nums = employees
@@ -135,8 +145,10 @@ export default function Employees() {
         address: form.address || null,
         empId: form.empId || nextEmpId,
         department: form.department || null,
+        branch: form.branch || null,
         designation: form.designation || null,
         employmentType: form.employmentType || 'Full-time',
+        qualification: form.qualification || null,
         joiningDate: form.joiningDate || null,
         reportingManager: form.reportingManager || null,
         ctcPerAnnum: form.ctcPerAnnum ? Number(form.ctcPerAnnum) : null,
@@ -239,7 +251,11 @@ export default function Employees() {
             </thead>
             <tbody>
               {filtered.map((emp) => (
-                <tr key={emp.id} className="border-t border-slate-100">
+                <tr
+                  key={emp.id}
+                  className="border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors"
+                  onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
+                >
                   <td className="px-4 py-3 font-mono text-slate-700">{emp.empId || '—'}</td>
                   <td className="px-4 py-3">
                     <div>
@@ -264,12 +280,9 @@ export default function Employees() {
                       {emp.status || 'Active'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 space-x-2">
-                    <Link to={`/company/${companyId}/employees/${emp.id}`} className="text-[#378ADD] text-xs font-medium hover:underline">
+                  <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#378ADD] text-xs font-medium hover:underline">
                       View Profile
-                    </Link>
-                    <button type="button" className="text-slate-600 text-xs font-medium hover:underline">
-                      Edit
                     </button>
                     {(emp.status || 'Active') === 'Active' && (
                       <button
@@ -330,6 +343,14 @@ export default function Employees() {
                       <option value="Other">Other</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Highest Qualification</label>
+                    <select name="qualification" value={form.qualification} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
+                      <option value="">—</option>
+                      {qualifications.map((q) => <option key={q} value={q}>{q}</option>)}
+                      {!qualifications.includes('Other') && <option value="Other">Other</option>}
+                    </select>
+                  </div>
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-medium text-slate-600 mb-1">Address</label>
                     <input name="address" value={form.address} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
@@ -349,16 +370,30 @@ export default function Employees() {
                     <select name="department" value={form.department} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
                       <option value="">—</option>
                       {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+                      {!departments.includes('Other') && <option value="Other">Other</option>}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Branch</label>
+                    <select name="branch" value={form.branch} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
+                      <option value="">—</option>
+                      {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+                      {!branches.includes('Other') && <option value="Other">Other</option>}
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Designation</label>
-                    <input name="designation" value={form.designation} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <select name="designation" value={form.designation} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
+                      <option value="">—</option>
+                      {designations.map((d) => <option key={d} value={d}>{d}</option>)}
+                      {!designations.includes('Other') && <option value="Other">Other</option>}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Employment Type</label>
                     <select name="employmentType" value={form.employmentType} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
-                      {EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      {employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                      {!employmentTypes.includes('Other') && <option value="Other">Other</option>}
                     </select>
                   </div>
                   <div>
