@@ -11,6 +11,7 @@ import {
   where,
   serverTimestamp,
   arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -81,6 +82,8 @@ export default function EmployeeProfile() {
   const [form, setForm] = useState(null);
   const [categoryOpen, setCategoryOpen] = useState({});
   const [uploadingDocId, setUploadingDocId] = useState(null);
+  const [deletingDocId, setDeletingDocId] = useState(null);
+  const [replacingDocId, setReplacingDocId] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [additionalDocName, setAdditionalDocName] = useState('');
   const [additionalDocCategory, setAdditionalDocCategory] = useState(DOCUMENT_CATEGORIES[0]);
@@ -94,6 +97,8 @@ export default function EmployeeProfile() {
   const branches = company?.branches?.length ? company.branches : DEFAULT_BRANCHES;
   const qualifications = company?.qualifications?.length ? company.qualifications : DEFAULT_QUALIFICATIONS;
   const categories = company?.categories?.length ? company.categories : DEFAULT_CATEGORIES;
+
+  const empRef = companyId && empId ? doc(db, 'companies', companyId, 'employees', empId) : null;
 
   useEffect(() => {
     if (!companyId || !empId) return;
@@ -184,6 +189,14 @@ export default function EmployeeProfile() {
   }, [docByType]);
   const documentCompletion = totalMandatory ? Math.round((mandatoryUploaded / totalMandatory) * 100) : 100;
   const progressColor = documentCompletion <= 40 ? 'bg-red-500' : documentCompletion < 80 ? 'bg-amber-500' : 'bg-green-500';
+
+  const refreshEmployee = async () => {
+    if (!empRef) return;
+    const snap = await getDoc(empRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    setEmployee({ id: snap.id, ...data });
+  };
 
   const openEdit = () => {
     if (!employee) return;
@@ -308,14 +321,13 @@ export default function EmployeeProfile() {
         uploadedBy: currentUser?.email || null,
         fileSize: result.fileSize,
       };
-      const nextDocs = [...(employee.documents || []).filter((d) => d.id !== docId), entry];
-      const newMandatory = mandatoryUploaded + (docSpec?.mandatory && !docByType[docId] ? 1 : 0);
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
-        documents: nextDocs,
-        documentCompletion: totalMandatory ? Math.round((newMandatory / totalMandatory) * 100) : 100,
-        updatedAt: serverTimestamp(),
-      });
-      setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
+      if (empRef) {
+        await updateDoc(empRef, {
+          documents: arrayUnion(entry),
+          updatedAt: serverTimestamp(),
+        });
+        await refreshEmployee();
+      }
       success(`${docName} uploaded successfully`);
     } catch (err) {
       driveAccessError(err);
@@ -336,8 +348,13 @@ export default function EmployeeProfile() {
       return;
     }
     setUploadingDocId(docId);
+    setReplacingDocId(docEntry.fileId);
     try {
-      await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+      try {
+        await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+      } catch (_) {
+        // ignore Drive delete failure
+      }
       const result = await uploadEmployeeDocument(
         googleAccessToken,
         file,
@@ -355,36 +372,54 @@ export default function EmployeeProfile() {
         uploadedBy: currentUser?.email || null,
         fileSize: result.fileSize,
       };
-      const nextDocs = (employee.documents || []).map((d) => (d.id === docId ? newEntry : d));
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { documents: nextDocs, updatedAt: serverTimestamp() });
-      setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
+      if (empRef) {
+        await updateDoc(empRef, {
+          documents: arrayRemove(docEntry),
+        });
+        await updateDoc(empRef, {
+          documents: arrayUnion(newEntry),
+          updatedAt: serverTimestamp(),
+        });
+        await refreshEmployee();
+      }
       success(`${docEntry.name} replaced successfully`);
     } catch (err) {
       driveAccessError(err);
     }
     setUploadingDocId(null);
+    setReplacingDocId(null);
   };
 
   const handleDeleteChecklistDoc = async (docEntry) => {
     if (!docEntry?.fileId) return;
     if (!googleAccessToken) {
-      showError('Please sign out and sign back in to enable Google Drive uploads');
+      showError('Please sign out and sign back in to manage documents');
       return;
     }
+    let driveFailed = false;
+    setDeletingDocId(docEntry.fileId);
     try {
-      await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
-      const nextDocs = (employee.documents || []).filter((d) => d.fileId !== docEntry.fileId);
-      const newPct = totalMandatory ? Math.round((mandatoryUploaded - (getDocById(docEntry.id)?.mandatory ? 1 : 0)) / totalMandatory * 100) : 0;
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
-        documents: nextDocs,
-        documentCompletion: Math.max(0, newPct),
-        updatedAt: serverTimestamp(),
-      });
-      setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
-      success('Document deleted');
+      try {
+        await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+      } catch (_) {
+        driveFailed = true;
+      }
+      if (empRef) {
+        await updateDoc(empRef, {
+          documents: arrayRemove(docEntry),
+          updatedAt: serverTimestamp(),
+        });
+        await refreshEmployee();
+      }
+      if (driveFailed) {
+        showError('File removed from records (may have already been deleted from Drive)');
+      } else {
+        success('Document deleted');
+      }
     } catch (err) {
       driveAccessError(err);
     }
+    setDeletingDocId(null);
     setDeleteConfirm(null);
   };
 
@@ -440,18 +475,28 @@ export default function EmployeeProfile() {
     const docEntry = additionalDocs[index];
     if (!docEntry?.fileId) return;
     if (!googleAccessToken) {
-      showError('Please sign out and sign back in to enable Google Drive uploads');
+      showError('Please sign out and sign back in to manage documents');
       return;
     }
+    setDeletingDocId(docEntry.fileId);
     try {
-      await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
-      const nextDocs = (employee.documents || []).filter((d) => d.fileId !== docEntry.fileId);
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { documents: nextDocs, updatedAt: serverTimestamp() });
-      setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
+      try {
+        await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+      } catch (_) {
+        // ignore Drive delete error
+      }
+      if (empRef) {
+        await updateDoc(empRef, {
+          documents: arrayRemove(docEntry),
+          updatedAt: serverTimestamp(),
+        });
+        await refreshEmployee();
+      }
       success('Document deleted');
     } catch (err) {
       driveAccessError(err);
     }
+    setDeletingDocId(null);
     setDeleteConfirm(null);
   };
 
@@ -626,6 +671,9 @@ export default function EmployeeProfile() {
                     {cat.documents.map((doc) => {
                       const uploaded = docByType[doc.id];
                       const uploading = uploadingDocId === doc.id;
+                      const isReplacing = uploaded?.fileId && replacingDocId === uploaded.fileId;
+                      const isDeleting = uploaded?.fileId && deletingDocId === uploaded.fileId;
+                      const rowBusy = uploading || isReplacing || isDeleting;
                       return (
                         <li key={doc.id} className="flex items-center gap-4 px-4 py-3">
                           {uploaded ? (
@@ -637,15 +685,22 @@ export default function EmployeeProfile() {
                               </div>
                               <div className="flex gap-2 shrink-0">
                                 {uploaded.webViewLink && (
-                                  <button type="button" onClick={() => handleViewDoc(uploaded)} className="text-[#378ADD] text-xs font-medium hover:underline disabled:opacity-50" disabled={!!uploadingDocId}>View</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleViewDoc(uploaded)}
+                                    className="text-[#378ADD] text-xs font-medium hover:underline disabled:opacity-50"
+                                    disabled={rowBusy}
+                                  >
+                                    View
+                                  </button>
                                 )}
-                                <label className={`text-xs font-medium text-slate-600 hover:underline cursor-pointer ${uploadingDocId ? 'pointer-events-none opacity-50' : ''}`}>
-                                  Replace
+                                <label className={`text-xs font-medium text-slate-600 hover:underline cursor-pointer ${rowBusy ? 'pointer-events-none opacity-50' : ''}`}>
+                                  {isReplacing ? 'Replacing…' : 'Replace'}
                                   <input
                                     type="file"
                                     className="hidden"
                                     accept={doc.accepts || '.pdf,.jpg,.jpeg,.png'}
-                                    disabled={!!uploadingDocId}
+                                    disabled={rowBusy}
                                     onChange={(e) => {
                                       const f = e.target.files?.[0];
                                       if (f) handleReplaceDoc(f, doc.id);
@@ -653,7 +708,14 @@ export default function EmployeeProfile() {
                                     }}
                                   />
                                 </label>
-                                <button type="button" onClick={() => setDeleteConfirm({ type: 'checklist', doc: uploaded })} className="text-red-600 text-xs font-medium hover:underline disabled:opacity-50" disabled={!!uploadingDocId}>Delete</button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteConfirm({ type: 'checklist', doc: uploaded })}
+                                  className="text-red-600 text-xs font-medium hover:underline disabled:opacity-50"
+                                  disabled={rowBusy}
+                                >
+                                  {isDeleting ? 'Deleting…' : 'Delete'}
+                                </button>
                               </div>
                             </>
                           ) : (
@@ -750,13 +812,14 @@ export default function EmployeeProfile() {
                 <p className="text-sm text-slate-600 mb-4">File will be removed from Google Drive.</p>
                 <div className="flex justify-end gap-3">
                   <button type="button" onClick={() => setDeleteConfirm(null)} className="text-slate-500 text-sm">Cancel</button>
-                  <button
-                    type="button"
-                    onClick={() => deleteConfirm.type === 'checklist' ? handleDeleteChecklistDoc(deleteConfirm.doc) : handleDeleteAdditionalDoc(deleteConfirm.index)}
-                    className="rounded-lg bg-red-600 text-white text-sm font-medium px-4 py-2"
-                  >
-                    Delete
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteConfirm.type === 'checklist' ? handleDeleteChecklistDoc(deleteConfirm.doc) : handleDeleteAdditionalDoc(deleteConfirm.index)}
+                      className="rounded-lg bg-red-600 text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                      disabled={!!deletingDocId}
+                    >
+                      {deletingDocId ? 'Deleting…' : 'Delete'}
+                    </button>
                 </div>
               </div>
             </div>
