@@ -88,32 +88,31 @@ export default function Companies() {
     location: '',
   });
 
-  // Real-time listener: companies (no filters — show all including inactive for admin)
+  // Real-time listener: companies with orderBy (fires immediately, updates on change, cleans up on unmount)
   useEffect(() => {
-    console.log('[Companies] Setting up onSnapshot for collection(db, "companies")');
-    const companiesRef = collection(db, 'companies');
+    const q = query(
+      collection(db, 'companies'),
+      orderBy('createdAt', 'desc'),
+    );
     const unsubscribe = onSnapshot(
-      companiesRef,
+      q,
       (snapshot) => {
-        const docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const sorted = [...docs].sort((a, b) => {
-          const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.getTime?.() ?? 0;
-          const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.getTime?.() ?? 0;
-          return tb - ta;
-        });
-        console.log('[Companies] onSnapshot received', sorted.length, 'companies', sorted);
-        setCompanies(sorted);
+        console.log('Companies snapshot:', snapshot.docs.length, 'companies found');
+        console.log('Companies data:', snapshot.docs.map((d) => ({ id: d.id, name: d.data().name })));
+        const companiesData = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setCompanies(companiesData);
+        setLoading(false);
       },
-      (err) => {
-        console.error('[Companies] onSnapshot error', err);
+      (error) => {
+        console.error('Companies listener error:', error);
+        setLoading(false);
         showError('Failed to load companies');
       },
     );
-    setLoading(false);
-    return () => {
-      console.log('[Companies] Cleaning up onSnapshot unsubscribe');
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [showError]);
 
   // Platform users: fetch once on mount
@@ -154,8 +153,9 @@ export default function Companies() {
     );
   }, [companies, search]);
 
+  const totalCompanies = companies.length;
   const totalEmployees = useMemo(
-    () => companies.reduce((sum, c) => sum + (Number(c.employeeCount) || 0), 0),
+    () => companies.reduce((sum, c) => sum + (c.employeeCount || 0), 0),
     [companies],
   );
 
@@ -239,24 +239,17 @@ export default function Companies() {
 
   const handleSeed = async () => {
     setSeeding(true);
-    success('Seeding…');
     try {
       const result = await seedData(currentUser?.uid || currentUser?.email || '');
-      if (result.seeded) {
-        success('Sample data seeded. Two companies with employees, leave and attendance added.');
+      if (result.success) {
+        success('Sample data created! 2 companies added.');
         // onSnapshot listener will update companies list automatically
       } else {
-        success(result.message || 'Already seeded.');
-        // Listener already has companies; optionally refetch once without orderBy
-        getDocs(collection(db, 'companies')).then((snap) => {
-          const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          setCompanies((prev) => (list.length > prev.length ? list : prev));
-        }).catch(() => {});
+        showError(result.message || 'Seed failed.');
       }
     } catch (err) {
       console.error('Seed error:', err);
-      const msg = err?.message || err?.code || 'Seed failed';
-      showError(msg.includes('Permission') ? 'Seed failed: check Firestore rules allow write to companies' : `Seed failed: ${msg}`);
+      showError(err?.message || err?.code || 'Seed failed');
     } finally {
       setSeeding(false);
     }
@@ -340,7 +333,7 @@ export default function Companies() {
           <>
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <p className="text-slate-500 text-sm">Total Companies</p>
-              <p className="text-xl font-semibold text-slate-800 mt-1">{companies.length}</p>
+              <p className="text-xl font-semibold text-slate-800 mt-1">{totalCompanies}</p>
             </div>
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <p className="text-slate-500 text-sm">Total Employees</p>
@@ -386,14 +379,16 @@ export default function Companies() {
             >
               Add your first company
             </button>
-            <button
-              type="button"
-              onClick={handleSeed}
-              disabled={seeding}
-              className="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-medium px-4 py-2 disabled:opacity-50"
-            >
-              {seeding ? 'Seeding…' : 'Seed sample data (2 companies)'}
-            </button>
+            {companies.length === 0 && (
+              <button
+                type="button"
+                onClick={handleSeed}
+                disabled={seeding}
+                className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+              >
+                {seeding ? 'Creating sample data...' : 'Seed sample data (2 companies)'}
+              </button>
+            )}
           </div>
         </div>
       ) : (
