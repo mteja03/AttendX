@@ -5,6 +5,7 @@ import {
   collectionGroup,
   doc,
   getDocs,
+  onSnapshot,
   setDoc,
   updateDoc,
   query,
@@ -80,26 +81,59 @@ export default function Companies() {
     location: '',
   });
 
+  // Real-time listener: companies (no filters — show all including inactive for admin)
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [companiesSnap, usersSnap, pendingSnap] = await Promise.all([
-          getDocs(query(collection(db, 'companies'), orderBy('createdAt', 'desc'))),
-          getDocs(collection(db, 'users')),
-          getDocs(query(collectionGroup(db, 'leave'), where('status', '==', 'Pending'))),
-        ]);
-        setCompanies(companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setPendingLeavesCount(pendingSnap.size);
-      } catch (err) {
-        console.error(err);
-        showError('Failed to load data');
-      }
-      setLoading(false);
+    console.log('[Companies] Setting up onSnapshot for collection(db, "companies")');
+    const companiesRef = collection(db, 'companies');
+    const unsubscribe = onSnapshot(
+      companiesRef,
+      (snapshot) => {
+        const docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const sorted = [...docs].sort((a, b) => {
+          const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.getTime?.() ?? 0;
+          const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.getTime?.() ?? 0;
+          return tb - ta;
+        });
+        console.log('[Companies] onSnapshot received', sorted.length, 'companies', sorted);
+        setCompanies(sorted);
+      },
+      (err) => {
+        console.error('[Companies] onSnapshot error', err);
+        showError('Failed to load companies');
+      },
+    );
+    setLoading(false);
+    return () => {
+      console.log('[Companies] Cleaning up onSnapshot unsubscribe');
+      unsubscribe();
     };
-    load();
   }, [showError]);
+
+  // Platform users: fetch once on mount
+  useEffect(() => {
+    let cancelled = false;
+    getDocs(collection(db, 'users'))
+      .then((snap) => {
+        if (!cancelled) setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      })
+      .catch((err) => {
+        if (!cancelled) console.error('[Companies] users fetch error', err);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Pending leaves: fetch once; if collectionGroup index not ready, show 0
+  useEffect(() => {
+    let cancelled = false;
+    getDocs(query(collectionGroup(db, 'leave'), where('status', '==', 'Pending')))
+      .then((snap) => {
+        if (!cancelled) setPendingLeavesCount(snap.size);
+      })
+      .catch(() => {
+        if (!cancelled) setPendingLeavesCount(0);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const filteredCompanies = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -185,8 +219,8 @@ export default function Companies() {
           ...payload,
           createdAt: serverTimestamp(),
         });
-        setCompanies((prev) => [{ id: ref.id, ...payload, createdAt: new Date(), employeeCount: 0 }, ...prev]);
         success('Company added');
+        // onSnapshot listener will update companies list automatically
       }
       closeModal();
     } catch (err) {
@@ -198,36 +232,35 @@ export default function Companies() {
 
   const handleSeed = async () => {
     setSeeding(true);
+    success('Seeding…');
     try {
       const result = await seedData(currentUser?.uid || currentUser?.email || '');
       if (result.seeded) {
-        const [companiesSnap, usersSnap, pendingSnap] = await Promise.all([
-          getDocs(query(collection(db, 'companies'), orderBy('createdAt', 'desc'))),
-          getDocs(collection(db, 'users')),
-          getDocs(query(collectionGroup(db, 'leave'), where('status', '==', 'Pending'))),
-        ]);
-        setCompanies(companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setPendingLeavesCount(pendingSnap.size);
         success('Sample data seeded. Two companies with employees, leave and attendance added.');
+        // onSnapshot listener will update companies list automatically
       } else {
         success(result.message || 'Already seeded.');
+        // Listener already has companies; optionally refetch once without orderBy
+        getDocs(collection(db, 'companies')).then((snap) => {
+          const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setCompanies((prev) => (list.length > prev.length ? list : prev));
+        }).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      showError('Seed failed');
+      console.error('Seed error:', err);
+      const msg = err?.message || err?.code || 'Seed failed';
+      showError(msg.includes('Permission') ? 'Seed failed: check Firestore rules allow write to companies' : `Seed failed: ${msg}`);
+    } finally {
+      setSeeding(false);
     }
-    setSeeding(false);
   };
 
   const handleDeactivate = async (company) => {
     try {
       await updateDoc(doc(db, 'companies', company.id), { isActive: false });
-      setCompanies((prev) =>
-        prev.map((c) => (c.id === company.id ? { ...c, isActive: false } : c)),
-      );
       setMenuCompanyId(null);
       success('Company deactivated');
+      // onSnapshot will update companies list automatically
     } catch (err) {
       showError('Failed to deactivate');
     }
