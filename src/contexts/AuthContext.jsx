@@ -9,7 +9,6 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [role, setRole] = useState(null);
   const [companyId, setCompanyId] = useState(null);
-  const [googleAccessToken, setGoogleAccessToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
@@ -19,8 +18,6 @@ export function AuthProvider({ children }) {
         setCurrentUser(null);
         setRole(null);
         setCompanyId(null);
-        setGoogleAccessToken(null);
-        try { localStorage.removeItem('gat'); } catch (_) {}
         setLoading(false);
         setAuthError('');
         return;
@@ -63,12 +60,6 @@ export function AuthProvider({ children }) {
           setCompanyId(data.companyId ?? null);
           setAuthError('');
           setLoading(false);
-          try {
-            const stored = localStorage.getItem('gat');
-            setGoogleAccessToken(stored || firebaseUser.accessToken || null);
-          } catch (_) {
-            setGoogleAccessToken(firebaseUser.accessToken || null);
-          }
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error checking users whitelist', error);
@@ -92,12 +83,6 @@ export function AuthProvider({ children }) {
     setAuthError('');
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const accessToken = credential?.accessToken;
-    if (accessToken) {
-      setGoogleAccessToken(accessToken);
-      try { localStorage.setItem('gat', accessToken); } catch (_) {}
-    }
 
     if (user?.email?.toLowerCase() === 'mteja0852@gmail.com') {
       const email = 'mteja0852@gmail.com';
@@ -119,7 +104,6 @@ export function AuthProvider({ children }) {
   };
 
   const signOutUser = async () => {
-    try { localStorage.removeItem('gat'); } catch (_) {}
     await signOut(auth);
   };
 
@@ -128,13 +112,12 @@ export function AuthProvider({ children }) {
       currentUser,
       role,
       companyId,
-      googleAccessToken,
       loading,
       authError,
       signInWithGoogle,
       signOut: signOutUser,
     }),
-    [currentUser, role, companyId, googleAccessToken, loading, authError],
+    [currentUser, role, companyId, loading, authError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

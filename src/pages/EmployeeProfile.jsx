@@ -67,7 +67,7 @@ function getAge(v) {
 export default function EmployeeProfile() {
   const { companyId, empId } = useParams();
   const [searchParams] = useSearchParams();
-  const { googleAccessToken, currentUser } = useAuth();
+  const { currentUser } = useAuth();
   const { success, error: showError } = useToast();
   const [employee, setEmployee] = useState(null);
   const [company, setCompany] = useState(null);
@@ -272,20 +272,11 @@ export default function EmployeeProfile() {
   const getCompanyName = () => company?.name || 'Company';
 
   const driveAccessError = (err) => {
-    const code = err?.message || '';
-    if (code.includes('401') || code.includes('403') || code.includes('expired') || code.includes('Access')) {
-      showError('Google Drive access expired. Please sign out and sign in again.');
-    } else {
-      showError(err?.message || 'Upload failed');
-    }
+    showError(err?.message || 'Upload failed');
   };
 
   const handleUploadChecklistDoc = async (file, docId, docName, categoryName) => {
     if (!employee) return;
-    if (!googleAccessToken) {
-      showError('Please sign out and sign in again to enable Google Drive access');
-      return;
-    }
     const docSpec = getDocById(docId);
     if (docSpec && !acceptsFile(docSpec, file.name)) {
       showError(`Accepted formats: ${docSpec.accepts}`);
@@ -294,7 +285,6 @@ export default function EmployeeProfile() {
     setUploadingDocId(docId);
     try {
       const result = await uploadEmployeeDocument(
-        googleAccessToken,
         file,
         getCompanyName(),
         employee.empId,
@@ -329,7 +319,7 @@ export default function EmployeeProfile() {
 
   const handleReplaceDoc = async (file, docId) => {
     const docEntry = docByType[docId];
-    if (!docEntry?.fileId || !googleAccessToken) return;
+    if (!docEntry?.fileId) return;
     const docSpec = getDocById(docId);
     if (docSpec && !acceptsFile(docSpec, file.name)) {
       showError(`Accepted formats: ${docSpec.accepts}`);
@@ -337,9 +327,8 @@ export default function EmployeeProfile() {
     }
     setUploadingDocId(docId);
     try {
-      await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+      await deleteFileFromDrive(docEntry.fileId);
       const result = await uploadEmployeeDocument(
-        googleAccessToken,
         file,
         getCompanyName(),
         employee.empId,
@@ -366,9 +355,9 @@ export default function EmployeeProfile() {
   };
 
   const handleDeleteChecklistDoc = async (docEntry) => {
-    if (!docEntry?.fileId || !googleAccessToken) return;
+    if (!docEntry?.fileId) return;
     try {
-      await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+      await deleteFileFromDrive(docEntry.fileId);
       const nextDocs = (employee.documents || []).filter((d) => d.fileId !== docEntry.fileId);
       const newPct = totalMandatory ? Math.round((mandatoryUploaded - (getDocById(docEntry.id)?.mandatory ? 1 : 0)) / totalMandatory * 100) : 0;
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
@@ -393,14 +382,9 @@ export default function EmployeeProfile() {
       showError('Name and file required');
       return;
     }
-    if (!googleAccessToken) {
-      showError('Please sign out and sign in again to enable Google Drive access');
-      return;
-    }
     setUploadingDocId('additional');
     try {
       const result = await uploadEmployeeDocument(
-        googleAccessToken,
         additionalDocFile,
         getCompanyName(),
         employee.empId,
@@ -435,12 +419,8 @@ export default function EmployeeProfile() {
   const handleDeleteAdditionalDoc = async (index) => {
     const docEntry = additionalDocs[index];
     if (!docEntry?.fileId) return;
-    if (!googleAccessToken) {
-      showError('Please sign out and sign in again to enable Google Drive access');
-      return;
-    }
     try {
-      await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+      await deleteFileFromDrive(docEntry.fileId);
       const nextDocs = (employee.documents || []).filter((d) => d.fileId !== docEntry.fileId);
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { documents: nextDocs, updatedAt: serverTimestamp() });
       setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
@@ -573,12 +553,6 @@ export default function EmployeeProfile() {
 
       {tab === 'documents' && (
         <div className="space-y-6">
-          {!googleAccessToken && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              Sign in with Google to upload and manage documents. Documents are stored in your Google Drive.
-            </div>
-          )}
-
           {uploadingDocId && (
             <div className="rounded-xl border border-[#378ADD] bg-[#378ADD]/10 p-3 text-sm text-[#378ADD] font-medium flex items-center gap-2">
               <span className="animate-spin rounded-full h-4 w-4 border-2 border-[#378ADD] border-t-transparent" />
