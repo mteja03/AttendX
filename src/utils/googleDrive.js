@@ -117,3 +117,52 @@ export async function deleteFileFromDrive(accessToken, fileId) {
     throw new Error('Failed to delete file');
   }
 }
+
+export async function findAndDeleteFolder(accessToken, folderName, parentName) {
+  try {
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+    };
+
+    // Find parent folder first
+    const parentQuery =
+      `name='${parentName}' and ` +
+      "mimeType='application/vnd.google-apps.folder' " +
+      'and trashed=false';
+    const parentRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(parentQuery)}&fields=files(id,name)`,
+      { headers },
+    );
+    const parentData = await parentRes.json();
+    if (!parentData.files?.length) return;
+
+    const parentId = parentData.files[0].id;
+
+    // Find company folder under parent
+    const folderQuery =
+      `name='${folderName}' and ` +
+      "mimeType='application/vnd.google-apps.folder' " +
+      `and '${parentId}' in parents ` +
+      'and trashed=false';
+    const folderRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(folderQuery)}&fields=files(id,name)`,
+      { headers },
+    );
+    const folderData = await folderRes.json();
+    if (!folderData.files?.length) return;
+
+    const folderId = folderData.files[0].id;
+
+    // Delete the folder (deletes all contents)
+    await fetch(
+      `https://www.googleapis.com/drive/v3/files/${folderId}`,
+      {
+        method: 'DELETE',
+        headers,
+      },
+    );
+    console.log('Deleted Drive folder:', folderName);
+  } catch (e) {
+    console.warn('Could not delete Drive folder:', folderName, e.message);
+  }
+}

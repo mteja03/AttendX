@@ -19,6 +19,7 @@ import { db } from '../firebase/config';
 import { seedData } from '../firebase/seed';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { findAndDeleteFolder, deleteFileFromDrive } from '../utils/googleDrive';
 
 const COLOR_PRESETS = [
   { name: 'Blue', value: '#378ADD' },
@@ -63,7 +64,7 @@ function CardSkeleton() {
 }
 
 export default function Companies() {
-  const { currentUser } = useAuth();
+  const { currentUser, googleAccessToken } = useAuth();
   const { success, error: showError } = useToast();
   const [companies, setCompanies] = useState([]);
   const [users, setUsers] = useState([]);
@@ -287,22 +288,74 @@ export default function Companies() {
     const company = deleteConfirm;
     if (!company) return;
     setDeleting(true);
+    const companyId = company.id;
+    const companyName = company.name || 'Company';
+    let driveCleanupOk = true;
+
     try {
-      const id = company.id;
-      await deleteSubcollection(id, 'attendance');
-      await deleteSubcollection(id, 'leave');
-      await deleteSubcollection(id, 'employees');
-      await deleteSubcollection(id, 'teamMembers');
-      await deleteDoc(doc(db, 'companies', id));
+      // Step 1 — Collect all Drive file IDs from all employees
+      const employeesSnap = await getDocs(collection(db, 'companies', companyId, 'employees'));
+      const driveFileIds = [];
+      employeesSnap.docs.forEach((empDoc) => {
+        const data = empDoc.data();
+        const docs = data.documents || [];
+        docs.forEach((d) => {
+          if (d.fileId) driveFileIds.push(d.fileId);
+        });
+      });
+
+      // Step 2 & 3 — Delete all Drive files and company folder
+      if (googleAccessToken) {
+        for (const fileId of driveFileIds) {
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            await deleteFileFromDrive(googleAccessToken, fileId);
+          } catch (e) {
+            driveCleanupOk = false;
+            // eslint-disable-next-line no-console
+            console.warn('Could not delete Drive file:', fileId, e.message);
+          }
+        }
+        try {
+          await findAndDeleteFolder(googleAccessToken, companyName, 'AttendX HR Documents');
+        } catch (e) {
+          driveCleanupOk = false;
+          // eslint-disable-next-line no-console
+          console.warn('Could not delete Drive folder for company:', companyName, e.message);
+        }
+      } else {
+        driveCleanupOk = false;
+      }
+
+      // Step 4 — Delete Firestore data (existing logic)
+      await deleteSubcollection(companyId, 'attendance');
+      await deleteSubcollection(companyId, 'leave');
+      await deleteSubcollection(companyId, 'employees');
+      await deleteSubcollection(companyId, 'teamMembers');
+      await deleteDoc(doc(db, 'companies', companyId));
+
       const usersSnap = await getDocs(collection(db, 'users'));
       await Promise.all(
         usersSnap.docs
-          .filter((d) => d.data().companyId === id)
+          .filter((d) => d.data().companyId === companyId)
           .map((d) => updateDoc(doc(db, 'users', d.id), { companyId: null })),
       );
+
       setDeleteConfirm(null);
       setMenuCompanyId(null);
-      success('Company deleted permanently');
+
+      // Step 5 — Toast based on Drive cleanup status
+      if (driveCleanupOk) {
+        success('Company and all documents deleted permanently');
+      } else if (!googleAccessToken) {
+        showError(
+          'Company deleted. Please manually remove the company folder from Google Drive (Google Drive access token not available).',
+        );
+      } else {
+        showError(
+          `Company deleted. Please manually remove the ${companyName} folder from Google Drive.`,
+        );
+      }
     } catch (err) {
       console.error(err);
       showError('Failed to delete company');
@@ -641,8 +694,16 @@ export default function Companies() {
               Delete {deleteConfirm.name || 'this company'}?
             </h3>
             <p className="text-sm text-slate-600 mb-4">
-              This will permanently delete the company and ALL its data including employees, leave
-              records and attendance. This cannot be undone.
+              This will permanently delete:
+              <br />
+              • All employee records ({deleteConfirm.employeeCount ?? 0} employees)
+              <br />
+              • All leave and attendance data
+              <br />
+              • All documents from Google Drive
+              <br />
+              <br />
+              This cannot be undone.
             </p>
             <div className="flex justify-end gap-3">
               <button
@@ -659,7 +720,7 @@ export default function Companies() {
                 disabled={deleting}
                 className="rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
               >
-                {deleting ? 'Deleting…' : 'Delete Forever'}
+                {deleting ? 'Deleting company data and Drive files...' : 'Delete Forever'}
               </button>
             </div>
           </div>
