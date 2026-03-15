@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   collection,
   doc,
@@ -13,7 +13,21 @@ import {
   arrayUnion,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import {
+  DOCUMENT_CHECKLIST,
+  DOCUMENT_CATEGORIES,
+  getMandatoryDocCount,
+  getDocById,
+  acceptsFile,
+} from '../utils/documentTypes';
+import {
+  getOrCreateEmployeeCategoryFolder,
+  uploadFileToDrive,
+  deleteFileFromDrive,
+  MAX_FILE_SIZE,
+} from '../utils/googleDrive';
 
 const DEPT_COLOR = {
   Engineering: '#378ADD',
@@ -30,7 +44,6 @@ const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Interns
 const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
 const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
 const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 'Probationary', 'Seasonal', 'Other'];
-const DOC_TYPES = ['Appointment Letter', 'PAN Card', 'Aadhaar Card', 'Relieving Letter', 'Offer Letter', 'Experience Certificate', 'Education Certificate', 'Other'];
 
 const LEAVE_TYPE_STYLE = { CL: 'bg-blue-100 text-blue-800', SL: 'bg-red-100 text-red-800', EL: 'bg-green-100 text-green-800' };
 const STATUS_STYLE = { Pending: 'bg-amber-100 text-amber-800', Approved: 'bg-green-100 text-green-800', Rejected: 'bg-red-100 text-red-800' };
@@ -58,6 +71,8 @@ function getAge(v) {
 
 export default function EmployeeProfile() {
   const { companyId, empId } = useParams();
+  const [searchParams] = useSearchParams();
+  const { googleAccessToken, currentUser } = useAuth();
   const { success, error: showError } = useToast();
   const [employee, setEmployee] = useState(null);
   const [company, setCompany] = useState(null);
@@ -69,8 +84,13 @@ export default function EmployeeProfile() {
   const [deactivateConfirm, setDeactivateConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(null);
-  const [uploadDocType, setUploadDocType] = useState(DOC_TYPES[0]);
-  const [uploadDocName, setUploadDocName] = useState('');
+  const [categoryOpen, setCategoryOpen] = useState({});
+  const [uploadingDocId, setUploadingDocId] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [additionalDocName, setAdditionalDocName] = useState('');
+  const [additionalDocCategory, setAdditionalDocCategory] = useState(DOCUMENT_CATEGORIES[0]);
+  const [additionalDocFile, setAdditionalDocFile] = useState(null);
+  const additionalFileInputRef = useRef(null);
 
   const deptColor = employee ? (DEPT_COLOR[employee.department] || DEFAULT_DEPT_COLOR) : DEFAULT_DEPT_COLOR;
   const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
@@ -116,6 +136,10 @@ export default function EmployeeProfile() {
     load();
   }, [companyId, empId, showError]);
 
+  useEffect(() => {
+    if (searchParams.get('tab') === 'documents') setTab('documents');
+  }, [searchParams]);
+
   const leavePolicy = company?.leavePolicy || { cl: 12, sl: 12, el: 15 };
   const clUsed = leaveList.filter((l) => l.status === 'Approved' && (l.leaveType || '') === 'CL').reduce((s, l) => s + (l.days || 0), 0);
   const slUsed = leaveList.filter((l) => l.status === 'Approved' && (l.leaveType || '') === 'SL').reduce((s, l) => s + (l.days || 0), 0);
@@ -140,6 +164,31 @@ export default function EmployeeProfile() {
     });
     return events;
   }, [employee, leaveList]);
+
+  const totalMandatory = getMandatoryDocCount();
+  const docByType = useMemo(() => {
+    const map = {};
+    const list = employee?.documents || [];
+    list.forEach((d) => {
+      if (d.id && getDocById(d.id)) map[d.id] = d;
+    });
+    return map;
+  }, [employee?.documents]);
+  const additionalDocs = useMemo(
+    () => (employee?.documents || []).filter((d) => !d.id || !getDocById(d.id)),
+    [employee?.documents],
+  );
+  const mandatoryUploaded = useMemo(() => {
+    let n = 0;
+    DOCUMENT_CHECKLIST.forEach((cat) => {
+      cat.documents.filter((d) => d.mandatory).forEach((d) => {
+        if (docByType[d.id]) n++;
+      });
+    });
+    return n;
+  }, [docByType]);
+  const documentCompletion = totalMandatory ? Math.round((mandatoryUploaded / totalMandatory) * 100) : 100;
+  const progressColor = documentCompletion <= 40 ? 'bg-red-500' : documentCompletion < 80 ? 'bg-amber-500' : 'bg-green-500';
 
   const openEdit = () => {
     if (!employee) return;
@@ -225,33 +274,189 @@ export default function EmployeeProfile() {
     setSaving(false);
   };
 
-  const handleUploadDoc = async () => {
-    if (!employee || !uploadDocName.trim()) return;
-    const entry = { type: uploadDocType, name: uploadDocName.trim(), uploadDate: new Date().toISOString() };
+  const getCompanyName = () => company?.name || 'Company';
+
+  const handleUploadChecklistDoc = async (file, docId, docName, categoryName) => {
+    if (!employee || !googleAccessToken) {
+      showError('Google sign-in required for document upload. Please sign in again.');
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      showError('File size must be under 10MB');
+      return;
+    }
+    const docSpec = getDocById(docId);
+    if (docSpec && !acceptsFile(docSpec, file.name)) {
+      showError(`Accepted formats: ${docSpec.accepts}`);
+      return;
+    }
+    setUploadingDocId(docId);
     try {
+      const folderId = await getOrCreateEmployeeCategoryFolder(
+        googleAccessToken,
+        getCompanyName(),
+        employee.empId,
+        employee.fullName,
+        categoryName,
+      );
+      const { fileId, fileName, webViewLink } = await uploadFileToDrive(googleAccessToken, file, file.name, folderId);
+      const entry = {
+        id: docId,
+        name: docName,
+        category: categoryName,
+        fileName,
+        fileId,
+        webViewLink,
+        uploadedAt: serverTimestamp(),
+        uploadedBy: currentUser?.email || null,
+        fileSize: file.size,
+      };
+      const nextDocs = [...(employee.documents || []).filter((d) => d.id !== docId), { ...entry, uploadedAt: new Date() }];
+      const newMandatory = mandatoryUploaded + (docSpec?.mandatory && !docByType[docId] ? 1 : 0);
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
-        documents: arrayUnion(entry),
+        documents: nextDocs,
+        documentCompletion: totalMandatory ? Math.round((newMandatory / totalMandatory) * 100) : 100,
         updatedAt: serverTimestamp(),
       });
-      setEmployee((prev) => (prev ? { ...prev, documents: [...(prev.documents || []), entry] } : null));
-      setUploadDocName('');
-      success('Document added');
+      setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
+      success(`${docName} uploaded successfully`);
     } catch (err) {
-      showError('Failed to add document');
+      const msg = err?.message || 'Upload failed';
+      showError(msg.includes('token') || msg.includes('401') ? 'Session expired. Please sign in again.' : msg);
     }
+    setUploadingDocId(null);
   };
 
-  const handleDeleteDoc = async (index) => {
-    if (!employee?.documents) return;
-    const next = employee.documents.filter((_, i) => i !== index);
-    try {
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { documents: next, updatedAt: serverTimestamp() });
-      setEmployee((prev) => (prev ? { ...prev, documents: next } : null));
-      success('Document removed');
-    } catch (err) {
-      showError('Failed to remove document');
+  const handleReplaceDoc = async (file, docId) => {
+    const docEntry = docByType[docId];
+    if (!docEntry?.fileId || !googleAccessToken) return;
+    const docSpec = getDocById(docId);
+    if (file.size > MAX_FILE_SIZE) {
+      showError('File size must be under 10MB');
+      return;
     }
+    if (docSpec && !acceptsFile(docSpec, file.name)) {
+      showError(`Accepted formats: ${docSpec.accepts}`);
+      return;
+    }
+    setUploadingDocId(docId);
+    try {
+      await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+      const folderId = await getOrCreateEmployeeCategoryFolder(
+        googleAccessToken,
+        getCompanyName(),
+        employee.empId,
+        employee.fullName,
+        docEntry.category,
+      );
+      const { fileId, fileName, webViewLink } = await uploadFileToDrive(googleAccessToken, file, file.name, folderId);
+      const newEntry = {
+        ...docEntry,
+        fileName,
+        fileId,
+        webViewLink,
+        uploadedAt: new Date(),
+        uploadedBy: currentUser?.email || null,
+        fileSize: file.size,
+      };
+      const nextDocs = (employee.documents || []).map((d) => (d.id === docId ? newEntry : d));
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { documents: nextDocs, updatedAt: serverTimestamp() });
+      setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
+      success(`${docEntry.name} replaced successfully`);
+    } catch (err) {
+      showError(err?.message || 'Replace failed');
+    }
+    setUploadingDocId(null);
   };
+
+  const handleDeleteChecklistDoc = async (docEntry) => {
+    if (!docEntry?.fileId || !googleAccessToken) return;
+    try {
+      await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+      const nextDocs = (employee.documents || []).filter((d) => d.fileId !== docEntry.fileId);
+      const newPct = totalMandatory ? Math.round((mandatoryUploaded - (getDocById(docEntry.id)?.mandatory ? 1 : 0)) / totalMandatory * 100) : 0;
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+        documents: nextDocs,
+        documentCompletion: Math.max(0, newPct),
+        updatedAt: serverTimestamp(),
+      });
+      setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
+      success('Document deleted');
+    } catch (err) {
+      showError(err?.message || 'Delete failed');
+    }
+    setDeleteConfirm(null);
+  };
+
+  const handleUploadAdditionalDoc = async () => {
+    if (!additionalDocName.trim() || !additionalDocFile || !googleAccessToken) {
+      showError('Name and file required');
+      return;
+    }
+    if (additionalDocFile.size > MAX_FILE_SIZE) {
+      showError('File size must be under 10MB');
+      return;
+    }
+    setUploadingDocId('additional');
+    try {
+      const folderId = await getOrCreateEmployeeCategoryFolder(
+        googleAccessToken,
+        getCompanyName(),
+        employee.empId,
+        employee.fullName,
+        additionalDocCategory,
+      );
+      const { fileId, fileName, webViewLink } = await uploadFileToDrive(googleAccessToken, additionalDocFile, additionalDocFile.name, folderId);
+      const entry = {
+        id: `additional_${Date.now()}`,
+        name: additionalDocName.trim(),
+        category: additionalDocCategory,
+        fileName,
+        fileId,
+        webViewLink,
+        uploadedAt: new Date(),
+        uploadedBy: currentUser?.email || null,
+        fileSize: additionalDocFile.size,
+      };
+      const nextDocs = [...(employee.documents || []), entry];
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { documents: nextDocs, updatedAt: serverTimestamp() });
+      setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
+      success('Document uploaded');
+      setAdditionalDocName('');
+      setAdditionalDocCategory(DOCUMENT_CATEGORIES[0]);
+      setAdditionalDocFile(null);
+      if (additionalFileInputRef.current) additionalFileInputRef.current.value = '';
+    } catch (err) {
+      showError(err?.message || 'Upload failed');
+    }
+    setUploadingDocId(null);
+  };
+
+  const handleDeleteAdditionalDoc = async (index) => {
+    const docEntry = additionalDocs[index];
+    if (!docEntry?.fileId) return;
+    if (!googleAccessToken) {
+      showError('Sign in with Google required');
+      return;
+    }
+    try {
+      await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+      const nextDocs = (employee.documents || []).filter((d) => d.fileId !== docEntry.fileId);
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { documents: nextDocs, updatedAt: serverTimestamp() });
+      setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
+      success('Document deleted');
+    } catch (err) {
+      showError(err?.message || 'Delete failed');
+    }
+    setDeleteConfirm(null);
+  };
+
+  const formatDocDate = (v) => {
+    if (!v) return '—';
+    const d = v?.toDate ? v.toDate() : new Date(v);
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+  const formatFileSize = (bytes) => (bytes ? `${(bytes / 1024).toFixed(1)} KB` : '—');
 
   if (loading) {
     return (
@@ -367,28 +572,183 @@ export default function EmployeeProfile() {
       )}
 
       {tab === 'documents' && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-end gap-3 p-4 bg-slate-50 rounded-xl">
-            <select value={uploadDocType} onChange={(e) => setUploadDocType(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              {DOC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <input type="text" value={uploadDocName} onChange={(e) => setUploadDocName(e.target.value)} placeholder="Document name" className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-48" />
-            <button type="button" onClick={handleUploadDoc} className="rounded-lg bg-[#378ADD] text-white text-sm px-4 py-2">Upload Document</button>
+        <div className="space-y-6">
+          {!googleAccessToken && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              Sign in with Google to upload and manage documents. Documents are stored in your Google Drive.
+            </div>
+          )}
+
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800 mb-2">Document Completion</h3>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-3 bg-slate-200 rounded-full overflow-hidden">
+                <div className={`h-full ${progressColor} transition-all`} style={{ width: `${documentCompletion}%` }} />
+              </div>
+              <span className="text-sm font-medium text-slate-700 whitespace-nowrap">
+                {mandatoryUploaded} of {totalMandatory} mandatory documents uploaded
+              </span>
+            </div>
+            <p className="text-slate-500 text-xs mt-1">
+              {totalMandatory - mandatoryUploaded === 0
+                ? 'All mandatory documents uploaded'
+                : `${totalMandatory - mandatoryUploaded} mandatory document${totalMandatory - mandatoryUploaded !== 1 ? 's' : ''} missing`}
+            </p>
           </div>
-          {(!employee.documents || employee.documents.length === 0) ? (
-            <p className="text-slate-500 py-8 text-center">No documents uploaded yet.</p>
-          ) : (
-            <ul className="border border-slate-200 rounded-xl divide-y">
-              {employee.documents.map((doc, i) => (
-                <li key={i} className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm">{doc.name} ({doc.type}) — {doc.uploadDate ? formatDate(doc.uploadDate) : '—'}</span>
-                  <div className="flex gap-2">
-                    {doc.url && <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-[#378ADD] text-sm">View</a>}
-                    <button type="button" onClick={() => handleDeleteDoc(i)} className="text-red-600 text-sm">Delete</button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+
+          {DOCUMENT_CHECKLIST.map((cat) => {
+            const open = categoryOpen[cat.category] !== false;
+            const uploadedInCat = cat.documents.filter((d) => docByType[d.id]).length;
+            return (
+              <div key={cat.category} className="border border-slate-200 rounded-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setCategoryOpen((p) => ({ ...p, [cat.category]: !open }))}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 text-left"
+                >
+                  <span className="font-medium text-slate-800">{cat.category}</span>
+                  <span className="text-slate-500 text-sm">{uploadedInCat} of {cat.documents.length} uploaded</span>
+                  <span className="text-slate-400">{open ? '▼' : '▶'}</span>
+                </button>
+                {open && (
+                  <ul className="divide-y divide-slate-100">
+                    {cat.documents.map((doc) => {
+                      const uploaded = docByType[doc.id];
+                      const uploading = uploadingDocId === doc.id;
+                      return (
+                        <li key={doc.id} className="flex items-center gap-4 px-4 py-3">
+                          {uploaded ? (
+                            <>
+                              <span className="text-green-600 shrink-0" title="Uploaded">✓</span>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-slate-800">{doc.name}</p>
+                                <p className="text-slate-500 text-xs">{formatDocDate(uploaded.uploadedAt)} · {formatFileSize(uploaded.fileSize)}</p>
+                              </div>
+                              <div className="flex gap-2 shrink-0">
+                                {uploaded.webViewLink && (
+                                  <a href={uploaded.webViewLink} target="_blank" rel="noopener noreferrer" className="text-[#378ADD] text-xs font-medium hover:underline">View</a>
+                                )}
+                                <label className="text-xs font-medium text-slate-600 hover:underline cursor-pointer">
+                                  Replace
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    accept={doc.accepts || '.pdf,.jpg,.jpeg,.png'}
+                                    disabled={uploading}
+                                    onChange={(e) => {
+                                      const f = e.target.files?.[0];
+                                      if (f) handleReplaceDoc(f, doc.id);
+                                      e.target.value = '';
+                                    }}
+                                  />
+                                </label>
+                                <button type="button" onClick={() => setDeleteConfirm({ type: 'checklist', doc: uploaded })} className="text-red-600 text-xs font-medium hover:underline disabled:opacity-50" disabled={uploading}>Delete</button>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <span className="w-5 h-5 rounded-full border-2 border-slate-300 shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-slate-800">{doc.name}</p>
+                                <span className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium ${doc.mandatory ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-600'}`}>
+                                  {doc.mandatory ? 'Mandatory' : 'Optional'}
+                                </span>
+                              </div>
+                              <label className="shrink-0 rounded-lg bg-[#378ADD] text-white text-xs font-medium px-3 py-1.5 cursor-pointer disabled:opacity-50">
+                                {uploading ? 'Uploading…' : 'Upload'}
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept={doc.accepts || '.pdf,.jpg,.jpeg,.png'}
+                                  disabled={uploading}
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) handleUploadChecklistDoc(f, doc.id, doc.name, cat.category);
+                                    e.target.value = '';
+                                  }}
+                                />
+                              </label>
+                            </>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <h3 className="px-4 py-3 bg-slate-50 font-medium text-slate-800">Additional Documents</h3>
+            <div className="p-4 space-y-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <input
+                  type="text"
+                  value={additionalDocName}
+                  onChange={(e) => setAdditionalDocName(e.target.value)}
+                  placeholder="Document name"
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-48"
+                />
+                <select value={additionalDocCategory} onChange={(e) => setAdditionalDocCategory(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                  {DOCUMENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input
+                  ref={additionalFileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => setAdditionalDocFile(e.target.files?.[0] || null)}
+                />
+                <button type="button" onClick={() => additionalFileInputRef.current?.click()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
+                  {additionalDocFile ? additionalDocFile.name : 'Choose file'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUploadAdditionalDoc}
+                  disabled={uploadingDocId === 'additional' || !additionalDocName.trim() || !additionalDocFile}
+                  className="rounded-lg bg-[#378ADD] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                >
+                  {uploadingDocId === 'additional' ? 'Uploading…' : 'Upload Additional Document'}
+                </button>
+              </div>
+              {additionalDocs.length === 0 ? (
+                <p className="text-slate-500 text-sm">No additional documents</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {additionalDocs.map((doc, i) => (
+                    <li key={doc.fileId || i} className="flex items-center justify-between py-2">
+                      <span className="text-sm">{doc.name} — {formatDocDate(doc.uploadedAt)}</span>
+                      <div className="flex gap-2">
+                        {doc.webViewLink && <a href={doc.webViewLink} target="_blank" rel="noopener noreferrer" className="text-[#378ADD] text-xs">View</a>}
+                        <button type="button" onClick={() => setDeleteConfirm({ type: 'additional', index: i })} className="text-red-600 text-xs">Delete</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {deleteConfirm && (
+            <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+                <h3 className="text-lg font-semibold text-slate-800 mb-2">
+                  Delete {deleteConfirm.type === 'checklist' ? deleteConfirm.doc.name : 'document'}?
+                </h3>
+                <p className="text-sm text-slate-600 mb-4">This will permanently remove the file from Google Drive.</p>
+                <div className="flex justify-end gap-3">
+                  <button type="button" onClick={() => setDeleteConfirm(null)} className="text-slate-500 text-sm">Cancel</button>
+                  <button
+                    type="button"
+                    onClick={() => deleteConfirm.type === 'checklist' ? handleDeleteChecklistDoc(deleteConfirm.doc) : handleDeleteAdditionalDoc(deleteConfirm.index)}
+                    className="rounded-lg bg-red-600 text-white text-sm font-medium px-4 py-2"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}

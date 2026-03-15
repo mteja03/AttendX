@@ -289,7 +289,11 @@ export default function Dashboard() {
               ) : (
                 <div className="flex flex-wrap gap-3">
                   {birthdayData.todayList.map((emp) => (
-                    <div key={emp.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-pink-50/50 p-3 min-w-[200px]">
+                    <Link
+                      key={emp.id}
+                      to={`/company/${companyId}/employees/${emp.id}`}
+                      className="flex items-center gap-3 rounded-lg border border-slate-200 bg-pink-50/50 p-3 min-w-[200px] hover:bg-pink-100/50 hover:border-[#378ADD]/30 transition-colors cursor-pointer"
+                    >
                       <div className="h-10 w-10 rounded-full bg-[#378ADD] flex items-center justify-center text-white text-sm font-bold shrink-0">
                         {(emp.fullName || '?').slice(0, 2).toUpperCase()}
                       </div>
@@ -298,7 +302,7 @@ export default function Dashboard() {
                         <p className="text-slate-500 text-xs truncate">{emp.designation || '—'} · {emp.department || '—'}</p>
                         <span className="inline-flex mt-1 rounded-full bg-pink-200 text-pink-800 px-2 py-0.5 text-xs font-medium">🎂 Today!</span>
                       </div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}
@@ -310,7 +314,11 @@ export default function Dashboard() {
               ) : (
                 <div className="flex flex-wrap gap-3">
                   {birthdayData.upcomingList.map(({ emp, daysAhead }) => (
-                    <div key={emp.id} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 min-w-[200px]">
+                    <Link
+                      key={emp.id}
+                      to={`/company/${companyId}/employees/${emp.id}`}
+                      className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 min-w-[200px] hover:bg-slate-50 hover:border-[#378ADD]/30 transition-colors cursor-pointer"
+                    >
                       <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-sm font-bold shrink-0">
                         {(emp.fullName || '?').slice(0, 2).toUpperCase()}
                       </div>
@@ -319,7 +327,7 @@ export default function Dashboard() {
                         <p className="text-slate-500 text-xs truncate">{emp.designation || '—'}</p>
                         <span className="inline-flex mt-1 text-xs text-slate-600">in {daysAhead} day{daysAhead !== 1 ? 's' : ''}</span>
                       </div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}
@@ -327,16 +335,17 @@ export default function Dashboard() {
             <div>
               <h3 className="text-sm font-semibold text-slate-700 mb-2">This month</h3>
               <p className="text-slate-600 text-sm">{birthdayData.thisMonthTotal} birthday{birthdayData.thisMonthTotal !== 1 ? 's' : ''} this month</p>
-              {birthdayData.thisMonthSample.length > 0 && (
+                {birthdayData.thisMonthSample.length > 0 && (
                 <div className="flex items-center gap-2 mt-2">
                   {birthdayData.thisMonthSample.map((emp) => (
-                    <div
+                    <Link
                       key={emp.id}
-                      className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs font-medium"
+                      to={`/company/${companyId}/employees/${emp.id}`}
+                      className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs font-medium hover:ring-2 hover:ring-[#378ADD]/50 transition-shadow cursor-pointer"
                       title={emp.fullName}
                     >
                       {(emp.fullName || '?').slice(0, 2).toUpperCase()}
-                    </div>
+                    </Link>
                   ))}
                   {birthdayData.thisMonthTotal > 5 && (
                     <span className="text-slate-500 text-xs">+{birthdayData.thisMonthTotal - 5} more</span>

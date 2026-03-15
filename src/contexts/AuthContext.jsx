@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/config';
 
@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [role, setRole] = useState(null);
   const [companyId, setCompanyId] = useState(null);
+  const [googleAccessToken, setGoogleAccessToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
@@ -18,6 +19,7 @@ export function AuthProvider({ children }) {
         setCurrentUser(null);
         setRole(null);
         setCompanyId(null);
+        setGoogleAccessToken(null);
         setLoading(false);
         setAuthError('');
         return;
@@ -60,6 +62,7 @@ export function AuthProvider({ children }) {
           setCompanyId(data.companyId ?? null);
           setAuthError('');
           setLoading(false);
+          setGoogleAccessToken(firebaseUser.accessToken || null);
         } catch (error) {
           // eslint-disable-next-line no-console
           console.error('Error checking users whitelist', error);
@@ -83,6 +86,10 @@ export function AuthProvider({ children }) {
     setAuthError('');
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      setGoogleAccessToken(credential.accessToken);
+    }
 
     if (user?.email?.toLowerCase() === 'mteja0852@gmail.com') {
       const email = 'mteja0852@gmail.com';
@@ -112,12 +119,13 @@ export function AuthProvider({ children }) {
       currentUser,
       role,
       companyId,
+      googleAccessToken,
       loading,
       authError,
       signInWithGoogle,
       signOut: signOutUser,
     }),
-    [currentUser, role, companyId, loading, authError],
+    [currentUser, role, companyId, googleAccessToken, loading, authError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
