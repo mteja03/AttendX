@@ -57,6 +57,7 @@ export default function Dashboard() {
   const [leaveList, setLeaveList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState(null);
+  const [birthdayCardOpen, setBirthdayCardOpen] = useState(true);
 
   useEffect(() => {
     if (!companyId) return;
@@ -106,6 +107,71 @@ export default function Dashboard() {
   }, [employees, leaveList]);
 
   const recentLeave = useMemo(() => leaveList.slice(0, 5), [leaveList]);
+
+  const birthdayData = useMemo(() => {
+    const now = new Date();
+    const todayMonth = now.getMonth();
+    const todayDate = now.getDate();
+    const isLeapYear = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+    const daysInMonth = (m, y) => new Date(y, m + 1, 0).getDate();
+
+    const withDob = employees.filter((e) => {
+      const d = e.dateOfBirth;
+      if (!d) return false;
+      const dt = typeof d === 'string' ? new Date(d) : d?.toDate ? d.toDate() : new Date(d);
+      return !isNaN(dt.getTime());
+    });
+
+    const norm = (dt) => {
+      const m = dt.getMonth();
+      const d = dt.getDate();
+      if (m === 1 && d === 29 && !isLeapYear(now.getFullYear())) return { month: 1, day: 28 };
+      return { month: m, day: d };
+    };
+
+    const todayList = [];
+    const upcomingList = [];
+    const thisMonthSet = new Set();
+
+    for (let i = 0; i < 8; i++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() + i);
+      const key = `${d.getMonth()}-${d.getDate()}`;
+      if (i === 0) {
+        withDob.forEach((emp) => {
+          const dt = typeof emp.dateOfBirth === 'string' ? new Date(emp.dateOfBirth) : emp.dateOfBirth?.toDate ? emp.dateOfBirth.toDate() : new Date(emp.dateOfBirth);
+          const { month, day } = norm(dt);
+          if (month === d.getMonth() && day === d.getDate()) {
+            todayList.push(emp);
+            thisMonthSet.add(emp.id);
+          }
+        });
+      } else {
+        withDob.forEach((emp) => {
+          const dt = typeof emp.dateOfBirth === 'string' ? new Date(emp.dateOfBirth) : emp.dateOfBirth?.toDate ? emp.dateOfBirth.toDate() : new Date(emp.dateOfBirth);
+          const { month, day } = norm(dt);
+          if (month === d.getMonth() && day === d.getDate()) {
+            upcomingList.push({ emp, daysAhead: i });
+            thisMonthSet.add(emp.id);
+          }
+        });
+      }
+    }
+
+    const thisMonthTotal = withDob.filter((emp) => {
+      const dt = typeof emp.dateOfBirth === 'string' ? new Date(emp.dateOfBirth) : emp.dateOfBirth?.toDate ? emp.dateOfBirth.toDate() : new Date(emp.dateOfBirth);
+      return dt.getMonth() === todayMonth;
+    }).length;
+
+    const thisMonthSample = withDob
+      .filter((emp) => {
+        const dt = typeof emp.dateOfBirth === 'string' ? new Date(emp.dateOfBirth) : emp.dateOfBirth?.toDate ? emp.dateOfBirth.toDate() : new Date(emp.dateOfBirth);
+        return dt.getMonth() === todayMonth;
+      })
+      .slice(0, 5);
+
+    return { todayList, upcomingList, thisMonthTotal, thisMonthSample };
+  }, [employees]);
 
   const handleApprove = async (leaveDoc) => {
     setActioningId(leaveDoc.id);
@@ -196,6 +262,90 @@ export default function Dashboard() {
           <CalendarIcon className="w-4 h-4" />
           View Leave Requests
         </Link>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6">
+        <button
+          type="button"
+          onClick={() => setBirthdayCardOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-6 py-4 border-b border-slate-100 hover:bg-slate-50/50 text-left"
+        >
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800 inline-flex items-center gap-2">
+              <span role="img" aria-label="cake">🎂</span> Birthdays
+            </h2>
+            <p className="text-slate-500 text-sm mt-0.5">
+              {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+            </p>
+          </div>
+          <span className="text-slate-400 text-sm">{birthdayCardOpen ? '▼' : '▶'}</span>
+        </button>
+        {birthdayCardOpen && (
+          <div className="p-6 space-y-6">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-700 mb-2">Today&apos;s Birthdays</h3>
+              {birthdayData.todayList.length === 0 ? (
+                <p className="text-slate-500 text-sm">No birthdays today</p>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {birthdayData.todayList.map((emp) => (
+                    <div key={emp.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-pink-50/50 p-3 min-w-[200px]">
+                      <div className="h-10 w-10 rounded-full bg-[#378ADD] flex items-center justify-center text-white text-sm font-bold shrink-0">
+                        {(emp.fullName || '?').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-800 truncate">{emp.fullName || '—'}</p>
+                        <p className="text-slate-500 text-xs truncate">{emp.designation || '—'} · {emp.department || '—'}</p>
+                        <span className="inline-flex mt-1 rounded-full bg-pink-200 text-pink-800 px-2 py-0.5 text-xs font-medium">🎂 Today!</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-700 mb-2">Upcoming (next 7 days)</h3>
+              {birthdayData.upcomingList.length === 0 ? (
+                <p className="text-slate-500 text-sm">No upcoming birthdays this week</p>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {birthdayData.upcomingList.map(({ emp, daysAhead }) => (
+                    <div key={emp.id} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 min-w-[200px]">
+                      <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-sm font-bold shrink-0">
+                        {(emp.fullName || '?').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-800 truncate">{emp.fullName || '—'}</p>
+                        <p className="text-slate-500 text-xs truncate">{emp.designation || '—'}</p>
+                        <span className="inline-flex mt-1 text-xs text-slate-600">in {daysAhead} day{daysAhead !== 1 ? 's' : ''}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-700 mb-2">This month</h3>
+              <p className="text-slate-600 text-sm">{birthdayData.thisMonthTotal} birthday{birthdayData.thisMonthTotal !== 1 ? 's' : ''} this month</p>
+              {birthdayData.thisMonthSample.length > 0 && (
+                <div className="flex items-center gap-2 mt-2">
+                  {birthdayData.thisMonthSample.map((emp) => (
+                    <div
+                      key={emp.id}
+                      className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs font-medium"
+                      title={emp.fullName}
+                    >
+                      {(emp.fullName || '?').slice(0, 2).toUpperCase()}
+                    </div>
+                  ))}
+                  {birthdayData.thisMonthTotal > 5 && (
+                    <span className="text-slate-500 text-xs">+{birthdayData.thisMonthTotal - 5} more</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">

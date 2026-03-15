@@ -10,6 +10,7 @@ const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operation
 const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
 const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
 const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
+const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 'Probationary', 'Seasonal', 'Other'];
 const INDUSTRIES = ['IT', 'Manufacturing', 'Automobile', 'Retail', 'Finance', 'Healthcare', 'Education', 'Media', 'Logistics', 'Real Estate', 'Other'];
 const COLOR_PRESETS = [
   { value: '#378ADD' }, { value: '#1D9E75' }, { value: '#D85A30' },
@@ -21,6 +22,7 @@ const SECTIONS = [
   { key: 'departments', label: 'Department', plural: 'Departments', field: 'department', defaults: DEFAULT_DEPARTMENTS },
   { key: 'designations', label: 'Designation', plural: 'Designations', field: 'designation', defaults: DEFAULT_DESIGNATIONS },
   { key: 'employmentTypes', label: 'Employment Type', plural: 'Employment Types', field: 'employmentType', defaults: DEFAULT_EMPLOYMENT_TYPES },
+  { key: 'categories', label: 'Category', plural: 'Categories', field: 'category', defaults: DEFAULT_CATEGORIES, description: 'Categorize employees by type or group (e.g. Permanent, Trainee, Contractual)' },
   { key: 'qualifications', label: 'Qualification', plural: 'Qualifications', field: 'qualification', defaults: DEFAULT_QUALIFICATIONS },
 ];
 
@@ -182,7 +184,7 @@ export default function Settings() {
         </form>
       </section>
 
-      {SECTIONS.map(({ key, label, plural, field, defaults }) => {
+      {SECTIONS.map(({ key, label, plural, field, defaults, description }) => {
         const list = getList(key, defaults);
         const countFn = getCount(field);
         const searchTerm = (sectionSearch[key] || '').toLowerCase();
@@ -191,7 +193,7 @@ export default function Settings() {
         return (
           <section key={key} className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
             <h2 className="text-lg font-semibold text-slate-800 mb-1">{plural} Management</h2>
-            <p className="text-slate-500 text-sm mb-4">Used in Add Employee form. Each item shows employee count; delete only when 0.</p>
+            <p className="text-slate-500 text-sm mb-4">{description || `Used in Add Employee form. Each item shows employee count; delete only when 0.`}</p>
             {list.length > 8 && (
               <input
                 type="text"

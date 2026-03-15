@@ -29,6 +29,7 @@ const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assista
 const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
 const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
 const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
+const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 'Probationary', 'Seasonal', 'Other'];
 const DOC_TYPES = ['Appointment Letter', 'PAN Card', 'Aadhaar Card', 'Relieving Letter', 'Offer Letter', 'Experience Certificate', 'Education Certificate', 'Other'];
 
 const LEAVE_TYPE_STYLE = { CL: 'bg-blue-100 text-blue-800', SL: 'bg-red-100 text-red-800', EL: 'bg-green-100 text-green-800' };
@@ -43,6 +44,16 @@ function formatDateDDMMYYYY(v) {
   if (!v) return '—';
   const d = v?.toDate ? v.toDate() : new Date(v);
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+function getAge(v) {
+  if (!v) return null;
+  const d = v?.toDate ? v.toDate() : new Date(v);
+  if (isNaN(d.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - d.getFullYear();
+  const m = today.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+  return age;
 }
 
 export default function EmployeeProfile() {
@@ -67,23 +78,37 @@ export default function EmployeeProfile() {
   const employmentTypes = company?.employmentTypes?.length ? company.employmentTypes : DEFAULT_EMPLOYMENT_TYPES;
   const branches = company?.branches?.length ? company.branches : DEFAULT_BRANCHES;
   const qualifications = company?.qualifications?.length ? company.qualifications : DEFAULT_QUALIFICATIONS;
+  const categories = company?.categories?.length ? company.categories : DEFAULT_CATEGORIES;
 
   useEffect(() => {
     if (!companyId || !empId) return;
-    console.log('EmployeeProfile empId (Firestore doc id):', empId);
     const load = async () => {
       setLoading(true);
       try {
-        const [empSnap, companySnap, leaveSnap] = await Promise.all([
+        const [empSnap, companySnap] = await Promise.all([
           getDoc(doc(db, 'companies', companyId, 'employees', empId)),
           getDoc(doc(db, 'companies', companyId)),
-          getDocs(query(collection(db, 'companies', companyId, 'leave'), where('employeeId', '==', empId), orderBy('appliedAt', 'desc'))),
         ]);
         if (empSnap.exists()) setEmployee({ id: empSnap.id, ...empSnap.data() });
         else setEmployee(null);
         if (companySnap.exists()) setCompany({ id: companySnap.id, ...companySnap.data() });
-        setLeaveList(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        try {
+          const leaveSnap = await getDocs(
+            query(collection(db, 'companies', companyId, 'leave'), where('employeeId', '==', empId)),
+          );
+          const list = leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          list.sort((a, b) => {
+            const ta = a.appliedAt?.toMillis?.() ?? (a.appliedAt ? new Date(a.appliedAt).getTime() : 0);
+            const tb = b.appliedAt?.toMillis?.() ?? (b.appliedAt ? new Date(b.appliedAt).getTime() : 0);
+            return tb - ta;
+          });
+          setLeaveList(list);
+        } catch (leaveErr) {
+          console.warn('Leave history could not be loaded:', leaveErr);
+          setLeaveList([]);
+        }
       } catch (err) {
+        console.error('EmployeeProfile load error:', err);
         showError('Failed to load profile');
       }
       setLoading(false);
@@ -131,6 +156,7 @@ export default function EmployeeProfile() {
       branch: employee.branch || '',
       designation: employee.designation || '',
       employmentType: employee.employmentType || 'Full-time',
+      category: employee.category || '',
       joiningDate: employee.joiningDate ? (typeof employee.joiningDate === 'string' ? employee.joiningDate : employee.joiningDate?.toDate?.()?.toISOString?.()?.slice(0, 10)) : '',
       reportingManager: employee.reportingManager || '',
       ctcPerAnnum: employee.ctcPerAnnum ?? employee.ctc ?? '',
@@ -161,6 +187,7 @@ export default function EmployeeProfile() {
         branch: form.branch || null,
         designation: form.designation || null,
         employmentType: form.employmentType || 'Full-time',
+        category: form.category || null,
         qualification: form.qualification || null,
         joiningDate: form.joiningDate || null,
         reportingManager: form.reportingManager || null,
@@ -298,7 +325,7 @@ export default function EmployeeProfile() {
               <p><span className="text-slate-500 text-sm">Full Name</span><br />{employee.fullName || '—'}</p>
               <p><span className="text-slate-500 text-sm">Email</span><br />{employee.email || '—'}</p>
               <p><span className="text-slate-500 text-sm">Phone</span><br />{employee.phone || '—'}</p>
-              <p><span className="text-slate-500 text-sm">Date of Birth</span><br />{formatDateDDMMYYYY(employee.dateOfBirth)}</p>
+              <p><span className="text-slate-500 text-sm">Date of Birth</span><br />{employee.dateOfBirth ? `${formatDate(employee.dateOfBirth)}${getAge(employee.dateOfBirth) != null ? ` (${getAge(employee.dateOfBirth)} years old)` : ''}` : '—'}</p>
               <p><span className="text-slate-500 text-sm">Gender</span><br />{employee.gender || '—'}</p>
               <p><span className="text-slate-500 text-sm">Highest Qualification</span><br />{employee.qualification || '—'}</p>
               <p><span className="text-slate-500 text-sm">Address</span><br />{employee.address || '—'}</p>
@@ -309,6 +336,7 @@ export default function EmployeeProfile() {
               <p><span className="text-slate-500 text-sm">Branch</span><br />{employee.branch || '—'}</p>
               <p><span className="text-slate-500 text-sm">Designation</span><br />{employee.designation || '—'}</p>
               <p><span className="text-slate-500 text-sm">Employment Type</span><br />{employee.employmentType || '—'}</p>
+              <p><span className="text-slate-500 text-sm">Category</span><br />{employee.category || '—'}</p>
               <p><span className="text-slate-500 text-sm">Reporting Manager</span><br />{employee.reportingManager || '—'}</p>
               <p><span className="text-slate-500 text-sm">Joining Date</span><br />{formatDateDDMMYYYY(employee.joiningDate)}</p>
             </div>
@@ -446,6 +474,7 @@ export default function EmployeeProfile() {
                 <div><label className="block text-xs text-slate-600 mb-1">Branch</label><select value={form.branch} onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{branches.map((b) => <option key={b} value={b}>{b}</option>)}{!branches.includes('Other') && <option value="Other">Other</option>}</select></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Designation</label><select value={form.designation} onChange={(e) => setForm((p) => ({ ...p, designation: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{designations.map((d) => <option key={d} value={d}>{d}</option>)}{!designations.includes('Other') && <option value="Other">Other</option>}</select></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Employment Type</label><select value={form.employmentType} onChange={(e) => setForm((p) => ({ ...p, employmentType: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}{!employmentTypes.includes('Other') && <option value="Other">Other</option>}</select></div>
+                <div><label className="block text-xs text-slate-600 mb-1">Category</label><select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}{!categories.includes('Other') && <option value="Other">Other</option>}</select></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Highest Qualification</label><select value={form.qualification} onChange={(e) => setForm((p) => ({ ...p, qualification: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{qualifications.map((q) => <option key={q} value={q}>{q}</option>)}{!qualifications.includes('Other') && <option value="Other">Other</option>}</select></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Joining Date</label><input type="date" value={form.joiningDate} onChange={(e) => setForm((p) => ({ ...p, joiningDate: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Reporting Manager</label><input value={form.reportingManager} onChange={(e) => setForm((p) => ({ ...p, reportingManager: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>

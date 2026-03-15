@@ -20,6 +20,8 @@ const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assista
 const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
 const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
 const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
+const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 'Probationary', 'Seasonal', 'Other'];
+const JOINING_YEARS = ['All Years', 2020, 2021, 2022, 2023, 2024, 2025, 2026];
 
 const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const AADHAAR_REGEX = /^[0-9]{12}$/;
@@ -37,6 +39,7 @@ const initialForm = {
   branch: '',
   designation: '',
   employmentType: 'Full-time',
+  category: '',
   joiningDate: new Date().toISOString().slice(0, 10),
   reportingManager: '',
   ctcPerAnnum: '',
@@ -57,6 +60,13 @@ export default function Employees() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterDept, setFilterDept] = useState('All Departments');
+  const [filterDesignation, setFilterDesignation] = useState('All Designations');
+  const [filterBranch, setFilterBranch] = useState('All Branches');
+  const [filterEmploymentType, setFilterEmploymentType] = useState('All Types');
+  const [filterCategory, setFilterCategory] = useState('All Categories');
+  const [filterJoiningYear, setFilterJoiningYear] = useState('All Years');
   const [showAddModal, setShowAddModal] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [formErrors, setFormErrors] = useState({});
@@ -86,6 +96,27 @@ export default function Employees() {
   const employmentTypes = company?.employmentTypes?.length ? company.employmentTypes : DEFAULT_EMPLOYMENT_TYPES;
   const branches = company?.branches?.length ? company.branches : DEFAULT_BRANCHES;
   const qualifications = company?.qualifications?.length ? company.qualifications : DEFAULT_QUALIFICATIONS;
+  const categories = company?.categories?.length ? company.categories : DEFAULT_CATEGORIES;
+
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    if (filterDept !== 'All Departments') n++;
+    if (filterDesignation !== 'All Designations') n++;
+    if (filterBranch !== 'All Branches') n++;
+    if (filterEmploymentType !== 'All Types') n++;
+    if (filterCategory !== 'All Categories') n++;
+    if (filterJoiningYear !== 'All Years') n++;
+    return n;
+  }, [filterDept, filterDesignation, filterBranch, filterEmploymentType, filterCategory, filterJoiningYear]);
+
+  const clearFilters = () => {
+    setFilterDept('All Departments');
+    setFilterDesignation('All Designations');
+    setFilterBranch('All Branches');
+    setFilterEmploymentType('All Types');
+    setFilterCategory('All Categories');
+    setFilterJoiningYear('All Years');
+  };
 
   const nextEmpId = useMemo(() => {
     const nums = employees
@@ -111,8 +142,22 @@ export default function Employees() {
           (e.department || '').toLowerCase().includes(term),
       );
     }
+    if (filterDept !== 'All Departments') list = list.filter((e) => (e.department || '').trim() === filterDept);
+    if (filterDesignation !== 'All Designations') list = list.filter((e) => (e.designation || '').trim() === filterDesignation);
+    if (filterBranch !== 'All Branches') list = list.filter((e) => (e.branch || '').trim() === filterBranch);
+    if (filterEmploymentType !== 'All Types') list = list.filter((e) => (e.employmentType || '').trim() === filterEmploymentType);
+    if (filterCategory !== 'All Categories') list = list.filter((e) => (e.category || '').trim() === filterCategory);
+    if (filterJoiningYear !== 'All Years') {
+      const year = Number(filterJoiningYear);
+      list = list.filter((e) => {
+        const j = e.joiningDate;
+        if (!j) return false;
+        const d = typeof j === 'string' ? new Date(j) : j?.toDate ? j.toDate() : new Date(j);
+        return d.getFullYear() === year;
+      });
+    }
     return list;
-  }, [employees, tab, search]);
+  }, [employees, tab, search, filterDept, filterDesignation, filterBranch, filterEmploymentType, filterCategory, filterJoiningYear]);
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -125,6 +170,16 @@ export default function Employees() {
     if (!form.fullName?.trim()) err.fullName = 'Required';
     if (!form.email?.trim()) err.email = 'Required';
     if (!form.phone?.trim()) err.phone = 'Required';
+    if (!form.dateOfBirth?.trim()) err.dateOfBirth = 'Required';
+    if (form.dateOfBirth) {
+      const dob = new Date(form.dateOfBirth);
+      const today = new Date();
+      let age = today.getFullYear() - dob.getFullYear();
+      const m = today.getMonth() - dob.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+      if (age < 18) err.dateOfBirth = 'Employee must be at least 18 years old';
+      if (age >= 65) err.dateOfBirth = 'Employee must be less than 65 years old';
+    }
     if (form.panNumber && !PAN_REGEX.test(form.panNumber.replace(/\s/g, ''))) err.panNumber = 'Invalid PAN (e.g. ABCDE1234F)';
     if (form.aadhaarNumber && !AADHAAR_REGEX.test(form.aadhaarNumber.replace(/\s/g, ''))) err.aadhaarNumber = 'Must be 12 digits';
     setFormErrors(err);
@@ -148,6 +203,7 @@ export default function Employees() {
         branch: form.branch || null,
         designation: form.designation || null,
         employmentType: form.employmentType || 'Full-time',
+        category: form.category || null,
         qualification: form.qualification || null,
         joiningDate: form.joiningDate || null,
         reportingManager: form.reportingManager || null,
@@ -228,6 +284,71 @@ export default function Employees() {
           placeholder="Search by name, email, Emp ID, department..."
           className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] w-64"
         />
+      </div>
+
+      <div className="mb-4">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <button
+            type="button"
+            onClick={() => setFilterOpen((o) => !o)}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${activeFilterCount > 0 ? 'bg-[#378ADD] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+          >
+            Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
+          </button>
+          {activeFilterCount > 0 && (
+            <button type="button" onClick={clearFilters} className="text-xs text-slate-500 hover:text-slate-700 hover:underline">
+              Clear Filters
+            </button>
+          )}
+        </div>
+        {filterOpen && (
+          <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 mb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs text-slate-500 mb-0.5">Department</label>
+                <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
+                  <option>All Departments</option>
+                  {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-0.5">Designation</label>
+                <select value={filterDesignation} onChange={(e) => setFilterDesignation(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
+                  <option>All Designations</option>
+                  {designations.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-0.5">Branch</label>
+                <select value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
+                  <option>All Branches</option>
+                  {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-0.5">Employment Type</label>
+                <select value={filterEmploymentType} onChange={(e) => setFilterEmploymentType(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
+                  <option>All Types</option>
+                  {employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-0.5">Category</label>
+                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
+                  <option>All Categories</option>
+                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-0.5">Joining Year</label>
+                <select value={filterJoiningYear} onChange={(e) => setFilterJoiningYear(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
+                  {JOINING_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+        <p className="text-slate-500 text-xs">{filtered.length} employee{filtered.length !== 1 ? 's' : ''} found</p>
       </div>
 
       {loading ? (
@@ -331,8 +452,9 @@ export default function Employees() {
                     <input name="phone" value={form.phone} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" required />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Date of Birth</label>
-                    <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Date of Birth *</label>
+                    <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" required />
+                    {formErrors.dateOfBirth && <p className="text-red-500 text-xs mt-1">{formErrors.dateOfBirth}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Gender</label>
@@ -394,6 +516,14 @@ export default function Employees() {
                     <select name="employmentType" value={form.employmentType} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
                       {employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                       {!employmentTypes.includes('Other') && <option value="Other">Other</option>}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
+                    <select name="category" value={form.category} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
+                      <option value="">—</option>
+                      {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                      {!categories.includes('Other') && <option value="Other">Other</option>}
                     </select>
                   </div>
                   <div>
