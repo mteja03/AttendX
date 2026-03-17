@@ -9,6 +9,7 @@ import {
   updateDoc,
   query,
   orderBy,
+  where,
   serverTimestamp,
   increment,
   Timestamp,
@@ -16,6 +17,8 @@ import {
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { toDateString, toDisplayDate, toJSDate } from '../utils';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
 const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
@@ -25,8 +28,64 @@ const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (
 const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 'Probationary', 'Seasonal', 'Other'];
 const JOINING_YEARS = ['All Years', 2020, 2021, 2022, 2023, 2024, 2025, 2026];
 
-const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
-const AADHAAR_REGEX = /^[0-9]{12}$/;
+// Add Employee form is intentionally flexible:
+// Only blocking validations:
+// - Emp ID cannot be empty and must not contain spaces
+// - Date of birth cannot be in the future
+// - Emp ID must be unique
+
+const INDIAN_STATES = [
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chhattisgarh',
+  'Goa',
+  'Gujarat',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Punjab',
+  'Rajasthan',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttar Pradesh',
+  'Uttarakhand',
+  'West Bengal',
+  'Delhi',
+  'Jammu & Kashmir',
+  'Ladakh',
+  'Puducherry',
+  'Chandigarh',
+  'Andaman & Nicobar Islands',
+  'Dadra & Nagar Haveli',
+  'Lakshadweep',
+];
+
+const getDeptColor = (dept) => {
+  const colors = {
+    Engineering: '#3B82F6',
+    HR: '#10B981',
+    Sales: '#F59E0B',
+    Finance: '#6366F1',
+    Operations: '#EC4899',
+    Marketing: '#14B8A6',
+    Design: '#8B5CF6',
+    Legal: '#64748B',
+  };
+  return colors[dept] || '#9CA3AF';
+};
 
 const initialForm = {
   fullName: '',
@@ -34,7 +93,12 @@ const initialForm = {
   phone: '',
   dateOfBirth: '',
   gender: '',
-  address: '',
+  fatherName: '',
+  streetAddress: '',
+  city: '',
+  state: '',
+  pincode: '',
+  country: 'India',
   qualification: '',
   empId: '',
   department: '',
@@ -43,7 +107,9 @@ const initialForm = {
   employmentType: 'Full-time',
   category: '',
   joiningDate: toDateString(new Date()),
-  reportingManager: '',
+  reportingManagerId: '',
+  reportingManagerName: '',
+  reportingManagerEmpId: '',
   ctcPerAnnum: '',
   basicSalary: '',
   hra: '',
@@ -51,6 +117,12 @@ const initialForm = {
   esicNumber: '',
   panNumber: '',
   aadhaarNumber: '',
+  drivingLicenceNumber: '',
+  emergencyContactName: '',
+  emergencyRelationship: '',
+  emergencyPhone: '',
+  emergencyEmail: '',
+  emergencyAddress: '',
 };
 
 export default function Employees() {
@@ -72,7 +144,24 @@ export default function Employees() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [formErrors, setFormErrors] = useState({});
+  const [formWarnings, setFormWarnings] = useState({});
   const [saving, setSaving] = useState(false);
+  const [managerSearch, setManagerSearch] = useState('');
+  const [showManagerDropdown, setShowManagerDropdown] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (showManagerDropdown) {
+        setShowManagerDropdown(false);
+        setManagerSearch('');
+      }
+    };
+    if (showManagerDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showManagerDropdown]);
+  const [showDownload, setShowDownload] = useState(false);
 
   useEffect(() => {
     if (!companyId) return;
@@ -110,6 +199,26 @@ export default function Employees() {
     if (filterJoiningYear !== 'All Years') n++;
     return n;
   }, [filterDept, filterDesignation, filterBranch, filterEmploymentType, filterCategory, filterJoiningYear]);
+
+  const activeFilters = useMemo(() => {
+    const list = [];
+    if (filterDept !== 'All Departments') list.push({ key: 'department', label: 'Department', value: filterDept });
+    if (filterBranch !== 'All Branches') list.push({ key: 'branch', label: 'Branch', value: filterBranch });
+    if (filterDesignation !== 'All Designations') list.push({ key: 'designation', label: 'Designation', value: filterDesignation });
+    if (filterEmploymentType !== 'All Types') list.push({ key: 'employmentType', label: 'Type', value: filterEmploymentType });
+    if (filterCategory !== 'All Categories') list.push({ key: 'category', label: 'Category', value: filterCategory });
+    if (filterJoiningYear !== 'All Years') list.push({ key: 'joiningYear', label: 'Year', value: filterJoiningYear });
+    return list;
+  }, [filterDept, filterBranch, filterDesignation, filterEmploymentType, filterCategory, filterJoiningYear]);
+
+  const clearFilter = (key) => {
+    if (key === 'department') setFilterDept('All Departments');
+    if (key === 'branch') setFilterBranch('All Branches');
+    if (key === 'designation') setFilterDesignation('All Designations');
+    if (key === 'employmentType') setFilterEmploymentType('All Types');
+    if (key === 'category') setFilterCategory('All Categories');
+    if (key === 'joiningYear') setFilterJoiningYear('All Years');
+  };
 
   const clearFilters = () => {
     setFilterDept('All Departments');
@@ -164,27 +273,42 @@ export default function Employees() {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
     if (formErrors[name]) setFormErrors((prev) => ({ ...prev, [name]: null }));
+    if (formWarnings[name]) setFormWarnings((prev) => ({ ...prev, [name]: null }));
   };
 
   const validate = () => {
     const err = {};
-    if (!form.fullName?.trim()) err.fullName = 'Required';
-    if (!form.email?.trim()) err.email = 'Required';
-    if (!form.phone?.trim()) err.phone = 'Required';
-    if (!form.dateOfBirth?.trim()) err.dateOfBirth = 'Required';
+    const empId = (form.empId || '').trim();
+    if (!empId) err.empId = 'Emp ID is required';
+    if (empId && /\s/.test(empId)) err.empId = 'Emp ID must not contain spaces';
+
     if (form.dateOfBirth) {
       const dob = new Date(form.dateOfBirth);
-      const today = new Date();
-      let age = today.getFullYear() - dob.getFullYear();
-      const m = today.getMonth() - dob.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-      if (age < 18) err.dateOfBirth = 'Employee must be at least 18 years old';
-      if (age >= 65) err.dateOfBirth = 'Employee must be less than 65 years old';
+      if (Number.isNaN(dob.getTime())) err.dateOfBirth = 'Invalid date';
+      else if (dob.getTime() > Date.now()) err.dateOfBirth = 'Date of birth cannot be in the future';
     }
-    if (form.panNumber && !PAN_REGEX.test(form.panNumber.replace(/\s/g, ''))) err.panNumber = 'Invalid PAN (e.g. ABCDE1234F)';
-    if (form.aadhaarNumber && !AADHAAR_REGEX.test(form.aadhaarNumber.replace(/\s/g, ''))) err.aadhaarNumber = 'Must be 12 digits';
     setFormErrors(err);
     return Object.keys(err).length === 0;
+  };
+
+  const checkEmpIdExists = async (empId) => {
+    const v = (empId || '').trim();
+    if (!v) return false;
+    const q = query(collection(db, 'companies', companyId, 'employees'), where('empId', '==', v));
+    const snap = await getDocs(q);
+    return !snap.empty;
+  };
+
+  const handleEmpIdBlur = () => {
+    const v = (form.empId || '').trim();
+    const nextErr = {};
+    const nextWarn = {};
+    if (!v) nextErr.empId = 'Emp ID is required';
+    else if (/\s/.test(v)) nextErr.empId = 'Emp ID must not contain spaces';
+    else if (!/^EMP\d+$/i.test(v)) nextWarn.empId = 'Emp IDs typically look like EMP001';
+
+    setFormErrors((p) => ({ ...p, empId: nextErr.empId || null }));
+    setFormWarnings((p) => ({ ...p, empId: nextWarn.empId || null }));
   };
 
   const handleAddEmployee = async (e) => {
@@ -192,14 +316,28 @@ export default function Employees() {
     if (!validate()) return;
     setSaving(true);
     try {
+      const exists = await checkEmpIdExists(form.empId);
+      if (exists) {
+        setFormErrors((prev) => ({
+          ...prev,
+          empId: `Emp ID ${form.empId} is already taken. Please use a different ID.`,
+        }));
+        setSaving(false);
+        return;
+      }
       const payload = {
-        fullName: form.fullName.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim(),
+        fullName: form.fullName?.trim() || null,
+        email: form.email?.trim() || null,
+        phone: form.phone?.trim() || null,
         dateOfBirth: form.dateOfBirth ? Timestamp.fromDate(new Date(form.dateOfBirth)) : null,
         gender: form.gender || null,
-        address: form.address || null,
-        empId: form.empId || nextEmpId,
+        fatherName: form.fatherName?.trim() || null,
+        streetAddress: form.streetAddress?.trim() || null,
+        city: form.city?.trim() || null,
+        state: form.state || null,
+        pincode: form.pincode?.trim() || null,
+        country: form.country?.trim() || 'India',
+        empId: (form.empId || '').trim(),
         department: form.department || null,
         branch: form.branch || null,
         designation: form.designation || null,
@@ -207,14 +345,24 @@ export default function Employees() {
         category: form.category || null,
         qualification: form.qualification || null,
         joiningDate: form.joiningDate ? Timestamp.fromDate(new Date(form.joiningDate)) : null,
-        reportingManager: form.reportingManager || null,
+        reportingManagerId: form.reportingManagerId || null,
+        reportingManagerName: form.reportingManagerName || null,
+        reportingManagerEmpId: form.reportingManagerEmpId || null,
         ctcPerAnnum: form.ctcPerAnnum ? Number(form.ctcPerAnnum) : null,
         basicSalary: form.basicSalary ? Number(form.basicSalary) : null,
         hra: form.hra ? Number(form.hra) : null,
         pfNumber: form.pfNumber || null,
         esicNumber: form.esicNumber || null,
-        panNumber: form.panNumber?.replace(/\s/g, '') || null,
-        aadhaarNumber: form.aadhaarNumber?.replace(/\s/g, '') || null,
+        panNumber: form.panNumber?.trim() || null,
+        aadhaarNumber: form.aadhaarNumber?.trim() || null,
+        drivingLicenceNumber: form.drivingLicenceNumber?.trim() || null,
+        emergencyContact: {
+          name: form.emergencyContactName?.trim() || '',
+          relationship: form.emergencyRelationship || '',
+          phone: form.emergencyPhone?.trim() || '',
+          email: form.emergencyEmail?.trim() || '',
+          address: form.emergencyAddress?.trim() || '',
+        },
         status: 'Active',
         createdAt: serverTimestamp(),
       };
@@ -223,6 +371,8 @@ export default function Employees() {
       setEmployees((prev) => [{ id: ref.id, ...payload, createdAt: new Date() }, ...prev]);
       setShowAddModal(false);
       setForm(initialForm);
+      setManagerSearch('');
+      setShowManagerDropdown(false);
       setFormErrors({});
       success('Employee added');
     } catch (err) {
@@ -241,6 +391,48 @@ export default function Employees() {
     }
   };
 
+  const companyName = (company?.name || 'Company').replace(/\s+/g, '');
+
+  const downloadRows = (emps) =>
+    emps.map((emp) => ({
+      'Emp ID': emp.empId || '',
+      'Full Name': emp.fullName || '',
+      Email: emp.email || '',
+      Phone: emp.phone || '',
+      Department: emp.department || '',
+      Designation: emp.designation || '',
+      Branch: emp.branch || '',
+      'Employment Type': emp.employmentType || '',
+      Category: emp.category || '',
+      'Joining Date': toDisplayDate(emp.joiningDate),
+      CTC: emp.ctcPerAnnum ?? emp.ctc ?? '',
+      'Basic Salary': emp.basicSalary ?? '',
+      'PF Number': emp.pfNumber || '',
+      'ESIC Number': emp.esicNumber || '',
+      'PAN Number': emp.panNumber || '',
+      Status: emp.status || '',
+    }));
+
+  const downloadCSV = () => {
+    const rows = downloadRows(filtered);
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const csv = XLSX.utils.sheet_to_csv(ws);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
+    saveAs(blob, `${companyName}_Employees_${today}.csv`);
+    setShowDownload(false);
+  };
+
+  const downloadExcel = () => {
+    const rows = downloadRows(filtered);
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Employees');
+    const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
+    XLSX.writeFile(wb, `${companyName}_Employees_${today}.xlsx`);
+    setShowDownload(false);
+  };
+
   if (!companyId) return null;
 
   return (
@@ -250,13 +442,42 @@ export default function Employees() {
           <h1 className="text-2xl font-semibold text-slate-800">Employees</h1>
           <p className="text-slate-500 mt-1">Manage employee records and directory</p>
         </div>
-        <button
-          type="button"
-          onClick={() => { setShowAddModal(true); setForm({ ...initialForm, empId: nextEmpId }); }}
-          className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
-        >
-          Add Employee
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowDownload((o) => !o)}
+              className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 bg-white"
+            >
+              Download ▾
+            </button>
+            {showDownload && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[10rem]">
+                <button
+                  type="button"
+                  onClick={downloadCSV}
+                  className="block w-full text-left px-4 py-2 text-sm hover:bg-slate-50"
+                >
+                  Download CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadExcel}
+                  className="block w-full text-left px-4 py-2 text-sm hover:bg-slate-50 rounded-b-lg"
+                >
+                  Download Excel
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => { setShowAddModal(true); setForm({ ...initialForm, empId: nextEmpId }); }}
+            className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
+          >
+            Add Employee
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
@@ -281,21 +502,49 @@ export default function Employees() {
         />
       </div>
 
+      <p className="text-sm text-slate-500 mb-3">
+        Showing {filtered.length} of {employees.length} employees
+        {activeFilterCount > 0 ? ` · ${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} active` : ''}
+      </p>
+
       <div className="mb-4">
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <button
             type="button"
             onClick={() => setFilterOpen((o) => !o)}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${activeFilterCount > 0 ? 'bg-[#378ADD] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200"
           >
-            Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-slate-500">
+              <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center rounded-full bg-[#378ADD] text-white px-2 py-0.5 text-[10px] font-semibold">
+                {activeFilterCount}
+              </span>
+            )}
           </button>
-          {activeFilterCount > 0 && (
-            <button type="button" onClick={clearFilters} className="text-xs text-slate-500 hover:text-slate-700 hover:underline">
-              Clear Filters
-            </button>
-          )}
         </div>
+
+        {activeFilters.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {activeFilters.map((f) => (
+              <span
+                key={f.key}
+                className="flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full border border-blue-200"
+              >
+                {f.label}: {f.value}
+                <button type="button" onClick={() => clearFilter(f.key)} className="ml-1 hover:text-blue-900">
+                  ✕
+                </button>
+              </span>
+            ))}
+            <button type="button" onClick={clearFilters} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1">
+              Clear all
+            </button>
+          </div>
+        )}
+
         {filterOpen && (
           <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 mb-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -343,7 +592,6 @@ export default function Employees() {
             </div>
           </div>
         )}
-        <p className="text-slate-500 text-xs">{filtered.length} employee{filtered.length !== 1 ? 's' : ''} found</p>
       </div>
 
       {loading ? (
@@ -351,7 +599,35 @@ export default function Employees() {
           <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#378ADD] border-t-transparent" />
         </div>
       ) : (
-        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="bg-white border rounded-lg p-3 text-center">
+              <p className="text-xl font-semibold text-slate-800">
+                {employees.filter((e) => (e.status || 'Active') === 'Active').length}
+              </p>
+              <p className="text-xs text-slate-500">Active</p>
+            </div>
+            <div className="bg-white border rounded-lg p-3 text-center">
+              <p className="text-xl font-semibold text-amber-600">
+                {employees.filter((e) => (e.status || '') === 'On Leave').length}
+              </p>
+              <p className="text-xs text-slate-500">On Leave</p>
+            </div>
+            <div className="bg-white border rounded-lg p-3 text-center">
+              <p className="text-xl font-semibold text-slate-400">
+                {employees.filter((e) => (e.status || '') === 'Inactive').length}
+              </p>
+              <p className="text-xs text-slate-500">Inactive</p>
+            </div>
+            <div className="bg-white border rounded-lg p-3 text-center">
+              <p className="text-xl font-semibold text-blue-600">
+                {new Set(employees.map((e) => e.department).filter(Boolean)).size}
+              </p>
+              <p className="text-xs text-slate-500">Departments</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
@@ -369,14 +645,23 @@ export default function Employees() {
               {filtered.map((emp) => (
                 <tr
                   key={emp.id}
-                  className="border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors"
+                  className="border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-all"
                   onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
+                  style={{ borderLeft: `3px solid ${getDeptColor(emp.department)}` }}
                 >
                   <td className="px-4 py-3 font-mono text-slate-700">{emp.empId || '—'}</td>
                   <td className="px-4 py-3">
-                    <div>
-                      <p className="font-medium text-slate-800">{emp.fullName || '—'}</p>
-                      <p className="text-slate-500 text-xs">{emp.email || '—'}</p>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
+                        style={{ background: getDeptColor(emp.department) }}
+                      >
+                        {emp.fullName?.charAt(0) || '—'}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{emp.fullName || '—'}</p>
+                        <p className="text-xs text-slate-500">{emp.email || '—'}</p>
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-slate-700">{emp.department || '—'}</td>
@@ -422,6 +707,7 @@ export default function Employees() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {showAddModal && (
@@ -433,22 +719,32 @@ export default function Employees() {
                 <h3 className="text-sm font-medium text-slate-700 mb-3">Personal Info</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Full Name *</label>
-                    <input name="fullName" value={form.fullName} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" required />
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Full Name</label>
+                    <input name="fullName" value={form.fullName} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
                     {formErrors.fullName && <p className="text-red-500 text-xs mt-1">{formErrors.fullName}</p>}
                   </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Father&apos;s Name</label>
+                    <input
+                      name="fatherName"
+                      value={form.fatherName}
+                      onChange={handleFormChange}
+                      placeholder="Father's full name"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    />
+                  </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Email *</label>
-                    <input type="email" name="email" value={form.email} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" required />
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                    <input type="email" name="email" value={form.email} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
                     {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Phone *</label>
-                    <input name="phone" value={form.phone} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" required />
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
+                    <input name="phone" value={form.phone} onChange={handleFormChange} placeholder="10-digit mobile number" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Date of Birth *</label>
-                    <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" required />
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Date of Birth</label>
+                    <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
                     {formErrors.dateOfBirth && <p className="text-red-500 text-xs mt-1">{formErrors.dateOfBirth}</p>}
                   </div>
                   <div>
@@ -469,8 +765,128 @@ export default function Employees() {
                     </select>
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Address</label>
-                    <input name="address" value={form.address} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Street Address</label>
+                    <input
+                      name="streetAddress"
+                      value={form.streetAddress}
+                      onChange={handleFormChange}
+                      placeholder="House/Flat no, Street name"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">City</label>
+                    <input
+                      name="city"
+                      value={form.city}
+                      onChange={handleFormChange}
+                      placeholder="City"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">State</label>
+                    <select
+                      name="state"
+                      value={form.state}
+                      onChange={handleFormChange}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    >
+                      <option value="">Select state</option>
+                      {INDIAN_STATES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Pincode</label>
+                    <input
+                      name="pincode"
+                      value={form.pincode}
+                      onChange={handleFormChange}
+                      placeholder="6-digit pincode"
+                      maxLength={6}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    />
+                    {formErrors.pincode && <p className="text-red-500 text-xs mt-1">{formErrors.pincode}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Country</label>
+                    <input
+                      name="country"
+                      value={form.country}
+                      onChange={handleFormChange}
+                      placeholder="Country"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-sm font-medium text-gray-700 mt-2 mb-3 pb-2 border-b">Emergency Contact</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Contact Name</label>
+                    <input
+                      name="emergencyContactName"
+                      value={form.emergencyContactName}
+                      onChange={handleFormChange}
+                      placeholder="Full name"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    />
+                    {formErrors.emergencyContactName && <p className="text-red-500 text-xs mt-1">{formErrors.emergencyContactName}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Relationship</label>
+                    <select
+                      name="emergencyRelationship"
+                      value={form.emergencyRelationship}
+                      onChange={handleFormChange}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    >
+                      <option value="">—</option>
+                      <option value="Father">Father</option>
+                      <option value="Mother">Mother</option>
+                      <option value="Spouse">Spouse</option>
+                      <option value="Sibling">Sibling</option>
+                      <option value="Friend">Friend</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Contact Phone</label>
+                    <input
+                      name="emergencyPhone"
+                      value={form.emergencyPhone}
+                      onChange={handleFormChange}
+                      placeholder="10-digit mobile number"
+                      maxLength={10}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    />
+                    {formErrors.emergencyPhone && <p className="text-red-500 text-xs mt-1">{formErrors.emergencyPhone}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Contact Email</label>
+                    <input
+                      name="emergencyEmail"
+                      value={form.emergencyEmail}
+                      onChange={handleFormChange}
+                      placeholder="Email address"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Contact Address</label>
+                    <input
+                      name="emergencyAddress"
+                      value={form.emergencyAddress}
+                      onChange={handleFormChange}
+                      placeholder="Contact's address"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    />
                   </div>
                 </div>
               </section>
@@ -480,7 +896,16 @@ export default function Employees() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Emp ID</label>
-                    <input name="empId" value={form.empId} onChange={handleFormChange} placeholder={nextEmpId} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD] font-mono" />
+                    <input
+                      name="empId"
+                      value={form.empId}
+                      onChange={handleFormChange}
+                      onBlur={handleEmpIdBlur}
+                      placeholder={nextEmpId}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD] font-mono"
+                    />
+                    {formErrors.empId && <p className="text-xs text-red-500 mt-1">{formErrors.empId}</p>}
+                    {!formErrors.empId && formWarnings.empId && <p className="text-xs text-amber-600 mt-1">{formWarnings.empId}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Department</label>
@@ -527,7 +952,140 @@ export default function Employees() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Reporting Manager</label>
-                    <input name="reportingManager" value={form.reportingManager} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setShowManagerDropdown(true)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setShowManagerDropdown(true);
+                          }
+                        }}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#378ADD]"
+                      >
+                        {form.reportingManagerId ? (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-700">
+                              {form.reportingManagerName?.charAt(0)}
+                            </div>
+                            <span className="text-slate-800 truncate">{form.reportingManagerName}</span>
+                            <span className="text-xs text-slate-400 whitespace-nowrap">{form.reportingManagerEmpId}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">Select reporting manager</span>
+                        )}
+
+                        <div className="flex items-center gap-1">
+                          {form.reportingManagerId && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setForm((prev) => ({
+                                  ...prev,
+                                  reportingManagerId: '',
+                                  reportingManagerName: '',
+                                  reportingManagerEmpId: '',
+                                }));
+                              }}
+                              className="text-slate-400 hover:text-slate-600 text-xs"
+                            >
+                              ✕
+                            </button>
+                          )}
+                          <span className="text-slate-400 text-xs">▾</span>
+                        </div>
+                      </div>
+
+                      {showManagerDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-48 overflow-hidden">
+                          <div className="p-2 border-b border-slate-100">
+                            <input
+                              autoFocus
+                              type="text"
+                              placeholder="Search by name or ID..."
+                              value={managerSearch}
+                              onChange={(e) => setManagerSearch(e.target.value)}
+                              className="w-full text-sm px-2 py-1.5 border border-slate-200 rounded focus:outline-none focus:border-[#378ADD]"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+
+                          <div className="overflow-y-auto max-h-36">
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                setForm((prev) => ({
+                                  ...prev,
+                                  reportingManagerId: '',
+                                  reportingManagerName: '',
+                                  reportingManagerEmpId: '',
+                                }));
+                                setShowManagerDropdown(false);
+                                setManagerSearch('');
+                              }}
+                              className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"
+                            >
+                              <span className="text-sm text-slate-400">— None</span>
+                            </div>
+
+                            {employees
+                              .filter((emp) => {
+                                if (form.empId && emp.empId === form.empId) return false;
+                                if (!managerSearch) return true;
+                                const term = managerSearch.toLowerCase();
+                                return (
+                                  emp.fullName?.toLowerCase().includes(term) ||
+                                  emp.empId?.toLowerCase().includes(term) ||
+                                  emp.designation?.toLowerCase().includes(term)
+                                );
+                              })
+                              .map((emp) => (
+                                <div
+                                  key={emp.id}
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => {
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      reportingManagerId: emp.id,
+                                      reportingManagerName: emp.fullName || '',
+                                      reportingManagerEmpId: emp.empId || '',
+                                    }));
+                                    setShowManagerDropdown(false);
+                                    setManagerSearch('');
+                                  }}
+                                  className={`flex items-center gap-3 px-3 py-2 hover:bg-blue-50 cursor-pointer ${
+                                    form.reportingManagerId === emp.id ? 'bg-blue-50' : ''
+                                  }`}
+                                >
+                                  <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-700 flex-shrink-0">
+                                    {emp.fullName?.charAt(0)}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-slate-800 truncate">{emp.fullName}</p>
+                                    <p className="text-xs text-slate-400">{emp.empId} · {emp.designation || '—'}</p>
+                                  </div>
+                                  {form.reportingManagerId === emp.id && (
+                                    <span className="text-[#378ADD] text-xs">✓</span>
+                                  )}
+                                </div>
+                              ))}
+
+                            {employees.filter((emp) => {
+                              if (form.empId && emp.empId === form.empId) return false;
+                              if (!managerSearch) return true;
+                              return emp.fullName?.toLowerCase().includes(managerSearch.toLowerCase());
+                            }).length === 0 && (
+                              <div className="px-3 py-4 text-center text-sm text-slate-400">No employees found</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </section>
@@ -562,14 +1120,36 @@ export default function Employees() {
                 <h3 className="text-sm font-medium text-slate-700 mb-3">Identity Documents</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">PAN (e.g. ABCDE1234F)</label>
-                    <input name="panNumber" value={form.panNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD] uppercase" maxLength={10} />
-                    {formErrors.panNumber && <p className="text-red-500 text-xs mt-1">{formErrors.panNumber}</p>}
+                    <label className="block text-xs font-medium text-slate-600 mb-1">PAN Number</label>
+                    <input
+                      name="panNumber"
+                      value={form.panNumber}
+                      onChange={handleFormChange}
+                      placeholder="e.g. ABCDE1234F"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD] uppercase"
+                      maxLength={20}
+                    />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Aadhaar (12 digits)</label>
-                    <input name="aadhaarNumber" value={form.aadhaarNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" maxLength={12} />
-                    {formErrors.aadhaarNumber && <p className="text-red-500 text-xs mt-1">{formErrors.aadhaarNumber}</p>}
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Aadhaar Number</label>
+                    <input
+                      name="aadhaarNumber"
+                      value={form.aadhaarNumber}
+                      onChange={handleFormChange}
+                      placeholder="12-digit number"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      maxLength={20}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Driving Licence No.</label>
+                    <input
+                      name="drivingLicenceNumber"
+                      value={form.drivingLicenceNumber}
+                      onChange={handleFormChange}
+                      placeholder="e.g. MH0120210012345"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    />
                   </div>
                 </div>
               </section>
