@@ -103,7 +103,7 @@ const DEFAULT_ONBOARDING_TEMPLATE = {
 
 export default function Settings() {
   const { companyId } = useParams();
-  const { role } = useAuth();
+  const { role, currentUser } = useAuth();
   const { success, error: showError } = useToast();
   const [company, setCompany] = useState(null);
   const [employees, setEmployees] = useState([]);
@@ -125,6 +125,7 @@ export default function Settings() {
   const [newDocNames, setNewDocNames] = useState({});
   const [onboardingTemplate, setOnboardingTemplate] = useState(null);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const isAdmin = role === 'admin';
 
   useEffect(() => {
@@ -939,8 +940,8 @@ export default function Settings() {
       });
     };
 
-    const addTask = () => {
-      const nextId = `task_${String(Date.now()).slice(-6)}`;
+    const handleAddTask = (category) => {
+      const nextId = `task_${Date.now()}`;
       const nextOrder = tasks.length ? Math.max(...tasks.map((t) => t.order || 0)) + 1 : 1;
       setOnboardingTemplate((prev) => ({
         ...(prev || {}),
@@ -948,12 +949,12 @@ export default function Settings() {
           ...(prev?.tasks || []),
           {
             id: nextId,
-            title: 'New task',
+            title: '',
             description: '',
-            category: 'Day 1',
+            category: category || 'Day 1',
             assignedTo: 'hr',
             daysFromJoining: 0,
-            isRequired: true,
+            isRequired: false,
             order: nextOrder,
           },
         ],
@@ -967,13 +968,17 @@ export default function Settings() {
       }));
     };
 
-    const saveTemplate = async () => {
+    const handleSaveTemplate = async () => {
       if (!companyId || !currentUser) return;
-      setSaving(true);
+      if (!onboardingTemplate?.tasks || onboardingTemplate.tasks.length === 0) {
+        showError('Add at least one task before saving');
+        return;
+      }
+      setSavingTemplate(true);
       try {
         const cleaned = (onboardingTemplate?.tasks || [])
           .map((t, idx) => ({
-            id: t.id || `task_${idx + 1}`,
+            id: t.id || `task_${Date.now()}`,
             title: String(t.title || '').trim(),
             description: String(t.description || '').trim(),
             category: categories.includes(t.category) ? t.category : 'Day 1',
@@ -995,11 +1000,13 @@ export default function Settings() {
         );
 
         setOnboardingTemplate({ tasks: cleaned });
-        success('Onboarding template saved');
+        success(`Onboarding template saved! ${cleaned.length} tasks saved.`);
       } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('Save template error:', e);
         showError('Failed to save onboarding template');
       }
-      setSaving(false);
+      setSavingTemplate(false);
     };
 
     const grouped = categories.map((cat) => ({
@@ -1020,7 +1027,7 @@ export default function Settings() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={addTask}
+              onClick={() => handleAddTask('Day 1')}
               className="rounded-lg border border-slate-300 text-slate-700 text-sm font-medium px-3 py-2 hover:bg-slate-50"
               disabled={onboardingLoading}
             >
@@ -1028,11 +1035,11 @@ export default function Settings() {
             </button>
             <button
               type="button"
-              onClick={saveTemplate}
+              onClick={handleSaveTemplate}
               className="rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
-              disabled={saving || onboardingLoading}
+              disabled={savingTemplate || onboardingLoading}
             >
-              {saving ? 'Saving…' : 'Save template'}
+              {savingTemplate ? 'Saving...' : 'Save Template'}
             </button>
           </div>
         </div>
@@ -1137,6 +1144,14 @@ export default function Settings() {
                     ))}
                   </div>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => handleAddTask(g.category)}
+                  className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors mt-2"
+                >
+                  + Add task to {g.category}
+                </button>
               </div>
             ))}
           </div>

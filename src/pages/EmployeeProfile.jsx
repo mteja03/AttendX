@@ -994,11 +994,28 @@ export default function EmployeeProfile() {
   };
 
   const calculateDueDate = (joiningDate, daysFromJoining) => {
-    const base = toJSDate(joiningDate);
-    if (!base) return null;
-    const d = new Date(base);
-    d.setDate(d.getDate() + Number(daysFromJoining || 0));
-    return Timestamp.fromDate(d);
+    try {
+      let joining;
+      if (joiningDate?.toDate) {
+        joining = joiningDate.toDate();
+      } else if (joiningDate instanceof Date) {
+        joining = joiningDate;
+      } else if (typeof joiningDate === 'string') {
+        joining = new Date(joiningDate);
+      } else if (joiningDate?.seconds) {
+        joining = new Date(joiningDate.seconds * 1000);
+      } else {
+        joining = new Date();
+      }
+
+      const due = new Date(joining);
+      due.setDate(due.getDate() + (Number(daysFromJoining) || 0));
+      return Timestamp.fromDate(due);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('Date calc error:', e);
+      return Timestamp.fromDate(new Date());
+    }
   };
 
   const onboarding = employee?.onboarding || null;
@@ -1020,31 +1037,42 @@ export default function EmployeeProfile() {
   const handleStartOnboarding = async () => {
     if (!companyId || !empId || !employee || !currentUser) return;
     try {
+      // eslint-disable-next-line no-console
+      console.log('Starting onboarding for:', empId, 'in company:', companyId);
       setSaving(true);
-      const tplSnap = await getDoc(doc(db, 'companies', companyId, 'onboardingTemplate'));
-      const tplTasks = tplSnap.exists() && Array.isArray(tplSnap.data()?.tasks)
-        ? tplSnap.data().tasks
-        : DEFAULT_ONBOARDING_TEMPLATE.tasks;
+      let templateTasks = DEFAULT_ONBOARDING_TEMPLATE.tasks;
+      try {
+        const templateDoc = await getDoc(doc(db, 'companies', companyId, 'onboardingTemplate'));
+        if (templateDoc.exists() && Array.isArray(templateDoc.data()?.tasks) && templateDoc.data().tasks.length > 0) {
+          templateTasks = templateDoc.data().tasks;
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('No template found, using default:', e?.message || e);
+      }
+      // eslint-disable-next-line no-console
+      console.log('Template tasks count:', templateTasks.length);
 
       const now = Timestamp.now();
-      const tasks = tplTasks
+      const sanitizedTasks = templateTasks
         .slice()
         .sort((a, b) => (a.order || 0) - (b.order || 0))
         .map((t) => ({
-          id: t.id,
-          title: t.title,
+          id: t.id || `task_${Date.now()}`,
+          title: t.title || '',
           description: t.description || '',
           category: t.category || 'Day 1',
           assignedTo: t.assignedTo || 'hr',
-          daysFromJoining: Number(t.daysFromJoining || 0),
-          isRequired: !!t.isRequired,
-          order: Number(t.order || 0),
+          daysFromJoining: t.daysFromJoining || 0,
+          isRequired: t.isRequired || false,
+          order: t.order || 0,
           completed: false,
           completedAt: null,
           completedBy: null,
           notes: '',
           dueDate: calculateDueDate(employee.joiningDate, t.daysFromJoining),
-        }));
+        }))
+        .map((t) => Object.fromEntries(Object.entries(t).filter(([, v]) => v !== undefined)));
 
       const payload = {
         onboarding: {
@@ -1052,7 +1080,7 @@ export default function EmployeeProfile() {
           startedAt: now,
           completedAt: null,
           completionPct: 0,
-          tasks,
+          tasks: sanitizedTasks,
         },
         updatedAt: serverTimestamp(),
       };
@@ -1060,10 +1088,10 @@ export default function EmployeeProfile() {
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
       setEmployee((prev) => (prev ? { ...prev, ...payload } : prev));
       success('Onboarding started');
-    } catch (e) {
+    } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('Failed to start onboarding', e);
-      showError('Failed to start onboarding');
+      console.error('Onboarding start error:', error?.message, error);
+      showError(`Failed to start: ${error?.message || 'Unknown error'}`);
     }
     setSaving(false);
   };
