@@ -85,6 +85,34 @@ const INDIAN_STATES = [
 const LEAVE_TYPE_STYLE = { CL: 'bg-blue-100 text-blue-800', SL: 'bg-red-100 text-red-800', EL: 'bg-green-100 text-green-800' };
 const STATUS_STYLE = { Pending: 'bg-amber-100 text-amber-800', Approved: 'bg-green-100 text-green-800', Rejected: 'bg-red-100 text-red-800' };
 
+const DEFAULT_ONBOARDING_TEMPLATE = {
+  tasks: [
+    { id: 'task_001', title: 'Send offer letter', description: '', category: 'Pre-joining', assignedTo: 'hr', daysFromJoining: -7, isRequired: true, order: 1 },
+    { id: 'task_002', title: 'Send welcome email', description: 'Send welcome email with company handbook and first day details', category: 'Pre-joining', assignedTo: 'hr', daysFromJoining: -3, isRequired: true, order: 2 },
+    { id: 'task_003', title: 'Collect documents list sent', description: '', category: 'Pre-joining', assignedTo: 'hr', daysFromJoining: -3, isRequired: true, order: 3 },
+    { id: 'task_004', title: 'IT setup request raised (laptop/email/access)', description: '', category: 'Pre-joining', assignedTo: 'it', daysFromJoining: -2, isRequired: true, order: 4 },
+    { id: 'task_005', title: 'Workspace/desk arranged', description: '', category: 'Pre-joining', assignedTo: 'admin', daysFromJoining: -1, isRequired: true, order: 5 },
+
+    { id: 'task_006', title: 'ID card issued', description: '', category: 'Day 1', assignedTo: 'admin', daysFromJoining: 0, isRequired: true, order: 6 },
+    { id: 'task_007', title: 'Office tour completed', description: '', category: 'Day 1', assignedTo: 'hr', daysFromJoining: 0, isRequired: false, order: 7 },
+    { id: 'task_008', title: 'Introduction to team', description: '', category: 'Day 1', assignedTo: 'manager', daysFromJoining: 0, isRequired: true, order: 8 },
+    { id: 'task_009', title: 'HR documentation completed (forms, policies signed)', description: '', category: 'Day 1', assignedTo: 'hr', daysFromJoining: 0, isRequired: true, order: 9 },
+    { id: 'task_010', title: 'System access provided (email, tools)', description: '', category: 'Day 1', assignedTo: 'it', daysFromJoining: 0, isRequired: true, order: 10 },
+
+    { id: 'task_011', title: 'Employee added to payroll', description: '', category: 'Week 1', assignedTo: 'admin', daysFromJoining: 3, isRequired: true, order: 11 },
+    { id: 'task_012', title: 'PF/ESIC registration done', description: '', category: 'Week 1', assignedTo: 'admin', daysFromJoining: 3, isRequired: false, order: 12 },
+    { id: 'task_013', title: 'Bank account details collected', description: '', category: 'Week 1', assignedTo: 'hr', daysFromJoining: 3, isRequired: true, order: 13 },
+    { id: 'task_014', title: 'Emergency contact collected', description: '', category: 'Week 1', assignedTo: 'hr', daysFromJoining: 5, isRequired: true, order: 14 },
+    { id: 'task_015', title: 'Reporting manager introduced', description: '', category: 'Week 1', assignedTo: 'manager', daysFromJoining: 1, isRequired: true, order: 15 },
+
+    { id: 'task_016', title: '30-day check-in meeting done', description: '', category: 'Month 1', assignedTo: 'manager', daysFromJoining: 30, isRequired: true, order: 16 },
+    { id: 'task_017', title: 'Access card issued', description: '', category: 'Month 1', assignedTo: 'admin', daysFromJoining: 7, isRequired: false, order: 17 },
+    { id: 'task_018', title: 'Company policies acknowledged', description: '', category: 'Month 1', assignedTo: 'employee', daysFromJoining: 7, isRequired: true, order: 18 },
+    { id: 'task_019', title: 'Probation goals set', description: '', category: 'Month 1', assignedTo: 'manager', daysFromJoining: 14, isRequired: true, order: 19 },
+    { id: 'task_020', title: 'All documents collected and verified', description: '', category: 'Month 1', assignedTo: 'hr', daysFromJoining: 30, isRequired: true, order: 20 },
+  ],
+};
+
 function getAge(v) {
   const d = toJSDate(v);
   if (!d || Number.isNaN(d.getTime())) return null;
@@ -175,6 +203,8 @@ export default function EmployeeProfile() {
   const [returnQty, setReturnQty] = useState(1);
   const [returnCondition, setReturnCondition] = useState('Good');
   const [returnNotes, setReturnNotes] = useState('');
+  const [completingTask, setCompletingTask] = useState(null);
+  const [taskNotes, setTaskNotes] = useState('');
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -938,6 +968,170 @@ export default function EmployeeProfile() {
     return icons[type] || '📦';
   };
 
+  const getCategoryIcon = (category) => {
+    if (category === 'Pre-joining') return '📋';
+    if (category === 'Day 1') return '🎉';
+    if (category === 'Week 1') return '📅';
+    if (category === 'Month 1') return '🏆';
+    return '✅';
+  };
+
+  const isOverdue = (dueDate) => {
+    const due = toJSDate(dueDate);
+    if (!due) return false;
+    return due < new Date();
+  };
+
+  const getAssignedLabel = (assignedTo) => {
+    const map = {
+      hr: 'HR Team',
+      manager: 'Manager',
+      it: 'IT Team',
+      admin: 'Admin',
+      employee: 'Employee',
+    };
+    return map[assignedTo] || assignedTo || '—';
+  };
+
+  const calculateDueDate = (joiningDate, daysFromJoining) => {
+    const base = toJSDate(joiningDate);
+    if (!base) return null;
+    const d = new Date(base);
+    d.setDate(d.getDate() + Number(daysFromJoining || 0));
+    return Timestamp.fromDate(d);
+  };
+
+  const onboarding = employee?.onboarding || null;
+  const onboardingTasks = Array.isArray(onboarding?.tasks) ? onboarding.tasks : [];
+  const onboardingCompleted = onboardingTasks.filter((t) => t.completed).length;
+  const onboardingTotal = onboardingTasks.length;
+  const onboardingPct =
+    onboardingTotal > 0 ? Math.round((onboardingCompleted / onboardingTotal) * 100) : 0;
+
+  const onboardingByCategory = useMemo(() => {
+    const categories = ['Pre-joining', 'Day 1', 'Week 1', 'Month 1'];
+    const tasks = onboardingTasks.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    return categories.map((cat) => ({
+      category: cat,
+      tasks: tasks.filter((t) => (t.category || 'Day 1') === cat),
+    }));
+  }, [onboardingTasks]);
+
+  const handleStartOnboarding = async () => {
+    if (!companyId || !empId || !employee || !currentUser) return;
+    try {
+      setSaving(true);
+      const tplSnap = await getDoc(doc(db, 'companies', companyId, 'onboardingTemplate'));
+      const tplTasks = tplSnap.exists() && Array.isArray(tplSnap.data()?.tasks)
+        ? tplSnap.data().tasks
+        : DEFAULT_ONBOARDING_TEMPLATE.tasks;
+
+      const now = Timestamp.now();
+      const tasks = tplTasks
+        .slice()
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+        .map((t) => ({
+          id: t.id,
+          title: t.title,
+          description: t.description || '',
+          category: t.category || 'Day 1',
+          assignedTo: t.assignedTo || 'hr',
+          daysFromJoining: Number(t.daysFromJoining || 0),
+          isRequired: !!t.isRequired,
+          order: Number(t.order || 0),
+          completed: false,
+          completedAt: null,
+          completedBy: null,
+          notes: '',
+          dueDate: calculateDueDate(employee.joiningDate, t.daysFromJoining),
+        }));
+
+      const payload = {
+        onboarding: {
+          status: 'in_progress',
+          startedAt: now,
+          completedAt: null,
+          completionPct: 0,
+          tasks,
+        },
+        updatedAt: serverTimestamp(),
+      };
+
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
+      setEmployee((prev) => (prev ? { ...prev, ...payload } : prev));
+      success('Onboarding started');
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to start onboarding', e);
+      showError('Failed to start onboarding');
+    }
+    setSaving(false);
+  };
+
+  const markTaskComplete = async (taskId, notes) => {
+    if (!companyId || !empId || !employee || !currentUser || !onboarding) return;
+    const now = Timestamp.now();
+    const nextTasks = onboardingTasks.map((t) =>
+      t.id === taskId
+        ? {
+            ...t,
+            completed: true,
+            completedAt: now,
+            completedBy: currentUser.email || '',
+            notes: notes || '',
+          }
+        : t,
+    );
+    const done = nextTasks.filter((t) => t.completed).length;
+    const total = nextTasks.length || 1;
+    const pct = Math.round((done / total) * 100);
+    const requiredDone = nextTasks.filter((t) => t.isRequired).every((t) => t.completed);
+    const status = requiredDone && done === nextTasks.length ? 'completed' : 'in_progress';
+
+    const payload = {
+      onboarding: {
+        ...(onboarding || {}),
+        status,
+        completionPct: pct,
+        tasks: nextTasks,
+        completedAt: status === 'completed' ? now : onboarding.completedAt || null,
+      },
+      updatedAt: serverTimestamp(),
+    };
+
+    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
+    setEmployee((prev) => (prev ? { ...prev, onboarding: payload.onboarding } : prev));
+    if (status === 'completed') success('🎉 Onboarding completed!');
+    else success('Task marked complete');
+  };
+
+  const unmarkTask = async (taskId) => {
+    if (!companyId || !empId || !employee || !currentUser || !onboarding) return;
+    const nextTasks = onboardingTasks.map((t) =>
+      t.id === taskId
+        ? { ...t, completed: false, completedAt: null, completedBy: null, notes: '' }
+        : t,
+    );
+    const done = nextTasks.filter((t) => t.completed).length;
+    const total = nextTasks.length || 1;
+    const pct = Math.round((done / total) * 100);
+
+    const payload = {
+      onboarding: {
+        ...(onboarding || {}),
+        status: done === 0 ? 'not_started' : 'in_progress',
+        completionPct: pct,
+        completedAt: null,
+        tasks: nextTasks,
+      },
+      updatedAt: serverTimestamp(),
+    };
+
+    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
+    setEmployee((prev) => (prev ? { ...prev, onboarding: payload.onboarding } : prev));
+    success('Task updated');
+  };
+
   const handleAssignAssetChange = (e) => {
     const { name, value } = e.target;
     setAssignAssetForm((prev) => ({ ...prev, [name]: value }));
@@ -1678,6 +1872,7 @@ export default function EmployeeProfile() {
     { id: 'documents', label: 'Documents' },
     { id: 'leave', label: 'Leave History' },
     { id: 'assets', label: 'Assets' },
+    { id: 'onboarding', label: 'Onboarding' },
     { id: 'timeline', label: 'Timeline' },
   ];
 
@@ -2612,6 +2807,195 @@ export default function EmployeeProfile() {
         </div>
       )}
 
+      {tab === 'onboarding' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      onboarding?.status === 'completed'
+                        ? 'bg-green-100 text-green-700'
+                        : onboarding?.status === 'in_progress'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {onboarding?.status === 'completed'
+                      ? 'Completed'
+                      : onboarding?.status === 'in_progress'
+                      ? 'In Progress'
+                      : 'Not Started'}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    Joining: {employee.joiningDate ? toDisplayDate(employee.joiningDate) : '—'}
+                  </span>
+                </div>
+
+                <p className="text-sm text-gray-700 font-medium">
+                  {onboardingCompleted} of {onboardingTotal} tasks completed
+                </p>
+                <p className="text-xs text-gray-400 mt-1">{onboardingPct}% Complete</p>
+                <div className="mt-3 w-full max-w-md bg-gray-100 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full"
+                    style={{ width: `${Math.min(onboardingPct, 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              {(!onboarding || onboarding.status === 'not_started') && (
+                <button
+                  type="button"
+                  onClick={handleStartOnboarding}
+                  disabled={saving}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {saving ? 'Starting…' : 'Start Onboarding'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {(!onboarding || onboarding.status === 'not_started' || onboardingTasks.length === 0) ? (
+            <div className="text-center py-12 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+              <p className="text-4xl mb-3">🎯</p>
+              <p className="text-base font-medium text-gray-700 mb-1">Onboarding not started</p>
+              <p className="text-sm text-gray-400 mb-4">
+                Start the onboarding process to track tasks for {employee.fullName}
+              </p>
+              <button
+                type="button"
+                onClick={handleStartOnboarding}
+                disabled={saving}
+                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? 'Starting…' : 'Start Onboarding'}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {onboardingByCategory.map((g) => {
+                const totalInCategory = g.tasks.length;
+                const completedInCategory = g.tasks.filter((t) => t.completed).length;
+                return (
+                  <div key={g.category}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                        {getCategoryIcon(g.category)} {g.category}
+                      </h3>
+                      <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                        {completedInCategory}/{totalInCategory}
+                      </span>
+                    </div>
+
+                    {g.tasks.map((task) => (
+                      <div
+                        key={task.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          if (task.completed) return;
+                          setCompletingTask(task);
+                          setTaskNotes('');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !task.completed) {
+                            setCompletingTask(task);
+                            setTaskNotes('');
+                          }
+                        }}
+                        className={`flex items-start gap-3 p-3 rounded-xl border mb-2 cursor-pointer transition-all ${
+                          task.completed
+                            ? 'bg-green-50 border-green-100'
+                            : isOverdue(task.dueDate)
+                            ? 'bg-red-50 border-red-100'
+                            : 'bg-white border-gray-200 hover:border-blue-200 hover:bg-blue-50'
+                        }`}
+                      >
+                        <div
+                          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${
+                            task.completed ? 'bg-green-500 border-green-500' : 'border-gray-300'
+                          }`}
+                        >
+                          {task.completed && (
+                            <svg width="10" height="10" viewBox="0 0 10 10">
+                              <path
+                                d="M2 5l2.5 2.5L8 3"
+                                stroke="white"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                fill="none"
+                              />
+                            </svg>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p
+                              className={`text-sm font-medium ${
+                                task.completed ? 'line-through text-gray-400' : 'text-gray-800'
+                              }`}
+                            >
+                              {task.title}
+                            </p>
+                            {task.isRequired && !task.completed && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">
+                                Required
+                              </span>
+                            )}
+                            {isOverdue(task.dueDate) && !task.completed && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">
+                                Overdue
+                              </span>
+                            )}
+                          </div>
+
+                          {task.description && (
+                            <p className="text-xs text-gray-400 mt-0.5">{task.description}</p>
+                          )}
+
+                          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                            <span className="text-xs text-gray-400 flex items-center gap-1">
+                              Due: {task.dueDate ? toDisplayDate(task.dueDate) : '—'}
+                            </span>
+                            <span className="text-xs text-gray-400">· {getAssignedLabel(task.assignedTo)}</span>
+                            {task.completed && (
+                              <span className="text-xs text-green-600">
+                                ✓ Done by {task.completedBy} on {toDisplayDate(task.completedAt)}
+                              </span>
+                            )}
+                          </div>
+
+                          {task.completed && task.notes && (
+                            <p className="text-xs text-gray-500 mt-1 italic">"{task.notes}"</p>
+                          )}
+                        </div>
+
+                        {task.completed && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              unmarkTask(task.id);
+                            }}
+                            className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100 flex-shrink-0"
+                          >
+                            Undo
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {deactivateConfirm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -3118,6 +3502,47 @@ export default function EmployeeProfile() {
                 className="flex-1 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700"
               >
                 Confirm Return
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {completingTask && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
+            <h3 className="font-medium mb-3">
+              Complete: {completingTask.title}
+            </h3>
+            <textarea
+              placeholder="Add notes (optional)..."
+              value={taskNotes}
+              onChange={(e) => setTaskNotes(e.target.value)}
+              rows={3}
+              className="w-full border rounded-xl px-3 py-2 text-sm resize-none mb-3"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCompletingTask(null)}
+                className="flex-1 py-2 border rounded-xl text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await markTaskComplete(completingTask.id, taskNotes);
+                    setCompletingTask(null);
+                    setTaskNotes('');
+                  } catch (e) {
+                    showError('Failed to update task');
+                  }
+                }}
+                className="flex-1 py-2 bg-green-600 text-white rounded-xl text-sm font-medium"
+              >
+                Mark Complete ✓
               </button>
             </div>
           </div>

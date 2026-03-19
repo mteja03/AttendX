@@ -183,6 +183,20 @@ export default function Dashboard() {
     return { todayList, upcomingList, thisMonthTotal, thisMonthSample };
   }, [employees]);
 
+  const onboardingEmployees = useMemo(() => {
+    return employees
+      .filter((e) => e?.onboarding?.status === 'in_progress')
+      .map((e) => {
+        const tasks = Array.isArray(e.onboarding?.tasks) ? e.onboarding.tasks : [];
+        const done = tasks.filter((t) => t.completed).length;
+        const total = tasks.length;
+        const pct = total ? Math.round((done / total) * 100) : e.onboarding?.completionPct || 0;
+        return { ...e, _onboardingDone: done, _onboardingTotal: total, _onboardingPct: pct };
+      })
+      .sort((a, b) => (b._onboardingPct || 0) - (a._onboardingPct || 0))
+      .slice(0, 6);
+  }, [employees]);
+
   const handleApprove = async (leaveDoc) => {
     setActioningId(leaveDoc.id);
     try {
@@ -286,6 +300,56 @@ export default function Dashboard() {
                 <p className="text-xs text-gray-400">Damaged/Lost</p>
               </div>
             </div>
+          </div>
+
+          <div className="bg-white border rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                🎯 Onboarding in Progress
+              </h3>
+              <span className="text-xs text-gray-400">
+                {onboardingEmployees.length} employees
+              </span>
+            </div>
+
+            {onboardingEmployees.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-3">No active onboardings</p>
+            ) : (
+              <div className="space-y-2">
+                {onboardingEmployees.map((emp) => (
+                  <div
+                    key={emp.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(`/company/${companyId}/employees/${emp.id}?tab=onboarding`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') navigate(`/company/${companyId}/employees/${emp.id}?tab=onboarding`);
+                    }}
+                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-blue-200 hover:bg-blue-50 cursor-pointer transition-all"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-700 text-xs font-medium">
+                      {(emp.fullName || '?').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{emp.fullName}</p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {emp.designation || '—'} · {emp.department || '—'}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {emp._onboardingDone}/{emp._onboardingTotal} tasks · {emp._onboardingPct}% complete
+                      </p>
+                    </div>
+                    <div className="w-24 bg-gray-100 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full"
+                        style={{ width: `${Math.min(emp._onboardingPct || 0, 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-blue-600">View →</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}

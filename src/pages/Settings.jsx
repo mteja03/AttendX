@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -69,8 +69,37 @@ const TABS = [
   { id: 'lists', label: 'Manage Lists' },
   { id: 'leave', label: 'Leave Policy' },
   { id: 'documents', label: 'Document Types' },
+  { id: 'onboarding', label: 'Onboarding' },
   { id: 'danger', label: 'Danger Zone' },
 ];
+
+const DEFAULT_ONBOARDING_TEMPLATE = {
+  tasks: [
+    { id: 'task_001', title: 'Send offer letter', description: '', category: 'Pre-joining', assignedTo: 'hr', daysFromJoining: -7, isRequired: true, order: 1 },
+    { id: 'task_002', title: 'Send welcome email', description: 'Send welcome email with company handbook and first day details', category: 'Pre-joining', assignedTo: 'hr', daysFromJoining: -3, isRequired: true, order: 2 },
+    { id: 'task_003', title: 'Collect documents list sent', description: '', category: 'Pre-joining', assignedTo: 'hr', daysFromJoining: -3, isRequired: true, order: 3 },
+    { id: 'task_004', title: 'IT setup request raised (laptop/email/access)', description: '', category: 'Pre-joining', assignedTo: 'it', daysFromJoining: -2, isRequired: true, order: 4 },
+    { id: 'task_005', title: 'Workspace/desk arranged', description: '', category: 'Pre-joining', assignedTo: 'admin', daysFromJoining: -1, isRequired: true, order: 5 },
+
+    { id: 'task_006', title: 'ID card issued', description: '', category: 'Day 1', assignedTo: 'admin', daysFromJoining: 0, isRequired: true, order: 6 },
+    { id: 'task_007', title: 'Office tour completed', description: '', category: 'Day 1', assignedTo: 'hr', daysFromJoining: 0, isRequired: false, order: 7 },
+    { id: 'task_008', title: 'Introduction to team', description: '', category: 'Day 1', assignedTo: 'manager', daysFromJoining: 0, isRequired: true, order: 8 },
+    { id: 'task_009', title: 'HR documentation completed (forms, policies signed)', description: '', category: 'Day 1', assignedTo: 'hr', daysFromJoining: 0, isRequired: true, order: 9 },
+    { id: 'task_010', title: 'System access provided (email, tools)', description: '', category: 'Day 1', assignedTo: 'it', daysFromJoining: 0, isRequired: true, order: 10 },
+
+    { id: 'task_011', title: 'Employee added to payroll', description: '', category: 'Week 1', assignedTo: 'admin', daysFromJoining: 3, isRequired: true, order: 11 },
+    { id: 'task_012', title: 'PF/ESIC registration done', description: '', category: 'Week 1', assignedTo: 'admin', daysFromJoining: 3, isRequired: false, order: 12 },
+    { id: 'task_013', title: 'Bank account details collected', description: '', category: 'Week 1', assignedTo: 'hr', daysFromJoining: 3, isRequired: true, order: 13 },
+    { id: 'task_014', title: 'Emergency contact collected', description: '', category: 'Week 1', assignedTo: 'hr', daysFromJoining: 5, isRequired: true, order: 14 },
+    { id: 'task_015', title: 'Reporting manager introduced', description: '', category: 'Week 1', assignedTo: 'manager', daysFromJoining: 1, isRequired: true, order: 15 },
+
+    { id: 'task_016', title: '30-day check-in meeting done', description: '', category: 'Month 1', assignedTo: 'manager', daysFromJoining: 30, isRequired: true, order: 16 },
+    { id: 'task_017', title: 'Access card issued', description: '', category: 'Month 1', assignedTo: 'admin', daysFromJoining: 7, isRequired: false, order: 17 },
+    { id: 'task_018', title: 'Company policies acknowledged', description: '', category: 'Month 1', assignedTo: 'employee', daysFromJoining: 7, isRequired: true, order: 18 },
+    { id: 'task_019', title: 'Probation goals set', description: '', category: 'Month 1', assignedTo: 'manager', daysFromJoining: 14, isRequired: true, order: 19 },
+    { id: 'task_020', title: 'All documents collected and verified', description: '', category: 'Month 1', assignedTo: 'hr', daysFromJoining: 30, isRequired: true, order: 20 },
+  ],
+};
 
 export default function Settings() {
   const { companyId } = useParams();
@@ -94,6 +123,8 @@ export default function Settings() {
   const [docTypes, setDocTypes] = useState(null);
   const [docTypesLoading, setDocTypesLoading] = useState(false);
   const [newDocNames, setNewDocNames] = useState({});
+  const [onboardingTemplate, setOnboardingTemplate] = useState(null);
+  const [onboardingLoading, setOnboardingLoading] = useState(false);
   const isAdmin = role === 'admin';
 
   useEffect(() => {
@@ -161,6 +192,29 @@ export default function Settings() {
       setDocTypesLoading(false);
     };
     fetchDocTypes();
+  }, [tab, companyId, showError]);
+
+  useEffect(() => {
+    if (!companyId || tab !== 'onboarding') return;
+    const loadTemplate = async () => {
+      setOnboardingLoading(true);
+      try {
+        const snap = await getDoc(doc(db, 'companies', companyId, 'onboardingTemplate'));
+        if (snap.exists()) {
+          const data = snap.data();
+          setOnboardingTemplate({
+            tasks: Array.isArray(data?.tasks) ? data.tasks : DEFAULT_ONBOARDING_TEMPLATE.tasks,
+          });
+        } else {
+          setOnboardingTemplate(DEFAULT_ONBOARDING_TEMPLATE);
+        }
+      } catch (e) {
+        setOnboardingTemplate(DEFAULT_ONBOARDING_TEMPLATE);
+        showError('Failed to load onboarding template');
+      }
+      setOnboardingLoading(false);
+    };
+    loadTemplate();
   }, [tab, companyId, showError]);
 
   const getList = (key, defaults) => (company?.[key]?.length ? company[key] : defaults);
@@ -870,6 +924,227 @@ export default function Settings() {
     </div>
   );
 
+  const renderOnboardingTab = () => {
+    const tasks = onboardingTemplate?.tasks || [];
+    const categories = ['Pre-joining', 'Day 1', 'Week 1', 'Month 1'];
+    const assignedToOptions = ['hr', 'manager', 'it', 'admin', 'employee'];
+
+    const updateTask = (taskId, patch) => {
+      setOnboardingTemplate((prev) => {
+        const cur = prev?.tasks || [];
+        return {
+          ...(prev || {}),
+          tasks: cur.map((t) => (t.id === taskId ? { ...t, ...patch } : t)),
+        };
+      });
+    };
+
+    const addTask = () => {
+      const nextId = `task_${String(Date.now()).slice(-6)}`;
+      const nextOrder = tasks.length ? Math.max(...tasks.map((t) => t.order || 0)) + 1 : 1;
+      setOnboardingTemplate((prev) => ({
+        ...(prev || {}),
+        tasks: [
+          ...(prev?.tasks || []),
+          {
+            id: nextId,
+            title: 'New task',
+            description: '',
+            category: 'Day 1',
+            assignedTo: 'hr',
+            daysFromJoining: 0,
+            isRequired: true,
+            order: nextOrder,
+          },
+        ],
+      }));
+    };
+
+    const removeTask = (taskId) => {
+      setOnboardingTemplate((prev) => ({
+        ...(prev || {}),
+        tasks: (prev?.tasks || []).filter((t) => t.id !== taskId),
+      }));
+    };
+
+    const saveTemplate = async () => {
+      if (!companyId || !currentUser) return;
+      setSaving(true);
+      try {
+        const cleaned = (onboardingTemplate?.tasks || [])
+          .map((t, idx) => ({
+            id: t.id || `task_${idx + 1}`,
+            title: String(t.title || '').trim(),
+            description: String(t.description || '').trim(),
+            category: categories.includes(t.category) ? t.category : 'Day 1',
+            assignedTo: assignedToOptions.includes(t.assignedTo) ? t.assignedTo : 'hr',
+            daysFromJoining: Number.isFinite(Number(t.daysFromJoining)) ? Number(t.daysFromJoining) : 0,
+            isRequired: !!t.isRequired,
+            order: Number.isFinite(Number(t.order)) ? Number(t.order) : idx + 1,
+          }))
+          .filter((t) => t.title);
+
+        await setDoc(
+          doc(db, 'companies', companyId, 'onboardingTemplate'),
+          {
+            tasks: cleaned,
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser.email || '',
+          },
+          { merge: true },
+        );
+
+        setOnboardingTemplate({ tasks: cleaned });
+        success('Onboarding template saved');
+      } catch (e) {
+        showError('Failed to save onboarding template');
+      }
+      setSaving(false);
+    };
+
+    const grouped = categories.map((cat) => ({
+      category: cat,
+      tasks: tasks
+        .filter((t) => (t.category || 'Day 1') === cat)
+        .slice()
+        .sort((a, b) => (a.order || 0) - (b.order || 0)),
+    }));
+
+    return (
+      <section className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">Onboarding Checklist</h2>
+            <p className="text-sm text-slate-500 mt-1">Customize the checklist template used for new employees.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={addTask}
+              className="rounded-lg border border-slate-300 text-slate-700 text-sm font-medium px-3 py-2 hover:bg-slate-50"
+              disabled={onboardingLoading}
+            >
+              + Add task
+            </button>
+            <button
+              type="button"
+              onClick={saveTemplate}
+              className="rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
+              disabled={saving || onboardingLoading}
+            >
+              {saving ? 'Saving…' : 'Save template'}
+            </button>
+          </div>
+        </div>
+
+        {onboardingLoading ? (
+          <p className="text-sm text-slate-500">Loading…</p>
+        ) : (
+          <div className="space-y-6">
+            {grouped.map((g) => (
+              <div key={g.category}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-slate-700">{g.category}</h3>
+                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                    {g.tasks.length} tasks
+                  </span>
+                </div>
+
+                {g.tasks.length === 0 ? (
+                  <p className="text-xs text-slate-400">No tasks in this category.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {g.tasks.map((t) => (
+                      <div key={t.id} className="border border-slate-200 rounded-xl p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Title</label>
+                            <input
+                              value={t.title || ''}
+                              onChange={(e) => updateTask(t.id, { title: e.target.value })}
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              placeholder="Task title"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeTask(t.id)}
+                            className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+
+                        <div className="mt-3">
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
+                          <textarea
+                            value={t.description || ''}
+                            onChange={(e) => updateTask(t.id, { description: e.target.value })}
+                            rows={2}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            placeholder="Optional description"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
+                            <select
+                              value={t.category || 'Day 1'}
+                              onChange={(e) => updateTask(t.id, { category: e.target.value })}
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            >
+                              {categories.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Assigned to</label>
+                            <select
+                              value={t.assignedTo || 'hr'}
+                              onChange={(e) => updateTask(t.id, { assignedTo: e.target.value })}
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            >
+                              {assignedToOptions.map((o) => (
+                                <option key={o} value={o}>{o.toUpperCase()}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Days from joining</label>
+                            <input
+                              type="number"
+                              value={t.daysFromJoining ?? 0}
+                              onChange={(e) => updateTask(t.id, { daysFromJoining: e.target.value })}
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 mt-6">
+                            <input
+                              id={`req_${t.id}`}
+                              type="checkbox"
+                              checked={!!t.isRequired}
+                              onChange={(e) => updateTask(t.id, { isRequired: e.target.checked })}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                            />
+                            <label htmlFor={`req_${t.id}`} className="text-xs text-slate-700">
+                              Required
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   const renderDangerTab = () => (
     <div className="space-y-4">
       <div className="border border-amber-200 bg-amber-50 rounded-xl p-4">
@@ -927,6 +1202,7 @@ export default function Settings() {
       {tab === 'lists' && renderListsTab()}
       {tab === 'leave' && renderLeaveTab()}
       {tab === 'documents' && renderDocumentsTab()}
+      {tab === 'onboarding' && renderOnboardingTab()}
       {tab === 'danger' && renderDangerTab()}
 
       {deleteConfirm && (
