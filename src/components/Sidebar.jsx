@@ -8,6 +8,7 @@ const COMPANY_NAV = [
   { to: 'employees', label: 'Employees' },
   { to: 'leave', label: 'Leave' },
   { to: 'documents', label: 'Documents' },
+  { to: 'assets', label: 'Assets' },
   { to: 'team', label: 'Team Members' },
   { to: 'settings', label: 'Settings' },
 ];
@@ -71,6 +72,16 @@ function DocumentsIcon({ className }) {
   );
 }
 
+function AssetsIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v10" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7v10" />
+    </svg>
+  );
+}
+
 function SettingsIcon({ className }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -80,7 +91,15 @@ function SettingsIcon({ className }) {
   );
 }
 
-const navIcons = { dashboard: DashboardIcon, employees: EmployeesIcon, leave: LeaveIcon, documents: DocumentsIcon, team: UsersIcon, settings: SettingsIcon };
+const navIcons = {
+  dashboard: DashboardIcon,
+  employees: EmployeesIcon,
+  leave: LeaveIcon,
+  documents: DocumentsIcon,
+  assets: AssetsIcon,
+  team: UsersIcon,
+  settings: SettingsIcon,
+};
 
 export default function Sidebar() {
   const { currentUser, role, signOut } = useAuth();
@@ -102,8 +121,8 @@ export default function Sidebar() {
     }`;
 
   return (
-    <aside className="w-64 min-h-screen flex flex-col bg-[#1e3a5f] text-white">
-      <div className="p-4 border-b border-white/10">
+    <aside className="flex flex-col h-screen bg-[#1e3a5f] w-56 fixed left-0 top-0 overflow-hidden text-white">
+      <div className="flex-shrink-0 p-4 border-b border-white/10">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#378ADD] text-white font-semibold text-sm">
             AX
@@ -115,7 +134,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-3 space-y-4">
+      <nav className="flex-1 overflow-y-auto min-h-0 p-3 space-y-4 scrollbar-none">
         {isAdmin && (
           <>
             <div>
@@ -205,7 +224,7 @@ export default function Sidebar() {
       </nav>
 
       {currentUser && (
-        <div className="border-t border-white/10 p-3">
+        <div className="flex-shrink-0 border-t border-white/10 p-3">
           <div className="flex items-center gap-3 mb-2">
             <img
               src={

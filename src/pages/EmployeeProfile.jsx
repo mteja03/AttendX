@@ -10,6 +10,7 @@ import {
   query,
   orderBy,
   where,
+  Timestamp,
   serverTimestamp,
   arrayUnion,
   arrayRemove,
@@ -144,6 +145,36 @@ export default function EmployeeProfile() {
   const additionalFileInputRef = useRef(null);
   const [managerSearch, setManagerSearch] = useState('');
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
+  const [assetList, setAssetList] = useState([]);
+  const [showAssignAssetModal, setShowAssignAssetModal] = useState(false);
+  const [showProfileAssignModal, setShowProfileAssignModal] = useState(null); // trackable assign or consumable issue
+  const [profileAssignMode, setProfileAssignMode] = useState('trackable'); // 'trackable' | 'consumable'
+  const [showAssetHistory, setShowAssetHistory] = useState(false);
+  const [assignAssetForm, setAssignAssetForm] = useState({
+    assetId: '',
+    issueDate: '',
+    condition: 'Good',
+    notes: '',
+  });
+  const [issueConsumableAsset, setIssueConsumableAsset] = useState(null);
+  const [issueConsumableForm, setIssueConsumableForm] = useState({
+    quantity: 1,
+    issueDate: '',
+    condition: 'Good',
+    notes: '',
+  });
+  const [returnAsset, setReturnAsset] = useState(null);
+  const [returnAssetForm, setReturnAssetForm] = useState({
+    date: '',
+    condition: 'Good',
+    notes: '',
+  });
+  const [pendingReturnAssets, setPendingReturnAssets] = useState([]);
+  const [showAssetReturnWarning, setShowAssetReturnWarning] = useState(false);
+  const [returnConsumableModal, setReturnConsumableModal] = useState(null); // { asset, assignment }
+  const [returnQty, setReturnQty] = useState(1);
+  const [returnCondition, setReturnCondition] = useState('Good');
+  const [returnNotes, setReturnNotes] = useState('');
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -200,6 +231,22 @@ export default function EmployeeProfile() {
     load();
   }, [companyId, empId, showError]);
 
+  // Load assets for this employee/company
+  useEffect(() => {
+    if (!companyId) return;
+    const loadAssets = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+        setAssetList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('Could not load assets for employee profile', e);
+        setAssetList([]);
+      }
+    };
+    loadAssets();
+  }, [companyId]);
+
   useEffect(() => {
     if (!companyId) return;
     const fetchEmployees = async () => {
@@ -253,6 +300,51 @@ export default function EmployeeProfile() {
     });
     return events;
   }, [employee, leaveList]);
+
+  const employeeAssets = useMemo(
+    () =>
+      assetList.filter(
+        (a) => a.assignedToId === empId && (a.status || 'Assigned') === 'Assigned',
+      ),
+    [assetList, empId],
+  );
+
+  const employeeConsumableCards = useMemo(() => {
+    return assetList
+      .filter((a) => (a.mode || 'trackable') === 'consumable')
+      .flatMap((asset) => {
+        const assignments = Array.isArray(asset.assignments) ? asset.assignments : [];
+        return assignments
+          .filter((as) => as.employeeId === empId && !as.returned)
+          .map((as) => ({
+            kind: 'consumable',
+            id: `${asset.id}_${as.employeeId}_${as.issueDate?.seconds || 0}`,
+            assetDocId: asset.id,
+            type: asset.type,
+            name: asset.name,
+            assetId: asset.assetId,
+            issueDate: as.issueDate,
+            quantity: as.quantity,
+            condition: as.condition,
+            unit: asset.unit,
+            serialNumber: null,
+            brand: null,
+            model: null,
+            assignment: as,
+          }));
+      });
+  }, [assetList, empId]);
+
+  const employeeAssetHistory = useMemo(
+    () =>
+      assetList
+        .filter((a) => Array.isArray(a.history) && a.history.some((h) => h.employeeId === empId))
+        .map((asset) => ({
+          ...asset,
+          relevantHistory: asset.history.filter((h) => h.employeeId === empId),
+        })),
+    [assetList, empId],
+  );
 
   const activeChecklist = useMemo(() => {
     if (company?.documentTypes && company.documentTypes.length > 0) {
@@ -457,15 +549,58 @@ export default function EmployeeProfile() {
   };
 
   const handleDeactivate = async () => {
-    if (!employee) return;
+    if (!employee || !companyId || !empId) return;
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { status: 'Inactive', updatedAt: serverTimestamp() });
-      setEmployee((prev) => (prev ? { ...prev, status: 'Inactive' } : null));
-      setDeactivateConfirm(false);
-      success('Employee deactivated');
+      // Trackables: assigned to this employee and still marked as Assigned
+      const assignedSnap = await getDocs(
+        query(
+          collection(db, 'companies', companyId, 'assets'),
+          where('assignedToId', '==', empId),
+          where('status', '==', 'Assigned'),
+        ),
+      );
+      const pendingTrackables = assignedSnap.docs.map((d) => ({
+        kind: 'trackable',
+        docId: d.id,
+        ...d.data(),
+      }));
+
+      // Consumables: any unreturned assignment for this employee
+      const consumableSnap = await getDocs(
+        query(collection(db, 'companies', companyId, 'assets'), where('mode', '==', 'consumable')),
+      );
+      const pendingConsumables = consumableSnap.docs.flatMap((d) => {
+        const asset = { id: d.id, ...d.data() };
+        const assignments = Array.isArray(asset.assignments) ? asset.assignments : [];
+        return assignments
+          .filter((as) => as.employeeId === empId && !as.returned)
+          .map((as) => ({
+            kind: 'consumable',
+            docId: asset.id,
+            type: asset.type,
+            name: asset.name,
+            assetId: asset.assetId,
+            assignment: as,
+            issueDate: as.issueDate,
+            quantity: as.quantity,
+            condition: as.condition,
+            employeeName: as.employeeName,
+            empId: as.empId,
+          }));
+      });
+
+      const pending = [...pendingTrackables, ...pendingConsumables];
+      if (pending.length > 0) {
+        setPendingReturnAssets(pending);
+        setShowAssetReturnWarning(true);
+      } else {
+        setDeactivateConfirm(true);
+      }
     } catch (err) {
-      showError('Failed to deactivate');
+      // eslint-disable-next-line no-console
+      console.error('Failed to check assets before deactivation', err);
+      showError('Could not check assigned assets');
     }
     setSaving(false);
   };
@@ -784,6 +919,475 @@ export default function EmployeeProfile() {
     return 'bg-gray-500';
   };
 
+  const getAssetIcon = (type) => {
+    const icons = {
+      Laptop: '💻',
+      Desktop: '🖥️',
+      'Mobile Phone': '📱',
+      'SIM Card': '📶',
+      Tablet: '📟',
+      'ID Card': '🪪',
+      'Access Card': '💳',
+      Uniform: '👔',
+      Headset: '🎧',
+      Charger: '🔌',
+      Vehicle: '🚗',
+      Tools: '🔧',
+      Furniture: '🪑',
+    };
+    return icons[type] || '📦';
+  };
+
+  const handleAssignAssetChange = (e) => {
+    const { name, value } = e.target;
+    setAssignAssetForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const openAssignAssetModal = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    setAssignAssetForm({
+      assetId: '',
+      issueDate: today,
+      condition: 'Good',
+      notes: '',
+    });
+    setShowAssignAssetModal(true);
+  };
+
+  const openProfileAssignModal = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    setAssignAssetForm({
+      assetId: '',
+      issueDate: today,
+      condition: 'Good',
+      notes: '',
+    });
+    setIssueConsumableAsset(null);
+    setIssueConsumableForm({
+      quantity: 1,
+      issueDate: today,
+      condition: 'Good',
+      notes: '',
+    });
+    setProfileAssignMode('trackable');
+    setShowProfileAssignModal(true);
+  };
+
+  const handleSaveAssignFromProfile = async (e) => {
+    e.preventDefault();
+    if (!companyId || !empId || !employee || !assignAssetForm.assetId || !currentUser) return;
+    setSaving(true);
+    try {
+      const assetRef = doc(db, 'companies', companyId, 'assets', assignAssetForm.assetId);
+      const assetSnap = await getDoc(assetRef);
+      if (!assetSnap.exists()) {
+        showError('Asset not found');
+        setSaving(false);
+        return;
+      }
+      const asset = { id: assetSnap.id, ...assetSnap.data() };
+      const issueTs = assignAssetForm.issueDate
+        ? Timestamp.fromDate(new Date(assignAssetForm.issueDate))
+        : Timestamp.now();
+      const historyEntry = {
+        action: 'assigned',
+        employeeId: empId,
+        employeeName: employee.fullName || '',
+        date: issueTs,
+        condition: assignAssetForm.condition || 'Good',
+        notes: assignAssetForm.notes?.trim() || '',
+        performedBy: currentUser.email || '',
+      };
+      const existingHistory = Array.isArray(asset.history) ? asset.history : [];
+
+      await updateDoc(assetRef, {
+        status: 'Assigned',
+        assignedToId: empId,
+        assignedToName: employee.fullName || '',
+        assignedToEmpId: employee.empId || '',
+        issueDate: issueTs,
+        condition: assignAssetForm.condition || asset.condition || 'Good',
+        history: [...existingHistory, historyEntry],
+      });
+
+      setAssetList((prev) =>
+        prev.map((a) =>
+          a.id === asset.id
+            ? {
+                ...a,
+                ...asset,
+                status: 'Assigned',
+                assignedToId: empId,
+                assignedToName: employee.fullName || '',
+                assignedToEmpId: employee.empId || '',
+                issueDate: issueTs,
+                condition: assignAssetForm.condition || asset.condition || 'Good',
+                history: [...existingHistory, historyEntry],
+              }
+            : a,
+        ),
+      );
+      success('Asset assigned');
+      setShowAssignAssetModal(false);
+      setShowProfileAssignModal(null);
+      setIssueConsumableAsset(null);
+      setProfileAssignMode('trackable');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to assign asset from profile', err);
+      showError('Failed to assign asset');
+    }
+    setSaving(false);
+  };
+
+  const handleIssueConsumableFromProfile = async (e) => {
+    e.preventDefault();
+    if (!companyId || !empId || !employee || !issueConsumableAsset || !currentUser) return;
+
+    const qty = Number(issueConsumableForm.quantity);
+    if (!qty || qty <= 0) return;
+
+    try {
+      const assetRef = doc(db, 'companies', companyId, 'assets', issueConsumableAsset.id);
+      const assetSnap = await getDoc(assetRef);
+      if (!assetSnap.exists()) {
+        showError('Asset not found');
+        return;
+      }
+
+      const asset = { id: assetSnap.id, ...assetSnap.data() };
+      const available = Number(asset.availableStock) || 0;
+      if (qty > available) {
+        showError(`Only ${available} available`);
+        return;
+      }
+
+      const issueTs = issueConsumableForm.issueDate
+        ? Timestamp.fromDate(new Date(issueConsumableForm.issueDate))
+        : Timestamp.now();
+
+      const assignment = {
+        employeeId: empId,
+        employeeName: employee.fullName || '',
+        empId: employee.empId || '',
+        quantity: qty,
+        issueDate: issueTs,
+        condition: issueConsumableForm.condition || 'Good',
+        returnDate: null,
+        returned: false,
+        notes: issueConsumableForm.notes?.trim() || '',
+      };
+
+      const existingAssignments = Array.isArray(asset.assignments) ? asset.assignments : [];
+      const existingHistory = Array.isArray(asset.history) ? asset.history : [];
+
+      await updateDoc(assetRef, {
+        assignments: [...existingAssignments, assignment],
+        availableStock: available - qty,
+        issuedCount: (Number(asset.issuedCount) || 0) + qty,
+        history: [
+          ...existingHistory,
+          {
+            action: 'issued',
+            employeeId: empId,
+            employeeName: employee.fullName || '',
+            quantity: qty,
+            date: issueTs,
+            condition: issueConsumableForm.condition || 'Good',
+            notes: issueConsumableForm.notes?.trim() || '',
+            performedBy: currentUser.email || '',
+          },
+        ],
+      });
+
+      success(`${qty} ${asset.name} issued to ${employee.fullName}`);
+
+      // Refresh local asset list
+      const assetsSnap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+      setAssetList(assetsSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+
+      setShowProfileAssignModal(null);
+      setIssueConsumableAsset(null);
+      setProfileAssignMode('trackable');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to issue consumable from profile', err);
+      showError('Failed to issue consumable');
+    }
+  };
+
+  const handleReturnAssetFromProfile = (asset) => {
+    const today = new Date().toISOString().slice(0, 10);
+    setReturnAsset(asset);
+    setReturnAssetForm({
+      date: today,
+      condition: 'Good',
+      notes: '',
+    });
+  };
+
+  const handleReturnAssetChange = (e) => {
+    const { name, value } = e.target;
+    setReturnAssetForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveReturnFromProfile = async (e) => {
+    e.preventDefault();
+    if (!companyId || !returnAsset || !currentUser) return;
+    setSaving(true);
+    try {
+      const assetRef = doc(db, 'companies', companyId, 'assets', returnAsset.id);
+      const assetSnap = await getDoc(assetRef);
+      if (!assetSnap.exists()) {
+        showError('Asset not found');
+        setSaving(false);
+        return;
+      }
+      const asset = { id: assetSnap.id, ...assetSnap.data() };
+      const returnTs = returnAssetForm.date
+        ? Timestamp.fromDate(new Date(returnAssetForm.date))
+        : Timestamp.now();
+      const isDamaged = returnAssetForm.condition === 'Damaged';
+      const newStatus = isDamaged ? 'Damaged' : 'Available';
+      const historyEntry = {
+        action: 'returned',
+        employeeId: empId,
+        employeeName: employee.fullName || '',
+        date: returnTs,
+        condition: returnAssetForm.condition || 'Good',
+        notes: returnAssetForm.notes?.trim() || '',
+        performedBy: currentUser.email || '',
+      };
+      const existingHistory = Array.isArray(asset.history) ? asset.history : [];
+
+      await updateDoc(assetRef, {
+        status: newStatus,
+        assignedToId: null,
+        assignedToName: null,
+        assignedToEmpId: null,
+        returnDate: returnTs,
+        condition: returnAssetForm.condition || asset.condition || 'Good',
+        history: [...existingHistory, historyEntry],
+      });
+
+      setAssetList((prev) =>
+        prev.map((a) =>
+          a.id === asset.id
+            ? {
+                ...a,
+                ...asset,
+                status: newStatus,
+                assignedToId: null,
+                assignedToName: null,
+                assignedToEmpId: null,
+                returnDate: returnTs,
+                condition: returnAssetForm.condition || asset.condition || 'Good',
+                history: [...existingHistory, historyEntry],
+              }
+            : a,
+        ),
+      );
+      success('Asset returned');
+      setReturnAsset(null);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to return asset from profile', err);
+      showError('Failed to return asset');
+    }
+    setSaving(false);
+  };
+
+  const handleReturnConsumableFromProfile = async () => {
+    try {
+      if (!returnConsumableModal || !companyId || !empId || !employee || !currentUser) return;
+
+      const { asset, assignment } = returnConsumableModal;
+      if (!asset || !assignment) return;
+
+      const assetRef = doc(db, 'companies', companyId, 'assets', asset.id);
+
+      const qty = Math.min(Number(returnQty) || 0, Number(assignment.quantity) || 0);
+      if (!qty || qty <= 0) {
+        showError('Invalid return quantity');
+        return;
+      }
+
+      const assignmentIssueSeconds = assignment.issueDate?.seconds ?? 0;
+
+      // Refresh asset to avoid stale stock counts
+      const assetSnap = await getDoc(assetRef);
+      if (!assetSnap.exists()) {
+        showError('Asset not found');
+        return;
+      }
+
+      const assetData = { id: assetSnap.id, ...assetSnap.data() };
+      const existingAssignments = Array.isArray(assetData.assignments) ? assetData.assignments : [];
+      const existingHistory = Array.isArray(assetData.history) ? assetData.history : [];
+
+      const updatedAssignments = existingAssignments.map((a) => {
+        const aIssueSeconds = a.issueDate?.seconds ?? 0;
+        const matchesThisEmployeeAssignment =
+          a.employeeId === empId && !a.returned && aIssueSeconds === assignmentIssueSeconds;
+
+        if (!matchesThisEmployeeAssignment) return a;
+
+        const remaining = Number(a.quantity) - qty;
+        if (remaining <= 0) {
+          return {
+            ...a,
+            returned: true,
+            returnDate: Timestamp.fromDate(new Date()),
+            quantity: 0,
+          };
+        }
+
+        return {
+          ...a,
+          quantity: remaining,
+        };
+      });
+
+      const newHistory = [
+        ...existingHistory,
+        {
+          action: 'returned',
+          employeeId: empId,
+          employeeName: employee.fullName,
+          quantity: qty,
+          date: Timestamp.fromDate(new Date()),
+          condition: returnCondition,
+          notes: returnNotes?.trim() || '',
+          performedBy: currentUser.email,
+        },
+      ];
+
+      await updateDoc(assetRef, {
+        assignments: updatedAssignments,
+        issuedCount: Math.max(0, Number(assetData.issuedCount || 0) - qty),
+        availableStock: Number(assetData.availableStock || 0) + qty,
+        history: newHistory,
+      });
+
+      success(`${qty} ${assetData.name} returned successfully`);
+
+      // Refresh local asset list
+      const assetsSnap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+      setAssetList(assetsSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+
+      setReturnConsumableModal(null);
+      setReturnQty(1);
+      setReturnCondition('Good');
+      setReturnNotes('');
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to return consumable from profile', error);
+      showError(`Return failed: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleReturnAllAndDeactivate = async () => {
+    if (!companyId || !empId || !employee || !currentUser || pendingReturnAssets.length === 0) {
+      setShowAssetReturnWarning(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const now = new Date();
+      const tsNow = Timestamp.fromDate(now);
+      // return all assets
+      // eslint-disable-next-line no-restricted-syntax
+      for (const asset of pendingReturnAssets) {
+        if (asset.kind === 'trackable') {
+          const assetRef = doc(db, 'companies', companyId, 'assets', asset.docId);
+          const assetSnap = await getDoc(assetRef);
+          if (!assetSnap.exists()) continue;
+          const currentAsset = { id: assetSnap.id, ...assetSnap.data() };
+          const existingHistory = Array.isArray(currentAsset.history) ? currentAsset.history : [];
+          const historyEntry = {
+            action: 'returned',
+            employeeId: empId,
+            employeeName: employee.fullName || '',
+            date: tsNow,
+            condition: currentAsset.condition || 'Good',
+            notes: 'Auto-returned on employee deactivation',
+            performedBy: currentUser.email || '',
+          };
+          await updateDoc(assetRef, {
+            status: 'Available',
+            assignedToId: null,
+            assignedToName: null,
+            assignedToEmpId: null,
+            returnDate: tsNow,
+            history: [...existingHistory, historyEntry],
+          });
+        } else if (asset.kind === 'consumable') {
+          const assetRef = doc(db, 'companies', companyId, 'assets', asset.docId);
+          const assetSnap = await getDoc(assetRef);
+          if (!assetSnap.exists()) continue;
+
+          const currentAsset = { id: assetSnap.id, ...assetSnap.data() };
+          const assignments = Array.isArray(currentAsset.assignments) ? currentAsset.assignments : [];
+          const existingHistory = Array.isArray(currentAsset.history) ? currentAsset.history : [];
+
+          const issueSeconds = asset.issueDate?.seconds || 0;
+          const assignmentIdx = assignments.findIndex(
+            (as) =>
+              as.employeeId === empId &&
+              !as.returned &&
+              (as.issueDate?.seconds || 0) === issueSeconds,
+          );
+
+          if (assignmentIdx === -1) continue;
+          const existingAssignment = assignments[assignmentIdx];
+          const qtyToReturn = Number(existingAssignment.quantity) || 0;
+
+          const nextAssignments = assignments.map((as, idx) => {
+            if (idx !== assignmentIdx) return as;
+            return {
+              ...as,
+              quantity: 0,
+              returned: true,
+              returnDate: tsNow,
+            };
+          });
+
+          await updateDoc(assetRef, {
+            assignments: nextAssignments,
+            availableStock: (Number(currentAsset.availableStock) || 0) + qtyToReturn,
+            issuedCount: (Number(currentAsset.issuedCount) || 0) - qtyToReturn,
+            history: [
+              ...existingHistory,
+              {
+                action: 'returned',
+                employeeId: empId,
+                employeeName: asset.employeeName || employee.fullName || '',
+                quantity: qtyToReturn,
+                date: tsNow,
+                condition: asset.condition || 'Good',
+                notes: 'Auto-returned on employee deactivation',
+                performedBy: currentUser.email || '',
+              },
+            ],
+          });
+        }
+      }
+
+      // Deactivate employee
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+        status: 'Inactive',
+        updatedAt: serverTimestamp(),
+      });
+      setEmployee((prev) => (prev ? { ...prev, status: 'Inactive' } : null));
+      setShowAssetReturnWarning(false);
+      setPendingReturnAssets([]);
+      success(`${pendingReturnAssets.length} asset(s) returned and employee deactivated`);
+    } catch (err) {
+      showError(`Error returning assets: ${err?.message || 'Unknown error'}`);
+    }
+    setSaving(false);
+  };
+
   const handlePrintProfile = () => {
     const companyName = getCompanyName() || '';
     const html = `
@@ -1006,6 +1610,33 @@ export default function EmployeeProfile() {
           : ''
       }
 
+      ${
+        employeeAssets.length > 0
+          ? `
+      <div class="section">
+        <div class="section-title">Assigned Assets (${employeeAssets.length})</div>
+        <div class="grid">
+          ${employeeAssets
+            .map(
+              (a) => `
+          <div>
+            <div class="field-label">${a.assetId || ''}</div>
+            <div class="field-value">
+              ${a.name || ''}
+              ${
+                a.serialNumber
+                  ? ` (SN: ${a.serialNumber})`
+                  : ''
+              }
+            </div>
+          </div>`,
+            )
+            .join('')}
+        </div>
+      </div>`
+          : ''
+      }
+
       <div class="footer">
         <span>Generated by AttendX HR Platform</span>
         <span>${new Date().toLocaleDateString('en-GB', {
@@ -1046,6 +1677,7 @@ export default function EmployeeProfile() {
     { id: 'personal', label: 'Personal Info' },
     { id: 'documents', label: 'Documents' },
     { id: 'leave', label: 'Leave History' },
+    { id: 'assets', label: 'Assets' },
     { id: 'timeline', label: 'Timeline' },
   ];
 
@@ -1106,7 +1738,7 @@ export default function EmployeeProfile() {
             {(employee.status || 'Active') === 'Active' && (
               <button
                 type="button"
-                onClick={() => setDeactivateConfirm(true)}
+                onClick={handleDeactivate}
                 className="rounded-lg border border-red-300 text-red-600 hover:bg-red-50 text-sm font-medium px-4 py-2"
               >
                 Deactivate
@@ -1135,7 +1767,7 @@ export default function EmployeeProfile() {
               <p><span className="text-slate-500 text-sm">Date of Birth</span><br />{employee.dateOfBirth ? `${toDisplayDate(employee.dateOfBirth)}${getAge(employee.dateOfBirth) != null ? ` (${getAge(employee.dateOfBirth)} years old)` : ''}` : '—'}</p>
               <p><span className="text-slate-500 text-sm">Gender</span><br />{employee.gender || '—'}</p>
               <p><span className="text-slate-500 text-sm">Highest Qualification</span><br />{employee.qualification || '—'}</p>
-              <p>
+              <div>
                 <span className="text-slate-500 text-sm">Address</span>
                 {employee.streetAddress || employee.city || employee.state || employee.pincode || employee.country ? (
                   <div className="mt-1">
@@ -1150,9 +1782,11 @@ export default function EmployeeProfile() {
                     </p>
                   </div>
                 ) : (
-                  <><br />{employee.address || '—'}</>
+                  <p className="text-sm text-gray-800 mt-1">
+                    {employee.address || '—'}
+                  </p>
                 )}
-              </p>
+              </div>
             </div>
             <div className="space-y-3">
               <p><span className="text-slate-500 text-sm">Emp ID</span><br />{employee.empId || '—'}</p>
@@ -1161,7 +1795,7 @@ export default function EmployeeProfile() {
               <p><span className="text-slate-500 text-sm">Designation</span><br />{employee.designation || '—'}</p>
               <p><span className="text-slate-500 text-sm">Employment Type</span><br />{employee.employmentType || '—'}</p>
               <p><span className="text-slate-500 text-sm">Category</span><br />{employee.category || '—'}</p>
-              <p>
+              <div>
                 <span className="text-slate-500 text-sm">Reporting Manager</span>
                 <br />
                 {employee.reportingManagerId ? (
@@ -1187,7 +1821,7 @@ export default function EmployeeProfile() {
                 ) : (
                   <span className="text-slate-400">—</span>
                 )}
-              </p>
+              </div>
               <p><span className="text-slate-500 text-sm">Joining Date</span><br />{toDisplayDate(employee.joiningDate)}</p>
             </div>
           </div>
@@ -1784,6 +2418,200 @@ export default function EmployeeProfile() {
         </div>
       )}
 
+      {tab === 'assets' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div className="bg-blue-50 rounded-xl p-3 text-center">
+              <p className="text-xl font-semibold text-blue-700">
+                {employeeAssets.length + employeeConsumableCards.length}
+              </p>
+              <p className="text-xs text-blue-600">Currently Assigned</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <p className="text-xl font-semibold text-gray-700">
+                {employeeAssetHistory.length}
+              </p>
+              <p className="text-xs text-gray-500">Total Assets Received</p>
+            </div>
+            <div className="bg-green-50 rounded-xl p-3 text-center">
+              <p className="text-xl font-semibold text-green-700">
+                {Math.max(employeeAssetHistory.length - (employeeAssets.length + employeeConsumableCards.length), 0)}
+              </p>
+              <p className="text-xs text-green-600">Returned</p>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700">Currently Assigned</h3>
+              <button
+                type="button"
+                onClick={openProfileAssignModal}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                + Assign Asset
+              </button>
+            </div>
+
+            {employeeAssets.length === 0 && employeeConsumableCards.length === 0 ? (
+              <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                <p className="text-2xl mb-2">📦</p>
+                <p className="text-sm text-gray-500">No assets currently assigned</p>
+                <button
+                  type="button"
+                    onClick={openProfileAssignModal}
+                  className="mt-3 text-sm text-blue-600 hover:underline"
+                >
+                  Assign an asset
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {[...employeeAssets.map((a) => ({ ...a, kind: 'trackable' })), ...employeeConsumableCards].map((asset) => (
+                  <div
+                    key={asset.id}
+                    className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:border-gray-300 transition-colors"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-xl flex-shrink-0">
+                      {getAssetIcon(asset.type)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800">
+                        {asset.name}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {asset.assetId}
+                        {asset.type && ` · ${asset.type}`}
+                        {asset.serialNumber && ` · SN: ${asset.serialNumber}`}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Issued: {asset.issueDate ? toDisplayDate(asset.issueDate) : '—'}
+                        {' · '}
+                        Condition: {asset.condition || '—'}
+                        {asset.brand && ` · ${asset.brand}`}
+                        {asset.model && ` ${asset.model}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {asset.kind === 'trackable' ? (
+                        <>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                            Trackable
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleReturnAssetFromProfile(asset)}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                          >
+                            Return
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
+                            Consumable · Qty {asset.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const assetDoc = assetList.find((x) => x.id === asset.assetDocId);
+                                if (!assetDoc) {
+                                  showError('Asset not found');
+                                  return;
+                                }
+                              setReturnConsumableModal({
+                                asset: assetDoc || asset,
+                                assignment: asset.assignment,
+                              });
+                              setReturnQty(1);
+                              setReturnCondition('Good');
+                              setReturnNotes('');
+                            }}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                          >
+                            Return
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowAssetHistory((s) => !s)}
+              className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3 w-full"
+            >
+              <span>Asset History</span>
+              <span className="text-xs text-gray-400 font-normal">
+                ({employeeAssetHistory.length} assets)
+              </span>
+              <span className="ml-auto text-gray-400">
+                {showAssetHistory ? '▲' : '▼'}
+              </span>
+            </button>
+
+            {showAssetHistory && (
+              <div className="space-y-2">
+                {employeeAssetHistory.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-4">
+                    No asset history found
+                  </p>
+                )}
+                {employeeAssetHistory.map((asset) =>
+                  asset.relevantHistory
+                    .slice()
+                    .sort((a, b) => {
+                      const da = a.date?.toDate?.() || new Date(a.date);
+                      const db2 = b.date?.toDate?.() || new Date(b.date);
+                      return db2 - da;
+                    })
+                    .map((h, i) => (
+                      <div
+                        key={`${asset.id}-${i}`}
+                        className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-base flex-shrink-0 border">
+                          {getAssetIcon(asset.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800">
+                            {asset.name}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {asset.assetId}
+                            {' · '}
+                            {h.date ? toDisplayDate(h.date) : '—'}
+                          </p>
+                        </div>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            h.action === 'assigned'
+                              ? 'bg-green-100 text-green-700'
+                              : h.action === 'issued'
+                              ? 'bg-green-100 text-green-700'
+                              : h.action === 'returned'
+                              ? 'bg-blue-100 text-blue-700'
+                              : h.action === 'stock_adjusted'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {h.action.charAt(0).toUpperCase() + h.action.slice(1)}
+                        </span>
+                      </div>
+                    )),
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {deactivateConfirm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -1791,7 +2619,585 @@ export default function EmployeeProfile() {
             <p className="text-sm text-slate-600 mb-4">They will be marked as Inactive.</p>
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setDeactivateConfirm(false)} className="text-slate-500 text-sm">Cancel</button>
-              <button type="button" onClick={handleDeactivate} disabled={saving} className="rounded-lg bg-red-600 text-white text-sm font-medium px-4 py-2 disabled:opacity-50">Deactivate</button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setSaving(true);
+                  try {
+                    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+                      status: 'Inactive',
+                      updatedAt: serverTimestamp(),
+                    });
+                    setEmployee((prev) => (prev ? { ...prev, status: 'Inactive' } : null));
+                    setDeactivateConfirm(false);
+                    success('Employee deactivated');
+                  } catch (err) {
+                    showError('Failed to deactivate');
+                  }
+                  setSaving(false);
+                }}
+                disabled={saving}
+                className="rounded-lg bg-red-600 text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+              >
+                Deactivate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAssignAssetModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-slate-800 mb-4">Assign Asset</h2>
+            <form onSubmit={handleSaveAssignFromProfile} className="space-y-4">
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Employee</p>
+                <p className="text-sm font-medium text-slate-800">
+                  {employee.fullName} ({employee.empId})
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Asset</label>
+                <select
+                  name="assetId"
+                  value={assignAssetForm.assetId}
+                  onChange={handleAssignAssetChange}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Select asset</option>
+                  {assetList
+                    .filter((a) => (a.status || 'Available') === 'Available')
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.assetId} · {a.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Issue Date</label>
+                  <input
+                    type="date"
+                    name="issueDate"
+                    value={assignAssetForm.issueDate}
+                    onChange={handleAssignAssetChange}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Condition at Issue</label>
+                  <select
+                    name="condition"
+                    value={assignAssetForm.condition}
+                    onChange={handleAssignAssetChange}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    <option value="New">New</option>
+                    <option value="Good">Good</option>
+                    <option value="Fair">Fair</option>
+                    <option value="Poor">Poor</option>
+                    <option value="Damaged">Damaged</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Notes</label>
+                <textarea
+                  name="notes"
+                  value={assignAssetForm.notes}
+                  onChange={handleAssignAssetChange}
+                  rows={3}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="Any special instructions or comments"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAssignAssetModal(false)}
+                  className="text-sm text-slate-500 hover:text-slate-700"
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                  disabled={saving}
+                >
+                  {saving ? 'Assigning…' : 'Assign Asset'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showProfileAssignModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-slate-800 mb-4">Assign / Issue Asset</h2>
+
+            <div className="mb-5">
+              <p className="text-sm text-slate-600">Employee</p>
+              <p className="text-sm font-medium text-slate-800">
+                {employee.fullName} ({employee.empId})
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Trackable assignment */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-slate-700">Trackable (Assign)</h3>
+
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Available Trackable Assets</label>
+                  <select
+                    value={assignAssetForm.assetId}
+                    onChange={(e) => {
+                      handleAssignAssetChange(e);
+                      setProfileAssignMode('trackable');
+                    }}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    <option value="">Select trackable asset</option>
+                    {assetList
+                      .filter((a) => (a.mode || 'trackable') === 'trackable')
+                      .filter((a) => (a.status || 'Available') === 'Available')
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.assetId} · {a.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Issue Date</label>
+                  <input
+                    type="date"
+                    name="issueDate"
+                    value={assignAssetForm.issueDate}
+                    onChange={(e) => {
+                      handleAssignAssetChange(e);
+                      setProfileAssignMode('trackable');
+                    }}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Condition at Issue</label>
+                  <select
+                    name="condition"
+                    value={assignAssetForm.condition}
+                    onChange={(e) => {
+                      handleAssignAssetChange(e);
+                      setProfileAssignMode('trackable');
+                    }}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    <option value="New">New</option>
+                    <option value="Good">Good</option>
+                    <option value="Fair">Fair</option>
+                    <option value="Poor">Poor</option>
+                    <option value="Damaged">Damaged</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Notes</label>
+                  <textarea
+                    name="notes"
+                    value={assignAssetForm.notes}
+                    onChange={(e) => {
+                      handleAssignAssetChange(e);
+                      setProfileAssignMode('trackable');
+                    }}
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="Any special instructions or comments"
+                  />
+                </div>
+              </div>
+
+              {/* Consumable issuance */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-slate-700">Consumable (Issue)</h3>
+
+                <div className="border border-slate-200 rounded-xl p-3 space-y-2">
+                  {assetList
+                    .filter((a) => (a.mode || 'trackable') === 'consumable')
+                    .filter((a) => Number(a.availableStock) > 0)
+                    .length === 0 ? (
+                      <p className="text-xs text-slate-500">No consumables available</p>
+                    ) : (
+                      assetList
+                        .filter((a) => (a.mode || 'trackable') === 'consumable')
+                        .filter((a) => Number(a.availableStock) > 0)
+                        .map((a) => (
+                          <div key={a.id} className="flex items-center justify-between gap-3 py-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-slate-800 truncate">{a.name}</p>
+                              <p className="text-xs text-slate-500">
+                                {a.type} · {a.availableStock} available
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIssueConsumableAsset(a);
+                                setProfileAssignMode('consumable');
+                                setIssueConsumableForm((p) => ({
+                                  ...p,
+                                  quantity: 1,
+                                  issueDate: p.issueDate || new Date().toISOString().slice(0, 10),
+                                  condition: 'Good',
+                                  notes: '',
+                                }));
+                              }}
+                              className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700"
+                            >
+                              Issue
+                            </button>
+                          </div>
+                        ))
+                    )}
+                </div>
+
+                {profileAssignMode === 'consumable' && issueConsumableAsset && (
+                  <form onSubmit={handleIssueConsumableFromProfile} className="space-y-4">
+                    <div>
+                      <p className="text-xs text-slate-600 mb-1">Issue Quantity</p>
+                      <input
+                        type="number"
+                        min={1}
+                        max={Number(issueConsumableAsset.availableStock) || 0}
+                        value={issueConsumableForm.quantity}
+                        onChange={(e) => setIssueConsumableForm((p) => ({ ...p, quantity: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">
+                        Available: {Number(issueConsumableAsset.availableStock) || 0}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-600 mb-1">Issue Date</label>
+                      <input
+                        type="date"
+                        value={issueConsumableForm.issueDate}
+                        onChange={(e) => setIssueConsumableForm((p) => ({ ...p, issueDate: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-600 mb-1">Condition</label>
+                      <select
+                        value={issueConsumableForm.condition}
+                        onChange={(e) => setIssueConsumableForm((p) => ({ ...p, condition: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      >
+                        <option value="New">New</option>
+                        <option value="Good">Good</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-600 mb-1">Notes</label>
+                      <textarea
+                        value={issueConsumableForm.notes}
+                        onChange={(e) => setIssueConsumableForm((p) => ({ ...p, notes: e.target.value }))}
+                        rows={3}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        placeholder="Optional notes"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowProfileAssignModal(null);
+                          setIssueConsumableAsset(null);
+                          setProfileAssignMode('trackable');
+                        }}
+                        className="text-sm text-slate-500 hover:text-slate-700"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2"
+                      >
+                        Issue Consumable
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {profileAssignMode === 'trackable' && (
+                  <form onSubmit={handleSaveAssignFromProfile} className="space-y-4">
+                    <div className="hidden" aria-hidden="true" />
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowProfileAssignModal(null);
+                          setIssueConsumableAsset(null);
+                          setProfileAssignMode('trackable');
+                        }}
+                        className="text-sm text-slate-500 hover:text-slate-700"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!assignAssetForm.assetId}
+                        className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                      >
+                        Assign Asset
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {returnAsset && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-slate-800 mb-4">Return Asset</h2>
+            <form onSubmit={handleSaveReturnFromProfile} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-slate-500">Asset</p>
+                  <p className="text-sm font-medium text-slate-800">
+                    {returnAsset.assetId} · {returnAsset.name}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Employee</p>
+                  <p className="text-sm text-slate-800">
+                    {employee.fullName} ({employee.empId})
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Return Date</label>
+                  <input
+                    type="date"
+                    name="date"
+                    value={returnAssetForm.date}
+                    onChange={handleReturnAssetChange}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Condition on Return</label>
+                  <select
+                    name="condition"
+                    value={returnAssetForm.condition}
+                    onChange={handleReturnAssetChange}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    <option value="New">New</option>
+                    <option value="Good">Good</option>
+                    <option value="Fair">Fair</option>
+                    <option value="Poor">Poor</option>
+                    <option value="Damaged">Damaged</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Notes</label>
+                <textarea
+                  name="notes"
+                  value={returnAssetForm.notes}
+                  onChange={handleReturnAssetChange}
+                  rows={3}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="Any damage or notes on return"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReturnAsset(null)}
+                  className="text-sm text-slate-500 hover:text-slate-700"
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                  disabled={saving}
+                >
+                  {saving ? 'Saving…' : 'Save Return'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {returnConsumableModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+            <h3 className="font-semibold text-gray-900 mb-1">
+              Return {returnConsumableModal.asset?.name}
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Issued to {employee.fullName} · Qty: {returnConsumableModal.assignment?.quantity}
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Quantity to Return</label>
+                <input
+                  type="number"
+                  min="1"
+                  max={returnConsumableModal.assignment?.quantity}
+                  value={returnQty}
+                  onChange={(e) => setReturnQty(Number(e.target.value))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Max: {returnConsumableModal.assignment?.quantity}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Condition on Return</label>
+                <select
+                  value={returnCondition}
+                  onChange={(e) => setReturnCondition(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                >
+                  <option>Good</option>
+                  <option>Fair</option>
+                  <option>Poor</option>
+                  <option>Damaged</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Notes (optional)</label>
+                <textarea
+                  value={returnNotes}
+                  onChange={(e) => setReturnNotes(e.target.value)}
+                  placeholder="Any damage or notes..."
+                  rows={2}
+                  className="w-full border rounded-lg px-3 py-2 text-sm resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => {
+                  setReturnConsumableModal(null);
+                  setReturnQty(1);
+                  setReturnCondition('Good');
+                  setReturnNotes('');
+                }}
+                className="flex-1 py-2 border rounded-xl text-sm text-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReturnConsumableFromProfile}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700"
+              >
+                Confirm Return
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAssetReturnWarning && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-xl">
+                ⚠️
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Pending Asset Returns</h3>
+                <p className="text-sm text-gray-500">
+                  {employee.fullName} has {pendingReturnAssets.length} unreturned asset(s)
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 rounded-xl p-3 mb-4 space-y-2">
+              {pendingReturnAssets.map((asset) => (
+                <div
+                  key={asset.kind === 'consumable' ? `${asset.docId}_${asset.employeeName}_${asset.issueDate?.seconds || 0}` : asset.docId}
+                  className="flex items-center gap-3 bg-white rounded-lg p-2.5 border border-amber-100"
+                >
+                  <span className="text-base">
+                    {getAssetIcon(asset.type)}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800">
+                      {asset.name}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {asset.assetId} ·{' '}
+                      {asset.kind === 'consumable' ? `Qty: ${asset.quantity} · ` : ''}
+                      Issued: {asset.issueDate ? toDisplayDate(asset.issueDate) : '—'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-xs text-gray-500 mb-4 bg-gray-50 rounded-lg p-3">
+              &quot;Return All &amp; Deactivate&quot; will mark all assets as returned today and deactivate the
+              employee.
+            </p>
+
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleReturnAllAndDeactivate}
+                className="w-full py-2.5 bg-amber-500 text-white rounded-xl font-medium text-sm hover:bg-amber-600"
+                disabled={saving}
+              >
+                Return All &amp; Deactivate
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAssetReturnWarning(false);
+                  setDeactivateConfirm(true);
+                }}
+                className="w-full py-2.5 border-2 border-red-200 text-red-600 rounded-xl font-medium text-sm hover:bg-red-50"
+                disabled={saving}
+              >
+                Deactivate Anyway
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAssetReturnWarning(false);
+                  setPendingReturnAssets([]);
+                }}
+                className="w-full py-2 text-gray-500 text-sm hover:text-gray-700"
+                disabled={saving}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

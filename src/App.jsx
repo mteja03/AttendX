@@ -10,6 +10,7 @@ import Documents from './pages/Documents';
 import EmployeeProfile from './pages/EmployeeProfile';
 import TeamMembers from './pages/TeamMembers';
 import Settings from './pages/Settings';
+import Assets from './pages/Assets';
 import Login from './pages/Login';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -84,6 +85,7 @@ function AppRoutes() {
           <Route path="employees/:empId" element={<EmployeeProfile />} />
           <Route path="leave" element={<Leave />} />
           <Route path="documents" element={<Documents />} />
+          <Route path="assets" element={<Assets />} />
           <Route path="team" element={<TeamMembers />} />
           <Route path="settings" element={<Settings />} />
         </Route>

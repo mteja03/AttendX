@@ -7,3 +7,25 @@
     @apply bg-slate-50 text-slate-800 antialiased;
   }
 }
+
+.settings-list::-webkit-scrollbar {
+  width: 4px;
+}
+.settings-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.settings-list::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 2px;
+}
+.settings-list::-webkit-scrollbar-thumb:hover {
+  background: #d1d5db;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

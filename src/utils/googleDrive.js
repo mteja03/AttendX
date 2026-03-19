@@ -1,8 +1,4 @@
 export async function uploadEmployeeDocument(accessToken, file, companyName, empId, empName, category) {
-  if (file.size > 10 * 1024 * 1024) {
-    throw new Error('File too large. Maximum size is 10MB.');
-  }
-
   const headers = {
     Authorization: `Bearer ${accessToken}`,
   };

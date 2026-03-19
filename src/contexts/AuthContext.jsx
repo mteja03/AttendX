@@ -22,6 +22,7 @@ export function AuthProvider({ children }) {
         setGoogleAccessToken(null);
         try {
           localStorage.removeItem('gat');
+          localStorage.removeItem('gat_expiry');
         } catch (_) {
           // ignore
         }
@@ -67,10 +68,32 @@ export function AuthProvider({ children }) {
           setCompanyId(data.companyId ?? null);
           setAuthError('');
           try {
+            // Refresh auth state and restore Drive token if still valid
+            try {
+              await firebaseUser.getIdTokenResult();
+            } catch (e) {
+              // eslint-disable-next-line no-console
+              console.warn('Could not refresh ID token:', e);
+            }
+
             const stored = localStorage.getItem('gat');
-            setGoogleAccessToken(stored || firebaseUser.accessToken || null);
+            const expiryStr = localStorage.getItem('gat_expiry');
+            const expiry = expiryStr ? parseInt(expiryStr, 10) : null;
+            const isValid = stored && expiry && Date.now() < expiry;
+
+            if (isValid) {
+              setGoogleAccessToken(stored);
+            } else {
+              try {
+                localStorage.removeItem('gat');
+                localStorage.removeItem('gat_expiry');
+              } catch (_) {
+                // ignore
+              }
+              setGoogleAccessToken(null);
+            }
           } catch (_) {
-            setGoogleAccessToken(firebaseUser.accessToken || null);
+            setGoogleAccessToken(null);
           }
           setLoading(false);
         } catch (error) {
@@ -102,6 +125,8 @@ export function AuthProvider({ children }) {
       setGoogleAccessToken(accessToken);
       try {
         localStorage.setItem('gat', accessToken);
+        const expiry = Date.now() + 55 * 60 * 1000;
+        localStorage.setItem('gat_expiry', expiry.toString());
       } catch (_) {
         // ignore
       }
@@ -129,6 +154,7 @@ export function AuthProvider({ children }) {
   const signOutUser = async () => {
     try {
       localStorage.removeItem('gat');
+      localStorage.removeItem('gat_expiry');
     } catch (_) {
       // ignore
     }

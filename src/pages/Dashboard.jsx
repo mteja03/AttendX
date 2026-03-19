@@ -52,6 +52,13 @@ export default function Dashboard() {
   const { success, error: showError } = useToast();
   const [employees, setEmployees] = useState([]);
   const [leaveList, setLeaveList] = useState([]);
+  const [assetStats, setAssetStats] = useState({
+    total: 0,
+    assigned: 0,
+    available: 0,
+    damaged: 0,
+    consumableIssued: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState(null);
   const [birthdayCardOpen, setBirthdayCardOpen] = useState(true);
@@ -74,6 +81,31 @@ export default function Dashboard() {
       setLoading(false);
     };
     load();
+  }, [companyId, showError]);
+
+  useEffect(() => {
+    if (!companyId) return;
+    const loadAssets = async () => {
+      try {
+        const assetsSnap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+        const assets = assetsSnap.docs.map((d) => d.data());
+        const trackable = assets.filter((a) => (a.mode || 'trackable') === 'trackable');
+        const consumable = assets.filter((a) => (a.mode || 'trackable') === 'consumable');
+
+        setAssetStats({
+          total: assets.length,
+          assigned: trackable.filter((a) => a.status === 'Assigned').length,
+          available: trackable.filter((a) => a.status === 'Available').length,
+          damaged: trackable.filter((a) => a.status === 'Damaged' || a.status === 'Lost').length,
+          consumableIssued: consumable.reduce((sum, a) => sum + (a.issuedCount || 0), 0),
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to load asset stats', err);
+        showError('Failed to load asset stats');
+      }
+    };
+    loadAssets();
   }, [companyId, showError]);
 
   const stats = useMemo(() => {
@@ -217,11 +249,45 @@ export default function Dashboard() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {statCards.map((stat) => (
-            <StatCard key={stat.title} {...stat} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {statCards.map((stat) => (
+              <StatCard key={stat.title} {...stat} />
+            ))}
+          </div>
+
+          <div className="bg-white border rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700">Asset Overview</h3>
+              <button
+                type="button"
+                onClick={() => navigate(`/company/${companyId}/assets`)}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                View all →
+              </button>
+            </div>
+
+            <div className="grid grid-cols-4 gap-3">
+              <div className="text-center">
+                <p className="text-lg font-semibold text-gray-800">{assetStats.total}</p>
+                <p className="text-xs text-gray-400">Total assets</p>
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-semibold text-green-600">{assetStats.assigned}</p>
+                <p className="text-xs text-gray-400">Assigned</p>
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-semibold text-blue-600">{assetStats.available}</p>
+                <p className="text-xs text-gray-400">Available</p>
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-semibold text-red-500">{assetStats.damaged}</p>
+                <p className="text-xs text-gray-400">Damaged/Lost</p>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       <div className="flex flex-wrap gap-3 mb-6">

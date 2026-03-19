@@ -8,9 +8,9 @@ export default function Layout() {
 
   return (
     <CompanyProvider companyIdFromRoute={companyIdFromRoute}>
-      <div className="flex min-h-screen bg-[#f1f5f9]">
+      <div className="min-h-screen bg-[#f1f5f9]">
         <Sidebar />
-        <main className="flex-1 overflow-auto">
+        <main className="ml-56 min-h-screen overflow-y-auto">
           <Outlet />
         </main>
       </div>

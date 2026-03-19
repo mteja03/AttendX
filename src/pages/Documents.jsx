@@ -3,8 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
-const totalMandatory = getMandatoryDocCount();
+const defaultTotalMandatory = getMandatoryDocCount();
 
 function getDocByType(emp) {
   const map = {};
@@ -14,27 +16,40 @@ function getDocByType(emp) {
   return map;
 }
 
-function getCategoryStatus(emp, category) {
-  const cat = DOCUMENT_CHECKLIST.find((c) => c.category === category);
-  if (!cat) return { status: 'gray', uploaded: 0, total: 0 };
-  const docByType = getDocByType(emp);
-  const mandatory = cat.documents.filter((d) => d.mandatory);
-  const mandatoryUploaded = mandatory.filter((d) => docByType[d.id]).length;
-  const uploaded = cat.documents.filter((d) => docByType[d.id]).length;
-  const total = cat.documents.length;
-  if (mandatory.length > 0 && mandatoryUploaded === mandatory.length) return { status: 'green', uploaded, total };
-  if (uploaded > 0) return { status: 'amber', uploaded, total };
-  return { status: 'gray', uploaded, total };
+function getCategoryStatus(emp, categoryName, checklist) {
+  if (!checklist || !Array.isArray(checklist)) {
+    return { status: 'gray', uploaded: 0, total: 0 };
+  }
+
+  const cat = checklist.find((c) => c.category === categoryName);
+  if (!cat) {
+    return { status: 'gray', uploaded: 0, total: 0 };
+  }
+
+  const empDocs = emp?.documents || [];
+  const total = cat.documents.filter((d) => d.mandatory).length;
+  const uploaded = cat.documents.filter(
+    (d) => d.mandatory && empDocs.some((ud) => ud.id === d.id),
+  ).length;
+
+  let status = 'gray';
+  if (uploaded === 0) status = 'gray';
+  else if (uploaded < total) status = 'amber';
+  else status = 'green';
+
+  return { status, uploaded, total };
 }
 
 function getOverallPct(emp) {
   const docByType = getDocByType(emp);
   let mandatoryUploaded = 0;
-  DOCUMENT_CHECKLIST.forEach((cat) => {
+  const checklist = emp._checklist || DOCUMENT_CHECKLIST;
+  checklist.forEach((cat) => {
     cat.documents.filter((d) => d.mandatory).forEach((d) => {
       if (docByType[d.id]) mandatoryUploaded++;
     });
   });
+  const totalMandatory = emp._totalMandatory ?? defaultTotalMandatory;
   return totalMandatory ? Math.round((mandatoryUploaded / totalMandatory) * 100) : 100;
 }
 
@@ -58,6 +73,7 @@ export default function Documents() {
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterCategory, setFilterCategory] = useState('All');
   const [missingAlertOpen, setMissingAlertOpen] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
 
   useEffect(() => {
     if (!companyId) return;
@@ -78,19 +94,48 @@ export default function Documents() {
     load();
   }, [companyId]);
 
+  const activeChecklist = useMemo(() => {
+    if (company?.documentTypes && company.documentTypes.length > 0) {
+      return company.documentTypes;
+    }
+    return DOCUMENT_CHECKLIST;
+  }, [company]);
+
+  const totalMandatory = useMemo(
+    () =>
+      activeChecklist
+        .flatMap((cat) => cat.documents)
+        .filter((d) => d.mandatory).length,
+    [activeChecklist],
+  );
+
   const departments = useMemo(() => {
     const set = new Set(employees.map((e) => e.department).filter(Boolean));
     return ['All Departments', ...Array.from(set).sort()];
   }, [employees]);
 
+  const enrichedEmployees = useMemo(
+    () =>
+      employees.map((e) => ({
+        ...e,
+        _checklist: activeChecklist,
+        _totalMandatory: totalMandatory || defaultTotalMandatory,
+      })),
+    [employees, activeChecklist, totalMandatory],
+  );
+
   const filtered = useMemo(() => {
-    let list = employees;
+    let list = enrichedEmployees;
     if (filterDept !== 'All Departments') list = list.filter((e) => (e.department || '') === filterDept);
     if (filterStatus === 'Complete') list = list.filter((e) => getOverallPct(e) === 100);
-    if (filterStatus === 'Incomplete') list = list.filter((e) => { const p = getOverallPct(e); return p > 0 && p < 100; });
+    if (filterStatus === 'Incomplete')
+      list = list.filter((e) => {
+        const p = getOverallPct(e);
+        return p > 0 && p < 100;
+      });
     if (filterStatus === 'Not Started') list = list.filter((e) => getOverallPct(e) === 0);
     if (filterCategory !== 'All') {
-      const cat = DOCUMENT_CHECKLIST.find((c) => c.category === filterCategory);
+      const cat = activeChecklist.find((c) => c.category === filterCategory);
       if (cat) {
         const mandatoryIds = cat.documents.filter((d) => d.mandatory).map((d) => d.id);
         list = list.filter((e) => {
@@ -100,24 +145,69 @@ export default function Documents() {
       }
     }
     return list;
-  }, [employees, filterDept, filterStatus, filterCategory]);
+  }, [enrichedEmployees, filterDept, filterStatus, filterCategory, activeChecklist]);
 
   const stats = useMemo(() => {
-    const total = employees.length;
-    const fullyComplete = employees.filter((e) => getOverallPct(e) === 100).length;
-    const notStarted = employees.filter((e) => getOverallPct(e) === 0).length;
+    const total = enrichedEmployees.length;
+    const fullyComplete = enrichedEmployees.filter((e) => getOverallPct(e) === 100).length;
+    const notStarted = enrichedEmployees.filter((e) => getOverallPct(e) === 0).length;
     const partiallyComplete = total - fullyComplete - notStarted;
     return { total, fullyComplete, partiallyComplete, notStarted };
-  }, [employees]);
+  }, [enrichedEmployees]);
 
   const missingMandatoryList = useMemo(() => {
-    return employees
+    return enrichedEmployees
       .map((e) => ({ emp: e, missing: getMissingMandatory(e) }))
       .filter((x) => x.missing.length > 0)
       .sort((a, b) => b.missing.length - a.missing.length);
-  }, [employees]);
+  }, [enrichedEmployees]);
 
   if (!companyId) return null;
+
+  const companyName = (company?.name || 'Company').replace(/\s+/g, '');
+
+  const downloadDocumentReport = (format) => {
+    const rows = filtered.map((emp) => {
+      const docs = emp.documents || [];
+      const kycDocs = docs.filter((d) => d.category === 'KYC Documents');
+      const empDocs = docs.filter((d) => d.category === 'Employment Documents');
+      const eduDocs = docs.filter((d) => d.category === 'Education Certificates');
+      const prevDocs = docs.filter((d) => d.category === 'Previous Employment');
+
+      const mandatoryDocs = activeChecklist
+        .flatMap((cat) => cat.documents)
+        .filter((d) => d.mandatory);
+      const mandatoryUploaded = mandatoryDocs.filter((md) =>
+        docs.some((ud) => ud.id === md.id),
+      ).length;
+      const mandatoryTotal = mandatoryDocs.length || 1;
+
+      return {
+        'Emp ID': emp.empId || '',
+        'Employee Name': emp.fullName || '',
+        Department: emp.department || '',
+        'KYC Complete': kycDocs.length >= 2 ? 'Yes' : 'No',
+        'Employment Docs Complete': empDocs.length >= 2 ? 'Yes' : 'No',
+        'Education Docs Complete': eduDocs.length > 0 ? 'Yes' : 'No',
+        'Previous Employment Complete': prevDocs.length > 0 ? 'Yes' : 'No',
+        'Overall % Complete': `${Math.round((mandatoryUploaded / mandatoryTotal) * 100)}%`,
+        'Total Docs Uploaded': docs.length,
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
+
+    if (format === 'csv') {
+      const csv = XLSX.utils.sheet_to_csv(ws);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      saveAs(blob, `${companyName}_Documents_${today}.csv`);
+    } else {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Documents');
+      XLSX.writeFile(wb, `${companyName}_Documents_${today}.xlsx`);
+    }
+  };
 
   const statusBadge = (status) => {
     const c = status === 'green' ? 'bg-green-100 text-green-800' : status === 'amber' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600';
@@ -126,9 +216,44 @@ export default function Documents() {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-slate-800">Documents</h1>
-        <p className="text-slate-500 mt-1">Company document completion overview (Google Drive)</p>
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-800">Documents</h1>
+          <p className="text-slate-500 mt-1">Company document completion overview (Google Drive)</p>
+        </div>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowDownload((o) => !o)}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 bg-white"
+          >
+            Download Report ▾
+          </button>
+          {showDownload && (
+            <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[10rem]">
+              <button
+                type="button"
+                onClick={() => {
+                  downloadDocumentReport('csv');
+                  setShowDownload(false);
+                }}
+                className="block w-full text-left px-4 py-2 text-sm hover:bg-slate-50"
+              >
+                Download CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  downloadDocumentReport('excel');
+                  setShowDownload(false);
+                }}
+                className="block w-full text-left px-4 py-2 text-sm hover:bg-slate-50 rounded-b-lg"
+              >
+                Download Excel
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -168,7 +293,7 @@ export default function Documents() {
             </select>
             <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
               <option value="All">All</option>
-              {DOCUMENT_CHECKLIST.map((c) => (
+              {activeChecklist.map((c) => (
                 <option key={c.category} value={c.category}>Missing: {c.category}</option>
               ))}
             </select>
@@ -190,10 +315,10 @@ export default function Documents() {
               </thead>
               <tbody>
                 {filtered.map((emp) => {
-                  const kyc = getCategoryStatus(emp, 'KYC Documents');
-                  const employment = getCategoryStatus(emp, 'Employment Documents');
-                  const education = getCategoryStatus(emp, 'Education Certificates');
-                  const prevEmp = getCategoryStatus(emp, 'Previous Employment');
+                  const kyc = getCategoryStatus(emp, 'KYC Documents', activeChecklist);
+                  const employment = getCategoryStatus(emp, 'Employment Documents', activeChecklist);
+                  const education = getCategoryStatus(emp, 'Education Certificates', activeChecklist);
+                  const prevEmp = getCategoryStatus(emp, 'Previous Employment', activeChecklist);
                   const pct = getOverallPct(emp);
                   return (
                     <tr key={emp.id} className="border-t border-slate-100">
