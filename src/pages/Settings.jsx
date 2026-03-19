@@ -1085,10 +1085,26 @@ export default function Settings() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              type="button"
-              onClick={handleAddTask}
-              className="rounded-lg border border-slate-300 text-slate-700 text-sm font-medium px-3 py-2 hover:bg-slate-50"
-              disabled={templateLoading}
+              onClick={() => {
+                const newTask = {
+                  id: `task_${Date.now()}`,
+                  title: '',
+                  description: '',
+                  category: 'Day 1',
+                  assignedTo: 'hr',
+                  daysFromJoining: 0,
+                  isRequired: false,
+                  order: (templateTasks?.length || 0) + 1,
+                };
+                setTemplateTasks((prev) => [...(Array.isArray(prev) ? prev : []), newTask]);
+                setTimeout(() => {
+                  window.scrollTo({
+                    top: document.body.scrollHeight,
+                    behavior: 'smooth',
+                  });
+                }, 100);
+              }}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-colors"
             >
               + Add task
             </button>
