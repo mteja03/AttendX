@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -123,10 +132,14 @@ export default function Settings() {
   const [docTypes, setDocTypes] = useState(null);
   const [docTypesLoading, setDocTypesLoading] = useState(false);
   const [newDocNames, setNewDocNames] = useState({});
-  const [onboardingTemplate, setOnboardingTemplate] = useState(null);
-  const [onboardingLoading, setOnboardingLoading] = useState(false);
+  const [templateTasks, setTemplateTasks] = useState([]);
+  const [templateLoading, setTemplateLoading] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const isAdmin = role === 'admin';
+  const activeTab = tab;
+
+  // eslint-disable-next-line no-console
+  console.log('Company ID in settings:', companyId);
 
   useEffect(() => {
     if (companyId) {
@@ -196,27 +209,64 @@ export default function Settings() {
   }, [tab, companyId, showError]);
 
   useEffect(() => {
-    if (!companyId || tab !== 'onboarding') return;
+    if (activeTab !== 'onboarding') return;
+
+    // eslint-disable-next-line no-console
+    console.log('Loading template for company:', companyId);
+    // eslint-disable-next-line no-console
+    console.log('Active tab:', activeTab);
+    // eslint-disable-next-line no-console
+    console.log('DB instance:', db);
+
     const loadTemplate = async () => {
-      setOnboardingLoading(true);
       try {
-        const snap = await getDoc(doc(db, 'companies', companyId, 'onboardingTemplate'));
-        if (snap.exists()) {
-          const data = snap.data();
-          setOnboardingTemplate({
-            tasks: Array.isArray(data?.tasks) ? data.tasks : DEFAULT_ONBOARDING_TEMPLATE.tasks,
-          });
-        } else {
-          setOnboardingTemplate(DEFAULT_ONBOARDING_TEMPLATE);
+        setTemplateLoading(true);
+        // eslint-disable-next-line no-console
+        console.log('Loading template, companyId:', companyId);
+
+        if (!companyId) {
+          // eslint-disable-next-line no-console
+          console.error('No companyId available');
+          setTemplateTasks(DEFAULT_ONBOARDING_TEMPLATE.tasks);
+          return;
         }
-      } catch (e) {
-        setOnboardingTemplate(DEFAULT_ONBOARDING_TEMPLATE);
-        showError('Failed to load onboarding template');
+
+        if (!db) {
+          // eslint-disable-next-line no-console
+          console.error('No db instance');
+          setTemplateTasks(DEFAULT_ONBOARDING_TEMPLATE.tasks);
+          return;
+        }
+
+        const templateRef = doc(db, 'companies', companyId, 'onboardingTemplate');
+        // eslint-disable-next-line no-console
+        console.log('Template ref path:', templateRef.path);
+
+        const templateDoc = await getDoc(templateRef);
+        // eslint-disable-next-line no-console
+        console.log('Template exists:', templateDoc.exists());
+
+        if (templateDoc.exists() && templateDoc.data()?.tasks?.length > 0) {
+          // eslint-disable-next-line no-console
+          console.log('Loaded tasks:', templateDoc.data().tasks.length);
+          setTemplateTasks(templateDoc.data().tasks);
+        } else {
+          // eslint-disable-next-line no-console
+          console.log('Using default template');
+          setTemplateTasks(DEFAULT_ONBOARDING_TEMPLATE.tasks);
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Load template error:', error.message, error);
+        setTemplateTasks(DEFAULT_ONBOARDING_TEMPLATE.tasks);
+        showError(`Failed to load template: ${error.message}`);
+      } finally {
+        setTemplateLoading(false);
       }
-      setOnboardingLoading(false);
     };
+
     loadTemplate();
-  }, [tab, companyId, showError]);
+  }, [activeTab, companyId, showError]);
 
   const getList = (key, defaults) => (company?.[key]?.length ? company[key] : defaults);
   const getCount = (field) => (value) => employees.filter((e) => (e[field] || '').trim() === value).length;
@@ -926,87 +976,94 @@ export default function Settings() {
   );
 
   const renderOnboardingTab = () => {
-    const tasks = onboardingTemplate?.tasks || [];
+    const tasks = templateTasks || [];
     const categories = ['Pre-joining', 'Day 1', 'Week 1', 'Month 1'];
     const assignedToOptions = ['hr', 'manager', 'it', 'admin', 'employee'];
 
-    const updateTask = (taskId, patch) => {
-      setOnboardingTemplate((prev) => {
-        const cur = prev?.tasks || [];
-        return {
-          ...(prev || {}),
-          tasks: cur.map((t) => (t.id === taskId ? { ...t, ...patch } : t)),
-        };
-      });
+    const updateTask = (taskId, field, value) => {
+      setTemplateTasks((prev) =>
+        (prev || []).map((t) => (t.id === taskId ? { ...t, [field]: value } : t)),
+      );
     };
 
-    const handleAddTask = (category) => {
-      const nextId = `task_${Date.now()}`;
-      const nextOrder = tasks.length ? Math.max(...tasks.map((t) => t.order || 0)) + 1 : 1;
-      setOnboardingTemplate((prev) => ({
-        ...(prev || {}),
-        tasks: [
-          ...(prev?.tasks || []),
-          {
-            id: nextId,
-            title: '',
-            description: '',
-            category: category || 'Day 1',
-            assignedTo: 'hr',
-            daysFromJoining: 0,
-            isRequired: false,
-            order: nextOrder,
-          },
-        ],
-      }));
+    const handleAddTask = () => {
+      // eslint-disable-next-line no-console
+      console.log('Add task clicked');
+      const newTask = {
+        id: `task_${Date.now()}`,
+        title: '',
+        description: '',
+        category: 'Day 1',
+        assignedTo: 'hr',
+        daysFromJoining: 0,
+        isRequired: false,
+        order: (templateTasks?.length || 0) + 1,
+      };
+      // eslint-disable-next-line no-console
+      console.log('Adding task:', newTask);
+      setTemplateTasks((prev) => [...(prev || []), newTask]);
     };
 
     const removeTask = (taskId) => {
-      setOnboardingTemplate((prev) => ({
-        ...(prev || {}),
-        tasks: (prev?.tasks || []).filter((t) => t.id !== taskId),
-      }));
+      setTemplateTasks((prev) => (prev || []).filter((t) => t.id !== taskId));
     };
 
     const handleSaveTemplate = async () => {
-      if (!companyId || !currentUser) return;
-      if (!onboardingTemplate?.tasks || onboardingTemplate.tasks.length === 0) {
-        showError('Add at least one task before saving');
-        return;
-      }
-      setSavingTemplate(true);
       try {
-        const cleaned = (onboardingTemplate?.tasks || [])
-          .map((t, idx) => ({
-            id: t.id || `task_${Date.now()}`,
-            title: String(t.title || '').trim(),
-            description: String(t.description || '').trim(),
-            category: categories.includes(t.category) ? t.category : 'Day 1',
-            assignedTo: assignedToOptions.includes(t.assignedTo) ? t.assignedTo : 'hr',
-            daysFromJoining: Number.isFinite(Number(t.daysFromJoining)) ? Number(t.daysFromJoining) : 0,
-            isRequired: !!t.isRequired,
-            order: Number.isFinite(Number(t.order)) ? Number(t.order) : idx + 1,
-          }))
-          .filter((t) => t.title);
-
-        await setDoc(
-          doc(db, 'companies', companyId, 'onboardingTemplate'),
-          {
-            tasks: cleaned,
-            updatedAt: serverTimestamp(),
-            updatedBy: currentUser.email || '',
-          },
-          { merge: true },
-        );
-
-        setOnboardingTemplate({ tasks: cleaned });
-        success(`Onboarding template saved! ${cleaned.length} tasks saved.`);
-      } catch (e) {
         // eslint-disable-next-line no-console
-        console.error('Save template error:', e);
-        showError('Failed to save onboarding template');
+        console.log('Save clicked');
+        // eslint-disable-next-line no-console
+        console.log('Saving template...');
+        // eslint-disable-next-line no-console
+        console.log('Company ID:', companyId);
+        // eslint-disable-next-line no-console
+        console.log('Template tasks:', templateTasks);
+        // eslint-disable-next-line no-console
+        console.log('DB:', db);
+
+        if (!companyId) {
+          showError('Company ID not found');
+          return;
+        }
+
+        if (!templateTasks || templateTasks.length === 0) {
+          showError('No tasks to save. Add tasks first.');
+          return;
+        }
+
+        setSavingTemplate(true);
+
+        const cleanTasks = templateTasks.map((t, index) => ({
+          id: t.id || `task_${Date.now()}_${index}`,
+          title: t.title || 'Untitled task',
+          description: t.description || '',
+          category: t.category || 'Day 1',
+          assignedTo: t.assignedTo || 'hr',
+          daysFromJoining: Number(t.daysFromJoining) || 0,
+          isRequired: Boolean(t.isRequired),
+          order: Number(t.order) || index,
+        }));
+
+        // eslint-disable-next-line no-console
+        console.log('Clean tasks to save:', cleanTasks.length);
+
+        const templateRef = doc(db, 'companies', companyId, 'onboardingTemplate');
+        await setDoc(templateRef, {
+          tasks: cleanTasks,
+          updatedAt: new Date(),
+          updatedBy: currentUser?.email || 'admin',
+        });
+
+        // eslint-disable-next-line no-console
+        console.log('Template saved successfully!');
+        success(`${cleanTasks.length} tasks saved successfully!`);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Save error:', error.message, error);
+        showError(`Save failed: ${error.message}`);
+      } finally {
+        setSavingTemplate(false);
       }
-      setSavingTemplate(false);
     };
 
     const grouped = categories.map((cat) => ({
@@ -1027,9 +1084,9 @@ export default function Settings() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => handleAddTask('Day 1')}
+              onClick={handleAddTask}
               className="rounded-lg border border-slate-300 text-slate-700 text-sm font-medium px-3 py-2 hover:bg-slate-50"
-              disabled={onboardingLoading}
+              disabled={templateLoading}
             >
               + Add task
             </button>
@@ -1037,14 +1094,14 @@ export default function Settings() {
               type="button"
               onClick={handleSaveTemplate}
               className="rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
-              disabled={savingTemplate || onboardingLoading}
+              disabled={savingTemplate || templateLoading}
             >
               {savingTemplate ? 'Saving...' : 'Save Template'}
             </button>
           </div>
         </div>
 
-        {onboardingLoading ? (
+        {templateLoading ? (
           <p className="text-sm text-slate-500">Loading…</p>
         ) : (
           <div className="space-y-6">
@@ -1068,7 +1125,7 @@ export default function Settings() {
                             <label className="block text-xs font-medium text-slate-600 mb-1">Title</label>
                             <input
                               value={t.title || ''}
-                              onChange={(e) => updateTask(t.id, { title: e.target.value })}
+                              onChange={(e) => updateTask(t.id, 'title', e.target.value)}
                               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                               placeholder="Task title"
                             />
@@ -1086,7 +1143,7 @@ export default function Settings() {
                           <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
                           <textarea
                             value={t.description || ''}
-                            onChange={(e) => updateTask(t.id, { description: e.target.value })}
+                            onChange={(e) => updateTask(t.id, 'description', e.target.value)}
                             rows={2}
                             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             placeholder="Optional description"
@@ -1098,7 +1155,7 @@ export default function Settings() {
                             <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
                             <select
                               value={t.category || 'Day 1'}
-                              onChange={(e) => updateTask(t.id, { category: e.target.value })}
+                              onChange={(e) => updateTask(t.id, 'category', e.target.value)}
                               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             >
                               {categories.map((c) => (
@@ -1110,7 +1167,7 @@ export default function Settings() {
                             <label className="block text-xs font-medium text-slate-600 mb-1">Assigned to</label>
                             <select
                               value={t.assignedTo || 'hr'}
-                              onChange={(e) => updateTask(t.id, { assignedTo: e.target.value })}
+                              onChange={(e) => updateTask(t.id, 'assignedTo', e.target.value)}
                               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             >
                               {assignedToOptions.map((o) => (
@@ -1123,7 +1180,7 @@ export default function Settings() {
                             <input
                               type="number"
                               value={t.daysFromJoining ?? 0}
-                              onChange={(e) => updateTask(t.id, { daysFromJoining: e.target.value })}
+                              onChange={(e) => updateTask(t.id, 'daysFromJoining', e.target.value)}
                               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             />
                           </div>
@@ -1132,7 +1189,7 @@ export default function Settings() {
                               id={`req_${t.id}`}
                               type="checkbox"
                               checked={!!t.isRequired}
-                              onChange={(e) => updateTask(t.id, { isRequired: e.target.checked })}
+                              onChange={(e) => updateTask(t.id, 'isRequired', e.target.checked)}
                               className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
                             />
                             <label htmlFor={`req_${t.id}`} className="text-xs text-slate-700">
