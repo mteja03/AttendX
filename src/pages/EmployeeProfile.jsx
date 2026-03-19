@@ -113,6 +113,43 @@ const DEFAULT_ONBOARDING_TEMPLATE = {
   ],
 };
 
+const DEFAULT_OFFBOARDING_TEMPLATE = {
+  tasks: [
+    { id: 'off_001', title: 'Resignation letter received', description: '', category: 'Resignation', assignedTo: 'hr', daysBefore: 30, isRequired: true, order: 1 },
+    { id: 'off_002', title: 'Exit date confirmed with manager', description: '', category: 'Resignation', assignedTo: 'manager', daysBefore: 28, isRequired: true, order: 2 },
+    { id: 'off_003', title: 'Handover plan created', description: '', category: 'Resignation', assignedTo: 'manager', daysBefore: 25, isRequired: true, order: 3 },
+    { id: 'off_004', title: 'Notice period terms confirmed', description: '', category: 'Resignation', assignedTo: 'hr', daysBefore: 28, isRequired: true, order: 4 },
+
+    { id: 'off_005', title: 'Handover document prepared', description: '', category: 'Knowledge Transfer', assignedTo: 'employee', daysBefore: 14, isRequired: true, order: 5 },
+    { id: 'off_006', title: 'Pending tasks documented', description: '', category: 'Knowledge Transfer', assignedTo: 'employee', daysBefore: 7, isRequired: true, order: 6 },
+    { id: 'off_007', title: 'Knowledge transfer to team done', description: '', category: 'Knowledge Transfer', assignedTo: 'manager', daysBefore: 5, isRequired: true, order: 7 },
+    { id: 'off_008', title: 'Passwords and credentials handed over', description: '', category: 'Knowledge Transfer', assignedTo: 'it', daysBefore: 1, isRequired: true, order: 8 },
+
+    { id: 'off_009', title: 'Laptop returned', description: '', category: 'Asset Return', assignedTo: 'admin', daysBefore: 0, isRequired: true, order: 9 },
+    { id: 'off_010', title: 'ID card returned', description: '', category: 'Asset Return', assignedTo: 'hr', daysBefore: 0, isRequired: true, order: 10 },
+    { id: 'off_011', title: 'Access card returned', description: '', category: 'Asset Return', assignedTo: 'admin', daysBefore: 0, isRequired: true, order: 11 },
+    { id: 'off_012', title: 'SIM card returned', description: '', category: 'Asset Return', assignedTo: 'admin', daysBefore: 0, isRequired: true, order: 12 },
+    { id: 'off_013', title: 'Any other company assets returned', description: '', category: 'Asset Return', assignedTo: 'admin', daysBefore: 0, isRequired: true, order: 13 },
+
+    { id: 'off_014', title: 'Email access revoked', description: '', category: 'IT & Access', assignedTo: 'it', daysBefore: 0, isRequired: true, order: 14 },
+    { id: 'off_015', title: 'System access removed', description: '', category: 'IT & Access', assignedTo: 'it', daysBefore: 0, isRequired: true, order: 15 },
+    { id: 'off_016', title: 'Added to alumni/ex-employee list', description: '', category: 'IT & Access', assignedTo: 'hr', daysBefore: 0, isRequired: false, order: 16 },
+
+    { id: 'off_017', title: 'Final salary calculated', description: '', category: 'Finance & Legal', assignedTo: 'hr', daysBefore: -5, isRequired: true, order: 17 },
+    { id: 'off_018', title: 'Full and final settlement processed', description: '', category: 'Finance & Legal', assignedTo: 'hr', daysBefore: -7, isRequired: true, order: 18 },
+    { id: 'off_019', title: 'PF withdrawal form collected', description: '', category: 'Finance & Legal', assignedTo: 'hr', daysBefore: 0, isRequired: false, order: 19 },
+    { id: 'off_020', title: 'Gratuity calculated (if applicable)', description: '', category: 'Finance & Legal', assignedTo: 'hr', daysBefore: -7, isRequired: false, order: 20 },
+    { id: 'off_021', title: 'Form 16 issued', description: '', category: 'Finance & Legal', assignedTo: 'hr', daysBefore: -30, isRequired: true, order: 21 },
+
+    { id: 'off_022', title: 'Experience letter issued', description: '', category: 'Documents', assignedTo: 'hr', daysBefore: 0, isRequired: true, order: 22 },
+    { id: 'off_023', title: 'Relieving letter issued', description: '', category: 'Documents', assignedTo: 'hr', daysBefore: 0, isRequired: true, order: 23 },
+    { id: 'off_024', title: 'NOC issued (if required)', description: '', category: 'Documents', assignedTo: 'hr', daysBefore: 0, isRequired: false, order: 24 },
+
+    { id: 'off_025', title: 'Exit interview conducted', description: '', category: 'Exit Interview', assignedTo: 'hr', daysBefore: 2, isRequired: false, order: 25 },
+    { id: 'off_026', title: 'Exit feedback form filled', description: '', category: 'Exit Interview', assignedTo: 'employee', daysBefore: 2, isRequired: false, order: 26 },
+  ],
+};
+
 function getAge(v) {
   const d = toJSDate(v);
   if (!d || Number.isNaN(d.getTime())) return null;
@@ -205,6 +242,11 @@ export default function EmployeeProfile() {
   const [returnNotes, setReturnNotes] = useState('');
   const [completingTask, setCompletingTask] = useState(null);
   const [taskNotes, setTaskNotes] = useState('');
+  const [offboardingExitDate, setOffboardingExitDate] = useState('');
+  const [offboardingExitReason, setOffboardingExitReason] = useState('');
+  const [completingOffTask, setCompletingOffTask] = useState(null);
+  const [offTaskNotes, setOffTaskNotes] = useState('');
+  const [deactivateChoiceOpen, setDeactivateChoiceOpen] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -578,7 +620,7 @@ export default function EmployeeProfile() {
     setSaving(false);
   };
 
-  const handleDeactivate = async () => {
+  const proceedDeactivateDirectly = async () => {
     if (!employee || !companyId || !empId) return;
     setSaving(true);
     try {
@@ -633,6 +675,15 @@ export default function EmployeeProfile() {
       showError('Could not check assigned assets');
     }
     setSaving(false);
+  };
+
+  const handleDeactivate = async () => {
+    if (!employee || !companyId || !empId) return;
+    if (!employee.offboarding || employee.offboarding.status === 'not_started') {
+      setDeactivateChoiceOpen(true);
+      return;
+    }
+    await proceedDeactivateDirectly();
   };
 
   const getCompanyName = () => company?.name || 'Company';
@@ -991,6 +1042,187 @@ export default function EmployeeProfile() {
       employee: 'Employee',
     };
     return map[assignedTo] || assignedTo || '—';
+  };
+
+  const getOffCategoryIcon = (category) => {
+    if (category === 'Resignation') return '📝';
+    if (category === 'Knowledge Transfer') return '🧠';
+    if (category === 'Asset Return') return '📦';
+    if (category === 'IT & Access') return '💻';
+    if (category === 'Finance & Legal') return '💰';
+    if (category === 'Documents') return '📄';
+    if (category === 'Exit Interview') return '🤝';
+    return '✅';
+  };
+
+  const calculateOffboardingDueDate = (exitDate, daysBefore) => {
+    try {
+      const exit = toJSDate(exitDate) || new Date();
+      const due = new Date(exit);
+      // positive daysBefore = before exit (subtract)
+      // negative daysBefore = after exit (subtracting negative adds)
+      due.setDate(due.getDate() - Number(daysBefore || 0));
+      return Timestamp.fromDate(due);
+    } catch (e) {
+      return Timestamp.fromDate(new Date());
+    }
+  };
+
+  const offboarding = employee?.offboarding || null;
+  const offTasks = Array.isArray(offboarding?.tasks) ? offboarding.tasks : [];
+  const offCompleted = offTasks.filter((t) => t.completed).length;
+  const offTotal = offTasks.length;
+  const offPct = offTotal ? Math.round((offCompleted / offTotal) * 100) : (offboarding?.completionPct || 0);
+
+  const offByCategory = useMemo(() => {
+    const categories = ['Resignation', 'Knowledge Transfer', 'Asset Return', 'IT & Access', 'Finance & Legal', 'Documents', 'Exit Interview'];
+    const tasks = offTasks.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    return categories.map((cat) => ({
+      category: cat,
+      tasks: tasks.filter((t) => (t.category || 'Resignation') === cat),
+    }));
+  }, [offTasks]);
+
+  const assignedAssetsForWarning = useMemo(() => {
+    const trackables = assetList.filter((a) => (a.mode || 'trackable') === 'trackable' && a.assignedToId === empId && a.status === 'Assigned');
+    const consumables = assetList
+      .filter((a) => (a.mode || 'trackable') === 'consumable')
+      .flatMap((asset) =>
+        (asset.assignments || [])
+          .filter((as) => as.employeeId === empId && !as.returned)
+          .map((as) => ({ ...asset, _qty: as.quantity })),
+      );
+    return { trackables, consumables };
+  }, [assetList, empId]);
+
+  const handleStartOffboarding = async () => {
+    if (!companyId || !empId || !employee || !currentUser) return;
+    if (!offboardingExitDate) {
+      showError('Please select last working day');
+      return;
+    }
+    if (!offboardingExitReason) {
+      showError('Please select exit reason');
+      return;
+    }
+    setSaving(true);
+    try {
+      let templateTasks = DEFAULT_OFFBOARDING_TEMPLATE.tasks;
+      try {
+        const templateDoc = await getDoc(doc(db, 'companies', companyId, 'settings', 'offboardingTemplate'));
+        if (templateDoc.exists() && Array.isArray(templateDoc.data()?.tasks) && templateDoc.data().tasks.length > 0) {
+          templateTasks = templateDoc.data().tasks;
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('No offboarding template found, using default:', e?.message || e);
+      }
+
+      const exitDateTs = Timestamp.fromDate(new Date(offboardingExitDate));
+      const now = Timestamp.now();
+
+      const sanitized = templateTasks
+        .slice()
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+        .map((t, idx) => ({
+          id: t.id || `off_${Date.now()}_${idx}`,
+          title: t.title || '',
+          description: t.description || '',
+          category: t.category || 'Resignation',
+          assignedTo: t.assignedTo || 'hr',
+          daysBefore: Number(t.daysBefore) || 0,
+          isRequired: Boolean(t.isRequired),
+          order: Number(t.order) || idx,
+          completed: false,
+          completedAt: null,
+          completedBy: null,
+          notes: '',
+          dueDate: calculateOffboardingDueDate(exitDateTs, t.daysBefore),
+        }))
+        .map((t) => Object.fromEntries(Object.entries(t).filter(([, v]) => v !== undefined)));
+
+      const payload = {
+        offboarding: {
+          status: 'in_progress',
+          exitDate: exitDateTs,
+          exitReason: offboardingExitReason,
+          startedAt: now,
+          completedAt: null,
+          completionPct: 0,
+          tasks: sanitized,
+        },
+        status: 'Offboarding',
+        updatedAt: serverTimestamp(),
+      };
+
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
+      setEmployee((prev) => (prev ? { ...prev, ...payload } : prev));
+      success(`Offboarding started for ${employee.fullName}. Exit date: ${toDisplayDate(exitDateTs)}`);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Offboarding start error:', error?.message, error);
+      showError(`Failed to start offboarding: ${error?.message || 'Unknown error'}`);
+    }
+    setSaving(false);
+  };
+
+  const markOffboardingTaskComplete = async (taskId, notes) => {
+    if (!companyId || !empId || !employee || !currentUser || !offboarding) return;
+    const now = Timestamp.now();
+    const nextTasks = offTasks.map((t) =>
+      t.id === taskId
+        ? { ...t, completed: true, completedAt: now, completedBy: currentUser.email || '', notes: notes || '' }
+        : t,
+    );
+    const done = nextTasks.filter((t) => t.completed).length;
+    const total = nextTasks.length || 1;
+    const pct = Math.round((done / total) * 100);
+    const requiredDone = nextTasks.filter((t) => t.isRequired).every((t) => t.completed);
+    const status = requiredDone && done === nextTasks.length ? 'completed' : 'in_progress';
+
+    const payload = {
+      offboarding: {
+        ...(offboarding || {}),
+        status,
+        completionPct: pct,
+        tasks: nextTasks,
+        completedAt: status === 'completed' ? now : offboarding.completedAt || null,
+      },
+      status: status === 'completed' ? 'Inactive' : (employee.status || 'Offboarding'),
+      updatedAt: serverTimestamp(),
+    };
+
+    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
+    setEmployee((prev) => (prev ? { ...prev, offboarding: payload.offboarding, status: payload.status } : prev));
+    if (status === 'completed') {
+      success(`✅ Offboarding completed for ${employee.fullName}! Employee has been deactivated.`);
+    } else {
+      success('Task marked complete');
+    }
+  };
+
+  const unmarkOffboardingTask = async (taskId) => {
+    if (!companyId || !empId || !employee || !currentUser || !offboarding) return;
+    const nextTasks = offTasks.map((t) =>
+      t.id === taskId ? { ...t, completed: false, completedAt: null, completedBy: null, notes: '' } : t,
+    );
+    const done = nextTasks.filter((t) => t.completed).length;
+    const total = nextTasks.length || 1;
+    const pct = Math.round((done / total) * 100);
+    const payload = {
+      offboarding: {
+        ...(offboarding || {}),
+        status: done === 0 ? 'not_started' : 'in_progress',
+        completionPct: pct,
+        completedAt: null,
+        tasks: nextTasks,
+      },
+      status: 'Offboarding',
+      updatedAt: serverTimestamp(),
+    };
+    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
+    setEmployee((prev) => (prev ? { ...prev, offboarding: payload.offboarding, status: payload.status } : prev));
+    success('Task updated');
   };
 
   const calculateDueDate = (joiningDate, daysFromJoining) => {
@@ -1901,6 +2133,7 @@ export default function EmployeeProfile() {
     { id: 'leave', label: 'Leave History' },
     { id: 'assets', label: 'Assets' },
     { id: 'onboarding', label: 'Onboarding' },
+    { id: 'offboarding', label: 'Offboarding' },
     { id: 'timeline', label: 'Timeline' },
   ];
 
@@ -1921,7 +2154,13 @@ export default function EmployeeProfile() {
               <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">{employee.employmentType || 'Full-time'}</span>
               <span
                 className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                  employee.status === 'Active' ? 'bg-green-100 text-green-800' : employee.status === 'On Leave' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
+                  employee.status === 'Active'
+                    ? 'bg-green-100 text-green-800'
+                    : employee.status === 'On Leave'
+                    ? 'bg-amber-100 text-amber-800'
+                    : employee.status === 'Offboarding'
+                    ? 'bg-orange-100 text-orange-800'
+                    : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 {employee.status || 'Active'}
@@ -3024,6 +3263,232 @@ export default function EmployeeProfile() {
         </div>
       )}
 
+      {tab === 'offboarding' && (
+        <div className="space-y-6">
+          {(!offboarding || offboarding.status === 'not_started') ? (
+            <div className="bg-white border rounded-2xl p-6 text-center">
+              <p className="text-4xl mb-3">👋</p>
+              <p className="text-base font-semibold text-gray-800 mb-1">Initiate Offboarding</p>
+              <p className="text-sm text-gray-400 mb-6">
+                Start the offboarding process for {employee.fullName}
+              </p>
+
+              <div className="max-w-md mx-auto text-left space-y-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Last Working Day</label>
+                  <input
+                    type="date"
+                    value={offboardingExitDate}
+                    onChange={(e) => setOffboardingExitDate(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Exit Reason</label>
+                  <select
+                    value={offboardingExitReason}
+                    onChange={(e) => setOffboardingExitReason(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="">Select reason</option>
+                    <option value="Resignation">Resignation</option>
+                    <option value="Termination">Termination</option>
+                    <option value="Retirement">Retirement</option>
+                    <option value="Contract End">Contract End</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleStartOffboarding}
+                  disabled={saving}
+                  className="w-full px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {saving ? 'Starting…' : 'Start Offboarding'}
+                </button>
+              </div>
+
+              {(assignedAssetsForWarning.trackables.length > 0 || assignedAssetsForWarning.consumables.length > 0) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-4 text-left">
+                  <p className="text-sm font-medium text-amber-800 mb-2">⚠️ Assets to be returned</p>
+                  {assignedAssetsForWarning.trackables.map((a) => (
+                    <p key={a.id} className="text-xs text-amber-700">
+                      • {a.name} ({a.assetId})
+                    </p>
+                  ))}
+                  {assignedAssetsForWarning.consumables.map((a) => (
+                    <p key={`${a.id}_${a.assetId}`} className="text-xs text-amber-700">
+                      • {a.name} ({a.assetId}) · Qty: {a._qty}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between p-4 bg-white border rounded-xl mb-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      offboarding.status === 'completed'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    {offboarding.status === 'completed' ? '✓ Offboarding Complete' : 'Offboarding In Progress'}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    Exit: {toDisplayDate(offboarding.exitDate)} · {offboarding.exitReason}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-semibold text-gray-800">{offPct}%</p>
+                  <p className="text-xs text-gray-400">
+                    {offCompleted} of {offTotal} tasks
+                  </p>
+                </div>
+              </div>
+
+              <div className="w-full bg-gray-100 rounded-full h-2 mb-6">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    offPct === 100 ? 'bg-green-500' : offPct > 50 ? 'bg-blue-500' : 'bg-amber-500'
+                  }`}
+                  style={{ width: `${Math.min(offPct, 100)}%` }}
+                />
+              </div>
+
+              {(() => {
+                const exit = toJSDate(offboarding.exitDate);
+                const daysUntilExit = exit
+                  ? Math.ceil((exit - new Date()) / (1000 * 60 * 60 * 24))
+                  : null;
+                if (daysUntilExit == null) return null;
+                if (daysUntilExit > 0) {
+                  return (
+                    <div className="text-center mb-4 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                      <p className="text-2xl font-bold text-amber-700">{daysUntilExit}</p>
+                      <p className="text-xs text-amber-600">days until exit</p>
+                    </div>
+                  );
+                }
+                if (daysUntilExit === 0) {
+                  return (
+                    <div className="text-center mb-4 p-3 bg-red-50 rounded-xl border border-red-100">
+                      <p className="text-sm font-bold text-red-700">🚨 Today is the last working day!</p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="text-center mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                    <p className="text-sm text-gray-500">
+                      Employee has exited {Math.abs(daysUntilExit)} days ago
+                    </p>
+                  </div>
+                );
+              })()}
+
+              <div className="space-y-6">
+                {offByCategory.map((g) => {
+                  const totalInCategory = g.tasks.length;
+                  const completedInCategory = g.tasks.filter((t) => t.completed).length;
+                  return (
+                    <div key={g.category}>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                          {getOffCategoryIcon(g.category)} {g.category}
+                        </h3>
+                        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                          {completedInCategory}/{totalInCategory}
+                        </span>
+                      </div>
+
+                      {g.tasks.map((task) => (
+                        <div
+                          key={task.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            if (task.completed) return;
+                            setCompletingOffTask(task);
+                            setOffTaskNotes('');
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !task.completed) {
+                              setCompletingOffTask(task);
+                              setOffTaskNotes('');
+                            }
+                          }}
+                          className={`flex items-start gap-3 p-3 rounded-xl border mb-2 cursor-pointer transition-all ${
+                            task.completed
+                              ? 'bg-green-50 border-green-100'
+                              : isOverdue(task.dueDate)
+                              ? 'bg-red-50 border-red-100'
+                              : 'bg-white border-gray-200 hover:border-amber-200 hover:bg-amber-50'
+                          }`}
+                        >
+                          <div
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${
+                              task.completed ? 'bg-green-500 border-green-500' : 'border-gray-300'
+                            }`}
+                          >
+                            {task.completed && (
+                              <svg width="10" height="10" viewBox="0 0 10 10">
+                                <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+                              </svg>
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className={`text-sm font-medium ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                                {task.title}
+                              </p>
+                              {task.isRequired && !task.completed && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">Required</span>
+                              )}
+                              {isOverdue(task.dueDate) && !task.completed && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">Overdue</span>
+                              )}
+                            </div>
+                            {task.description && <p className="text-xs text-gray-400 mt-0.5">{task.description}</p>}
+                            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                              <span className="text-xs text-gray-400">Due: {task.dueDate ? toDisplayDate(task.dueDate) : '—'}</span>
+                              <span className="text-xs text-gray-400">· {getAssignedLabel(task.assignedTo)}</span>
+                              {task.completed && (
+                                <span className="text-xs text-green-600">
+                                  ✓ Done by {task.completedBy} on {toDisplayDate(task.completedAt)}
+                                </span>
+                              )}
+                            </div>
+                            {task.completed && task.notes && (
+                              <p className="text-xs text-gray-500 mt-1 italic">"{task.notes}"</p>
+                            )}
+                          </div>
+
+                          {task.completed && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                unmarkOffboardingTask(task.id);
+                              }}
+                              className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100 flex-shrink-0"
+                            >
+                              Undo
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {deactivateConfirm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -3573,6 +4038,87 @@ export default function EmployeeProfile() {
                 Mark Complete ✓
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {completingOffTask && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
+            <h3 className="font-medium mb-3">
+              Complete: {completingOffTask.title}
+            </h3>
+            <textarea
+              placeholder="Add notes (optional)..."
+              value={offTaskNotes}
+              onChange={(e) => setOffTaskNotes(e.target.value)}
+              rows={3}
+              className="w-full border rounded-xl px-3 py-2 text-sm resize-none mb-3"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCompletingOffTask(null)}
+                className="flex-1 py-2 border rounded-xl text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await markOffboardingTaskComplete(completingOffTask.id, offTaskNotes);
+                    setCompletingOffTask(null);
+                    setOffTaskNotes('');
+                  } catch (e) {
+                    showError('Failed to update task');
+                  }
+                }}
+                className="flex-1 py-2 bg-green-600 text-white rounded-xl text-sm font-medium"
+              >
+                Mark Complete ✓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deactivateChoiceOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+            <h3 className="font-semibold text-gray-900 mb-1">Start offboarding instead?</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              This employee does not have offboarding started. Would you like to start the offboarding process instead of directly deactivating?
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeactivateChoiceOpen(false);
+                  setTab('offboarding');
+                }}
+                className="flex-1 py-2 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600"
+              >
+                Start Offboarding
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setDeactivateChoiceOpen(false);
+                  await proceedDeactivateDirectly();
+                }}
+                className="flex-1 py-2 border rounded-xl text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Deactivate Directly
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDeactivateChoiceOpen(false)}
+              className="w-full mt-3 text-sm text-gray-500 hover:text-gray-700"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

@@ -79,6 +79,7 @@ const TABS = [
   { id: 'leave', label: 'Leave Policy' },
   { id: 'documents', label: 'Document Types' },
   { id: 'onboarding', label: 'Onboarding' },
+  { id: 'offboarding', label: 'Offboarding' },
   { id: 'danger', label: 'Danger Zone' },
 ];
 
@@ -110,6 +111,43 @@ const DEFAULT_ONBOARDING_TEMPLATE = {
   ],
 };
 
+const DEFAULT_OFFBOARDING_TEMPLATE = {
+  tasks: [
+    { id: 'off_001', title: 'Resignation letter received', description: '', category: 'Resignation', assignedTo: 'hr', daysBefore: 30, isRequired: true, order: 1 },
+    { id: 'off_002', title: 'Exit date confirmed with manager', description: '', category: 'Resignation', assignedTo: 'manager', daysBefore: 28, isRequired: true, order: 2 },
+    { id: 'off_003', title: 'Handover plan created', description: '', category: 'Resignation', assignedTo: 'manager', daysBefore: 25, isRequired: true, order: 3 },
+    { id: 'off_004', title: 'Notice period terms confirmed', description: '', category: 'Resignation', assignedTo: 'hr', daysBefore: 28, isRequired: true, order: 4 },
+
+    { id: 'off_005', title: 'Handover document prepared', description: '', category: 'Knowledge Transfer', assignedTo: 'employee', daysBefore: 14, isRequired: true, order: 5 },
+    { id: 'off_006', title: 'Pending tasks documented', description: '', category: 'Knowledge Transfer', assignedTo: 'employee', daysBefore: 7, isRequired: true, order: 6 },
+    { id: 'off_007', title: 'Knowledge transfer to team done', description: '', category: 'Knowledge Transfer', assignedTo: 'manager', daysBefore: 5, isRequired: true, order: 7 },
+    { id: 'off_008', title: 'Passwords and credentials handed over', description: '', category: 'Knowledge Transfer', assignedTo: 'it', daysBefore: 1, isRequired: true, order: 8 },
+
+    { id: 'off_009', title: 'Laptop returned', description: '', category: 'Asset Return', assignedTo: 'admin', daysBefore: 0, isRequired: true, order: 9 },
+    { id: 'off_010', title: 'ID card returned', description: '', category: 'Asset Return', assignedTo: 'hr', daysBefore: 0, isRequired: true, order: 10 },
+    { id: 'off_011', title: 'Access card returned', description: '', category: 'Asset Return', assignedTo: 'admin', daysBefore: 0, isRequired: true, order: 11 },
+    { id: 'off_012', title: 'SIM card returned', description: '', category: 'Asset Return', assignedTo: 'admin', daysBefore: 0, isRequired: true, order: 12 },
+    { id: 'off_013', title: 'Any other company assets returned', description: '', category: 'Asset Return', assignedTo: 'admin', daysBefore: 0, isRequired: true, order: 13 },
+
+    { id: 'off_014', title: 'Email access revoked', description: '', category: 'IT & Access', assignedTo: 'it', daysBefore: 0, isRequired: true, order: 14 },
+    { id: 'off_015', title: 'System access removed', description: '', category: 'IT & Access', assignedTo: 'it', daysBefore: 0, isRequired: true, order: 15 },
+    { id: 'off_016', title: 'Added to alumni/ex-employee list', description: '', category: 'IT & Access', assignedTo: 'hr', daysBefore: 0, isRequired: false, order: 16 },
+
+    { id: 'off_017', title: 'Final salary calculated', description: '', category: 'Finance & Legal', assignedTo: 'hr', daysBefore: -5, isRequired: true, order: 17 },
+    { id: 'off_018', title: 'Full and final settlement processed', description: '', category: 'Finance & Legal', assignedTo: 'hr', daysBefore: -7, isRequired: true, order: 18 },
+    { id: 'off_019', title: 'PF withdrawal form collected', description: '', category: 'Finance & Legal', assignedTo: 'hr', daysBefore: 0, isRequired: false, order: 19 },
+    { id: 'off_020', title: 'Gratuity calculated (if applicable)', description: '', category: 'Finance & Legal', assignedTo: 'hr', daysBefore: -7, isRequired: false, order: 20 },
+    { id: 'off_021', title: 'Form 16 issued', description: '', category: 'Finance & Legal', assignedTo: 'hr', daysBefore: -30, isRequired: true, order: 21 },
+
+    { id: 'off_022', title: 'Experience letter issued', description: '', category: 'Documents', assignedTo: 'hr', daysBefore: 0, isRequired: true, order: 22 },
+    { id: 'off_023', title: 'Relieving letter issued', description: '', category: 'Documents', assignedTo: 'hr', daysBefore: 0, isRequired: true, order: 23 },
+    { id: 'off_024', title: 'NOC issued (if required)', description: '', category: 'Documents', assignedTo: 'hr', daysBefore: 0, isRequired: false, order: 24 },
+
+    { id: 'off_025', title: 'Exit interview conducted', description: '', category: 'Exit Interview', assignedTo: 'hr', daysBefore: 2, isRequired: false, order: 25 },
+    { id: 'off_026', title: 'Exit feedback form filled', description: '', category: 'Exit Interview', assignedTo: 'employee', daysBefore: 2, isRequired: false, order: 26 },
+  ],
+};
+
 export default function Settings() {
   const { companyId } = useParams();
   const { role, currentUser } = useAuth();
@@ -135,6 +173,9 @@ export default function Settings() {
   const [templateTasks, setTemplateTasks] = useState([]);
   const [templateLoading, setTemplateLoading] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [offTemplateTasks, setOffTemplateTasks] = useState([]);
+  const [offTemplateLoading, setOffTemplateLoading] = useState(false);
+  const [savingOffTemplate, setSavingOffTemplate] = useState(false);
   const isAdmin = role === 'admin';
   const activeTab = tab;
 
@@ -262,6 +303,36 @@ export default function Settings() {
         showError(`Failed to load template: ${error.message}`);
       } finally {
         setTemplateLoading(false);
+      }
+    };
+
+    loadTemplate();
+  }, [activeTab, companyId, showError]);
+
+  useEffect(() => {
+    if (activeTab !== 'offboarding') return;
+
+    const loadTemplate = async () => {
+      try {
+        setOffTemplateLoading(true);
+        if (!companyId || !db) {
+          setOffTemplateTasks(DEFAULT_OFFBOARDING_TEMPLATE.tasks);
+          return;
+        }
+        const templateRef = doc(db, 'companies', companyId, 'settings', 'offboardingTemplate');
+        const templateDoc = await getDoc(templateRef);
+        if (templateDoc.exists() && templateDoc.data()?.tasks?.length > 0) {
+          setOffTemplateTasks(templateDoc.data().tasks);
+        } else {
+          setOffTemplateTasks(DEFAULT_OFFBOARDING_TEMPLATE.tasks);
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Load offboarding template error:', error.message, error);
+        setOffTemplateTasks(DEFAULT_OFFBOARDING_TEMPLATE.tasks);
+        showError(`Failed to load offboarding template: ${error.message}`);
+      } finally {
+        setOffTemplateLoading(false);
       }
     };
 
@@ -1235,6 +1306,223 @@ export default function Settings() {
     );
   };
 
+  const renderOffboardingTab = () => {
+    const tasks = offTemplateTasks || [];
+    const categories = ['Resignation', 'Knowledge Transfer', 'Asset Return', 'IT & Access', 'Finance & Legal', 'Documents', 'Exit Interview'];
+    const assignedToOptions = ['hr', 'manager', 'it', 'admin', 'employee'];
+
+    const updateTask = (taskId, field, value) => {
+      setOffTemplateTasks((prev) =>
+        (prev || []).map((t) => (t.id === taskId ? { ...t, [field]: value } : t)),
+      );
+    };
+
+    const handleAddTask = () => {
+      const newTask = {
+        id: `off_${Date.now()}`,
+        title: '',
+        description: '',
+        category: 'Resignation',
+        assignedTo: 'hr',
+        daysBefore: 0,
+        isRequired: false,
+        order: (offTemplateTasks?.length || 0) + 1,
+      };
+      setOffTemplateTasks((prev) => [...(Array.isArray(prev) ? prev : []), newTask]);
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }, 100);
+    };
+
+    const deleteTask = (taskId) => {
+      setOffTemplateTasks((prev) => (prev || []).filter((t) => t.id !== taskId));
+    };
+
+    const handleSaveTemplate = async () => {
+      try {
+        if (!companyId) {
+          showError('Company ID not found');
+          return;
+        }
+        if (!offTemplateTasks || offTemplateTasks.length === 0) {
+          showError('No tasks to save. Add tasks first.');
+          return;
+        }
+        setSavingOffTemplate(true);
+
+        const cleanTasks = offTemplateTasks.map((t, index) => ({
+          id: t.id || `off_${Date.now()}_${index}`,
+          title: t.title || 'Untitled task',
+          description: t.description || '',
+          category: t.category || 'Resignation',
+          assignedTo: t.assignedTo || 'hr',
+          daysBefore: Number(t.daysBefore) || 0,
+          isRequired: Boolean(t.isRequired),
+          order: Number(t.order) || index,
+        }));
+
+        const templateRef = doc(db, 'companies', companyId, 'settings', 'offboardingTemplate');
+        await setDoc(templateRef, {
+          tasks: cleanTasks,
+          updatedAt: new Date(),
+          updatedBy: currentUser?.email || 'admin',
+        });
+        success(`Offboarding template saved! ${cleanTasks.length} tasks saved.`);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Save offboarding template error:', error.message, error);
+        showError(`Save failed: ${error.message}`);
+      } finally {
+        setSavingOffTemplate(false);
+      }
+    };
+
+    const grouped = categories.map((cat) => ({
+      category: cat,
+      tasks: tasks
+        .filter((t) => (t.category || 'Resignation') === cat)
+        .slice()
+        .sort((a, b) => (a.order || 0) - (b.order || 0)),
+    }));
+
+    return (
+      <section className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">Offboarding Checklist</h2>
+            <p className="text-sm text-slate-500 mt-1">Customize the checklist template used when an employee exits.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAddTask}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+              disabled={offTemplateLoading}
+            >
+              + Add task
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveTemplate}
+              className="rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
+              disabled={savingOffTemplate || offTemplateLoading}
+            >
+              {savingOffTemplate ? 'Saving...' : 'Save Template'}
+            </button>
+          </div>
+        </div>
+
+        {offTemplateLoading ? (
+          <p className="text-sm text-slate-500">Loading…</p>
+        ) : (
+          <div className="space-y-6">
+            {grouped.map((g) => (
+              <div key={g.category}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-slate-700">{g.category}</h3>
+                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                    {g.tasks.length} tasks
+                  </span>
+                </div>
+
+                {g.tasks.length === 0 ? (
+                  <p className="text-xs text-slate-400">No tasks in this category.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {g.tasks.map((t) => (
+                      <div key={t.id} className="border border-slate-200 rounded-xl p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Title</label>
+                            <input
+                              value={t.title || ''}
+                              onChange={(e) => updateTask(t.id, 'title', e.target.value)}
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              placeholder="Task title"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => deleteTask(t.id)}
+                            className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+
+                        <div className="mt-3">
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
+                          <textarea
+                            value={t.description || ''}
+                            onChange={(e) => updateTask(t.id, 'description', e.target.value)}
+                            rows={2}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            placeholder="Optional description"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
+                            <select
+                              value={t.category || 'Resignation'}
+                              onChange={(e) => updateTask(t.id, 'category', e.target.value)}
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            >
+                              {categories.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Assigned to</label>
+                            <select
+                              value={t.assignedTo || 'hr'}
+                              onChange={(e) => updateTask(t.id, 'assignedTo', e.target.value)}
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            >
+                              {assignedToOptions.map((o) => (
+                                <option key={o} value={o}>{o.toUpperCase()}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Days before exit date</label>
+                            <input
+                              type="number"
+                              value={t.daysBefore ?? 0}
+                              onChange={(e) => updateTask(t.id, 'daysBefore', e.target.value)}
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            />
+                            <p className="text-[11px] text-slate-400 mt-1">
+                              Use negative numbers for tasks after exit (e.g. -7 = 7 days after)
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 mt-6">
+                            <input
+                              id={`off_req_${t.id}`}
+                              type="checkbox"
+                              checked={!!t.isRequired}
+                              onChange={(e) => updateTask(t.id, 'isRequired', e.target.checked)}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                            />
+                            <label htmlFor={`off_req_${t.id}`} className="text-xs text-slate-700">
+                              Required
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   const renderDangerTab = () => (
     <div className="space-y-4">
       <div className="border border-amber-200 bg-amber-50 rounded-xl p-4">
@@ -1293,6 +1581,7 @@ export default function Settings() {
       {tab === 'leave' && renderLeaveTab()}
       {tab === 'documents' && renderDocumentsTab()}
       {tab === 'onboarding' && renderOnboardingTab()}
+      {tab === 'offboarding' && renderOffboardingTab()}
       {tab === 'danger' && renderDangerTab()}
 
       {deleteConfirm && (

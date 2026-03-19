@@ -197,6 +197,27 @@ export default function Dashboard() {
       .slice(0, 6);
   }, [employees]);
 
+  const offboardingEmployees = useMemo(() => {
+    return employees
+      .filter((e) => e?.offboarding?.status === 'in_progress')
+      .map((e) => {
+        const tasks = Array.isArray(e.offboarding?.tasks) ? e.offboarding.tasks : [];
+        const done = tasks.filter((t) => t.completed).length;
+        const total = tasks.length;
+        const pct = total ? Math.round((done / total) * 100) : e.offboarding?.completionPct || 0;
+        return { ...e, _offDone: done, _offTotal: total, _offPct: pct };
+      })
+      .sort((a, b) => {
+        const aExit = toJSDate(a.offboarding?.exitDate);
+        const bExit = toJSDate(b.offboarding?.exitDate);
+        if (aExit && bExit) return aExit - bExit;
+        if (aExit) return -1;
+        if (bExit) return 1;
+        return (b._offPct || 0) - (a._offPct || 0);
+      })
+      .slice(0, 6);
+  }, [employees]);
+
   const handleApprove = async (leaveDoc) => {
     setActioningId(leaveDoc.id);
     try {
@@ -348,6 +369,71 @@ export default function Dashboard() {
                     <span className="text-xs text-blue-600">View →</span>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white border rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                👋 Offboarding in Progress
+              </h3>
+              <span className="text-xs text-gray-400">
+                {offboardingEmployees.length} employees
+              </span>
+            </div>
+
+            {offboardingEmployees.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-3">No active offboardings</p>
+            ) : (
+              <div className="space-y-2">
+                {offboardingEmployees.map((emp) => {
+                  const exitDate = toJSDate(emp.offboarding?.exitDate);
+                  const daysLeft = exitDate ? Math.ceil((exitDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
+                  return (
+                    <div
+                      key={emp.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(`/company/${companyId}/employees/${emp.id}?tab=offboarding`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') navigate(`/company/${companyId}/employees/${emp.id}?tab=offboarding`);
+                      }}
+                      className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-amber-200 hover:bg-amber-50 cursor-pointer transition-all"
+                    >
+                      <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-xs font-medium">
+                        {(emp.fullName || '?').slice(0, 1).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{emp.fullName}</p>
+                        <p className="text-xs text-slate-500 truncate">
+                          {emp.designation || '—'} · {emp.department || '—'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                            <div
+                              className="bg-amber-500 h-1.5 rounded-full"
+                              style={{ width: `${Math.min(emp._offPct || 0, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-gray-400">{emp._offPct || 0}%</span>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xs text-gray-400">Exit: {toDisplayDate(emp.offboarding?.exitDate)}</p>
+                        {daysLeft !== null && (
+                          <p
+                            className={`text-xs font-medium ${
+                              daysLeft <= 0 ? 'text-red-600' : daysLeft <= 7 ? 'text-amber-600' : 'text-gray-500'
+                            }`}
+                          >
+                            {daysLeft < 0 ? 'Exited' : daysLeft === 0 ? 'Today!' : `${daysLeft} days left`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

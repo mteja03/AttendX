@@ -675,11 +675,24 @@ export default function Employees() {
                           ? 'bg-green-100 text-green-800'
                           : emp.status === 'On Leave'
                             ? 'bg-blue-100 text-blue-800'
+                            : emp.status === 'Offboarding'
+                              ? 'bg-orange-100 text-orange-800'
                             : 'bg-slate-100 text-slate-600'
                       }`}
                     >
                       {emp.status || 'Active'}
                     </span>
+                    {emp.offboarding?.status === 'in_progress' && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <div className="w-16 bg-gray-100 rounded-full h-1">
+                          <div
+                            className="bg-amber-500 h-1 rounded-full"
+                            style={{ width: `${emp.offboarding?.completionPct || 0}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-amber-600">Offboarding</span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
                     <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#378ADD] text-xs font-medium hover:underline">
