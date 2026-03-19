@@ -238,7 +238,7 @@ export default function Settings() {
           return;
         }
 
-        const templateRef = doc(db, 'companies', companyId, 'onboardingTemplate');
+        const templateRef = doc(db, 'companies', companyId, 'settings', 'onboardingTemplate');
         // eslint-disable-next-line no-console
         console.log('Template ref path:', templateRef.path);
 
@@ -1047,7 +1047,7 @@ export default function Settings() {
         // eslint-disable-next-line no-console
         console.log('Clean tasks to save:', cleanTasks.length);
 
-        const templateRef = doc(db, 'companies', companyId, 'onboardingTemplate');
+        const templateRef = doc(db, 'companies', companyId, 'settings', 'onboardingTemplate');
         await setDoc(templateRef, {
           tasks: cleanTasks,
           updatedAt: new Date(),
@@ -1056,6 +1056,8 @@ export default function Settings() {
 
         // eslint-disable-next-line no-console
         console.log('Template saved successfully!');
+        // eslint-disable-next-line no-console
+        console.log('✅ Template saved to:', templateRef.path);
         success(`${cleanTasks.length} tasks saved successfully!`);
       } catch (error) {
         // eslint-disable-next-line no-console

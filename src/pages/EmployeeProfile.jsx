@@ -1042,7 +1042,7 @@ export default function EmployeeProfile() {
       setSaving(true);
       let templateTasks = DEFAULT_ONBOARDING_TEMPLATE.tasks;
       try {
-        const templateDoc = await getDoc(doc(db, 'companies', companyId, 'onboardingTemplate'));
+        const templateDoc = await getDoc(doc(db, 'companies', companyId, 'settings', 'onboardingTemplate'));
         if (templateDoc.exists() && Array.isArray(templateDoc.data()?.tasks) && templateDoc.data().tasks.length > 0) {
           templateTasks = templateDoc.data().tasks;
         }
