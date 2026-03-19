@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   collection,
   doc,
@@ -99,6 +99,7 @@ const buildAssetIdPrefix = (type) => {
 
 export default function Assets() {
   const { companyId } = useParams();
+  const navigate = useNavigate();
   const { currentUser } = useAuth();
   const { success, error: showError } = useToast();
   const [company, setCompany] = useState(null);
@@ -127,7 +128,7 @@ export default function Assets() {
   const [form, setForm] = useState({
     assetId: '',
     name: '',
-    type: 'Laptop',
+    type: '',
     brand: '',
     model: '',
     serialNumber: '',
@@ -221,7 +222,14 @@ export default function Assets() {
       .filter((t) => t.name);
   }, [company]);
 
-  const selectedAddAssetMode = assetTypes.find((t) => t.name === form.type)?.mode || 'trackable';
+  const selectedAddAssetMode = assetTypes.find((t) => t.name === form.type)?.mode || null;
+  const sortedAssetTypes = useMemo(() => {
+    const list = Array.isArray(assetTypes) ? assetTypes.slice() : [];
+    const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''));
+    const trackable = list.filter((t) => (t.mode || 'trackable') === 'trackable').sort(byName);
+    const consumable = list.filter((t) => (t.mode || 'trackable') === 'consumable').sort(byName);
+    return { trackable, consumable };
+  }, [assetTypes]);
 
   const stats = useMemo(() => {
     const total = assets.length;
@@ -280,7 +288,7 @@ export default function Assets() {
     setForm({
       assetId: '',
       name: '',
-      type: 'Laptop',
+      type: '',
       brand: '',
       model: '',
       serialNumber: '',
@@ -309,10 +317,10 @@ export default function Assets() {
       [name]: v,
       ...(name === 'type'
         ? {
-            ...(assetTypes.find((t) => t.name === value)?.mode === 'trackable'
+            ...(value && assetTypes.find((t) => t.name === value)?.mode === 'trackable'
               ? { assetId: prev.assetId || `${buildAssetIdPrefix(value)}001` }
               : { assetId: prev.assetId || '' }),
-            name: prev.name || value,
+            name: value ? prev.name || value : prev.name,
           }
         : null),
     }));
@@ -321,6 +329,7 @@ export default function Assets() {
 
   const handleValidateAdd = () => {
     const err = {};
+    if (!form.type) err.type = 'Asset type is required';
     const mode = assetTypes.find((t) => t.name === form.type)?.mode || 'trackable';
     if (mode === 'trackable') {
       if (!form.assetId?.trim()) err.assetId = 'Asset ID is required';
@@ -1288,13 +1297,28 @@ export default function Assets() {
                 <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
                   Trackable — individual item
                 </span>
-              ) : (
+              ) : selectedAddAssetMode === 'consumable' ? (
                 <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
                   Consumable — quantity based
                 </span>
-              )}
+              ) : null}
             </h2>
-            <form onSubmit={handleSaveAsset} className="space-y-6">
+
+            {assetTypes.length === 0 ? (
+              <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                <p className="text-sm text-gray-500 mb-2">
+                  No asset types configured yet.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/company/${companyId}/settings`)}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  Go to Settings → Manage Lists to add asset types
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveAsset} className="space-y-6">
               <section>
                 <h3 className="text-sm font-medium text-slate-700 mb-3">Asset Information</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1327,14 +1351,60 @@ export default function Assets() {
                       value={form.type}
                       onChange={handleFormChange}
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
-                      disabled={selectedAddAssetMode === 'consumable'}
                     >
-                      {assetTypes.map((t) => (
-                        <option key={t.name} value={t.name}>
-                          {t.name}
-                        </option>
-                      ))}
+                      <option value="">Select asset type</option>
+                      <optgroup label="Trackable (unique items)">
+                        {sortedAssetTypes.trackable.map((t) => (
+                          <option key={t.name} value={t.name}>
+                            {t.name} 🔵
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Consumable (quantity)">
+                        {sortedAssetTypes.consumable.map((t) => (
+                          <option key={t.name} value={t.name}>
+                            {t.name} 🟢
+                          </option>
+                        ))}
+                      </optgroup>
                     </select>
+                    {formErrors.type && <p className="text-red-500 text-xs mt-1">{formErrors.type}</p>}
+
+                    {selectedAddAssetMode === 'trackable' ? (
+                      <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-100 mt-2">
+                        <span className="text-blue-600 text-base">
+                          🔵
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-blue-700">
+                            Trackable Asset
+                          </p>
+                          <p className="text-xs text-blue-500">
+                            Each item gets a unique ID and can only be assigned to one person at a time. Full serial number and history tracking.
+                          </p>
+                        </div>
+                      </div>
+                    ) : selectedAddAssetMode === 'consumable' ? (
+                      <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-100 mt-2">
+                        <span className="text-green-600 text-base">
+                          🟢
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-green-700">
+                            Consumable Asset
+                          </p>
+                          <p className="text-xs text-green-500">
+                            Track total stock and issue quantities to multiple employees simultaneously. e.g. Uniforms, ID Cards, SIM Cards.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100 mt-2">
+                        <p className="text-xs text-gray-400">
+                          Select an asset type to see tracking mode. Configure types in Settings → Manage Lists → Asset Types.
+                        </p>
+                      </div>
+                    )}
                   </div>
                   {selectedAddAssetMode === 'trackable' && (
                     <>
@@ -1527,7 +1597,8 @@ export default function Assets() {
                   {saving ? 'Saving…' : 'Save Asset'}
                 </button>
               </div>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       )}

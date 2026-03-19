@@ -551,6 +551,15 @@ export default function Settings() {
           </span>
         </div>
 
+        <div className="flex gap-3 mb-3 p-2 bg-gray-50 rounded-lg">
+          <span className="text-xs text-gray-500 flex items-center gap-1">
+            🔵 <span>Trackable — unique items with individual IDs</span>
+          </span>
+          <span className="text-xs text-gray-500 flex items-center gap-1 ml-3">
+            🟢 <span>Consumable — stock quantity issued to multiple employees</span>
+          </span>
+        </div>
+
         <div className="max-h-48 overflow-y-auto space-y-1 mb-3 pr-1 settings-list">
           {normalizedAssetTypes.map((t) => {
             const usedByAssets = assets.filter((a) => (a.type || '').trim() === t.name).length;
