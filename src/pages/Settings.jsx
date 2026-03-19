@@ -176,6 +176,7 @@ export default function Settings() {
   const [offTemplateTasks, setOffTemplateTasks] = useState([]);
   const [offTemplateLoading, setOffTemplateLoading] = useState(false);
   const [savingOffTemplate, setSavingOffTemplate] = useState(false);
+  const [showOffCategoryPicker, setShowOffCategoryPicker] = useState(false);
   const isAdmin = role === 'admin';
   const activeTab = tab;
 
@@ -194,6 +195,12 @@ export default function Settings() {
       localStorage.setItem(`settings_tab_${companyId}`, tab);
     }
   }, [tab, companyId]);
+
+  useEffect(() => {
+    const handleClick = () => setShowOffCategoryPicker(false);
+    if (showOffCategoryPicker) document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showOffCategoryPicker]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -1317,12 +1324,12 @@ export default function Settings() {
       );
     };
 
-    const handleAddTask = () => {
+    const addTaskToCategory = (category) => {
       const newTask = {
         id: `off_${Date.now()}`,
         title: '',
         description: '',
-        category: 'Resignation',
+        category: category || 'Resignation',
         assignedTo: 'hr',
         daysBefore: 0,
         isRequired: false,
@@ -1377,14 +1384,6 @@ export default function Settings() {
       }
     };
 
-    const grouped = categories.map((cat) => ({
-      category: cat,
-      tasks: tasks
-        .filter((t) => (t.category || 'Resignation') === cat)
-        .slice()
-        .sort((a, b) => (a.order || 0) - (b.order || 0)),
-    }));
-
     return (
       <section className="bg-white rounded-xl border border-slate-200 p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
@@ -1393,14 +1392,33 @@ export default function Settings() {
             <p className="text-sm text-slate-500 mt-1">Customize the checklist template used when an employee exits.</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleAddTask}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-colors"
-              disabled={offTemplateLoading}
-            >
-              + Add task
-            </button>
+            <div className="relative" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setShowOffCategoryPicker((v) => !v)}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+                disabled={offTemplateLoading}
+              >
+                + Add task ▾
+              </button>
+              {showOffCategoryPicker && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 min-w-48 overflow-hidden">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => {
+                        addTaskToCategory(cat);
+                        setShowOffCategoryPicker(false);
+                      }}
+                      className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-700 border-b last:border-0"
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={handleSaveTemplate}
@@ -1416,20 +1434,25 @@ export default function Settings() {
           <p className="text-sm text-slate-500">Loading…</p>
         ) : (
           <div className="space-y-6">
-            {grouped.map((g) => (
-              <div key={g.category}>
+            {categories.map((category) => {
+              const categoryTasks = (tasks || [])
+                .filter((t) => (t.category || 'Resignation') === category)
+                .slice()
+                .sort((a, b) => (a.order || 0) - (b.order || 0));
+              return (
+              <div key={category} className="mb-6">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-slate-700">{g.category}</h3>
+                  <h3 className="text-sm font-semibold text-slate-700">{category}</h3>
                   <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                    {g.tasks.length} tasks
+                    {categoryTasks.length} tasks
                   </span>
                 </div>
 
-                {g.tasks.length === 0 ? (
+                {categoryTasks.length === 0 ? (
                   <p className="text-xs text-slate-400">No tasks in this category.</p>
                 ) : (
                   <div className="space-y-3">
-                    {g.tasks.map((t) => (
+                    {categoryTasks.map((t) => (
                       <div key={t.id} className="border border-slate-200 rounded-xl p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
@@ -1515,8 +1538,17 @@ export default function Settings() {
                     ))}
                   </div>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => addTaskToCategory(category)}
+                  className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-amber-300 hover:text-amber-500 transition-colors mt-2 mb-4"
+                >
+                  + Add task to {category}
+                </button>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </section>
