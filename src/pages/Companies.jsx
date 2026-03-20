@@ -79,7 +79,7 @@ export default function Companies() {
   const [deactivateConfirm, setDeactivateConfirm] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [seeding, setSeeding] = useState(false);
+  const [seedLoading, setSeedLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -239,20 +239,18 @@ export default function Companies() {
   };
 
   const handleSeed = async () => {
-    setSeeding(true);
     try {
-      const result = await seedData(currentUser?.uid || currentUser?.email || '');
+      setSeedLoading(true);
+      const result = await seedData(currentUser?.email || 'admin');
       if (result.success) {
-        success('Sample data created! 2 companies added.');
-        // onSnapshot listener will update companies list automatically
+        success(result.message);
       } else {
-        showError(result.message || 'Seed failed.');
+        showError(result.message);
       }
-    } catch (err) {
-      console.error('Seed error:', err);
-      showError(err?.message || err?.code || 'Seed failed');
+    } catch (error) {
+      showError(`Seed failed: ${error?.message || error?.code || 'Unknown error'}`);
     } finally {
-      setSeeding(false);
+      setSeedLoading(false);
     }
   };
 
@@ -422,27 +420,41 @@ export default function Companies() {
         </div>
       ) : filteredCompanies.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-12 text-center text-slate-500">
-          <p className="font-medium text-slate-700">No companies yet.</p>
-          <p className="text-sm mt-1">Add your first company to get started.</p>
-          <div className="mt-4 flex flex-wrap justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShowAddModal(true)}
-              className="text-[#378ADD] text-sm font-medium hover:underline"
-            >
-              Add your first company
-            </button>
-            {companies.length === 0 && (
+          {companies.length === 0 ? (
+            <>
+              <p className="font-medium text-slate-700">No companies yet.</p>
+              <p className="text-sm mt-1">Add your first company to get started.</p>
+              <div className="mt-4 flex flex-wrap justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(true)}
+                  className="text-[#378ADD] text-sm font-medium hover:underline"
+                >
+                  Add your first company
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={handleSeed}
-                disabled={seeding}
-                className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                disabled={seedLoading}
+                className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 mt-4 flex items-center gap-2 mx-auto"
               >
-                {seeding ? 'Creating sample data...' : 'Seed sample data (2 companies)'}
+                {seedLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Creating sample data...
+                  </>
+                ) : (
+                  '🌱 Load sample data'
+                )}
               </button>
-            )}
-          </div>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-slate-700">No companies match your search.</p>
+              <p className="text-sm mt-1">Try a different search term or clear the filter.</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-visible">
