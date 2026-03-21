@@ -83,6 +83,7 @@ const INDIAN_STATES = [
 ];
 
 const LEAVE_TYPE_STYLE = { CL: 'bg-blue-100 text-blue-800', SL: 'bg-red-100 text-red-800', EL: 'bg-green-100 text-green-800' };
+const leaveTypePillClass = (lt) => LEAVE_TYPE_STYLE[lt] || 'bg-slate-100 text-slate-700';
 const STATUS_STYLE = { Pending: 'bg-amber-100 text-amber-800', Approved: 'bg-green-100 text-green-800', Rejected: 'bg-red-100 text-red-800' };
 
 const DEFAULT_ONBOARDING_TEMPLATE = {
@@ -192,6 +193,7 @@ export default function EmployeeProfile() {
   const [company, setCompany] = useState(null);
   const [allEmployees, setAllEmployees] = useState([]);
   const [leaveList, setLeaveList] = useState([]);
+  const [leaveError, setLeaveError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('personal');
   const [showSalary, setShowSalary] = useState(false);
@@ -214,6 +216,8 @@ export default function EmployeeProfile() {
   const [showAssignAssetModal, setShowAssignAssetModal] = useState(false);
   const [showProfileAssignModal, setShowProfileAssignModal] = useState(null); // trackable assign or consumable issue
   const [profileAssignMode, setProfileAssignMode] = useState('trackable'); // 'trackable' | 'consumable'
+  const [showProfileAssetDropdown, setShowProfileAssetDropdown] = useState(false);
+  const [profileAssetSearch, setProfileAssetSearch] = useState('');
   const [showAssetHistory, setShowAssetHistory] = useState(false);
   const [assignAssetForm, setAssignAssetForm] = useState({
     assetId: '',
@@ -279,21 +283,6 @@ export default function EmployeeProfile() {
         const empSnap = await getDoc(doc(db, 'companies', companyId, 'employees', empId));
         if (empSnap.exists()) setEmployee({ id: empSnap.id, ...empSnap.data() });
         else setEmployee(null);
-        try {
-          const leaveSnap = await getDocs(
-            query(collection(db, 'companies', companyId, 'leave'), where('employeeId', '==', empId)),
-          );
-          const list = leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          list.sort((a, b) => {
-            const ta = a.appliedAt?.toMillis?.() ?? (a.appliedAt ? new Date(a.appliedAt).getTime() : 0);
-            const tb = b.appliedAt?.toMillis?.() ?? (b.appliedAt ? new Date(b.appliedAt).getTime() : 0);
-            return tb - ta;
-          });
-          setLeaveList(list);
-        } catch (leaveErr) {
-          console.warn('Leave history could not be loaded:', leaveErr);
-          setLeaveList([]);
-        }
       } catch (err) {
         console.error('EmployeeProfile load error:', err);
         showError('Failed to load profile');
@@ -302,6 +291,49 @@ export default function EmployeeProfile() {
     };
     load();
   }, [companyId, empId, showError]);
+
+  useEffect(() => {
+    if (!companyId || !empId) return;
+    let cancelled = false;
+    const loadLeave = async () => {
+      setLeaveError(null);
+      try {
+        const leaveQuery = query(
+          collection(db, 'companies', companyId, 'leave'),
+          where('employeeId', '==', empId),
+        );
+        const leaveSnap = await getDocs(leaveQuery);
+        if (cancelled) return;
+        const list = leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        list.sort((a, b) => {
+          const ta = a.appliedAt?.toMillis?.() ?? (a.appliedAt ? new Date(a.appliedAt).getTime() : 0);
+          const tb = b.appliedAt?.toMillis?.() ?? (b.appliedAt ? new Date(b.appliedAt).getTime() : 0);
+          return tb - ta;
+        });
+        setLeaveList(list);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Leave fetch error:', error);
+        if (!cancelled) {
+          setLeaveError(error?.message || 'Failed to load leave');
+          setLeaveList([]);
+        }
+      }
+    };
+    loadLeave();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, empId]);
+
+  useEffect(() => {
+    const close = () => {
+      setShowProfileAssetDropdown(false);
+      setProfileAssetSearch('');
+    };
+    if (showProfileAssetDropdown) document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [showProfileAssetDropdown]);
 
   // Load assets for this employee/company
   useEffect(() => {
@@ -349,29 +381,149 @@ export default function EmployeeProfile() {
   }, [searchParams]);
 
   const leavePolicy = company?.leavePolicy || { cl: 12, sl: 12, el: 15 };
-  const clUsed = leaveList.filter((l) => l.status === 'Approved' && (l.leaveType || '') === 'CL').reduce((s, l) => s + (l.days || 0), 0);
-  const slUsed = leaveList.filter((l) => l.status === 'Approved' && (l.leaveType || '') === 'SL').reduce((s, l) => s + (l.days || 0), 0);
-  const elUsed = leaveList.filter((l) => l.status === 'Approved' && (l.leaveType || '') === 'EL').reduce((s, l) => s + (l.days || 0), 0);
+  const profileLeaveTypes = useMemo(() => {
+    const lt = company?.leaveTypes;
+    if (Array.isArray(lt) && lt.length > 0) return lt;
+    return ['Casual Leave', 'Sick Leave', 'Earned Leave'];
+  }, [company?.leaveTypes]);
 
-  const timeline = useMemo(() => {
+  const leaveUsedByTypeProfile = useMemo(() => {
+    const acc = {};
+    profileLeaveTypes.forEach((t) => {
+      acc[t] = 0;
+    });
+    leaveList
+      .filter((l) => l.status === 'Approved')
+      .forEach((l) => {
+        const raw = (l.leaveType || '').trim();
+        if (acc[raw] !== undefined) acc[raw] += l.days || 0;
+        else if (raw === 'CL' && acc['Casual Leave'] !== undefined) acc['Casual Leave'] += l.days || 0;
+        else if (raw === 'SL' && acc['Sick Leave'] !== undefined) acc['Sick Leave'] += l.days || 0;
+        else if (raw === 'EL' && acc['Earned Leave'] !== undefined) acc['Earned Leave'] += l.days || 0;
+      });
+    return acc;
+  }, [leaveList, profileLeaveTypes]);
+
+  const getMaxLeaveProfile = (typeLabel) => {
+    if (typeLabel === 'Casual Leave') return leavePolicy.cl ?? 12;
+    if (typeLabel === 'Sick Leave') return leavePolicy.sl ?? 12;
+    if (typeLabel === 'Earned Leave') return leavePolicy.el ?? 15;
+    return leavePolicy[typeLabel] ?? 12;
+  };
+
+  const timelineEvents = useMemo(() => {
     if (!employee) return [];
     const events = [];
+
     if (employee.joiningDate) {
-      events.push({ date: employee.joiningDate, type: 'joined', text: 'Joined the company' });
+      events.push({
+        type: 'joined',
+        date: toJSDate(employee.joiningDate),
+        title: 'Joined the company',
+        description: `${employee.department || '—'} · ${employee.designation || '—'}`,
+        icon: '🎉',
+        color: 'green',
+      });
     }
-    leaveList.forEach((l) => {
-      const typeLabel = l.leaveType === 'CL' ? 'Casual Leave' : l.leaveType === 'SL' ? 'Sick Leave' : 'Earned Leave';
-      const days = l.days || 0;
-      if (l.status === 'Approved') events.push({ date: l.decidedAt || l.appliedAt, type: 'leave_approved', text: `Leave approved — ${typeLabel} ${days} day(s)` });
-      if (l.status === 'Rejected') events.push({ date: l.decidedAt || l.appliedAt, type: 'leave_rejected', text: `Leave rejected — ${typeLabel} ${days} day(s)` });
+
+    leaveList.forEach((leave) => {
+      const d = toJSDate(leave.appliedAt) || toJSDate(leave.startDate);
+      events.push({
+        type: 'leave',
+        date: d,
+        title: `${leave.leaveType || 'Leave'} — ${leave.status || '—'}`,
+        description: `${leave.days || 0} day(s) · ${leave.startDate ? toDisplayDate(leave.startDate) : '—'} to ${leave.endDate ? toDisplayDate(leave.endDate) : '—'}${leave.reason ? ` · ${leave.reason}` : ''}`,
+        icon: leave.status === 'Approved' ? '✅' : leave.status === 'Rejected' ? '❌' : '⏳',
+        color: leave.status === 'Approved' ? 'green' : leave.status === 'Rejected' ? 'red' : 'amber',
+      });
     });
-    events.sort((a, b) => {
-      const ta = a.date?.toMillis?.() ?? (typeof a.date === 'string' ? new Date(a.date).getTime() : 0);
-      const tb = b.date?.toMillis?.() ?? (typeof b.date === 'string' ? new Date(b.date).getTime() : 0);
-      return tb - ta;
+
+    assetList.forEach((asset) => {
+      const hist = Array.isArray(asset.history) ? asset.history : [];
+      hist
+        .filter((h) => h.employeeId === empId)
+        .forEach((h) => {
+          events.push({
+            type: 'asset',
+            date: toJSDate(h.date) || new Date(),
+            title:
+              h.action === 'assigned'
+                ? `${asset.name} assigned`
+                : h.action === 'returned'
+                  ? `${asset.name} returned`
+                  : `${asset.name} — ${h.action || 'update'}`,
+            description: `${asset.assetId || ''}${h.condition ? ` · Condition: ${h.condition}` : ''}${h.notes ? ` · ${h.notes}` : ''}`,
+            icon: h.action === 'assigned' ? '📦' : '↩️',
+            color: 'blue',
+          });
+        });
+      if ((asset.mode || 'trackable') === 'consumable') {
+        (asset.assignments || [])
+          .filter((as) => as.employeeId === empId)
+          .forEach((as) => {
+            events.push({
+              type: 'asset',
+              date: toJSDate(as.issueDate) || new Date(),
+              title: `${asset.name} issued (consumable)`,
+              description: `Qty ${as.quantity || 1} · ${asset.assetId || ''}`,
+              icon: '📦',
+              color: 'blue',
+            });
+          });
+      }
     });
-    return events;
-  }, [employee, leaveList]);
+
+    (employee.documents || []).forEach((docItem) => {
+      events.push({
+        type: 'document',
+        date: toJSDate(docItem.uploadedAt) || new Date(),
+        title: `${docItem.name || 'Document'} uploaded`,
+        description: `${docItem.category || '—'} · by ${docItem.uploadedBy || 'HR'}`,
+        icon: '📄',
+        color: 'purple',
+      });
+    });
+
+    const ob = employee.onboarding;
+    if (ob && (ob.status === 'in_progress' || ob.status === 'completed')) {
+      events.push({
+        type: 'onboarding',
+        date: toJSDate(ob.startedAt),
+        title: 'Onboarding started',
+        description: `${ob.completionPct || 0}% complete`,
+        icon: '🎯',
+        color: 'blue',
+      });
+      if (ob.status === 'completed') {
+        events.push({
+          type: 'onboarding',
+          date: toJSDate(ob.completedAt),
+          title: 'Onboarding completed',
+          description: 'All tasks finished',
+          icon: '🏆',
+          color: 'green',
+        });
+      }
+    }
+
+    const offb = employee.offboarding;
+    if (offb && (offb.status === 'in_progress' || offb.status === 'completed')) {
+      events.push({
+        type: 'offboarding',
+        date: toJSDate(offb.startedAt),
+        title: 'Offboarding initiated',
+        description: `Exit reason: ${offb.exitReason || '—'} · Exit date: ${offb.exitDate ? toDisplayDate(offb.exitDate) : '—'}`,
+        icon: '👋',
+        color: 'amber',
+      });
+    }
+
+    return events.sort((a, b) => {
+      const da = a.date instanceof Date && !Number.isNaN(a.date.getTime()) ? a.date : new Date(0);
+      const db2 = b.date instanceof Date && !Number.isNaN(b.date.getTime()) ? b.date : new Date(0);
+      return db2 - da;
+    });
+  }, [employee, leaveList, assetList, empId]);
 
   const employeeAssets = useMemo(
     () =>
@@ -1424,6 +1576,8 @@ export default function EmployeeProfile() {
       notes: '',
     });
     setProfileAssignMode('trackable');
+    setShowProfileAssetDropdown(false);
+    setProfileAssetSearch('');
     setShowProfileAssignModal(true);
   };
 
@@ -1484,6 +1638,8 @@ export default function EmployeeProfile() {
       success('Asset assigned');
       setShowAssignAssetModal(false);
       setShowProfileAssignModal(null);
+      setShowProfileAssetDropdown(false);
+      setProfileAssetSearch('');
       setIssueConsumableAsset(null);
       setProfileAssignMode('trackable');
     } catch (err) {
@@ -2614,23 +2770,22 @@ export default function EmployeeProfile() {
 
       {tab === 'leave' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
-              <p className="text-slate-500 text-sm">CL</p>
-              <p className="font-semibold text-slate-800">{clUsed} / {leavePolicy.cl ?? 12}</p>
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
-              <p className="text-slate-500 text-sm">SL</p>
-              <p className="font-semibold text-slate-800">{slUsed} / {leavePolicy.sl ?? 12}</p>
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
-              <p className="text-slate-500 text-sm">EL</p>
-              <p className="font-semibold text-slate-800">{elUsed} / {leavePolicy.el ?? 15}</p>
-            </div>
+          {leaveError && (
+            <p className="text-red-500 text-sm text-center py-4">Error loading leave: {leaveError}</p>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {profileLeaveTypes.map((lt) => (
+              <div key={lt} className="bg-white rounded-xl border border-slate-200 p-4 text-center">
+                <p className="text-slate-500 text-sm truncate" title={lt}>
+                  {lt}
+                </p>
+                <p className="font-semibold text-slate-800">
+                  {leaveUsedByTypeProfile[lt] ?? 0} / {getMaxLeaveProfile(lt)}
+                </p>
+              </div>
+            ))}
           </div>
-          {leaveList.length === 0 ? (
-            <p className="text-slate-500 py-8 text-center">No leave records found.</p>
-          ) : (
+          {Array.isArray(leaveList) && leaveList.length > 0 ? (
             <div className="overflow-x-auto border border-slate-200 rounded-xl">
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-50">
@@ -2646,32 +2801,68 @@ export default function EmployeeProfile() {
                 <tbody>
                   {leaveList.map((l) => (
                     <tr key={l.id} className="border-t border-slate-100">
-                      <td className="px-4 py-2"><span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${LEAVE_TYPE_STYLE[l.leaveType] || 'bg-slate-100'}`}>{l.leaveType}</span></td>
-                      <td className="px-4 py-2">{l.startDate}</td>
-                      <td className="px-4 py-2">{l.endDate}</td>
-                      <td className="px-4 py-2">{l.days}</td>
+                      <td className="px-4 py-2">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${leaveTypePillClass(l.leaveType)}`}
+                        >
+                          {l.leaveType || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">{l.startDate ? toDisplayDate(l.startDate) : '—'}</td>
+                      <td className="px-4 py-2">{l.endDate ? toDisplayDate(l.endDate) : '—'}</td>
+                      <td className="px-4 py-2">{l.days ?? '—'}</td>
                       <td className="px-4 py-2">{l.reason || '—'}</td>
-                      <td className="px-4 py-2"><span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[l.status] || 'bg-slate-100'}`}>{l.status}</span></td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[l.status] || 'bg-slate-100'}`}>
+                          {l.status || '—'}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+          ) : (
+            <p className="text-center py-8 text-gray-400 text-sm">No leave records found</p>
           )}
         </div>
       )}
 
       {tab === 'timeline' && (
-        <div className="space-y-3">
-          {timeline.length === 0 ? (
-            <p className="text-slate-500">No timeline events yet.</p>
-          ) : (
-            timeline.map((ev, i) => (
-              <div key={i} className="flex gap-3 items-start">
-                <span className="text-slate-400 text-sm shrink-0">{toDisplayDate(ev.date)}</span>
-                <span className="text-slate-700">{ev.text}</span>
+        <div className="space-y-0">
+          {timelineEvents.map((event, index) => (
+            <div key={`${event.type}-${index}`} className="flex gap-4 pb-6 relative">
+              {index < timelineEvents.length - 1 && (
+                <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-gray-100" aria-hidden />
+              )}
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center text-base flex-shrink-0 z-10 ${
+                  event.color === 'green'
+                    ? 'bg-green-100'
+                    : event.color === 'red'
+                      ? 'bg-red-100'
+                      : event.color === 'amber'
+                        ? 'bg-amber-100'
+                        : event.color === 'purple'
+                          ? 'bg-purple-100'
+                          : 'bg-blue-100'
+                }`}
+              >
+                {event.icon}
               </div>
-            ))
+              <div className="flex-1 pt-1.5 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-800">{event.title}</p>
+                  <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+                    {event.date instanceof Date && !Number.isNaN(event.date.getTime()) ? toDisplayDate(event.date) : '—'}
+                  </span>
+                </div>
+                {event.description && <p className="text-xs text-gray-500 mt-0.5">{event.description}</p>}
+              </div>
+            </div>
+          ))}
+          {timelineEvents.length === 0 && (
+            <p className="text-center py-8 text-gray-400 text-sm">No activity recorded yet</p>
           )}
         </div>
       )}
@@ -3631,24 +3822,99 @@ export default function EmployeeProfile() {
 
                 <div>
                   <label className="block text-xs text-slate-600 mb-1">Available Trackable Assets</label>
-                  <select
-                    value={assignAssetForm.assetId}
-                    onChange={(e) => {
-                      handleAssignAssetChange(e);
-                      setProfileAssignMode('trackable');
-                    }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    <option value="">Select trackable asset</option>
-                    {assetList
-                      .filter((a) => (a.mode || 'trackable') === 'trackable')
-                      .filter((a) => (a.status || 'Available') === 'Available')
-                      .map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.assetId} · {a.name}
-                        </option>
-                      ))}
-                  </select>
+                  <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setShowProfileAssetDropdown(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') setShowProfileAssetDropdown(true);
+                      }}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between min-h-[38px] hover:border-blue-400"
+                    >
+                      {assignAssetForm.assetId ? (
+                        (() => {
+                          const sel = assetList.find((x) => x.id === assignAssetForm.assetId);
+                          return sel ? (
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded shrink-0">{sel.assetId}</span>
+                              <span className="truncate">{sel.name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">Select asset...</span>
+                          );
+                        })()
+                      ) : (
+                        <span className="text-gray-400">Select asset...</span>
+                      )}
+                      <span className="text-gray-400 text-xs shrink-0">▾</span>
+                    </div>
+                    {showProfileAssetDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-[60] max-h-52 overflow-hidden">
+                        <div className="p-2 border-b border-gray-100">
+                          <input
+                            autoFocus
+                            placeholder="Search by name or ID..."
+                            value={profileAssetSearch}
+                            onChange={(e) => setProfileAssetSearch(e.target.value)}
+                            className="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                        <div className="overflow-y-auto max-h-40">
+                          {assetList
+                            .filter((a) => (a.mode || 'trackable') === 'trackable')
+                            .filter((a) => (a.status || 'Available') === 'Available' || !a.status)
+                            .filter(
+                              (a) =>
+                                !profileAssetSearch ||
+                                (a.name || '').toLowerCase().includes(profileAssetSearch.toLowerCase()) ||
+                                (a.assetId || '').toLowerCase().includes(profileAssetSearch.toLowerCase()),
+                            )
+                            .map((asset) => (
+                              <div
+                                key={asset.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                  setAssignAssetForm((prev) => ({ ...prev, assetId: asset.id }));
+                                  setProfileAssignMode('trackable');
+                                  setShowProfileAssetDropdown(false);
+                                  setProfileAssetSearch('');
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    setAssignAssetForm((prev) => ({ ...prev, assetId: asset.id }));
+                                    setProfileAssignMode('trackable');
+                                    setShowProfileAssetDropdown(false);
+                                    setProfileAssetSearch('');
+                                  }
+                                }}
+                                className="flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                              >
+                                <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 shrink-0">
+                                  {asset.assetId}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{asset.name}</p>
+                                  <p className="text-xs text-gray-400 truncate">
+                                    {asset.type} · {asset.brand || '—'}
+                                    {asset.condition ? ` · ${asset.condition}` : ''}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          {assetList.filter(
+                            (a) =>
+                              (a.mode || 'trackable') === 'trackable' &&
+                              ((a.status || 'Available') === 'Available' || !a.status),
+                          ).length === 0 && (
+                            <p className="text-center py-4 text-sm text-gray-400">No available trackable assets</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -3799,6 +4065,8 @@ export default function EmployeeProfile() {
                         type="button"
                         onClick={() => {
                           setShowProfileAssignModal(null);
+                          setShowProfileAssetDropdown(false);
+                          setProfileAssetSearch('');
                           setIssueConsumableAsset(null);
                           setProfileAssignMode('trackable');
                         }}
@@ -3824,6 +4092,8 @@ export default function EmployeeProfile() {
                         type="button"
                         onClick={() => {
                           setShowProfileAssignModal(null);
+                          setShowProfileAssetDropdown(false);
+                          setProfileAssetSearch('');
                           setIssueConsumableAsset(null);
                           setProfileAssignMode('trackable');
                         }}

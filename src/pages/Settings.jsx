@@ -62,6 +62,20 @@ const INDUSTRIES = ['IT', 'Manufacturing', 'Automobile', 'Retail', 'Finance', 'H
 const COLOR_PRESETS = [
   { value: '#378ADD' }, { value: '#1D9E75' }, { value: '#D85A30' },
   { value: '#534AB7' }, { value: '#A32D2D' }, { value: '#BA7517' },
+  { value: '#0F6E56' }, { value: '#E91E8C' }, { value: '#455A64' },
+];
+
+const DEFAULT_LEAVE_TYPES = [
+  'Casual Leave',
+  'Sick Leave',
+  'Earned Leave',
+  'Maternity Leave',
+  'Paternity Leave',
+  'Bereavement Leave',
+  'Compensatory Leave',
+  'Marriage Leave',
+  'Study Leave',
+  'Unpaid Leave',
 ];
 
 const SECTIONS = [
@@ -155,6 +169,8 @@ export default function Settings() {
   const [company, setCompany] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [assets, setAssets] = useState([]);
+  const [companyLeaves, setCompanyLeaves] = useState([]);
+  const [companyColor, setCompanyColor] = useState('#378ADD');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [companyForm, setCompanyForm] = useState({ name: '', industry: '', location: '', initials: '', color: '#378ADD' });
@@ -167,6 +183,7 @@ export default function Settings() {
   const [tab, setTab] = useState('company');
   const [newAssetType, setNewAssetType] = useState('');
   const [newAssetMode, setNewAssetMode] = useState('trackable');
+  const [leaveTypeInput, setLeaveTypeInput] = useState('');
   const [docTypes, setDocTypes] = useState(null);
   const [docTypesLoading, setDocTypesLoading] = useState(false);
   const [newDocNames, setNewDocNames] = useState({});
@@ -207,25 +224,29 @@ export default function Settings() {
     const load = async () => {
       setLoading(true);
       try {
-        const [companySnap, empSnap, assetSnap] = await Promise.all([
+        const [companySnap, empSnap, assetSnap, leaveSnap] = await Promise.all([
           getDoc(doc(db, 'companies', companyId)),
           getDocs(collection(db, 'companies', companyId, 'employees')),
           getDocs(collection(db, 'companies', companyId, 'assets')),
+          getDocs(collection(db, 'companies', companyId, 'leave')),
         ]);
         if (companySnap.exists()) {
           const data = companySnap.data();
           setCompany({ id: companySnap.id, ...data });
+          const col = data.color || '#378ADD';
           setCompanyForm({
             name: data.name || '',
             industry: data.industry || '',
             location: data.location || '',
             initials: data.initials || '',
-            color: data.color || '#378ADD',
+            color: col,
           });
+          setCompanyColor(col);
           setLeavePolicy(data.leavePolicy || { cl: 12, sl: 12, el: 15 });
         }
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setAssets(assetSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setCompanyLeaves(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
         showError('Failed to load settings');
       }
@@ -233,6 +254,10 @@ export default function Settings() {
     };
     load();
   }, [companyId, showError]);
+
+  useEffect(() => {
+    if (company?.color) setCompanyColor(company.color);
+  }, [company?.color]);
 
   // Load document types when Documents tab is active
   useEffect(() => {
@@ -349,6 +374,12 @@ export default function Settings() {
   const getList = (key, defaults) => (company?.[key]?.length ? company[key] : defaults);
   const getCount = (field) => (value) => employees.filter((e) => (e[field] || '').trim() === value).length;
 
+  const getLeaveTypesList = () =>
+    Array.isArray(company?.leaveTypes) && company.leaveTypes.length > 0 ? company.leaveTypes : DEFAULT_LEAVE_TYPES;
+
+  const countLeaveUses = (typeName) =>
+    companyLeaves.filter((l) => (l.leaveType || '').trim() === (typeName || '').trim()).length;
+
   const normalizedAssetTypes = useMemo(() => {
     const raw = company?.assetTypes;
     if (!Array.isArray(raw)) return DEFAULT_ASSET_TYPES;
@@ -389,6 +420,43 @@ export default function Settings() {
   const saveAssetTypes = async (next) => {
     await updateDoc(doc(db, 'companies', companyId), { assetTypes: next });
     setCompany((prev) => (prev ? { ...prev, assetTypes: next } : prev));
+  };
+
+  const handleAddLeaveType = async () => {
+    const name = leaveTypeInput.trim();
+    if (!name) return;
+    const list = getLeaveTypesList();
+    if (list.some((x) => x.toLowerCase() === name.toLowerCase())) {
+      showError('Already exists');
+      return;
+    }
+    setSaving(true);
+    try {
+      const next = [...list, name];
+      await updateDoc(doc(db, 'companies', companyId), { leaveTypes: next });
+      setCompany((prev) => (prev ? { ...prev, leaveTypes: next } : null));
+      setLeaveTypeInput('');
+      success('Leave type added');
+    } catch (err) {
+      showError('Failed to add leave type');
+    }
+    setSaving(false);
+  };
+
+  const handleRemoveLeaveType = async (name) => {
+    if (countLeaveUses(name) > 0) {
+      showError('Cannot delete: used in leave records');
+      return;
+    }
+    const list = getLeaveTypesList();
+    const next = list.filter((x) => x !== name);
+    try {
+      await updateDoc(doc(db, 'companies', companyId), { leaveTypes: next });
+      setCompany((prev) => (prev ? { ...prev, leaveTypes: next } : null));
+      success('Leave type removed');
+    } catch (err) {
+      showError('Failed to remove leave type');
+    }
   };
 
   const handleAdd = async (sectionKey, defaults) => {
@@ -439,9 +507,10 @@ export default function Settings() {
         industry: companyForm.industry.trim(),
         location: companyForm.location.trim(),
         initials: (companyForm.initials || '').slice(0, 2).toUpperCase(),
-        color: companyForm.color,
+        color: companyColor,
       });
-      setCompany((prev) => (prev ? { ...prev, ...companyForm } : null));
+      setCompanyForm((p) => ({ ...p, color: companyColor }));
+      setCompany((prev) => (prev ? { ...prev, ...companyForm, color: companyColor } : null));
       success('Company details saved');
     } catch (err) {
       showError('Failed to save');
@@ -630,16 +699,29 @@ export default function Settings() {
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Color</label>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3 mb-3">
+            <div
+              className="w-10 h-10 rounded-full border-2 border-gray-200 shrink-0"
+              style={{ backgroundColor: companyColor }}
+              aria-hidden
+            />
+            <span className="text-sm text-gray-600">Selected: {companyColor}</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {COLOR_PRESETS.map((c) => (
               <button
                 key={c.value}
                 type="button"
-                onClick={() => setCompanyForm((p) => ({ ...p, color: c.value }))}
-                className={`h-8 w-8 rounded-full border-2 ${
-                  companyForm.color === c.value ? 'border-slate-800' : 'border-slate-200'
-                }`}
-                style={{ backgroundColor: c.value }}
+                onClick={() => {
+                  setCompanyColor(c.value);
+                  setCompanyForm((p) => ({ ...p, color: c.value }));
+                }}
+                className="h-8 w-8 rounded-full border-2 transition-all hover:scale-110"
+                style={{
+                  backgroundColor: c.value,
+                  borderColor: companyColor === c.value ? '#1f2937' : 'transparent',
+                }}
+                title={c.value}
               />
             ))}
           </div>
@@ -723,6 +805,61 @@ export default function Settings() {
       } catch (e) {
         showError('Failed to add asset type');
       }
+    };
+
+    const renderLeaveTypesCard = () => {
+      const items = getLeaveTypesList();
+      return (
+        <div className="bg-white border rounded-xl p-4">
+          <div className="flex justify-between mb-3">
+            <h3 className="font-medium text-sm">Leave Types</h3>
+            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+              {items.length} types
+            </span>
+          </div>
+          <div className="max-h-48 overflow-y-auto space-y-1 mb-3 pr-1 settings-list">
+            {items.map((item) => (
+              <div
+                key={item}
+                className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-50 mr-1"
+              >
+                <span className="flex-1 text-sm truncate mr-2">{item}</span>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <span className="text-xs text-gray-400 whitespace-nowrap">{countLeaveUses(item)} leaves</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveLeaveType(item)}
+                    className="w-5 h-5 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded text-xs flex-shrink-0"
+                    disabled={countLeaveUses(item) > 0}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+            {items.length === 0 && <p className="text-xs text-slate-400">No leave types yet</p>}
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={leaveTypeInput}
+              onChange={(e) => setLeaveTypeInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAddLeaveType();
+              }}
+              placeholder="Add leave type..."
+              className="flex-1 text-sm border rounded px-2 py-1"
+            />
+            <button
+              type="button"
+              onClick={handleAddLeaveType}
+              className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+              disabled={saving || !leaveTypeInput.trim()}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      );
     };
 
     const renderAssetTypesCard = () => (
@@ -877,6 +1014,7 @@ export default function Settings() {
         </div>
         <div className="space-y-4">
           {right.map(renderCard)}
+          {renderLeaveTypesCard()}
           {renderAssetTypesCard()}
         </div>
       </div>

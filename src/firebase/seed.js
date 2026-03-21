@@ -49,6 +49,18 @@ export async function seedData(createdBy) {
         { name: 'SIM Card', mode: 'consumable' },
       ],
       leavePolicy: { cl: 12, sl: 12, el: 15 },
+      leaveTypes: [
+        'Casual Leave',
+        'Sick Leave',
+        'Earned Leave',
+        'Maternity Leave',
+        'Paternity Leave',
+        'Bereavement Leave',
+        'Compensatory Leave',
+        'Marriage Leave',
+        'Study Leave',
+        'Unpaid Leave',
+      ],
     });
 
     const c1Id = company1Ref.id;
@@ -180,7 +192,7 @@ export async function seedData(createdBy) {
     await addDoc(collection(db, 'companies', c1Id, 'leave'), {
       employeeId: tc1Ref.id,
       employeeName: 'Rahul Sharma',
-      leaveType: 'CL',
+      leaveType: 'Casual Leave',
       startDate: Timestamp.fromDate(new Date()),
       endDate: Timestamp.fromDate(new Date()),
       days: 1,
@@ -193,7 +205,7 @@ export async function seedData(createdBy) {
     await addDoc(collection(db, 'companies', c1Id, 'leave'), {
       employeeId: tc2Ref.id,
       employeeName: 'Priya Krishnan',
-      leaveType: 'SL',
+      leaveType: 'Sick Leave',
       startDate: Timestamp.fromDate(slApplied),
       endDate: Timestamp.fromDate(slApplied),
       days: 1,
@@ -206,7 +218,7 @@ export async function seedData(createdBy) {
     await addDoc(collection(db, 'companies', c1Id, 'leave'), {
       employeeId: tc3Ref.id,
       employeeName: 'Arjun Mehta',
-      leaveType: 'EL',
+      leaveType: 'Earned Leave',
       startDate: Timestamp.fromDate(new Date(Date.now() + 86400000 * 5)),
       endDate: Timestamp.fromDate(new Date(Date.now() + 86400000 * 9)),
       days: 5,
@@ -362,6 +374,18 @@ export async function seedData(createdBy) {
         { name: 'Tools', mode: 'trackable' },
       ],
       leavePolicy: { cl: 12, sl: 12, el: 15 },
+      leaveTypes: [
+        'Casual Leave',
+        'Sick Leave',
+        'Earned Leave',
+        'Maternity Leave',
+        'Paternity Leave',
+        'Bereavement Leave',
+        'Compensatory Leave',
+        'Marriage Leave',
+        'Study Leave',
+        'Unpaid Leave',
+      ],
     });
 
     const c2Id = company2Ref.id;
@@ -492,7 +516,7 @@ export async function seedData(createdBy) {
     await addDoc(collection(db, 'companies', c2Id, 'leave'), {
       employeeId: gs1Ref.id,
       employeeName: 'Vikram Rao',
-      leaveType: 'EL',
+      leaveType: 'Earned Leave',
       startDate: Timestamp.fromDate(new Date(Date.now() + 86400000 * 3)),
       endDate: Timestamp.fromDate(new Date(Date.now() + 86400000 * 7)),
       days: 5,
@@ -505,7 +529,7 @@ export async function seedData(createdBy) {
     await addDoc(collection(db, 'companies', c2Id, 'leave'), {
       employeeId: gs2Ref.id,
       employeeName: 'Sunita Patel',
-      leaveType: 'CL',
+      leaveType: 'Casual Leave',
       startDate: Timestamp.fromDate(new Date(Date.now() - 86400000 * 2)),
       endDate: Timestamp.fromDate(new Date(Date.now() - 86400000 * 2)),
       days: 1,
