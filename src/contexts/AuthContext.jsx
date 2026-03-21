@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/config';
 
 const AuthContext = createContext(null);
@@ -67,6 +67,12 @@ export function AuthProvider({ children }) {
           setRole(data.role || null);
           setCompanyId(data.companyId ?? null);
           setAuthError('');
+          try {
+            const refUsed = snap.ref;
+            await updateDoc(refUsed, { lastLogin: serverTimestamp() });
+          } catch (e) {
+            // ignore lastLogin write failures (e.g. rules)
+          }
           try {
             // Refresh auth state and restore Drive token if still valid
             try {
@@ -166,6 +172,7 @@ export function AuthProvider({ children }) {
     () => ({
       currentUser,
       role,
+      userRole: role,
       companyId,
       googleAccessToken,
       loading,

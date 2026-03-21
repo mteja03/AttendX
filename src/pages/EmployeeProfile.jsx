@@ -247,7 +247,10 @@ export default function EmployeeProfile() {
   const { companyId, empId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { currentUser, googleAccessToken, signOut } = useAuth();
+  const { currentUser, googleAccessToken, signOut, role: authRole } = useAuth();
+  const userRole = authRole;
+  const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
+  const canUploadDocuments = userRole === 'admin' || userRole === 'hrmanager';
   const { success, error: showError } = useToast();
   const [employee, setEmployee] = useState(null);
   const [company, setCompany] = useState(null);
@@ -2348,15 +2351,31 @@ export default function EmployeeProfile() {
     );
   }
 
-  const tabs = [
-    { id: 'personal', label: 'Personal Info' },
-    { id: 'documents', label: 'Documents' },
-    { id: 'leave', label: 'Leave History' },
-    { id: 'assets', label: 'Assets' },
-    { id: 'onboarding', label: 'Onboarding' },
-    { id: 'offboarding', label: 'Offboarding' },
-    { id: 'timeline', label: 'Timeline' },
-  ];
+  const allTabs = useMemo(
+    () => [
+      { id: 'personal', label: 'Personal Info' },
+      { id: 'documents', label: 'Documents' },
+      { id: 'leave', label: 'Leave History' },
+      { id: 'assets', label: 'Assets' },
+      { id: 'onboarding', label: 'Onboarding' },
+      { id: 'offboarding', label: 'Offboarding' },
+      { id: 'timeline', label: 'Timeline' },
+    ],
+    [],
+  );
+
+  const visibleTabs = useMemo(() => {
+    if (userRole === 'itmanager') {
+      return allTabs.filter((t) => ['personal', 'assets', 'timeline'].includes(t.id));
+    }
+    return allTabs;
+  }, [userRole, allTabs]);
+
+  useEffect(() => {
+    if (!visibleTabs.some((t) => t.id === tab)) {
+      setTab(visibleTabs[0]?.id || 'personal');
+    }
+  }, [visibleTabs, tab]);
 
   return (
     <div className="p-8">
@@ -2396,13 +2415,15 @@ export default function EmployeeProfile() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={openEdit}
-              className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
-            >
-              Edit
-            </button>
+            {canEditEmployees && (
+              <button
+                type="button"
+                onClick={openEdit}
+                className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
+              >
+                Edit
+              </button>
+            )}
             <button
               type="button"
               onClick={handlePrintProfile}
@@ -2418,7 +2439,7 @@ export default function EmployeeProfile() {
               </svg>
               Print
             </button>
-            {(employee.status || 'Active') === 'Active' && (
+            {canEditEmployees && (employee.status || 'Active') === 'Active' && (
               <button
                 type="button"
                 onClick={handleDeactivate}
@@ -2432,7 +2453,7 @@ export default function EmployeeProfile() {
       </div>
 
       <div className="flex gap-2 border-b border-slate-200 mb-6">
-        {tabs.map((t) => (
+        {visibleTabs.map((t) => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)} className={`px-4 py-2 text-sm font-medium rounded-t-lg ${tab === t.id ? 'bg-white border border-slate-200 border-b-white -mb-px text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>
             {t.label}
           </button>
@@ -2584,7 +2605,12 @@ export default function EmployeeProfile() {
 
       {tab === 'documents' && (
         <div className="space-y-6">
-          {!googleAccessToken && (
+          {!canUploadDocuments && (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-lg mb-4">
+              <span className="text-blue-600 text-sm">ℹ️ Only HR Manager and Admin can upload or delete documents.</span>
+            </div>
+          )}
+          {!googleAccessToken && canUploadDocuments && (
             <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
               <span className="text-amber-600 text-sm">
                 Google Drive session expired. Please sign out and sign back in to upload documents.
@@ -2676,30 +2702,34 @@ export default function EmployeeProfile() {
                                     View
                                   </button>
                                 )}
-                                <label className={`${rowBusy ? 'pointer-events-none opacity-50' : ''}`}>
-                                  <span className="px-2.5 py-1 text-xs font-medium text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors inline-block cursor-pointer">
-                                    Replace
-                                  </span>
-                                  <input
-                                    type="file"
-                                    className="hidden"
-                                    accept={acceptAttr}
+                                {canUploadDocuments && (
+                                  <label className={`${rowBusy ? 'pointer-events-none opacity-50' : ''}`}>
+                                    <span className="px-2.5 py-1 text-xs font-medium text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors inline-block cursor-pointer">
+                                      Replace
+                                    </span>
+                                    <input
+                                      type="file"
+                                      className="hidden"
+                                      accept={acceptAttr}
+                                      disabled={rowBusy}
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (f) handleReplaceDoc(f, doc.id);
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </label>
+                                )}
+                                {canUploadDocuments && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteConfirm({ type: 'checklist', doc: uploaded })}
                                     disabled={rowBusy}
-                                    onChange={(e) => {
-                                      const f = e.target.files?.[0];
-                                      if (f) handleReplaceDoc(f, doc.id);
-                                      e.target.value = '';
-                                    }}
-                                  />
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeleteConfirm({ type: 'checklist', doc: uploaded })}
-                                  disabled={rowBusy}
-                                  className="px-2.5 py-1 text-xs font-medium text-red-500 bg-red-50 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
-                                >
-                                  Delete
-                                </button>
+                                    className="px-2.5 py-1 text-xs font-medium text-red-500 bg-red-50 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ) : (
@@ -2723,29 +2753,35 @@ export default function EmployeeProfile() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const input = document.getElementById(`doc-upload-${doc.id}`);
-                                    if (input) input.click();
-                                  }}
-                                  disabled={uploadingDocId === doc.id}
-                                  className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                                >
-                                  {uploadingDocId === doc.id ? 'Uploading...' : 'Upload'}
-                                </button>
-                                <input
-                                  id={`doc-upload-${doc.id}`}
-                                  type="file"
-                                  className="hidden"
-                                  accept={acceptAttr}
-                                  disabled={!!uploadingDocId}
-                                  onChange={(e) => {
-                                    const f = e.target.files?.[0];
-                                    if (f) handleUploadChecklistDoc(f, doc.id, doc.name, cat.category);
-                                    e.target.value = '';
-                                  }}
-                                />
+                                {canUploadDocuments ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const input = document.getElementById(`doc-upload-${doc.id}`);
+                                        if (input) input.click();
+                                      }}
+                                      disabled={uploadingDocId === doc.id}
+                                      className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                    >
+                                      {uploadingDocId === doc.id ? 'Uploading...' : 'Upload'}
+                                    </button>
+                                    <input
+                                      id={`doc-upload-${doc.id}`}
+                                      type="file"
+                                      className="hidden"
+                                      accept={acceptAttr}
+                                      disabled={!!uploadingDocId}
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (f) handleUploadChecklistDoc(f, doc.id, doc.name, cat.category);
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </>
+                                ) : (
+                                  <span className="text-xs text-gray-400 italic">View only</span>
+                                )}
                               </div>
                             </div>
                           )}
@@ -2761,36 +2797,42 @@ export default function EmployeeProfile() {
           <div className="border border-slate-200 rounded-xl overflow-hidden">
             <h3 className="px-4 py-3 bg-slate-50 font-medium text-slate-800">Additional Documents</h3>
             <div className="p-4 space-y-3">
-              <div className="flex flex-wrap items-end gap-3">
-                <input
-                  type="text"
-                  value={additionalDocName}
-                  onChange={(e) => setAdditionalDocName(e.target.value)}
-                  placeholder="Document name"
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-48"
-                />
-                <select value={additionalDocCategory} onChange={(e) => setAdditionalDocCategory(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                  {DOCUMENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <input
-                  ref={additionalFileInputRef}
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
-                  onChange={(e) => setAdditionalDocFile(e.target.files?.[0] || null)}
-                />
-                <button type="button" onClick={() => additionalFileInputRef.current?.click()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
-                  {additionalDocFile ? additionalDocFile.name : 'Choose file'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleUploadAdditionalDoc}
-                  disabled={uploadingDocId === 'additional' || !additionalDocName.trim() || !additionalDocFile}
-                  className="rounded-lg bg-[#378ADD] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
-                >
-                  {uploadingDocId === 'additional' ? 'Uploading…' : 'Upload Additional Document'}
-                </button>
-              </div>
+              {canUploadDocuments && (
+                <div className="flex flex-wrap items-end gap-3">
+                  <input
+                    type="text"
+                    value={additionalDocName}
+                    onChange={(e) => setAdditionalDocName(e.target.value)}
+                    placeholder="Document name"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-48"
+                  />
+                  <select value={additionalDocCategory} onChange={(e) => setAdditionalDocCategory(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                    {DOCUMENT_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    ref={additionalFileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                    onChange={(e) => setAdditionalDocFile(e.target.files?.[0] || null)}
+                  />
+                  <button type="button" onClick={() => additionalFileInputRef.current?.click()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
+                    {additionalDocFile ? additionalDocFile.name : 'Choose file'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUploadAdditionalDoc}
+                    disabled={uploadingDocId === 'additional' || !additionalDocName.trim() || !additionalDocFile}
+                    className="rounded-lg bg-[#378ADD] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                  >
+                    {uploadingDocId === 'additional' ? 'Uploading…' : 'Upload Additional Document'}
+                  </button>
+                </div>
+              )}
               {additionalDocs.length === 0 ? (
                 <p className="text-slate-500 text-sm">No additional documents</p>
               ) : (
@@ -2800,7 +2842,11 @@ export default function EmployeeProfile() {
                       <span className="text-sm">{doc.name} — {formatDocDate(doc.uploadedAt)}</span>
                       <div className="flex gap-2">
                         {doc.webViewLink && <a href={doc.webViewLink} target="_blank" rel="noopener noreferrer" className="text-[#378ADD] text-xs">View</a>}
-                        <button type="button" onClick={() => setDeleteConfirm({ type: 'additional', index: i })} className="text-red-600 text-xs">Delete</button>
+                        {canUploadDocuments && (
+                          <button type="button" onClick={() => setDeleteConfirm({ type: 'additional', index: i })} className="text-red-600 text-xs">
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </li>
                   ))}

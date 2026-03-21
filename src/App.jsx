@@ -12,6 +12,7 @@ import TeamMembers from './pages/TeamMembers';
 import Settings from './pages/Settings';
 import Assets from './pages/Assets';
 import Login from './pages/Login';
+import Unauthorized from './pages/Unauthorized';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 
@@ -28,6 +29,24 @@ function ProtectedRoute({ children }) {
 
   if (!currentUser) {
     return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
+
+function RoleRoute({ allowedRoles, children }) {
+  const { role, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f1f5f9]">
+        <div className="text-slate-500 text-sm">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!role || !allowedRoles.includes(role)) {
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return children;
@@ -78,16 +97,73 @@ function AppRoutes() {
         <Route index element={<HomeRedirect />} />
         <Route path="companies" element={<Companies />} />
         <Route path="admin/users" element={<AdminUsers />} />
+        <Route path="unauthorized" element={<Unauthorized />} />
         <Route path="company/:companyId" element={<CompanyLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="employees" element={<Employees />} />
-          <Route path="employees/:empId" element={<EmployeeProfile />} />
-          <Route path="leave" element={<Leave />} />
-          <Route path="documents" element={<Documents />} />
-          <Route path="assets" element={<Assets />} />
-          <Route path="team" element={<TeamMembers />} />
-          <Route path="settings" element={<Settings />} />
+          <Route
+            path="dashboard"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager', 'itmanager']}>
+                <Dashboard />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="employees"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager', 'itmanager']}>
+                <Employees />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="employees/:empId"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager', 'itmanager']}>
+                <EmployeeProfile />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="leave"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager']}>
+                <Leave />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="documents"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <Documents />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="assets"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager', 'itmanager']}>
+                <Assets />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="team"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <TeamMembers />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <Settings />
+              </RoleRoute>
+            }
+          />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

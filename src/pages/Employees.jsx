@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { toDateString, toDisplayDate, toJSDate } from '../utils';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -129,6 +130,8 @@ export default function Employees() {
   const { companyId } = useParams();
   const navigate = useNavigate();
   const { success, error: showError } = useToast();
+  const { role: userRole } = useAuth();
+  const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
   const [employees, setEmployees] = useState([]);
   const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -470,13 +473,18 @@ export default function Employees() {
               </div>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => { setShowAddModal(true); setForm({ ...initialForm, empId: nextEmpId }); }}
-            className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
-          >
-            Add Employee
-          </button>
+          {canEditEmployees && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddModal(true);
+                setForm({ ...initialForm, empId: nextEmpId });
+              }}
+              className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
+            >
+              Add Employee
+            </button>
+          )}
         </div>
       </div>
 
@@ -696,9 +704,9 @@ export default function Employees() {
                   </td>
                   <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
                     <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#378ADD] text-xs font-medium hover:underline">
-                      View Profile
+                      {canEditEmployees ? 'View Profile' : 'View'}
                     </button>
-                    {(emp.status || 'Active') === 'Active' && (
+                    {canEditEmployees && (emp.status || 'Active') === 'Active' && (
                       <button
                         type="button"
                         onClick={() => handleDeactivate(emp)}

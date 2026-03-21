@@ -17,6 +17,7 @@ import { canAccessUserManagement } from '../utils/roles';
 const ROLE_OPTIONS = [
   { value: 'hrmanager', label: 'HR Manager' },
   { value: 'manager', label: 'Manager' },
+  { value: 'itmanager', label: 'IT Manager' },
 ];
 
 function formatDate(v) {
@@ -234,8 +235,9 @@ export default function AdminUsers() {
       admin: 'bg-purple-100 text-purple-800',
       hrmanager: 'bg-green-100 text-green-800',
       manager: 'bg-amber-100 text-amber-800',
+      itmanager: 'bg-blue-100 text-blue-800',
     };
-    const label = { admin: 'Admin', hrmanager: 'HR Manager', manager: 'Manager' }[r] || r;
+    const label = { admin: 'Admin', hrmanager: 'HR Manager', manager: 'Manager', itmanager: 'IT Manager' }[r] || r;
     return (
       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${styles[r] || 'bg-slate-100 text-slate-700'}`}>
         {label}
