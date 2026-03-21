@@ -36,9 +36,11 @@ function UserAddIcon({ className }) {
   );
 }
 const LEAVE_TYPE_STYLE = {
-  CL: 'bg-[#C5E8E8] text-[#0F4444]',
-  SL: 'bg-red-100 text-red-800',
-  EL: 'bg-green-100 text-green-800',
+  SL: 'bg-red-100 text-red-700',
+  CL: 'bg-[#E8F5F5] text-[#1B6B6B]',
+  EL: 'bg-green-100 text-green-700',
+  ML: 'bg-purple-100 text-purple-700',
+  UL: 'bg-gray-100 text-gray-700',
 };
 const STATUS_STYLE = {
   Pending: 'bg-amber-100 text-amber-800',
@@ -62,6 +64,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState(null);
   const [birthdayCardOpen, setBirthdayCardOpen] = useState(true);
+  const [dashError, setDashError] = useState(null);
 
   useEffect(() => {
     if (!companyId) return;
@@ -76,6 +79,7 @@ export default function Dashboard() {
         setLeaveList(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
         console.error(err);
+        setDashError(err);
         showError('Failed to load dashboard data');
       }
       setLoading(false);
@@ -102,6 +106,7 @@ export default function Dashboard() {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error('Failed to load asset stats', err);
+        setDashError(err);
         showError('Failed to load asset stats');
       }
     };
@@ -252,6 +257,14 @@ export default function Dashboard() {
     setActioningId(null);
   };
 
+  const handleEmployeeClick = (employeeId) => {
+    if (!employeeId || !companyId) {
+      console.warn('Missing employeeId or companyId', { employeeId, companyId });
+      return;
+    }
+    navigate(`/company/${companyId}/employees/${employeeId}`);
+  };
+
   if (!companyId) {
     return (
       <div className="p-8">
@@ -274,7 +287,23 @@ export default function Dashboard() {
         <p className="text-slate-500 mt-1">Company overview</p>
       </div>
 
-      {loading ? (
+      {dashError ? (
+        <div className="p-8 text-center">
+          <p className="text-red-500 mb-4">
+            Something went wrong loading the dashboard.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setDashError(null);
+              window.location.reload();
+            }}
+            className="px-4 py-2 bg-[#1B6B6B] text-white rounded-lg text-sm"
+          >
+            Reload
+          </button>
+        </div>
+      ) : loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="bg-white rounded-xl border border-slate-200 p-6 animate-pulse">
@@ -574,9 +603,18 @@ export default function Dashboard() {
               <tbody>
                 {recentLeave.map((l) => (
                   <tr key={l.id} className="border-t border-slate-100">
-                    <td className="px-4 py-3 font-medium text-slate-800">{l.employeeName || '—'}</td>
+                    <td className="px-4 py-3 font-medium text-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => handleEmployeeClick(l.employeeId)}
+                        className="cursor-pointer hover:text-teal-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={!l.employeeId}
+                      >
+                        {l.employeeName || '—'}
+                      </button>
+                    </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${LEAVE_TYPE_STYLE[l.leaveType] || 'bg-slate-100 text-slate-700'}`}>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${LEAVE_TYPE_STYLE[l.leaveType] || 'bg-[#E8F5F5] text-[#1B6B6B]'}`}>
                         {l.leaveType || '—'}
                       </span>
                     </td>
