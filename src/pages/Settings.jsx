@@ -65,18 +65,57 @@ const COLOR_PRESETS = [
   { value: '#0F6E56' }, { value: '#E91E8C' }, { value: '#455A64' },
 ];
 
-const DEFAULT_LEAVE_TYPES = [
-  'Casual Leave',
-  'Sick Leave',
-  'Earned Leave',
-  'Maternity Leave',
-  'Paternity Leave',
-  'Bereavement Leave',
-  'Compensatory Leave',
-  'Marriage Leave',
-  'Study Leave',
-  'Unpaid Leave',
+const DEFAULT_LEAVE_TYPE_OBJECTS = [
+  { name: 'Casual Leave', shortCode: 'CL', isPaid: true },
+  { name: 'Sick Leave', shortCode: 'SL', isPaid: true },
+  { name: 'Earned Leave', shortCode: 'EL', isPaid: true },
+  { name: 'Maternity Leave', shortCode: 'ML', isPaid: true },
+  { name: 'Paternity Leave', shortCode: 'PL', isPaid: true },
+  { name: 'Bereavement Leave', shortCode: 'BL', isPaid: true },
+  { name: 'Compensatory Leave', shortCode: 'CO', isPaid: true },
+  { name: 'Marriage Leave', shortCode: 'MAR', isPaid: true },
+  { name: 'Study Leave', shortCode: 'STL', isPaid: false },
+  { name: 'Unpaid Leave', shortCode: 'UL', isPaid: false },
 ];
+
+function abbrevLeaveTypeName(name) {
+  return (name || '')
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 4);
+}
+
+function normalizeLeaveTypeObjects(raw) {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return DEFAULT_LEAVE_TYPE_OBJECTS.map((t) => ({ ...t }));
+  }
+  return raw.map((t) => {
+    if (typeof t === 'string') {
+      const name = t.trim();
+      return { name, shortCode: abbrevLeaveTypeName(name), isPaid: true };
+    }
+    const name = (t.name || '').trim() || 'Leave';
+    const shortCode = (t.shortCode || abbrevLeaveTypeName(name)).toUpperCase().slice(0, 8);
+    return { name, shortCode, isPaid: t.isPaid !== false };
+  });
+}
+
+function buildLeaveAllowancesFromData(data, normalizedTypes) {
+  const lp = data?.leavePolicy || {};
+  const out = {};
+  normalizedTypes.filter((lt) => lt.isPaid).forEach((lt) => {
+    let n =
+      lp[lt.shortCode] ??
+      lp[lt.name] ??
+      (lt.shortCode === 'CL' ? lp.cl : lt.shortCode === 'SL' ? lp.sl : lt.shortCode === 'EL' ? lp.el : undefined);
+    if (n === undefined || Number.isNaN(Number(n))) n = lt.shortCode === 'EL' ? 15 : 12;
+    out[lt.shortCode] = Number(n);
+  });
+  return out;
+}
 
 const SECTIONS = [
   { key: 'departments', label: 'Department', plural: 'Departments', field: 'department', defaults: DEFAULT_DEPARTMENTS },
@@ -90,7 +129,7 @@ const SECTIONS = [
 const TABS = [
   { id: 'company', label: 'Company Info' },
   { id: 'lists', label: 'Manage Lists' },
-  { id: 'leave', label: 'Leave Policy' },
+  { id: 'leave', label: 'Leave' },
   { id: 'documents', label: 'Document Types' },
   { id: 'onboarding', label: 'Onboarding' },
   { id: 'offboarding', label: 'Offboarding' },
@@ -174,7 +213,11 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [companyForm, setCompanyForm] = useState({ name: '', industry: '', location: '', initials: '', color: '#378ADD' });
-  const [leavePolicy, setLeavePolicy] = useState({ cl: 12, sl: 12, el: 15 });
+  const [leaveTypes, setLeaveTypes] = useState([]);
+  const [leaveAllowances, setLeaveAllowances] = useState({ CL: 12, SL: 12, EL: 15 });
+  const [newLeaveTypeName, setNewLeaveTypeName] = useState('');
+  const [newLeaveTypeCode, setNewLeaveTypeCode] = useState('');
+  const [newLeaveTypePaid, setNewLeaveTypePaid] = useState(true);
   const [addingSection, setAddingSection] = useState(null);
   const [addValue, setAddValue] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -183,7 +226,6 @@ export default function Settings() {
   const [tab, setTab] = useState('company');
   const [newAssetType, setNewAssetType] = useState('');
   const [newAssetMode, setNewAssetMode] = useState('trackable');
-  const [leaveTypeInput, setLeaveTypeInput] = useState('');
   const [docTypes, setDocTypes] = useState(null);
   const [docTypesLoading, setDocTypesLoading] = useState(false);
   const [newDocNames, setNewDocNames] = useState({});
@@ -242,7 +284,6 @@ export default function Settings() {
             color: col,
           });
           setCompanyColor(col);
-          setLeavePolicy(data.leavePolicy || { cl: 12, sl: 12, el: 15 });
         }
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setAssets(assetSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -374,11 +415,87 @@ export default function Settings() {
   const getList = (key, defaults) => (company?.[key]?.length ? company[key] : defaults);
   const getCount = (field) => (value) => employees.filter((e) => (e[field] || '').trim() === value).length;
 
-  const getLeaveTypesList = () =>
-    Array.isArray(company?.leaveTypes) && company.leaveTypes.length > 0 ? company.leaveTypes : DEFAULT_LEAVE_TYPES;
+  const countLeaveUsesForLt = (lt) =>
+    companyLeaves.filter((l) => {
+      const t = (l.leaveType || '').trim();
+      if (t === lt.name || t === lt.shortCode) return true;
+      if (lt.shortCode === 'CL' && t === 'CL') return true;
+      if (lt.shortCode === 'SL' && t === 'SL') return true;
+      if (lt.shortCode === 'EL' && t === 'EL') return true;
+      return false;
+    }).length;
 
-  const countLeaveUses = (typeName) =>
-    companyLeaves.filter((l) => (l.leaveType || '').trim() === (typeName || '').trim()).length;
+  useEffect(() => {
+    if (activeTab !== 'leave' || !companyId) return;
+    const loadLeaveTypes = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'companies', companyId));
+        const data = snap.exists() ? snap.data() : {};
+        const normalized = normalizeLeaveTypeObjects(data?.leaveTypes);
+        setLeaveTypes(normalized);
+        setLeaveAllowances(buildLeaveAllowancesFromData(data, normalized));
+      } catch (err) {
+        showError('Failed to load leave settings');
+      }
+    };
+    loadLeaveTypes();
+  }, [activeTab, companyId, showError]);
+
+  const handleAddLeaveType = () => {
+    if (!newLeaveTypeName.trim()) return;
+    const shortCode =
+      newLeaveTypeCode.trim().toUpperCase().slice(0, 4) ||
+      abbrevLeaveTypeName(newLeaveTypeName);
+    const dup = leaveTypes.some(
+      (x) => x.name.toLowerCase() === newLeaveTypeName.trim().toLowerCase() || x.shortCode === shortCode,
+    );
+    if (dup) {
+      showError('A leave type with this name or code already exists');
+      return;
+    }
+    const newType = {
+      name: newLeaveTypeName.trim(),
+      shortCode,
+      isPaid: newLeaveTypePaid,
+    };
+    setLeaveTypes((prev) => [...prev, newType]);
+    if (newType.isPaid) {
+      setLeaveAllowances((prev) => ({ ...prev, [shortCode]: prev[shortCode] ?? 12 }));
+    }
+    setNewLeaveTypeName('');
+    setNewLeaveTypeCode('');
+    setNewLeaveTypePaid(true);
+  };
+
+  const handleDeleteLeaveType = (index) => {
+    const lt = leaveTypes[index];
+    if (!lt) return;
+    if (countLeaveUsesForLt(lt) > 0) {
+      showError('Cannot remove: used in leave records');
+      return;
+    }
+    setLeaveTypes((prev) => prev.filter((_, i) => i !== index));
+    setLeaveAllowances((prev) => {
+      const next = { ...prev };
+      delete next[lt.shortCode];
+      return next;
+    });
+  };
+
+  const handleSaveLeavePolicy = async () => {
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'companies', companyId), {
+        leaveTypes,
+        leavePolicy: leaveAllowances,
+      });
+      setCompany((prev) => (prev ? { ...prev, leaveTypes, leavePolicy: leaveAllowances } : null));
+      success('Leave policy saved successfully!');
+    } catch (err) {
+      showError('Failed to save leave policy');
+    }
+    setSaving(false);
+  };
 
   const normalizedAssetTypes = useMemo(() => {
     const raw = company?.assetTypes;
@@ -420,43 +537,6 @@ export default function Settings() {
   const saveAssetTypes = async (next) => {
     await updateDoc(doc(db, 'companies', companyId), { assetTypes: next });
     setCompany((prev) => (prev ? { ...prev, assetTypes: next } : prev));
-  };
-
-  const handleAddLeaveType = async () => {
-    const name = leaveTypeInput.trim();
-    if (!name) return;
-    const list = getLeaveTypesList();
-    if (list.some((x) => x.toLowerCase() === name.toLowerCase())) {
-      showError('Already exists');
-      return;
-    }
-    setSaving(true);
-    try {
-      const next = [...list, name];
-      await updateDoc(doc(db, 'companies', companyId), { leaveTypes: next });
-      setCompany((prev) => (prev ? { ...prev, leaveTypes: next } : null));
-      setLeaveTypeInput('');
-      success('Leave type added');
-    } catch (err) {
-      showError('Failed to add leave type');
-    }
-    setSaving(false);
-  };
-
-  const handleRemoveLeaveType = async (name) => {
-    if (countLeaveUses(name) > 0) {
-      showError('Cannot delete: used in leave records');
-      return;
-    }
-    const list = getLeaveTypesList();
-    const next = list.filter((x) => x !== name);
-    try {
-      await updateDoc(doc(db, 'companies', companyId), { leaveTypes: next });
-      setCompany((prev) => (prev ? { ...prev, leaveTypes: next } : null));
-      success('Leave type removed');
-    } catch (err) {
-      showError('Failed to remove leave type');
-    }
   };
 
   const handleAdd = async (sectionKey, defaults) => {
@@ -514,24 +594,6 @@ export default function Settings() {
       success('Company details saved');
     } catch (err) {
       showError('Failed to save');
-    }
-    setSaving(false);
-  };
-
-  const handleSavePolicy = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await updateDoc(doc(db, 'companies', companyId), {
-        leavePolicy: {
-          cl: Number(leavePolicy.cl) || 12,
-          sl: Number(leavePolicy.sl) || 12,
-          el: Number(leavePolicy.el) || 15,
-        },
-      });
-      success('Leave policy saved');
-    } catch (err) {
-      showError('Failed to save policy');
     }
     setSaving(false);
   };
@@ -807,61 +869,6 @@ export default function Settings() {
       }
     };
 
-    const renderLeaveTypesCard = () => {
-      const items = getLeaveTypesList();
-      return (
-        <div className="bg-white border rounded-xl p-4">
-          <div className="flex justify-between mb-3">
-            <h3 className="font-medium text-sm">Leave Types</h3>
-            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-              {items.length} types
-            </span>
-          </div>
-          <div className="max-h-48 overflow-y-auto space-y-1 mb-3 pr-1 settings-list">
-            {items.map((item) => (
-              <div
-                key={item}
-                className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-50 mr-1"
-              >
-                <span className="flex-1 text-sm truncate mr-2">{item}</span>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <span className="text-xs text-gray-400 whitespace-nowrap">{countLeaveUses(item)} leaves</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveLeaveType(item)}
-                    className="w-5 h-5 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded text-xs flex-shrink-0"
-                    disabled={countLeaveUses(item) > 0}
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ))}
-            {items.length === 0 && <p className="text-xs text-slate-400">No leave types yet</p>}
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={leaveTypeInput}
-              onChange={(e) => setLeaveTypeInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAddLeaveType();
-              }}
-              placeholder="Add leave type..."
-              className="flex-1 text-sm border rounded px-2 py-1"
-            />
-            <button
-              type="button"
-              onClick={handleAddLeaveType}
-              className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
-              disabled={saving || !leaveTypeInput.trim()}
-            >
-              Add
-            </button>
-          </div>
-        </div>
-      );
-    };
-
     const renderAssetTypesCard = () => (
       <div className="bg-white border rounded-xl p-4">
         <div className="flex justify-between mb-3">
@@ -1014,7 +1021,6 @@ export default function Settings() {
         </div>
         <div className="space-y-4">
           {right.map(renderCard)}
-          {renderLeaveTypesCard()}
           {renderAssetTypesCard()}
         </div>
       </div>
@@ -1022,50 +1028,138 @@ export default function Settings() {
   };
 
   const renderLeaveTab = () => (
-    <section className="bg-white rounded-xl border border-slate-200 p-6">
-      <h2 className="text-lg font-semibold text-slate-800 mb-4">Leave Policy</h2>
-      <form onSubmit={handleSavePolicy} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="space-y-4">
+      <div className="bg-white border rounded-xl p-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Casual Leave (CL)</label>
-            <input
-              type="number"
-              min={0}
-              value={leavePolicy.cl}
-              onChange={(e) => setLeavePolicy((p) => ({ ...p, cl: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
+            <h3 className="font-medium text-gray-800">Leave Types</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              These types appear in Add Leave form and leave balance tracking
+            </p>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Sick Leave (SL)</label>
+          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+            {leaveTypes.length} types
+          </span>
+        </div>
+
+        <div className="space-y-1 mb-3 max-h-60 overflow-y-auto">
+          {leaveTypes.map((lt, index) => (
+            <div
+              key={`${lt.shortCode}-${index}`}
+              className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <span className="text-sm text-gray-800 truncate">{lt.name}</span>
+                {lt.shortCode && (
+                  <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-mono shrink-0">
+                    {lt.shortCode}
+                  </span>
+                )}
+                {lt.isPaid !== undefined && (
+                  <span
+                    className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
+                      lt.isPaid ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {lt.isPaid ? 'Paid' : 'Unpaid'}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDeleteLeaveType(index)}
+                className="text-red-400 hover:text-red-600 text-xs w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+
+          {leaveTypes.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-4">No leave types added yet</p>
+          )}
+        </div>
+
+        <div className="border-t pt-3">
+          <p className="text-xs text-gray-500 mb-2">Add new leave type</p>
+          <div className="flex gap-2 flex-wrap">
             <input
-              type="number"
-              min={0}
-              value={leavePolicy.sl}
-              onChange={(e) => setLeavePolicy((p) => ({ ...p, sl: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Leave type name"
+              value={newLeaveTypeName}
+              onChange={(e) => setNewLeaveTypeName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddLeaveType()}
+              className="flex-1 min-w-32 text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Earned Leave (EL)</label>
             <input
-              type="number"
-              min={0}
-              value={leavePolicy.el}
-              onChange={(e) => setLeavePolicy((p) => ({ ...p, el: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Short code (e.g. CL)"
+              value={newLeaveTypeCode}
+              onChange={(e) => setNewLeaveTypeCode(e.target.value.toUpperCase())}
+              maxLength={4}
+              className="w-24 text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 font-mono"
             />
+            <select
+              value={newLeaveTypePaid ? 'true' : 'false'}
+              onChange={(e) => setNewLeaveTypePaid(e.target.value === 'true')}
+              className="text-sm border rounded-lg px-3 py-1.5"
+            >
+              <option value="true">Paid</option>
+              <option value="false">Unpaid</option>
+            </select>
+            <button
+              type="button"
+              onClick={handleAddLeaveType}
+              className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+            >
+              Add
+            </button>
           </div>
         </div>
+      </div>
+
+      <div className="bg-white border rounded-xl p-4 mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-medium text-gray-800">Leave Allowance</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Annual days allowed per leave type</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-4 sm:grid-cols-3">
+          {leaveTypes
+            .filter((lt) => lt.isPaid)
+            .map((lt, index) => (
+              <div key={`${lt.shortCode}-allow-${index}`}>
+                <label className="text-xs text-gray-500 block mb-1">
+                  {lt.name}
+                  <span className="ml-1 font-mono text-blue-500">({lt.shortCode})</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={365}
+                  value={leaveAllowances[lt.shortCode] ?? leaveAllowances[lt.name] ?? 0}
+                  onChange={(e) =>
+                    setLeaveAllowances((prev) => ({
+                      ...prev,
+                      [lt.shortCode]: Number(e.target.value),
+                    }))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+                />
+              </div>
+            ))}
+        </div>
+
         <button
-          type="submit"
+          type="button"
+          onClick={handleSaveLeavePolicy}
           disabled={saving}
-          className="rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
         >
-          Save Policy
+          Save Leave Policy
         </button>
-      </form>
-    </section>
+      </div>
+    </div>
   );
 
   const renderDocumentsTab = () => (

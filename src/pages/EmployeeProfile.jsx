@@ -82,8 +82,68 @@ const INDIAN_STATES = [
   'Lakshadweep',
 ];
 
-const LEAVE_TYPE_STYLE = { CL: 'bg-blue-100 text-blue-800', SL: 'bg-red-100 text-red-800', EL: 'bg-green-100 text-green-800' };
-const leaveTypePillClass = (lt) => LEAVE_TYPE_STYLE[lt] || 'bg-slate-100 text-slate-700';
+const LEAVE_TYPE_STYLE = {
+  CL: 'bg-blue-100 text-blue-800',
+  SL: 'bg-red-100 text-red-800',
+  EL: 'bg-green-100 text-green-800',
+  ML: 'bg-pink-100 text-pink-800',
+  PL: 'bg-indigo-100 text-indigo-800',
+  BL: 'bg-gray-200 text-gray-800',
+  CO: 'bg-amber-100 text-amber-800',
+  MAR: 'bg-rose-100 text-rose-800',
+  STL: 'bg-slate-100 text-slate-700',
+  UL: 'bg-slate-100 text-slate-600',
+};
+
+const DEFAULT_PROFILE_LEAVE_TYPE_OBJECTS = [
+  { name: 'Casual Leave', shortCode: 'CL', isPaid: true },
+  { name: 'Sick Leave', shortCode: 'SL', isPaid: true },
+  { name: 'Earned Leave', shortCode: 'EL', isPaid: true },
+  { name: 'Maternity Leave', shortCode: 'ML', isPaid: true },
+  { name: 'Paternity Leave', shortCode: 'PL', isPaid: true },
+  { name: 'Bereavement Leave', shortCode: 'BL', isPaid: true },
+  { name: 'Compensatory Leave', shortCode: 'CO', isPaid: true },
+  { name: 'Marriage Leave', shortCode: 'MAR', isPaid: true },
+  { name: 'Study Leave', shortCode: 'STL', isPaid: false },
+  { name: 'Unpaid Leave', shortCode: 'UL', isPaid: false },
+];
+
+function abbrevProfileLeaveName(name) {
+  return (name || '')
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 4);
+}
+
+function normalizeProfileLeaveTypeList(raw) {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return DEFAULT_PROFILE_LEAVE_TYPE_OBJECTS.map((t) => ({ ...t }));
+  }
+  return raw.map((t) => {
+    if (typeof t === 'string') {
+      const name = t.trim();
+      return { name, shortCode: abbrevProfileLeaveName(name), isPaid: true };
+    }
+    const name = (t.name || '').trim() || 'Leave';
+    const shortCode = (t.shortCode || abbrevProfileLeaveName(name)).toUpperCase().slice(0, 8);
+    return { name, shortCode, isPaid: t.isPaid !== false };
+  });
+}
+
+function getMaxLeaveForProfileType(lt, leavePolicy) {
+  const lp = leavePolicy || {};
+  let n = lp[lt.shortCode] ?? lp[lt.name];
+  if (n === undefined) {
+    if (lt.shortCode === 'CL') n = lp.cl;
+    else if (lt.shortCode === 'SL') n = lp.sl;
+    else if (lt.shortCode === 'EL') n = lp.el;
+  }
+  if (n === undefined || Number.isNaN(Number(n))) n = 12;
+  return Number(n);
+}
 const STATUS_STYLE = { Pending: 'bg-amber-100 text-amber-800', Approved: 'bg-green-100 text-green-800', Rejected: 'bg-red-100 text-red-800' };
 
 const DEFAULT_ONBOARDING_TEMPLATE = {
@@ -381,35 +441,40 @@ export default function EmployeeProfile() {
   }, [searchParams]);
 
   const leavePolicy = company?.leavePolicy || { cl: 12, sl: 12, el: 15 };
-  const profileLeaveTypes = useMemo(() => {
-    const lt = company?.leaveTypes;
-    if (Array.isArray(lt) && lt.length > 0) return lt;
-    return ['Casual Leave', 'Sick Leave', 'Earned Leave'];
-  }, [company?.leaveTypes]);
+  const profileLeaveTypes = useMemo(() => normalizeProfileLeaveTypeList(company?.leaveTypes), [company?.leaveTypes]);
+  const profilePaidLeaveTypes = useMemo(() => profileLeaveTypes.filter((lt) => lt.isPaid), [profileLeaveTypes]);
 
   const leaveUsedByTypeProfile = useMemo(() => {
     const acc = {};
-    profileLeaveTypes.forEach((t) => {
-      acc[t] = 0;
+    profileLeaveTypes.forEach((lt) => {
+      acc[lt.name] = 0;
     });
     leaveList
       .filter((l) => l.status === 'Approved')
       .forEach((l) => {
         const raw = (l.leaveType || '').trim();
-        if (acc[raw] !== undefined) acc[raw] += l.days || 0;
-        else if (raw === 'CL' && acc['Casual Leave'] !== undefined) acc['Casual Leave'] += l.days || 0;
-        else if (raw === 'SL' && acc['Sick Leave'] !== undefined) acc['Sick Leave'] += l.days || 0;
-        else if (raw === 'EL' && acc['Earned Leave'] !== undefined) acc['Earned Leave'] += l.days || 0;
+        const lt = profileLeaveTypes.find(
+          (x) =>
+            x.name === raw ||
+            x.shortCode === raw ||
+            (x.shortCode === 'CL' && raw === 'CL') ||
+            (x.shortCode === 'SL' && raw === 'SL') ||
+            (x.shortCode === 'EL' && raw === 'EL'),
+        );
+        if (lt) acc[lt.name] = (acc[lt.name] || 0) + (l.days || 0);
       });
     return acc;
   }, [leaveList, profileLeaveTypes]);
 
-  const getMaxLeaveProfile = (typeLabel) => {
-    if (typeLabel === 'Casual Leave') return leavePolicy.cl ?? 12;
-    if (typeLabel === 'Sick Leave') return leavePolicy.sl ?? 12;
-    if (typeLabel === 'Earned Leave') return leavePolicy.el ?? 15;
-    return leavePolicy[typeLabel] ?? 12;
-  };
+  const leaveTypePillClassResolved = useMemo(
+    () => (raw) => {
+      const r = (raw || '').trim();
+      const lt = profileLeaveTypes.find((x) => x.name === r || x.shortCode === r);
+      const code = lt?.shortCode || r;
+      return LEAVE_TYPE_STYLE[code] || 'bg-slate-100 text-slate-700';
+    },
+    [profileLeaveTypes],
+  );
 
   const timelineEvents = useMemo(() => {
     if (!employee) return [];
@@ -2774,13 +2839,14 @@ export default function EmployeeProfile() {
             <p className="text-red-500 text-sm text-center py-4">Error loading leave: {leaveError}</p>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {profileLeaveTypes.map((lt) => (
-              <div key={lt} className="bg-white rounded-xl border border-slate-200 p-4 text-center">
-                <p className="text-slate-500 text-sm truncate" title={lt}>
-                  {lt}
+            {profilePaidLeaveTypes.map((lt) => (
+              <div key={lt.shortCode} className="bg-white rounded-xl border border-slate-200 p-4 text-center">
+                <p className="text-slate-500 text-sm truncate" title={lt.name}>
+                  {lt.name}
+                  <span className="block text-xs font-mono text-blue-500 mt-0.5">{lt.shortCode}</span>
                 </p>
                 <p className="font-semibold text-slate-800">
-                  {leaveUsedByTypeProfile[lt] ?? 0} / {getMaxLeaveProfile(lt)}
+                  {leaveUsedByTypeProfile[lt.name] ?? 0} / {getMaxLeaveForProfileType(lt, leavePolicy)}
                 </p>
               </div>
             ))}
@@ -2803,7 +2869,7 @@ export default function EmployeeProfile() {
                     <tr key={l.id} className="border-t border-slate-100">
                       <td className="px-4 py-2">
                         <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${leaveTypePillClass(l.leaveType)}`}
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${leaveTypePillClassResolved(l.leaveType)}`}
                         >
                           {l.leaveType || '—'}
                         </span>

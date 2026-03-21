@@ -19,18 +19,84 @@ import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { toDisplayDate, toJSDate } from '../utils';
 
-const DEFAULT_LEAVE_TYPES = [
-  'Casual Leave',
-  'Sick Leave',
-  'Earned Leave',
-  'Maternity Leave',
-  'Paternity Leave',
-  'Bereavement Leave',
-  'Compensatory Leave',
-  'Marriage Leave',
-  'Study Leave',
-  'Unpaid Leave',
+const DEFAULT_LEAVE_TYPE_OBJECTS = [
+  { name: 'Casual Leave', shortCode: 'CL', isPaid: true },
+  { name: 'Sick Leave', shortCode: 'SL', isPaid: true },
+  { name: 'Earned Leave', shortCode: 'EL', isPaid: true },
+  { name: 'Maternity Leave', shortCode: 'ML', isPaid: true },
+  { name: 'Paternity Leave', shortCode: 'PL', isPaid: true },
+  { name: 'Bereavement Leave', shortCode: 'BL', isPaid: true },
+  { name: 'Compensatory Leave', shortCode: 'CO', isPaid: true },
+  { name: 'Marriage Leave', shortCode: 'MAR', isPaid: true },
+  { name: 'Study Leave', shortCode: 'STL', isPaid: false },
+  { name: 'Unpaid Leave', shortCode: 'UL', isPaid: false },
 ];
+
+function abbrevLeaveTypeName(name) {
+  return (name || '')
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 4);
+}
+
+function normalizeLeaveTypesFromCompany(raw) {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return DEFAULT_LEAVE_TYPE_OBJECTS.map((t) => ({ ...t }));
+  }
+  return raw.map((t) => {
+    if (typeof t === 'string') {
+      const name = t.trim();
+      return { name, shortCode: abbrevLeaveTypeName(name), isPaid: true };
+    }
+    const name = (t.name || '').trim() || 'Leave';
+    const shortCode = (t.shortCode || abbrevLeaveTypeName(name)).toUpperCase().slice(0, 8);
+    return { name, shortCode, isPaid: t.isPaid !== false };
+  });
+}
+
+function buildAllowancesMapFromCompany(data, normalizedTypes) {
+  const lp = data?.leavePolicy || {};
+  const out = {};
+  normalizedTypes.filter((lt) => lt.isPaid).forEach((lt) => {
+    let n =
+      lp[lt.shortCode] ??
+      lp[lt.name] ??
+      (lt.shortCode === 'CL' ? lp.cl : lt.shortCode === 'SL' ? lp.sl : lt.shortCode === 'EL' ? lp.el : undefined);
+    if (n === undefined || Number.isNaN(Number(n))) n = lt.shortCode === 'EL' ? 15 : 12;
+    out[lt.shortCode] = Number(n);
+  });
+  return out;
+}
+
+function leaveRecordMatchesType(l, lt) {
+  const t = (l.leaveType || '').trim();
+  if (t === lt.name || t === lt.shortCode) return true;
+  if (lt.shortCode === 'CL' && t === 'CL') return true;
+  if (lt.shortCode === 'SL' && t === 'SL') return true;
+  if (lt.shortCode === 'EL' && t === 'EL') return true;
+  return false;
+}
+
+function getAllowanceForType(lt, leavePolicyMap) {
+  const lp = leavePolicyMap || {};
+  let n = lp[lt.shortCode] ?? lp[lt.name];
+  if (n === undefined) {
+    if (lt.shortCode === 'CL') n = lp.cl;
+    else if (lt.shortCode === 'SL') n = lp.sl;
+    else if (lt.shortCode === 'EL') n = lp.el;
+  }
+  if (n === undefined || Number.isNaN(Number(n))) n = 0;
+  return Number(n);
+}
+
+function incrementKeyForLeaveType(leaveTypeRaw, leaveTypesArr) {
+  const r = (leaveTypeRaw || '').trim();
+  const lt = leaveTypesArr.find((x) => x.name === r || x.shortCode === r);
+  return lt?.shortCode || r || 'CL';
+}
 
 function getDaysBetween(startVal, endVal) {
   const start = toJSDate(startVal);
@@ -46,28 +112,25 @@ function getDaysBetween(startVal, endVal) {
   return count;
 }
 
-function matchLeaveBalanceKey(rawLeaveType, leaveTypes) {
-  const r = (rawLeaveType || '').trim();
-  if (leaveTypes.includes(r)) return r;
-  if (r === 'CL' && leaveTypes.includes('Casual Leave')) return 'Casual Leave';
-  if (r === 'SL' && leaveTypes.includes('Sick Leave')) return 'Sick Leave';
-  if (r === 'EL' && leaveTypes.includes('Earned Leave')) return 'Earned Leave';
-  return null;
-}
-
-function getMaxForLeaveType(typeLabel, leavePolicy) {
-  const lp = leavePolicy || { cl: 12, sl: 12, el: 15 };
-  if (typeLabel === 'Casual Leave') return Number(lp.cl) || 12;
-  if (typeLabel === 'Sick Leave') return Number(lp.sl) || 12;
-  if (typeLabel === 'Earned Leave') return Number(lp.el) || 15;
-  return Number(lp[typeLabel]) || 12;
-}
-
-const TYPE_STYLE = { CL: 'bg-blue-100 text-blue-800', SL: 'bg-red-100 text-red-800', EL: 'bg-green-100 text-green-800' };
+const TYPE_STYLE = {
+  CL: 'bg-blue-100 text-blue-800',
+  SL: 'bg-red-100 text-red-800',
+  EL: 'bg-green-100 text-green-800',
+  ML: 'bg-pink-100 text-pink-800',
+  PL: 'bg-indigo-100 text-indigo-800',
+  BL: 'bg-gray-200 text-gray-800',
+  CO: 'bg-amber-100 text-amber-800',
+  MAR: 'bg-rose-100 text-rose-800',
+  STL: 'bg-slate-100 text-slate-700',
+  UL: 'bg-slate-100 text-slate-600',
+};
 const STATUS_STYLE = { Pending: 'bg-amber-100 text-amber-800', Approved: 'bg-green-100 text-green-800', Rejected: 'bg-red-100 text-red-800' };
 
-function leaveTypeBadgeClass(lt) {
-  return TYPE_STYLE[lt] || 'bg-slate-100 text-slate-700';
+function leaveTypeBadgeClass(raw, leaveTypesArr) {
+  const r = (raw || '').trim();
+  const lt = leaveTypesArr.find((x) => x.name === r || x.shortCode === r);
+  const code = lt?.shortCode || r;
+  return TYPE_STYLE[code] || 'bg-slate-100 text-slate-700';
 }
 
 export default function Leave() {
@@ -75,8 +138,8 @@ export default function Leave() {
   const { success, error: showError } = useToast();
   const [leaveList, setLeaveList] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [leavePolicy, setLeavePolicy] = useState({ cl: 12, sl: 12, el: 15 });
-  const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
+  const [leavePolicy, setLeavePolicy] = useState({ CL: 12, SL: 12, EL: 15 });
+  const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPE_OBJECTS);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('Pending');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -131,12 +194,9 @@ export default function Leave() {
         ]);
         if (companySnap.exists()) {
           const data = companySnap.data();
-          if (data.leavePolicy) setLeavePolicy(data.leavePolicy);
-          if (Array.isArray(data.leaveTypes) && data.leaveTypes.length > 0) {
-            setLeaveTypes(data.leaveTypes);
-          } else {
-            setLeaveTypes(DEFAULT_LEAVE_TYPES);
-          }
+          const types = normalizeLeaveTypesFromCompany(data?.leaveTypes);
+          setLeaveTypes(types);
+          setLeavePolicy(buildAllowancesMapFromCompany(data, types));
         }
         setLeaveList(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => (e.status || 'Active') !== 'Inactive'));
@@ -189,27 +249,35 @@ export default function Leave() {
     return getDaysBetween(form.startDate, form.endDate);
   }, [form.startDate, form.endDate]);
 
+  const paidLeaveTypes = useMemo(() => leaveTypes.filter((lt) => lt.isPaid), [leaveTypes]);
+
   const leaveBalance = useMemo(() => {
     const approved = leaveList.filter((l) => l.status === 'Approved');
     const byEmployee = {};
-    employees.forEach((e) => {
-      byEmployee[e.id] = { name: e.fullName };
-      leaveTypes.forEach((lt) => {
-        byEmployee[e.id][lt] = 0;
+
+    const ensureRow = (id, name) => {
+      if (!byEmployee[id]) {
+        const row = { name: name || '—' };
+        paidLeaveTypes.forEach((lt) => {
+          row[lt.shortCode] = 0;
+        });
+        byEmployee[id] = row;
+      }
+    };
+
+    employees.forEach((e) => ensureRow(e.id, e.fullName));
+
+    approved.forEach((l) => {
+      ensureRow(l.employeeId, l.employeeName);
+      paidLeaveTypes.forEach((lt) => {
+        if (leaveRecordMatchesType(l, lt)) {
+          byEmployee[l.employeeId][lt.shortCode] += l.days || 0;
+        }
       });
     });
-    approved.forEach((l) => {
-      if (!byEmployee[l.employeeId]) {
-        byEmployee[l.employeeId] = { name: l.employeeName || '—' };
-        leaveTypes.forEach((lt) => {
-          byEmployee[l.employeeId][lt] = 0;
-        });
-      }
-      const key = matchLeaveBalanceKey(l.leaveType, leaveTypes);
-      if (key) byEmployee[l.employeeId][key] = (byEmployee[l.employeeId][key] || 0) + (l.days || 0);
-    });
+
     return byEmployee;
-  }, [leaveList, employees, leaveTypes]);
+  }, [leaveList, employees, paidLeaveTypes]);
 
   const downloadLeaveReport = (format) => {
     const rows = filteredLeave.map((l) => ({
@@ -246,7 +314,8 @@ export default function Leave() {
         decidedAt: serverTimestamp(),
       });
       const empRef = doc(db, 'companies', companyId, 'employees', leaveDoc.employeeId);
-      const key = `leaveUsed.${leaveDoc.leaveType || 'CL'}`;
+      const code = incrementKeyForLeaveType(leaveDoc.leaveType, leaveTypes);
+      const key = `leaveUsed.${code}`;
       await updateDoc(empRef, { [key]: increment(leaveDoc.days || 0) });
       setLeaveList((prev) => prev.map((l) => (l.id === leaveDoc.id ? { ...l, status: 'Approved' } : l)));
       success('Leave approved');
@@ -323,7 +392,7 @@ export default function Leave() {
     setSelectedEmployee(null);
     setEmpSearch('');
     setShowEmpDropdown(false);
-    setForm({ employeeId: '', leaveType: leaveTypes[0] || '', startDate: '', endDate: '', reason: '' });
+    setForm({ employeeId: '', leaveType: leaveTypes[0]?.name || '', startDate: '', endDate: '', reason: '' });
     setShowAddModal(true);
   };
 
@@ -390,27 +459,36 @@ export default function Leave() {
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Employee</th>
-                {leaveTypes.map((lt) => (
-                  <th key={lt} className="px-4 py-2 text-left font-medium text-slate-600 whitespace-nowrap">
-                    {lt} (used/{getMaxForLeaveType(lt, leavePolicy)})
-                  </th>
-                ))}
+                {paidLeaveTypes.map((lt) => {
+                  const allowed = getAllowanceForType(lt, leavePolicy);
+                  return (
+                    <th key={lt.shortCode} className="px-4 py-2 text-left font-medium text-slate-600 whitespace-nowrap">
+                      {lt.shortCode}
+                      <span className="block text-xs font-normal text-gray-400">/{allowed}</span>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
               {Object.entries(leaveBalance).map(([empId, row]) => (
                 <tr key={empId} className="border-t border-slate-100">
                   <td className="px-4 py-2 font-medium text-slate-800">{row.name}</td>
-                  {leaveTypes.map((lt) => (
-                    <td key={lt} className="px-4 py-2 text-slate-600 whitespace-nowrap">
-                      {row[lt] ?? 0}/{getMaxForLeaveType(lt, leavePolicy)}
-                    </td>
-                  ))}
+                  {paidLeaveTypes.map((lt) => {
+                    const used = row[lt.shortCode] ?? 0;
+                    const allowed = getAllowanceForType(lt, leavePolicy);
+                    return (
+                      <td key={lt.shortCode} className="px-4 py-2 whitespace-nowrap">
+                        <span className={used > allowed ? 'text-red-600' : 'text-gray-800'}>{used}</span>
+                        <span className="text-gray-400">/{allowed}</span>
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
               {Object.keys(leaveBalance).length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-500" colSpan={leaveTypes.length + 1}>
+                  <td className="px-4 py-4 text-slate-500" colSpan={paidLeaveTypes.length + 1}>
                     No employees
                   </td>
                 </tr>
@@ -451,9 +529,10 @@ export default function Leave() {
           className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
         >
           <option value="">All leave types</option>
-          {leaveTypes.map((t) => (
-            <option key={t} value={t}>
-              {t}
+          {leaveTypes.map((lt) => (
+            <option key={lt.name} value={lt.name}>
+              {lt.name} ({lt.shortCode})
+              {!lt.isPaid ? ' — Unpaid' : ''}
             </option>
           ))}
         </select>
@@ -541,7 +620,7 @@ export default function Leave() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${leaveTypeBadgeClass(l.leaveType)}`}>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${leaveTypeBadgeClass(l.leaveType, leaveTypes)}`}>
                       {l.leaveType || '—'}
                     </span>
                   </td>
@@ -697,9 +776,10 @@ export default function Leave() {
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
                 >
                   <option value="">Select leave type</option>
-                  {leaveTypes.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
+                  {leaveTypes.map((lt) => (
+                    <option key={lt.name} value={lt.name}>
+                      {lt.name} ({lt.shortCode})
+                      {!lt.isPaid ? ' — Unpaid' : ''}
                     </option>
                   ))}
                 </select>

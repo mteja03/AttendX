@@ -20,6 +20,29 @@ export async function seedData(createdBy) {
 
     const ts = (d) => Timestamp.fromDate(d instanceof Date ? d : new Date(d));
 
+    const SEED_LEAVE_TYPES = [
+      { name: 'Casual Leave', shortCode: 'CL', isPaid: true },
+      { name: 'Sick Leave', shortCode: 'SL', isPaid: true },
+      { name: 'Earned Leave', shortCode: 'EL', isPaid: true },
+      { name: 'Maternity Leave', shortCode: 'ML', isPaid: true },
+      { name: 'Paternity Leave', shortCode: 'PL', isPaid: true },
+      { name: 'Bereavement Leave', shortCode: 'BL', isPaid: true },
+      { name: 'Compensatory Leave', shortCode: 'CO', isPaid: true },
+      { name: 'Marriage Leave', shortCode: 'MAR', isPaid: true },
+      { name: 'Study Leave', shortCode: 'STL', isPaid: false },
+      { name: 'Unpaid Leave', shortCode: 'UL', isPaid: false },
+    ];
+    const SEED_LEAVE_POLICY = {
+      CL: 12,
+      SL: 12,
+      EL: 15,
+      ML: 12,
+      PL: 12,
+      BL: 12,
+      CO: 12,
+      MAR: 12,
+    };
+
     // ================================
     // COMPANY 1 — TechCorp India
     // ================================
@@ -48,19 +71,8 @@ export async function seedData(createdBy) {
         { name: 'Uniform', mode: 'consumable' },
         { name: 'SIM Card', mode: 'consumable' },
       ],
-      leavePolicy: { cl: 12, sl: 12, el: 15 },
-      leaveTypes: [
-        'Casual Leave',
-        'Sick Leave',
-        'Earned Leave',
-        'Maternity Leave',
-        'Paternity Leave',
-        'Bereavement Leave',
-        'Compensatory Leave',
-        'Marriage Leave',
-        'Study Leave',
-        'Unpaid Leave',
-      ],
+      leavePolicy: SEED_LEAVE_POLICY,
+      leaveTypes: SEED_LEAVE_TYPES,
     });
 
     const c1Id = company1Ref.id;
@@ -373,19 +385,8 @@ export async function seedData(createdBy) {
         { name: 'Safety Equipment', mode: 'consumable' },
         { name: 'Tools', mode: 'trackable' },
       ],
-      leavePolicy: { cl: 12, sl: 12, el: 15 },
-      leaveTypes: [
-        'Casual Leave',
-        'Sick Leave',
-        'Earned Leave',
-        'Maternity Leave',
-        'Paternity Leave',
-        'Bereavement Leave',
-        'Compensatory Leave',
-        'Marriage Leave',
-        'Study Leave',
-        'Unpaid Leave',
-      ],
+      leavePolicy: SEED_LEAVE_POLICY,
+      leaveTypes: SEED_LEAVE_TYPES,
     });
 
     const c2Id = company2Ref.id;
