@@ -1,7 +1,27 @@
-import { NavLink, Link, useParams } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { ROLE_COLORS, ROLE_LABELS, getNavItems } from '../utils/roles';
+
+function BrandMark() {
+  const [imgErr, setImgErr] = useState(false);
+  if (imgErr) {
+    return (
+      <div className="w-8 h-8 rounded-lg bg-[#4ECDC4] flex items-center justify-center text-[#1B6B6B] font-bold text-sm shrink-0">
+        AX
+      </div>
+    );
+  }
+  return (
+    <img
+      src="/logo/icon.png"
+      alt="AttendX"
+      className="w-8 h-8 rounded-lg object-contain shrink-0 bg-white/10"
+      onError={() => setImgErr(true)}
+    />
+  );
+}
 
 function NavIcon({ className }) {
   return (
@@ -133,23 +153,21 @@ export default function Sidebar() {
 
   const linkClass = (isActive) =>
     `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-      isActive ? 'bg-[#378ADD] text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'
+      isActive
+        ? 'bg-[#4ECDC4] text-[#1B6B6B]'
+        : 'text-white/70 hover:bg-white/[0.08] hover:text-white'
     }`;
 
   const roleBadgeClass = ROLE_COLORS[role] || 'bg-slate-100 text-slate-700';
   const roleLabel = ROLE_LABELS[role] || role || 'User';
 
   return (
-    <aside className="flex flex-col h-screen bg-[#1e3a5f] w-56 fixed left-0 top-0 overflow-hidden text-white">
-      <div className="flex-shrink-0 p-4 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#378ADD] text-white font-semibold text-sm">
-            AX
-          </div>
-          <div>
-            <h1 className="font-semibold text-white">AttendX</h1>
-            <p className="text-slate-400 text-xs">HR Platform</p>
-          </div>
+    <aside className="flex flex-col h-screen bg-[#1B6B6B] w-56 fixed left-0 top-0 overflow-hidden text-white">
+      <div className="flex-shrink-0 flex items-center gap-3 p-4 border-b border-white/10">
+        <BrandMark />
+        <div>
+          <p className="text-white font-semibold text-base tracking-wide">AttendX</p>
+          <p className="text-white/50 text-xs">HR Platform</p>
         </div>
       </div>
 
@@ -157,7 +175,7 @@ export default function Sidebar() {
         {isAdmin && (
           <>
             <div>
-              <p className="px-3 text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Admin Controls</p>
+              <p className="px-3 text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Admin Controls</p>
               <div className="space-y-0.5">
                 <NavLink to="/companies" className={({ isActive }) => linkClass(isActive)}>
                   <BuildingIcon className="w-5 h-5 shrink-0" />
@@ -172,19 +190,19 @@ export default function Sidebar() {
 
             {inCompany && (
               <div>
-                <Link to="/companies" className="flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-white text-sm">
+                <Link to="/companies" className="flex items-center gap-2 px-3 py-2 text-white/60 hover:text-white text-sm">
                   ← All Companies
                 </Link>
-                <div className="flex items-center gap-2 mt-2 mb-2 px-3">
+                <div className="flex items-center gap-2 mt-2 mb-2 px-3 py-2 rounded-lg bg-white/10">
                   <div
                     className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-xs font-semibold shrink-0"
-                    style={{ backgroundColor: company?.color || '#378ADD' }}
+                    style={{ backgroundColor: company?.color || '#1B6B6B' }}
                   >
                     {company?.initials || '—'}
                   </div>
                   <span className="text-sm font-medium text-white truncate">{company?.name || 'Company'}</span>
                 </div>
-                <p className="px-3 text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Current Company</p>
+                <p className="px-3 text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Current Company</p>
                 <div className="space-y-0.5">
                   {companyNavItems.map(({ to, label }) => {
                     const Icon = navIcons[to] || NavIcon;
@@ -203,10 +221,10 @@ export default function Sidebar() {
 
         {!isAdmin && inCompany && (
           <div className="space-y-0.5">
-            <div className="flex items-center gap-2 mb-2 px-3">
+            <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg bg-white/10">
               <div
                 className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-xs font-semibold"
-                style={{ backgroundColor: company?.color || '#378ADD' }}
+                style={{ backgroundColor: company?.color || '#1B6B6B' }}
               >
                 {company?.initials || '—'}
               </div>
@@ -238,13 +256,13 @@ export default function Sidebar() {
             />
             <div className="min-w-0">
               <p className="text-sm font-medium text-white truncate">{currentUser.displayName || currentUser.email}</p>
-              <p className="text-xs text-slate-400 truncate">{currentUser.email}</p>
+              <p className="text-xs text-white/60 truncate">{currentUser.email}</p>
             </div>
           </div>
           {role && (
             <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium mb-2 ${roleBadgeClass}`}>{roleLabel}</span>
           )}
-          <button type="button" onClick={handleSignOut} className="w-full text-left text-xs text-slate-400 hover:text-red-300">
+          <button type="button" onClick={handleSignOut} className="w-full text-left text-xs text-white/60 hover:text-red-200">
             Sign Out
           </button>
         </div>

@@ -113,7 +113,7 @@ function getDaysBetween(startVal, endVal) {
 }
 
 const TYPE_STYLE = {
-  CL: 'bg-blue-100 text-blue-800',
+  CL: 'bg-[#C5E8E8] text-[#0F4444]',
   SL: 'bg-red-100 text-red-800',
   EL: 'bg-green-100 text-green-800',
   ML: 'bg-pink-100 text-pink-800',
@@ -439,7 +439,7 @@ export default function Leave() {
           <button
             type="button"
             onClick={openAddModal}
-            className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
+            className="inline-flex items-center justify-center rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
           >
             Add Leave
           </button>
@@ -508,7 +508,7 @@ export default function Leave() {
               setFilterStatusDropdown('');
             }}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-              tab === t && !filterStatusDropdown ? 'bg-[#378ADD] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              tab === t && !filterStatusDropdown ? 'bg-[#1B6B6B] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
             {t}
@@ -591,7 +591,7 @@ export default function Leave() {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#378ADD] border-t-transparent" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
         </div>
       ) : (
         <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
@@ -686,11 +686,11 @@ export default function Leave() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') setShowEmpDropdown(true);
                     }}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-blue-400 min-h-[38px]"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#4ECDC4] min-h-[38px]"
                   >
                     {selectedEmployee ? (
                       <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-700 shrink-0">
+                        <div className="w-6 h-6 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B] shrink-0">
                           {selectedEmployee.fullName?.charAt(0)}
                         </div>
                         <span className="text-gray-800 text-sm truncate">{selectedEmployee.fullName}</span>
@@ -710,7 +710,7 @@ export default function Leave() {
                           placeholder="Search by name or ID..."
                           value={empSearch}
                           onChange={(e) => setEmpSearch(e.target.value)}
-                          className="w-full text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-400"
+                          className="w-full text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#4ECDC4]"
                           onClick={(e) => e.stopPropagation()}
                         />
                       </div>
@@ -742,9 +742,9 @@ export default function Leave() {
                                   setEmpSearch('');
                                 }
                               }}
-                              className="flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                              className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer border-b border-gray-100 last:border-0"
                             >
-                              <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-700 shrink-0">
+                              <div className="w-7 h-7 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B] shrink-0">
                                 {emp.fullName?.charAt(0)}
                               </div>
                               <div className="min-w-0">
@@ -773,7 +773,7 @@ export default function Leave() {
                   name="leaveType"
                   value={form.leaveType}
                   onChange={(e) => setForm((p) => ({ ...p, leaveType: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                 >
                   <option value="">Select leave type</option>
                   {leaveTypes.map((lt) => (
@@ -792,7 +792,7 @@ export default function Leave() {
                     name="startDate"
                     value={form.startDate}
                     onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     required
                   />
                 </div>
@@ -803,7 +803,7 @@ export default function Leave() {
                     name="endDate"
                     value={form.endDate}
                     onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     required
                   />
                 </div>
@@ -816,7 +816,7 @@ export default function Leave() {
                   value={form.reason}
                   onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                 />
               </div>
               <div className="flex justify-end gap-3 pt-2">
@@ -835,7 +835,7 @@ export default function Leave() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
                   disabled={saving || !form.employeeId || !form.leaveType}
                 >
                   {saving ? 'Saving…' : 'Save'}

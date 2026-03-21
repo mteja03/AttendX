@@ -51,7 +51,7 @@ export async function seedData(createdBy) {
     const company1Ref = await addDoc(collection(db, 'companies'), {
       name: 'TechCorp India',
       initials: 'TC',
-      color: '#378ADD',
+      color: '#1B6B6B',
       industry: 'IT',
       location: 'Mumbai',
       employeeCount: 3,

@@ -28,7 +28,7 @@ import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDriv
 import { toDisplayDate, toJSDate, toDateString } from '../utils';
 
 const DEPT_COLOR = {
-  Engineering: '#378ADD',
+  Engineering: '#1B6B6B',
   HR: '#1D9E75',
   Sales: '#D97706',
   Finance: '#0D9488',
@@ -83,7 +83,7 @@ const INDIAN_STATES = [
 ];
 
 const LEAVE_TYPE_STYLE = {
-  CL: 'bg-blue-100 text-blue-800',
+  CL: 'bg-[#C5E8E8] text-[#0F4444]',
   SL: 'bg-red-100 text-red-800',
   EL: 'bg-green-100 text-green-800',
   ML: 'bg-pink-100 text-pink-800',
@@ -1214,9 +1214,9 @@ export default function EmployeeProfile() {
   const getFileIconColor = (fileName) => {
     const ext = fileName?.split('.').pop()?.toLowerCase();
     if (ext === 'pdf') return 'bg-red-500';
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'bg-blue-500';
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'bg-[#4ECDC4]';
     if (['xls', 'xlsx'].includes(ext)) return 'bg-green-600';
-    if (['doc', 'docx'].includes(ext)) return 'bg-blue-700';
+    if (['doc', 'docx'].includes(ext)) return 'bg-[#155858]';
     return 'bg-gray-500';
   };
 
@@ -2338,7 +2338,7 @@ export default function EmployeeProfile() {
   if (loading) {
     return (
       <div className="p-8 flex justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#378ADD] border-t-transparent" />
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
       </div>
     );
   }
@@ -2346,7 +2346,7 @@ export default function EmployeeProfile() {
     return (
       <div className="p-8">
         <p className="text-slate-500">Employee not found.</p>
-        <Link to={`/company/${companyId}/employees`} className="text-[#378ADD] text-sm mt-2 inline-block">← Employees</Link>
+        <Link to={`/company/${companyId}/employees`} className="text-[#1B6B6B] text-sm mt-2 inline-block">← Employees</Link>
       </div>
     );
   }
@@ -2379,7 +2379,7 @@ export default function EmployeeProfile() {
 
   return (
     <div className="p-8">
-      <Link to={`/company/${companyId}/employees`} className="text-sm text-slate-600 hover:text-[#378ADD] mb-4 inline-block">← Employees</Link>
+      <Link to={`/company/${companyId}/employees`} className="text-sm text-slate-600 hover:text-[#1B6B6B] mb-4 inline-block">← Employees</Link>
 
       <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
         <div className="flex flex-wrap items-start gap-6">
@@ -2409,7 +2409,7 @@ export default function EmployeeProfile() {
             <p className="text-sm text-gray-500 mt-1">
               Joined {toDisplayDate(employee.joiningDate)}
               <span className="mx-2 text-gray-300">·</span>
-              <span className="text-blue-600 font-medium">
+              <span className="text-[#1B6B6B] font-medium">
                 {getTenure(employee.joiningDate)}
               </span>
             </p>
@@ -2419,7 +2419,7 @@ export default function EmployeeProfile() {
               <button
                 type="button"
                 onClick={openEdit}
-                className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
+                className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
               >
                 Edit
               </button>
@@ -2507,18 +2507,18 @@ export default function EmployeeProfile() {
                     onClick={() => navigate(`/company/${companyId}/employees/${employee.reportingManagerId}`)}
                     className="flex items-center gap-2 cursor-pointer hover:opacity-80 group mt-1"
                   >
-                    <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-700 group-hover:bg-blue-200 transition-colors">
+                    <div className="w-7 h-7 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B] group-hover:bg-[#9DD8D8] transition-colors">
                       {employee.reportingManagerName?.charAt(0)}
                     </div>
                     <div>
-                      <span className="text-sm text-blue-600 font-medium group-hover:underline">
+                      <span className="text-sm text-[#1B6B6B] font-medium group-hover:underline">
                         {employee.reportingManagerName}
                       </span>
                       <span className="text-xs text-gray-400 ml-1">
                         ({employee.reportingManagerEmpId})
                       </span>
                     </div>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-blue-400 group-hover:text-blue-600">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-[#4ECDC4] group-hover:text-[#1B6B6B]">
                       <path d="M2 10L10 2M10 2H4M10 2v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                   </div>
@@ -2534,7 +2534,7 @@ export default function EmployeeProfile() {
             {!showSalary ? (
               <div className="flex items-center gap-3">
                 <span className="text-slate-400 select-none">₹ ••••••••</span>
-                <button type="button" onClick={() => setShowSalary(true)} className="text-sm text-[#378ADD] hover:underline">Show</button>
+                <button type="button" onClick={() => setShowSalary(true)} className="text-sm text-[#1B6B6B] hover:underline">Show</button>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2606,8 +2606,8 @@ export default function EmployeeProfile() {
       {tab === 'documents' && (
         <div className="space-y-6">
           {!canUploadDocuments && (
-            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-lg mb-4">
-              <span className="text-blue-600 text-sm">ℹ️ Only HR Manager and Admin can upload or delete documents.</span>
+            <div className="flex items-center gap-2 p-3 bg-[#E8F5F5] border border-[#E8F5F5] rounded-lg mb-4">
+              <span className="text-[#1B6B6B] text-sm">ℹ️ Only HR Manager and Admin can upload or delete documents.</span>
             </div>
           )}
           {!googleAccessToken && canUploadDocuments && (
@@ -2626,8 +2626,8 @@ export default function EmployeeProfile() {
           )}
 
           {uploadingDocId && (
-            <div className="rounded-xl border border-[#378ADD] bg-[#378ADD]/10 p-3 text-sm text-[#378ADD] font-medium flex items-center gap-2">
-              <span className="animate-spin rounded-full h-4 w-4 border-2 border-[#378ADD] border-t-transparent" />
+            <div className="rounded-xl border border-[#4ECDC4] bg-[#4ECDC4]/10 p-3 text-sm text-[#1B6B6B] font-medium flex items-center gap-2">
+              <span className="animate-spin rounded-full h-4 w-4 border-2 border-[#4ECDC4] border-t-transparent" />
               Uploading to Google Drive...
             </div>
           )}
@@ -2697,7 +2697,7 @@ export default function EmployeeProfile() {
                                     type="button"
                                     onClick={() => handleViewDoc(uploaded)}
                                     disabled={rowBusy}
-                                    className="px-2.5 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
+                                    className="px-2.5 py-1 text-xs font-medium text-[#1B6B6B] bg-[#E8F5F5] rounded-lg hover:bg-[#C5E8E8] transition-colors disabled:opacity-50"
                                   >
                                     View
                                   </button>
@@ -2762,7 +2762,7 @@ export default function EmployeeProfile() {
                                         if (input) input.click();
                                       }}
                                       disabled={uploadingDocId === doc.id}
-                                      className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                      className="px-4 py-1.5 bg-[#1B6B6B] text-white text-sm rounded-lg hover:bg-[#155858] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                                     >
                                       {uploadingDocId === doc.id ? 'Uploading...' : 'Upload'}
                                     </button>
@@ -2827,7 +2827,7 @@ export default function EmployeeProfile() {
                     type="button"
                     onClick={handleUploadAdditionalDoc}
                     disabled={uploadingDocId === 'additional' || !additionalDocName.trim() || !additionalDocFile}
-                    className="rounded-lg bg-[#378ADD] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                    className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
                   >
                     {uploadingDocId === 'additional' ? 'Uploading…' : 'Upload Additional Document'}
                   </button>
@@ -2841,7 +2841,7 @@ export default function EmployeeProfile() {
                     <li key={doc.fileId || i} className="flex items-center justify-between py-2">
                       <span className="text-sm">{doc.name} — {formatDocDate(doc.uploadedAt)}</span>
                       <div className="flex gap-2">
-                        {doc.webViewLink && <a href={doc.webViewLink} target="_blank" rel="noopener noreferrer" className="text-[#378ADD] text-xs">View</a>}
+                        {doc.webViewLink && <a href={doc.webViewLink} target="_blank" rel="noopener noreferrer" className="text-[#1B6B6B] text-xs">View</a>}
                         {canUploadDocuments && (
                           <button type="button" onClick={() => setDeleteConfirm({ type: 'additional', index: i })} className="text-red-600 text-xs">
                             Delete
@@ -2889,7 +2889,7 @@ export default function EmployeeProfile() {
               <div key={lt.shortCode} className="bg-white rounded-xl border border-slate-200 p-4 text-center">
                 <p className="text-slate-500 text-sm truncate" title={lt.name}>
                   {lt.name}
-                  <span className="block text-xs font-mono text-blue-500 mt-0.5">{lt.shortCode}</span>
+                  <span className="block text-xs font-mono text-[#1B6B6B] mt-0.5">{lt.shortCode}</span>
                 </p>
                 <p className="font-semibold text-slate-800">
                   {leaveUsedByTypeProfile[lt.name] ?? 0} / {getMaxLeaveForProfileType(lt, leavePolicy)}
@@ -2957,7 +2957,7 @@ export default function EmployeeProfile() {
                         ? 'bg-amber-100'
                         : event.color === 'purple'
                           ? 'bg-purple-100'
-                          : 'bg-blue-100'
+                          : 'bg-[#C5E8E8]'
                 }`}
               >
                 {event.icon}
@@ -3031,11 +3031,11 @@ export default function EmployeeProfile() {
                           setShowManagerDropdown(true);
                         }
                       }}
-                      className="w-full border rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#378ADD]"
+                      className="w-full border rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#4ECDC4]"
                     >
                       {form.reportingManagerId ? (
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-700">
+                          <div className="w-6 h-6 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B]">
                             {form.reportingManagerName?.charAt(0)}
                           </div>
                           <span className="text-slate-800 truncate">{form.reportingManagerName}</span>
@@ -3075,7 +3075,7 @@ export default function EmployeeProfile() {
                             placeholder="Search by name or ID..."
                             value={managerSearch}
                             onChange={(e) => setManagerSearch(e.target.value)}
-                            className="w-full text-sm px-2 py-1.5 border rounded focus:outline-none focus:border-[#378ADD]"
+                            className="w-full text-sm px-2 py-1.5 border rounded focus:outline-none focus:border-[#4ECDC4]"
                             onClick={(e) => e.stopPropagation()}
                           />
                         </div>
@@ -3121,11 +3121,11 @@ export default function EmployeeProfile() {
                                   setShowManagerDropdown(false);
                                   setManagerSearch('');
                                 }}
-                                className={`flex items-center gap-3 px-3 py-2 hover:bg-blue-50 cursor-pointer ${
-                                  form.reportingManagerId === emp.id ? 'bg-blue-50' : ''
+                                className={`flex items-center gap-3 px-3 py-2 hover:bg-[#E8F5F5] cursor-pointer ${
+                                  form.reportingManagerId === emp.id ? 'bg-[#E8F5F5]' : ''
                                 }`}
                               >
-                                <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-700 flex-shrink-0">
+                                <div className="w-7 h-7 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B] flex-shrink-0">
                                   {emp.fullName?.charAt(0)}
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -3133,7 +3133,7 @@ export default function EmployeeProfile() {
                                   <p className="text-xs text-slate-400">{emp.empId} · {emp.designation || '—'}</p>
                                 </div>
                                 {form.reportingManagerId === emp.id && (
-                                  <span className="text-[#378ADD] text-xs">✓</span>
+                                  <span className="text-[#1B6B6B] text-xs">✓</span>
                                 )}
                               </div>
                             ))}
@@ -3176,7 +3176,7 @@ export default function EmployeeProfile() {
               </div>
               <div className="flex justify-end gap-3 pt-4">
                 <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-500 text-sm">Cancel</button>
-                <button type="submit" disabled={saving} className="rounded-lg bg-[#378ADD] text-white text-sm font-medium px-4 py-2 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
+                <button type="submit" disabled={saving} className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
               </div>
             </form>
           </div>
@@ -3186,11 +3186,11 @@ export default function EmployeeProfile() {
       {tab === 'assets' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-            <div className="bg-blue-50 rounded-xl p-3 text-center">
-              <p className="text-xl font-semibold text-blue-700">
+            <div className="bg-[#E8F5F5] rounded-xl p-3 text-center">
+              <p className="text-xl font-semibold text-[#1B6B6B]">
                 {employeeAssets.length + employeeConsumableCards.length}
               </p>
-              <p className="text-xs text-blue-600">Currently Assigned</p>
+              <p className="text-xs text-[#1B6B6B]">Currently Assigned</p>
             </div>
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-xl font-semibold text-gray-700">
@@ -3212,7 +3212,7 @@ export default function EmployeeProfile() {
               <button
                 type="button"
                 onClick={openProfileAssignModal}
-                className="text-xs text-blue-600 hover:underline"
+                className="text-xs text-[#1B6B6B] hover:underline"
               >
                 + Assign Asset
               </button>
@@ -3225,7 +3225,7 @@ export default function EmployeeProfile() {
                 <button
                   type="button"
                     onClick={openProfileAssignModal}
-                  className="mt-3 text-sm text-blue-600 hover:underline"
+                  className="mt-3 text-sm text-[#1B6B6B] hover:underline"
                 >
                   Assign an asset
                 </button>
@@ -3237,7 +3237,7 @@ export default function EmployeeProfile() {
                     key={asset.id}
                     className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:border-gray-300 transition-colors"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-xl flex-shrink-0">
+                    <div className="w-10 h-10 rounded-lg bg-[#E8F5F5] flex items-center justify-center text-xl flex-shrink-0">
                       {getAssetIcon(asset.type)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -3260,7 +3260,7 @@ export default function EmployeeProfile() {
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {asset.kind === 'trackable' ? (
                         <>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-[#C5E8E8] text-[#1B6B6B] font-medium">
                             Trackable
                           </span>
                           <button
@@ -3360,7 +3360,7 @@ export default function EmployeeProfile() {
                               : h.action === 'issued'
                               ? 'bg-green-100 text-green-700'
                               : h.action === 'returned'
-                              ? 'bg-blue-100 text-blue-700'
+                              ? 'bg-[#C5E8E8] text-[#1B6B6B]'
                               : h.action === 'stock_adjusted'
                               ? 'bg-amber-100 text-amber-800'
                               : 'bg-gray-100 text-gray-600'
@@ -3388,7 +3388,7 @@ export default function EmployeeProfile() {
                       onboarding?.status === 'completed'
                         ? 'bg-green-100 text-green-700'
                         : onboarding?.status === 'in_progress'
-                        ? 'bg-blue-100 text-blue-700'
+                        ? 'bg-[#C5E8E8] text-[#1B6B6B]'
                         : 'bg-gray-100 text-gray-600'
                     }`}
                   >
@@ -3409,7 +3409,7 @@ export default function EmployeeProfile() {
                 <p className="text-xs text-gray-400 mt-1">{onboardingPct}% Complete</p>
                 <div className="mt-3 w-full max-w-md bg-gray-100 rounded-full h-2">
                   <div
-                    className="bg-blue-600 h-2 rounded-full"
+                    className="bg-[#4ECDC4] h-2 rounded-full"
                     style={{ width: `${Math.min(onboardingPct, 100)}%` }}
                   />
                 </div>
@@ -3420,7 +3420,7 @@ export default function EmployeeProfile() {
                   type="button"
                   onClick={handleStartOnboarding}
                   disabled={saving}
-                  className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  className="px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
                 >
                   {saving ? 'Starting…' : 'Start Onboarding'}
                 </button>
@@ -3439,7 +3439,7 @@ export default function EmployeeProfile() {
                 type="button"
                 onClick={handleStartOnboarding}
                 disabled={saving}
-                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
               >
                 {saving ? 'Starting…' : 'Start Onboarding'}
               </button>
@@ -3481,7 +3481,7 @@ export default function EmployeeProfile() {
                             ? 'bg-green-50 border-green-100'
                             : isOverdue(task.dueDate)
                             ? 'bg-red-50 border-red-100'
-                            : 'bg-white border-gray-200 hover:border-blue-200 hover:bg-blue-50'
+                            : 'bg-white border-gray-200 hover:border-[#C5E8E8] hover:bg-[#E8F5F5]'
                         }`}
                       >
                         <div
@@ -3605,7 +3605,7 @@ export default function EmployeeProfile() {
                   type="button"
                   onClick={handleStartOffboarding}
                   disabled={saving}
-                  className="w-full px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  className="w-full px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
                 >
                   {saving ? 'Starting…' : 'Start Offboarding'}
                 </button>
@@ -3655,7 +3655,7 @@ export default function EmployeeProfile() {
               <div className="w-full bg-gray-100 rounded-full h-2 mb-6">
                 <div
                   className={`h-2 rounded-full transition-all ${
-                    offPct === 100 ? 'bg-green-500' : offPct > 50 ? 'bg-blue-500' : 'bg-amber-500'
+                    offPct === 100 ? 'bg-green-500' : offPct > 50 ? 'bg-[#4ECDC4]' : 'bg-amber-500'
                   }`}
                   style={{ width: `${Math.min(offPct, 100)}%` }}
                 />
@@ -3904,7 +3904,7 @@ export default function EmployeeProfile() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
                   disabled={saving}
                 >
                   {saving ? 'Assigning…' : 'Assign Asset'}
@@ -3942,7 +3942,7 @@ export default function EmployeeProfile() {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') setShowProfileAssetDropdown(true);
                       }}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between min-h-[38px] hover:border-blue-400"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between min-h-[38px] hover:border-[#4ECDC4]"
                     >
                       {assignAssetForm.assetId ? (
                         (() => {
@@ -4002,7 +4002,7 @@ export default function EmployeeProfile() {
                                     setProfileAssetSearch('');
                                   }
                                 }}
-                                className="flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                                className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer border-b border-gray-100 last:border-0"
                               >
                                 <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 shrink-0">
                                   {asset.assetId}
@@ -4216,7 +4216,7 @@ export default function EmployeeProfile() {
                       <button
                         type="submit"
                         disabled={!assignAssetForm.assetId}
-                        className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                        className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
                       >
                         Assign Asset
                       </button>
@@ -4297,7 +4297,7 @@ export default function EmployeeProfile() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
                   disabled={saving}
                 >
                   {saving ? 'Saving…' : 'Save Return'}
@@ -4374,7 +4374,7 @@ export default function EmployeeProfile() {
               </button>
               <button
                 onClick={handleReturnConsumableFromProfile}
-                className="flex-1 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700"
+                className="flex-1 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
               >
                 Confirm Return
               </button>

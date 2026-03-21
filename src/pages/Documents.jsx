@@ -258,7 +258,7 @@ export default function Documents() {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#378ADD] border-t-transparent" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
         </div>
       ) : (
         <>
@@ -332,7 +332,7 @@ export default function Documents() {
                         <span className={pct === 100 ? 'text-green-700 font-medium' : pct > 0 ? 'text-amber-700' : 'text-slate-500'}>{pct}%</span>
                       </td>
                       <td className="px-4 py-3">
-                        <Link to={`/company/${companyId}/employees/${emp.id}?tab=documents`} className="text-[#378ADD] text-xs font-medium hover:underline">View Documents</Link>
+                        <Link to={`/company/${companyId}/employees/${emp.id}?tab=documents`} className="text-[#1B6B6B] text-xs font-medium hover:underline">View Documents</Link>
                       </td>
                     </tr>
                   );
@@ -370,7 +370,7 @@ export default function Documents() {
                             Missing: {missing.map((d) => d.name).join(', ')}
                           </p>
                         </div>
-                        <Link to={`/company/${companyId}/employees/${emp.id}?tab=documents`} className="text-[#378ADD] text-sm font-medium hover:underline">View Documents</Link>
+                        <Link to={`/company/${companyId}/employees/${emp.id}?tab=documents`} className="text-[#1B6B6B] text-sm font-medium hover:underline">View Documents</Link>
                         <button type="button" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50" disabled title="Coming soon">Send Reminder</button>
                       </li>
                     ))}

@@ -44,7 +44,7 @@ const CONDITION_OPTIONS = ['New', 'Good', 'Fair', 'Poor', 'Damaged'];
 const getStatusBadgeClass = (status) => {
   switch (status) {
     case 'Available':
-      return 'bg-blue-100 text-blue-700';
+      return 'bg-[#C5E8E8] text-[#1B6B6B]';
     case 'Assigned':
       return 'bg-green-100 text-green-700';
     case 'Damaged':
@@ -1006,7 +1006,7 @@ export default function Assets() {
           <button
             type="button"
             onClick={handleOpenAdd}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#378ADD] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#2a7bc7]"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#1B6B6B] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#155858]"
           >
             + Add Asset
           </button>
@@ -1019,7 +1019,7 @@ export default function Assets() {
           <p className="text-xs text-slate-500">Total Assets</p>
         </div>
         <div className="bg-white border rounded-lg p-3 text-center">
-          <p className="text-xl font-semibold text-blue-600">{stats.trackable}</p>
+          <p className="text-xl font-semibold text-[#1B6B6B]">{stats.trackable}</p>
           <p className="text-xs text-slate-500">Trackable</p>
         </div>
         <div className="bg-white border rounded-lg p-3 text-center">
@@ -1039,7 +1039,7 @@ export default function Assets() {
             placeholder="Search by asset, ID, serial, or employee..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
           />
           <div className="flex gap-2">
             <select
@@ -1101,7 +1101,7 @@ export default function Assets() {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#378ADD] border-t-transparent" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
         </div>
       ) : (
         <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
@@ -1137,7 +1137,7 @@ export default function Assets() {
                   <td className="px-4 py-3">
                     {a.assignedToId ? (
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-700">
+                        <div className="w-7 h-7 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B]">
                           {(a.assignedToName || '?').charAt(0)}
                         </div>
                         <div>
@@ -1165,7 +1165,7 @@ export default function Assets() {
                       <button
                         type="button"
                         onClick={() => openAssignModal(a)}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="text-xs text-[#1B6B6B] hover:underline"
                       >
                         Assign
                       </button>
@@ -1253,7 +1253,7 @@ export default function Assets() {
                           {available > 0 && (
                             <button
                               type="button"
-                              className="text-xs text-blue-600 hover:underline"
+                              className="text-xs text-[#1B6B6B] hover:underline"
                               onClick={() => openIssueModal(a)}
                             >
                               Issue
@@ -1294,7 +1294,7 @@ export default function Assets() {
             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-3">
               Add Asset
               {selectedAddAssetMode === 'trackable' ? (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-[#C5E8E8] text-[#1B6B6B] border border-[#C5E8E8]">
                   Trackable — individual item
                 </span>
               ) : selectedAddAssetMode === 'consumable' ? (
@@ -1312,7 +1312,7 @@ export default function Assets() {
                 <button
                   type="button"
                   onClick={() => navigate(`/company/${companyId}/settings`)}
-                  className="text-sm text-blue-600 hover:underline"
+                  className="text-sm text-[#1B6B6B] hover:underline"
                 >
                   Go to Settings → Manage Lists to add asset types
                 </button>
@@ -1329,7 +1329,7 @@ export default function Assets() {
                         name="assetId"
                         value={form.assetId}
                         onChange={handleFormChange}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:ring-1 focus:ring-[#378ADD]"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:ring-1 focus:ring-[#4ECDC4]"
                       />
                       {formErrors.assetId && <p className="text-red-500 text-xs mt-1">{formErrors.assetId}</p>}
                     </div>
@@ -1340,7 +1340,7 @@ export default function Assets() {
                       name="name"
                       value={form.name}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                     {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
                   </div>
@@ -1350,7 +1350,7 @@ export default function Assets() {
                       name="type"
                       value={form.type}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     >
                       <option value="">Select asset type</option>
                       <optgroup label="Trackable (unique items)">
@@ -1371,15 +1371,15 @@ export default function Assets() {
                     {formErrors.type && <p className="text-red-500 text-xs mt-1">{formErrors.type}</p>}
 
                     {selectedAddAssetMode === 'trackable' ? (
-                      <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-100 mt-2">
-                        <span className="text-blue-600 text-base">
+                      <div className="flex items-center gap-2 p-3 bg-[#E8F5F5] rounded-lg border border-[#E8F5F5] mt-2">
+                        <span className="text-[#1B6B6B] text-base">
                           🔵
                         </span>
                         <div>
-                          <p className="text-sm font-medium text-blue-700">
+                          <p className="text-sm font-medium text-[#1B6B6B]">
                             Trackable Asset
                           </p>
-                          <p className="text-xs text-blue-500">
+                          <p className="text-xs text-[#1B6B6B]">
                             Each item gets a unique ID and can only be assigned to one person at a time. Full serial number and history tracking.
                           </p>
                         </div>
@@ -1414,7 +1414,7 @@ export default function Assets() {
                           name="brand"
                           value={form.brand}
                           onChange={handleFormChange}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                         />
                       </div>
                       <div>
@@ -1423,7 +1423,7 @@ export default function Assets() {
                           name="model"
                           value={form.model}
                           onChange={handleFormChange}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                         />
                       </div>
                       <div>
@@ -1432,7 +1432,7 @@ export default function Assets() {
                           name="serialNumber"
                           value={form.serialNumber}
                           onChange={handleFormChange}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                         />
                       </div>
                     </>
@@ -1452,7 +1452,7 @@ export default function Assets() {
                           name="purchaseDate"
                           value={form.purchaseDate}
                           onChange={handleFormChange}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                         />
                       </div>
                       <div>
@@ -1462,7 +1462,7 @@ export default function Assets() {
                           name="purchasePrice"
                           value={form.purchasePrice}
                           onChange={handleFormChange}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                         />
                       </div>
                       <div>
@@ -1472,7 +1472,7 @@ export default function Assets() {
                           name="warrantyExpiry"
                           value={form.warrantyExpiry}
                           onChange={handleFormChange}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                         />
                       </div>
                     </>
@@ -1485,7 +1485,7 @@ export default function Assets() {
                           name="totalStock"
                           value={form.totalStock}
                           onChange={handleFormChange}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                           min={0}
                         />
                         {formErrors.totalStock && (
@@ -1499,7 +1499,7 @@ export default function Assets() {
                           name="purchasePrice"
                           value={form.purchasePrice}
                           onChange={handleFormChange}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                           min={0}
                         />
                       </div>
@@ -1509,7 +1509,7 @@ export default function Assets() {
                           name="unit"
                           value={form.unit}
                           onChange={handleFormChange}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                         >
                           <option value="pieces">pieces</option>
                           <option value="sets">sets</option>
@@ -1541,7 +1541,7 @@ export default function Assets() {
                           name="condition"
                           value={form.condition}
                           onChange={handleFormChange}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                         >
                           {CONDITION_OPTIONS.map((c) => (
                             <option key={c} value={c}>
@@ -1559,7 +1559,7 @@ export default function Assets() {
                       name="isReturnable"
                       checked={form.isReturnable}
                       onChange={handleFormChange}
-                      className="rounded border-slate-300 text-[#378ADD] focus:ring-[#378ADD]"
+                      className="rounded border-slate-300 text-[#1B6B6B] focus:ring-[#4ECDC4]"
                     />
                     <label htmlFor="isReturnable" className="text-xs text-slate-700">
                       Employee must return this asset
@@ -1575,7 +1575,7 @@ export default function Assets() {
                   value={form.notes}
                   onChange={handleFormChange}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                   placeholder="Any additional information about this asset"
                 />
               </section>
@@ -1591,7 +1591,7 @@ export default function Assets() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
                   disabled={saving}
                 >
                   {saving ? 'Saving…' : 'Save Asset'}
@@ -1700,7 +1700,7 @@ export default function Assets() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
                   disabled={saving}
                 >
                   {saving ? 'Assigning…' : 'Assign Asset'}
@@ -1780,7 +1780,7 @@ export default function Assets() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
                   disabled={saving}
                 >
                   {saving ? 'Saving…' : 'Save Return'}
@@ -1879,7 +1879,7 @@ export default function Assets() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
+                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
                 >
                   {saving ? 'Saving…' : 'Issue'}
                 </button>
@@ -2012,7 +2012,7 @@ export default function Assets() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="rounded-lg bg-[#378ADD] text-white text-sm font-medium px-4 py-2">
+                <button type="submit" className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2">
                   {saving ? 'Saving…' : 'Return'}
                 </button>
               </div>
@@ -2075,7 +2075,7 @@ export default function Assets() {
                 <button type="button" onClick={() => setShowEditStockModal(false)} className="text-sm text-slate-500 hover:text-slate-700">
                   Cancel
                 </button>
-                <button type="submit" className="rounded-lg bg-[#378ADD] text-white text-sm font-medium px-4 py-2">
+                <button type="submit" className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2">
                   {saving ? 'Saving…' : 'Save Stock'}
                 </button>
               </div>
@@ -2108,7 +2108,7 @@ export default function Assets() {
                     badgeClass = 'bg-green-100 text-green-700';
                     label = 'Assigned';
                   } else if (h.action === 'returned') {
-                    badgeClass = 'bg-blue-100 text-blue-700';
+                    badgeClass = 'bg-[#C5E8E8] text-[#1B6B6B]';
                     label = 'Returned';
                   } else if (h.action === 'damaged') {
                     badgeClass = 'bg-red-100 text-red-700';

@@ -235,7 +235,7 @@ export default function AdminUsers() {
       admin: 'bg-purple-100 text-purple-800',
       hrmanager: 'bg-green-100 text-green-800',
       manager: 'bg-amber-100 text-amber-800',
-      itmanager: 'bg-blue-100 text-blue-800',
+      itmanager: 'bg-[#C5E8E8] text-[#0F4444]',
     };
     const label = { admin: 'Admin', hrmanager: 'HR Manager', manager: 'Manager', itmanager: 'IT Manager' }[r] || r;
     return (
@@ -255,7 +255,7 @@ export default function AdminUsers() {
         <button
           type="button"
           onClick={() => { setShowForm(true); setFormError(''); }}
-          className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
+          className="inline-flex items-center justify-center rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
         >
           Add User
         </button>
@@ -282,12 +282,12 @@ export default function AdminUsers() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name or email"
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] w-56"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-56"
         />
         <select
           value={filterCompany}
           onChange={(e) => setFilterCompany(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] w-44"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-44"
         >
           <option value="">All companies</option>
           {companies.map((c) => (
@@ -297,7 +297,7 @@ export default function AdminUsers() {
         <select
           value={filterRole}
           onChange={(e) => setFilterRole(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] w-40"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-40"
         >
           <option value="">All roles</option>
           {ROLE_OPTIONS.map((r) => (
@@ -308,7 +308,7 @@ export default function AdminUsers() {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] w-32"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-32"
         >
           <option value="">All status</option>
           <option value="active">Active</option>
@@ -318,7 +318,7 @@ export default function AdminUsers() {
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#378ADD] border-t-transparent" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
         </div>
       ) : (
         <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
@@ -346,7 +346,7 @@ export default function AdminUsers() {
                       />
                       <span className="font-medium text-slate-800">{u.name || '—'}</span>
                       {(currentUser?.email || '').toLowerCase() === (u.email || '').toLowerCase() && (
-                        <span className="inline-flex items-center rounded-full bg-[#378ADD] px-2 py-0.5 text-xs font-medium text-white">
+                        <span className="inline-flex items-center rounded-full bg-[#1B6B6B] px-2 py-0.5 text-xs font-medium text-white">
                           You
                         </span>
                       )}
@@ -433,7 +433,7 @@ export default function AdminUsers() {
                   value={form.email}
                   onChange={handleFormChange}
                   placeholder="user@gmail.com"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
                   required
                 />
               </div>
@@ -444,7 +444,7 @@ export default function AdminUsers() {
                   name="name"
                   value={form.name}
                   onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
                   required
                 />
               </div>
@@ -454,7 +454,7 @@ export default function AdminUsers() {
                   name="role"
                   value={form.role}
                   onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
                 >
                   {ROLE_OPTIONS.map((r) => (
                     <option key={r.value} value={r.value}>{r.label}</option>
@@ -467,7 +467,7 @@ export default function AdminUsers() {
                   name="companyId"
                   value={form.companyId}
                   onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
                 >
                   <option value="">— Select company —</option>
                   {companies.map((c) => (
@@ -477,7 +477,7 @@ export default function AdminUsers() {
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowForm(false)} className="text-sm text-slate-500 hover:text-slate-700" disabled={saving}>Cancel</button>
-                <button type="submit" className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50" disabled={saving}>
+                <button type="submit" className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50" disabled={saving}>
                   {saving ? 'Saving…' : 'Save'}
                 </button>
               </div>

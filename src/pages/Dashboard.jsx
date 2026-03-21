@@ -36,7 +36,7 @@ function UserAddIcon({ className }) {
   );
 }
 const LEAVE_TYPE_STYLE = {
-  CL: 'bg-blue-100 text-blue-800',
+  CL: 'bg-[#C5E8E8] text-[#0F4444]',
   SL: 'bg-red-100 text-red-800',
   EL: 'bg-green-100 text-green-800',
 };
@@ -297,7 +297,7 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={() => navigate(`/company/${companyId}/assets`)}
-                className="text-xs text-blue-600 hover:underline"
+                className="text-xs text-[#1B6B6B] hover:underline"
               >
                 View all →
               </button>
@@ -313,7 +313,7 @@ export default function Dashboard() {
                 <p className="text-xs text-gray-400">Assigned</p>
               </div>
               <div className="text-center">
-                <p className="text-lg font-semibold text-blue-600">{assetStats.available}</p>
+                <p className="text-lg font-semibold text-[#1B6B6B]">{assetStats.available}</p>
                 <p className="text-xs text-gray-400">Available</p>
               </div>
               <div className="text-center">
@@ -346,7 +346,7 @@ export default function Dashboard() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') navigate(`/company/${companyId}/employees/${emp.id}?tab=onboarding`);
                     }}
-                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-blue-200 hover:bg-blue-50 cursor-pointer transition-all"
+                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-[#C5E8E8] hover:bg-[#E8F5F5] cursor-pointer transition-all"
                   >
                     <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-700 text-xs font-medium">
                       {(emp.fullName || '?').slice(0, 2).toUpperCase()}
@@ -362,11 +362,11 @@ export default function Dashboard() {
                     </div>
                     <div className="w-24 bg-gray-100 rounded-full h-2">
                       <div
-                        className="bg-blue-600 h-2 rounded-full"
+                        className="bg-[#4ECDC4] h-2 rounded-full"
                         style={{ width: `${Math.min(emp._onboardingPct || 0, 100)}%` }}
                       />
                     </div>
-                    <span className="text-xs text-blue-600">View →</span>
+                    <span className="text-xs text-[#1B6B6B]">View →</span>
                   </div>
                 ))}
               </div>
@@ -444,7 +444,7 @@ export default function Dashboard() {
         <button
           type="button"
           onClick={() => navigate(`/company/${companyId}/employees`)}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
+          className="inline-flex items-center gap-2 rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
         >
           <UserAddIcon className="w-4 h-4" />
           Add Employee
@@ -486,9 +486,9 @@ export default function Dashboard() {
                     <Link
                       key={emp.id}
                       to={`/company/${companyId}/employees/${emp.id}`}
-                      className="flex items-center gap-3 rounded-lg border border-slate-200 bg-pink-50/50 p-3 min-w-[200px] hover:bg-pink-100/50 hover:border-[#378ADD]/30 transition-colors cursor-pointer"
+                      className="flex items-center gap-3 rounded-lg border border-slate-200 bg-pink-50/50 p-3 min-w-[200px] hover:bg-pink-100/50 hover:border-[#4ECDC4]/30 transition-colors cursor-pointer"
                     >
-                      <div className="h-10 w-10 rounded-full bg-[#378ADD] flex items-center justify-center text-white text-sm font-bold shrink-0">
+                      <div className="h-10 w-10 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-sm font-bold shrink-0">
                         {(emp.fullName || '?').slice(0, 2).toUpperCase()}
                       </div>
                       <div className="min-w-0">
@@ -511,7 +511,7 @@ export default function Dashboard() {
                     <Link
                       key={emp.id}
                       to={`/company/${companyId}/employees/${emp.id}`}
-                      className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 min-w-[200px] hover:bg-slate-50 hover:border-[#378ADD]/30 transition-colors cursor-pointer"
+                      className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 min-w-[200px] hover:bg-slate-50 hover:border-[#4ECDC4]/30 transition-colors cursor-pointer"
                     >
                       <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-sm font-bold shrink-0">
                         {(emp.fullName || '?').slice(0, 2).toUpperCase()}
@@ -535,7 +535,7 @@ export default function Dashboard() {
                     <Link
                       key={emp.id}
                       to={`/company/${companyId}/employees/${emp.id}`}
-                      className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs font-medium hover:ring-2 hover:ring-[#378ADD]/50 transition-shadow cursor-pointer"
+                      className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs font-medium hover:ring-2 hover:ring-[#4ECDC4]/50 transition-shadow cursor-pointer"
                       title={emp.fullName}
                     >
                       {(emp.fullName || '?').slice(0, 2).toUpperCase()}

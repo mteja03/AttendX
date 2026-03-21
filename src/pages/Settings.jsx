@@ -60,7 +60,7 @@ const DEFAULT_ASSET_TYPES = [
 ];
 const INDUSTRIES = ['IT', 'Manufacturing', 'Automobile', 'Retail', 'Finance', 'Healthcare', 'Education', 'Media', 'Logistics', 'Real Estate', 'Other'];
 const COLOR_PRESETS = [
-  { value: '#378ADD' }, { value: '#1D9E75' }, { value: '#D85A30' },
+  { value: '#1B6B6B' }, { value: '#1D9E75' }, { value: '#D85A30' },
   { value: '#534AB7' }, { value: '#A32D2D' }, { value: '#BA7517' },
   { value: '#0F6E56' }, { value: '#E91E8C' }, { value: '#455A64' },
 ];
@@ -209,10 +209,10 @@ export default function Settings() {
   const [employees, setEmployees] = useState([]);
   const [assets, setAssets] = useState([]);
   const [companyLeaves, setCompanyLeaves] = useState([]);
-  const [companyColor, setCompanyColor] = useState('#378ADD');
+  const [companyColor, setCompanyColor] = useState('#1B6B6B');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [companyForm, setCompanyForm] = useState({ name: '', industry: '', location: '', initials: '', color: '#378ADD' });
+  const [companyForm, setCompanyForm] = useState({ name: '', industry: '', location: '', initials: '', color: '#1B6B6B' });
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [leaveAllowances, setLeaveAllowances] = useState({ CL: 12, SL: 12, EL: 15 });
   const [newLeaveTypeName, setNewLeaveTypeName] = useState('');
@@ -275,7 +275,7 @@ export default function Settings() {
         if (companySnap.exists()) {
           const data = companySnap.data();
           setCompany({ id: companySnap.id, ...data });
-          const col = data.color || '#378ADD';
+          const col = data.color || '#1B6B6B';
           setCompanyForm({
             name: data.name || '',
             industry: data.industry || '',
@@ -710,7 +710,7 @@ export default function Settings() {
   if (loading) {
     return (
       <div className="p-8 flex justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#378ADD] border-t-transparent" />
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
       </div>
     );
   }
@@ -791,7 +791,7 @@ export default function Settings() {
         <button
           type="submit"
           disabled={saving}
-          className="w-full rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+          className="w-full rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
         >
           Save Changes
         </button>
@@ -902,7 +902,7 @@ export default function Settings() {
                     onClick={() => handleToggleAssetTypeMode(t.name)}
                     className={`text-xs px-3 py-1.5 rounded border font-medium ${
                       t.mode === 'trackable'
-                        ? 'bg-blue-50 text-blue-600 border-blue-200'
+                        ? 'bg-[#E8F5F5] text-[#1B6B6B] border-[#C5E8E8]'
                         : 'bg-green-50 text-green-600 border-green-200'
                     }`}
                   >
@@ -936,7 +936,7 @@ export default function Settings() {
             onClick={() => setNewAssetMode(newAssetMode === 'trackable' ? 'consumable' : 'trackable')}
             className={`text-xs px-3 py-1.5 rounded border font-medium ${
               newAssetMode === 'trackable'
-                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                ? 'bg-[#E8F5F5] text-[#1B6B6B] border-[#C5E8E8]'
                 : 'bg-green-50 text-green-600 border-green-200'
             }`}
           >
@@ -945,7 +945,7 @@ export default function Settings() {
           <button
             type="button"
             onClick={handleAddAssetType}
-            className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700"
+            className="text-sm bg-[#1B6B6B] text-white px-3 py-1.5 rounded hover:bg-[#155858]"
           >
             Add
           </button>
@@ -1005,7 +1005,7 @@ export default function Settings() {
           <button
             type="button"
             onClick={() => handleAdd(section.key, section.defaults)}
-            className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+            className="text-sm bg-[#1B6B6B] text-white px-3 py-1 rounded hover:bg-[#155858] disabled:opacity-50"
             disabled={saving || (addingSection === section.key && !addValue.trim())}
           >
             Add
@@ -1051,7 +1051,7 @@ export default function Settings() {
               <div className="flex items-center gap-2 flex-wrap min-w-0">
                 <span className="text-sm text-gray-800 truncate">{lt.name}</span>
                 {lt.shortCode && (
-                  <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-mono shrink-0">
+                  <span className="text-xs px-1.5 py-0.5 bg-[#E8F5F5] text-[#1B6B6B] rounded font-mono shrink-0">
                     {lt.shortCode}
                   </span>
                 )}
@@ -1088,14 +1088,14 @@ export default function Settings() {
               value={newLeaveTypeName}
               onChange={(e) => setNewLeaveTypeName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddLeaveType()}
-              className="flex-1 min-w-32 text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400"
+              className="flex-1 min-w-32 text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#4ECDC4]"
             />
             <input
               placeholder="Short code (e.g. CL)"
               value={newLeaveTypeCode}
               onChange={(e) => setNewLeaveTypeCode(e.target.value.toUpperCase())}
               maxLength={4}
-              className="w-24 text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 font-mono"
+              className="w-24 text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#4ECDC4] font-mono"
             />
             <select
               value={newLeaveTypePaid ? 'true' : 'false'}
@@ -1108,7 +1108,7 @@ export default function Settings() {
             <button
               type="button"
               onClick={handleAddLeaveType}
-              className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+              className="px-4 py-1.5 bg-[#1B6B6B] text-white rounded-lg text-sm hover:bg-[#155858]"
             >
               Add
             </button>
@@ -1131,7 +1131,7 @@ export default function Settings() {
               <div key={`${lt.shortCode}-allow-${index}`}>
                 <label className="text-xs text-gray-500 block mb-1">
                   {lt.name}
-                  <span className="ml-1 font-mono text-blue-500">({lt.shortCode})</span>
+                  <span className="ml-1 font-mono text-[#1B6B6B]">({lt.shortCode})</span>
                 </label>
                 <input
                   type="number"
@@ -1144,7 +1144,7 @@ export default function Settings() {
                       [lt.shortCode]: Number(e.target.value),
                     }))
                   }
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#4ECDC4]"
                 />
               </div>
             ))}
@@ -1154,7 +1154,7 @@ export default function Settings() {
           type="button"
           onClick={handleSaveLeavePolicy}
           disabled={saving}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-[#1B6B6B] text-white rounded-lg text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
         >
           Save Leave Policy
         </button>
@@ -1166,7 +1166,7 @@ export default function Settings() {
     <div className="space-y-4">
       {docTypesLoading && (
         <div className="flex justify-center py-12">
-          <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full" />
+          <div className="animate-spin w-6 h-6 border-2 border-[#4ECDC4] border-t-transparent rounded-full" />
         </div>
       )}
       {!docTypesLoading && docTypes && docTypes.map((cat) => (
@@ -1216,7 +1216,7 @@ export default function Settings() {
                       className={`text-xs px-2 py-0.5 rounded border transition-colors ${
                         (Array.isArray(docItem.accepts) ? docItem.accepts : [])
                           .includes(fmt.ext)
-                          ? 'bg-blue-600 text-white border-blue-600'
+                          ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]'
                           : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400 hover:text-gray-600'
                       }`}
                     >
@@ -1260,12 +1260,12 @@ export default function Settings() {
                 if (e.key === 'Enter') addDocType(cat.category);
               }}
               placeholder="Add document type..."
-              className="flex-1 text-sm border rounded px-2 py-1.5 focus:outline-none focus:border-blue-400"
+              className="flex-1 text-sm border rounded px-2 py-1.5 focus:outline-none focus:border-[#4ECDC4]"
             />
             <button
               type="button"
               onClick={() => addDocType(cat.category)}
-              className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700"
+              className="text-sm bg-[#1B6B6B] text-white px-3 py-1.5 rounded hover:bg-[#155858]"
             >
               Add
             </button>
@@ -1277,7 +1277,7 @@ export default function Settings() {
           type="button"
           onClick={saveDocTypes}
           disabled={saving}
-          className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 mt-2"
+          className="w-full bg-[#1B6B6B] text-white py-2.5 rounded-lg text-sm font-medium hover:bg-[#155858] disabled:opacity-50 mt-2"
         >
           Save Document Types
         </button>
@@ -1421,7 +1421,7 @@ export default function Settings() {
             <button
               type="button"
               onClick={handleSaveTemplate}
-              className="rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2 hover:bg-[#155858] disabled:opacity-50"
               disabled={savingTemplate || templateLoading}
             >
               {savingTemplate ? 'Saving...' : 'Save Template'}
@@ -1518,7 +1518,7 @@ export default function Settings() {
                               type="checkbox"
                               checked={!!t.isRequired}
                               onChange={(e) => updateTask(t.id, 'isRequired', e.target.checked)}
-                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                              className="rounded border-slate-300 text-[#1B6B6B] focus:ring-[#4ECDC4]"
                             />
                             <label htmlFor={`req_${t.id}`} className="text-xs text-slate-700">
                               Required
@@ -1533,7 +1533,7 @@ export default function Settings() {
                 <button
                   type="button"
                   onClick={() => handleAddTask(g.category)}
-                  className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors mt-2"
+                  className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#70C4C4] hover:text-[#1B6B6B] transition-colors mt-2"
                 >
                   + Add task to {g.category}
                 </button>
@@ -1654,7 +1654,7 @@ export default function Settings() {
             <button
               type="button"
               onClick={handleSaveTemplate}
-              className="rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2 hover:bg-[#155858] disabled:opacity-50"
               disabled={savingOffTemplate || offTemplateLoading}
             >
               {savingOffTemplate ? 'Saving...' : 'Save Template'}
@@ -1759,7 +1759,7 @@ export default function Settings() {
                               type="checkbox"
                               checked={!!t.isRequired}
                               onChange={(e) => updateTask(t.id, 'isRequired', e.target.checked)}
-                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                              className="rounded border-slate-300 text-[#1B6B6B] focus:ring-[#4ECDC4]"
                             />
                             <label htmlFor={`off_req_${t.id}`} className="text-xs text-slate-700">
                               Required
@@ -1831,7 +1831,7 @@ export default function Settings() {
             onClick={() => setTab(t.id)}
             className={
               tab === t.id
-                ? 'bg-blue-600 text-white rounded-full px-4 py-2 text-sm font-medium'
+                ? 'bg-[#1B6B6B] text-white rounded-full px-4 py-2 text-sm font-medium'
                 : 'text-gray-600 px-4 py-2 text-sm rounded-full hover:bg-gray-100'
             }
           >

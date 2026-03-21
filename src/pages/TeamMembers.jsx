@@ -31,7 +31,7 @@ const ROLE_INFO_CARDS = [
   },
   {
     role: 'IT Manager',
-    badgeClass: 'bg-blue-100 text-blue-700',
+    badgeClass: 'bg-[#C5E8E8] text-[#1B6B6B]',
     desc: 'View employees, manage assets',
   },
 ];
@@ -283,20 +283,20 @@ export default function TeamMembers() {
           <button
             type="button"
             onClick={openAddModal}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            className="px-4 py-2 bg-[#1B6B6B] text-white rounded-lg text-sm font-medium hover:bg-[#155858]"
           >
             + Grant Access
           </button>
         )}
       </div>
 
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6">
-        <p className="text-sm font-medium text-blue-800 mb-2">About Team Access</p>
+      <div className="bg-[#E8F5F5] border border-[#E8F5F5] rounded-xl p-4 mb-6">
+        <p className="text-sm font-medium text-[#0F4444] mb-2">About Team Access</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {ROLE_INFO_CARDS.map((r) => (
             <div key={r.role} className="flex items-start gap-2">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium mt-0.5 shrink-0 ${r.badgeClass}`}>{r.role}</span>
-              <span className="text-xs text-blue-800">{r.desc}</span>
+              <span className="text-xs text-[#0F4444]">{r.desc}</span>
             </div>
           ))}
         </div>
@@ -304,7 +304,7 @@ export default function TeamMembers() {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#378ADD] border-t-transparent" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
         </div>
       ) : (
         <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
@@ -327,7 +327,7 @@ export default function TeamMembers() {
                   <tr key={m.id} className="border-t border-slate-100">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-sm font-medium text-blue-700">
+                        <div className="w-9 h-9 rounded-full bg-[#C5E8E8] flex items-center justify-center text-sm font-medium text-[#1B6B6B]">
                           {(m.name || emp?.fullName || m.email || '?').charAt(0).toUpperCase()}
                         </div>
                         <div>
@@ -377,7 +377,7 @@ export default function TeamMembers() {
                                 setChangeRoleFor(m);
                                 setNewRoleValue(m.role);
                               }}
-                              className="text-blue-600 text-xs font-medium hover:underline"
+                              className="text-[#1B6B6B] text-xs font-medium hover:underline"
                             >
                               Change Role
                             </button>
@@ -429,11 +429,11 @@ export default function TeamMembers() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') setShowEmpPicker(true);
                 }}
-                className="w-full border rounded-xl px-3 py-2.5 cursor-pointer flex items-center justify-between hover:border-blue-400"
+                className="w-full border rounded-xl px-3 py-2.5 cursor-pointer flex items-center justify-between hover:border-[#4ECDC4]"
               >
                 {selectedEmployee ? (
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-medium text-blue-700">
+                    <div className="w-8 h-8 rounded-full bg-[#C5E8E8] flex items-center justify-center text-sm font-medium text-[#1B6B6B]">
                       {selectedEmployee.fullName?.charAt(0)}
                     </div>
                     <div>
@@ -490,9 +490,9 @@ export default function TeamMembers() {
                               setGrantEmail((emp.email || '').trim());
                             }
                           }}
-                          className="flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 cursor-pointer border-b last:border-0"
+                          className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer border-b last:border-0"
                         >
-                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-medium text-blue-700">
+                          <div className="w-8 h-8 rounded-full bg-[#C5E8E8] flex items-center justify-center text-sm font-medium text-[#1B6B6B]">
                             {emp.fullName?.charAt(0)}
                           </div>
                           <div>
@@ -536,7 +536,7 @@ export default function TeamMembers() {
                       if (e.key === 'Enter' || e.key === ' ') setGrantRole(role);
                     }}
                     className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                      grantRole === role ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                      grantRole === role ? 'border-[#4ECDC4] bg-[#E8F5F5]' : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
                     <div
@@ -545,7 +545,7 @@ export default function TeamMembers() {
                           ? 'bg-green-100 text-green-700'
                           : role === 'manager'
                             ? 'bg-amber-100 text-amber-700'
-                            : 'bg-blue-100 text-blue-700'
+                            : 'bg-[#C5E8E8] text-[#1B6B6B]'
                       }`}
                     >
                       {(ROLE_LABELS[role] || role).charAt(0)}
@@ -560,7 +560,7 @@ export default function TeamMembers() {
                             : 'View employees, manage assets'}
                       </p>
                     </div>
-                    {grantRole === role && <span className="text-blue-500 text-lg">✓</span>}
+                    {grantRole === role && <span className="text-[#4ECDC4] text-lg">✓</span>}
                   </div>
                 ))}
               </div>
@@ -574,7 +574,7 @@ export default function TeamMembers() {
                 type="button"
                 onClick={handleGrantAccess}
                 disabled={saving}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-[#1B6B6B] text-white rounded-lg text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
               >
                 {saving ? 'Saving…' : 'Grant Access'}
               </button>
@@ -625,7 +625,7 @@ export default function TeamMembers() {
               <button type="button" onClick={() => setChangeRoleFor(null)} className="text-slate-500 text-sm">
                 Cancel
               </button>
-              <button type="button" onClick={handleChangeRole} className="rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2">
+              <button type="button" onClick={handleChangeRole} className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2">
                 Save
               </button>
             </div>

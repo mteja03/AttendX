@@ -480,7 +480,7 @@ export default function Employees() {
                 setShowAddModal(true);
                 setForm({ ...initialForm, empId: nextEmpId });
               }}
-              className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
+              className="inline-flex items-center justify-center rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
             >
               Add Employee
             </button>
@@ -495,7 +495,7 @@ export default function Employees() {
             type="button"
             onClick={() => setTab(t)}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-              tab === t ? 'bg-[#378ADD] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              tab === t ? 'bg-[#1B6B6B] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
             {t === 'all' ? 'All' : t === 'active' ? 'Active' : t === 'onleave' ? 'On Leave' : 'Inactive'}
@@ -506,7 +506,7 @@ export default function Employees() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name, email, Emp ID, department..."
-          className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] w-64"
+          className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-64"
         />
       </div>
 
@@ -527,7 +527,7 @@ export default function Employees() {
             </svg>
             Filters
             {activeFilterCount > 0 && (
-              <span className="ml-1 inline-flex items-center justify-center rounded-full bg-[#378ADD] text-white px-2 py-0.5 text-[10px] font-semibold">
+              <span className="ml-1 inline-flex items-center justify-center rounded-full bg-[#1B6B6B] text-white px-2 py-0.5 text-[10px] font-semibold">
                 {activeFilterCount}
               </span>
             )}
@@ -539,10 +539,10 @@ export default function Employees() {
             {activeFilters.map((f) => (
               <span
                 key={f.key}
-                className="flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full border border-blue-200"
+                className="flex items-center gap-1 bg-[#E8F5F5] text-[#1B6B6B] text-xs px-2.5 py-1 rounded-full border border-[#C5E8E8]"
               >
                 {f.label}: {f.value}
-                <button type="button" onClick={() => clearFilter(f.key)} className="ml-1 hover:text-blue-900">
+                <button type="button" onClick={() => clearFilter(f.key)} className="ml-1 hover:text-[#0A2E2E]">
                   ✕
                 </button>
               </span>
@@ -604,7 +604,7 @@ export default function Employees() {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#378ADD] border-t-transparent" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
         </div>
       ) : (
         <>
@@ -628,7 +628,7 @@ export default function Employees() {
               <p className="text-xs text-slate-500">Inactive</p>
             </div>
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-blue-600">
+              <p className="text-xl font-semibold text-[#1B6B6B]">
                 {new Set(employees.map((e) => e.department).filter(Boolean)).size}
               </p>
               <p className="text-xs text-slate-500">Departments</p>
@@ -682,7 +682,7 @@ export default function Employees() {
                         emp.status === 'Active'
                           ? 'bg-green-100 text-green-800'
                           : emp.status === 'On Leave'
-                            ? 'bg-blue-100 text-blue-800'
+                            ? 'bg-[#C5E8E8] text-[#0F4444]'
                             : emp.status === 'Offboarding'
                               ? 'bg-orange-100 text-orange-800'
                             : 'bg-slate-100 text-slate-600'
@@ -703,7 +703,7 @@ export default function Employees() {
                     )}
                   </td>
                   <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
-                    <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#378ADD] text-xs font-medium hover:underline">
+                    <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#1B6B6B] text-xs font-medium hover:underline">
                       {canEditEmployees ? 'View Profile' : 'View'}
                     </button>
                     {canEditEmployees && (emp.status || 'Active') === 'Active' && (
@@ -741,7 +741,7 @@ export default function Employees() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-medium text-slate-600 mb-1">Full Name</label>
-                    <input name="fullName" value={form.fullName} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <input name="fullName" value={form.fullName} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                     {formErrors.fullName && <p className="text-red-500 text-xs mt-1">{formErrors.fullName}</p>}
                   </div>
                   <div className="sm:col-span-2">
@@ -751,26 +751,26 @@ export default function Employees() {
                       value={form.fatherName}
                       onChange={handleFormChange}
                       placeholder="Father's full name"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
-                    <input type="email" name="email" value={form.email} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <input type="email" name="email" value={form.email} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                     {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
-                    <input name="phone" value={form.phone} onChange={handleFormChange} placeholder="10-digit mobile number" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <input name="phone" value={form.phone} onChange={handleFormChange} placeholder="10-digit mobile number" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Date of Birth</label>
-                    <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                     {formErrors.dateOfBirth && <p className="text-red-500 text-xs mt-1">{formErrors.dateOfBirth}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Gender</label>
-                    <select name="gender" value={form.gender} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
+                    <select name="gender" value={form.gender} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
                       <option value="">—</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
@@ -779,7 +779,7 @@ export default function Employees() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Highest Qualification</label>
-                    <select name="qualification" value={form.qualification} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
+                    <select name="qualification" value={form.qualification} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
                       <option value="">—</option>
                       {qualifications.map((q) => <option key={q} value={q}>{q}</option>)}
                       {!qualifications.includes('Other') && <option value="Other">Other</option>}
@@ -792,7 +792,7 @@ export default function Employees() {
                       value={form.streetAddress}
                       onChange={handleFormChange}
                       placeholder="House/Flat no, Street name"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                   </div>
                   <div>
@@ -802,7 +802,7 @@ export default function Employees() {
                       value={form.city}
                       onChange={handleFormChange}
                       placeholder="City"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                   </div>
                   <div>
@@ -811,7 +811,7 @@ export default function Employees() {
                       name="state"
                       value={form.state}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     >
                       <option value="">Select state</option>
                       {INDIAN_STATES.map((s) => (
@@ -829,7 +829,7 @@ export default function Employees() {
                       onChange={handleFormChange}
                       placeholder="6-digit pincode"
                       maxLength={6}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                     {formErrors.pincode && <p className="text-red-500 text-xs mt-1">{formErrors.pincode}</p>}
                   </div>
@@ -840,7 +840,7 @@ export default function Employees() {
                       value={form.country}
                       onChange={handleFormChange}
                       placeholder="Country"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                   </div>
                 </div>
@@ -856,7 +856,7 @@ export default function Employees() {
                       value={form.emergencyContactName}
                       onChange={handleFormChange}
                       placeholder="Full name"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                     {formErrors.emergencyContactName && <p className="text-red-500 text-xs mt-1">{formErrors.emergencyContactName}</p>}
                   </div>
@@ -866,7 +866,7 @@ export default function Employees() {
                       name="emergencyRelationship"
                       value={form.emergencyRelationship}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     >
                       <option value="">—</option>
                       <option value="Father">Father</option>
@@ -885,7 +885,7 @@ export default function Employees() {
                       onChange={handleFormChange}
                       placeholder="10-digit mobile number"
                       maxLength={10}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                     {formErrors.emergencyPhone && <p className="text-red-500 text-xs mt-1">{formErrors.emergencyPhone}</p>}
                   </div>
@@ -896,7 +896,7 @@ export default function Employees() {
                       value={form.emergencyEmail}
                       onChange={handleFormChange}
                       placeholder="Email address"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -906,7 +906,7 @@ export default function Employees() {
                       value={form.emergencyAddress}
                       onChange={handleFormChange}
                       placeholder="Contact's address"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                   </div>
                 </div>
@@ -923,14 +923,14 @@ export default function Employees() {
                       onChange={handleFormChange}
                       onBlur={handleEmpIdBlur}
                       placeholder={nextEmpId}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD] font-mono"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4] font-mono"
                     />
                     {formErrors.empId && <p className="text-xs text-red-500 mt-1">{formErrors.empId}</p>}
                     {!formErrors.empId && formWarnings.empId && <p className="text-xs text-amber-600 mt-1">{formWarnings.empId}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Department</label>
-                    <select name="department" value={form.department} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
+                    <select name="department" value={form.department} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
                       <option value="">—</option>
                       {departments.map((d) => <option key={d} value={d}>{d}</option>)}
                       {!departments.includes('Other') && <option value="Other">Other</option>}
@@ -938,7 +938,7 @@ export default function Employees() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Branch</label>
-                    <select name="branch" value={form.branch} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
+                    <select name="branch" value={form.branch} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
                       <option value="">—</option>
                       {branches.map((b) => <option key={b} value={b}>{b}</option>)}
                       {!branches.includes('Other') && <option value="Other">Other</option>}
@@ -946,7 +946,7 @@ export default function Employees() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Designation</label>
-                    <select name="designation" value={form.designation} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
+                    <select name="designation" value={form.designation} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
                       <option value="">—</option>
                       {designations.map((d) => <option key={d} value={d}>{d}</option>)}
                       {!designations.includes('Other') && <option value="Other">Other</option>}
@@ -954,14 +954,14 @@ export default function Employees() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Employment Type</label>
-                    <select name="employmentType" value={form.employmentType} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
+                    <select name="employmentType" value={form.employmentType} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
                       {employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                       {!employmentTypes.includes('Other') && <option value="Other">Other</option>}
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
-                    <select name="category" value={form.category} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]">
+                    <select name="category" value={form.category} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
                       <option value="">—</option>
                       {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                       {!categories.includes('Other') && <option value="Other">Other</option>}
@@ -969,7 +969,7 @@ export default function Employees() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Joining Date</label>
-                    <input type="date" name="joiningDate" value={form.joiningDate} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <input type="date" name="joiningDate" value={form.joiningDate} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Reporting Manager</label>
@@ -984,11 +984,11 @@ export default function Employees() {
                             setShowManagerDropdown(true);
                           }
                         }}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#378ADD]"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#4ECDC4]"
                       >
                         {form.reportingManagerId ? (
                           <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-700">
+                            <div className="w-6 h-6 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B]">
                               {form.reportingManagerName?.charAt(0)}
                             </div>
                             <span className="text-slate-800 truncate">{form.reportingManagerName}</span>
@@ -1029,7 +1029,7 @@ export default function Employees() {
                               placeholder="Search by name or ID..."
                               value={managerSearch}
                               onChange={(e) => setManagerSearch(e.target.value)}
-                              className="w-full text-sm px-2 py-1.5 border border-slate-200 rounded focus:outline-none focus:border-[#378ADD]"
+                              className="w-full text-sm px-2 py-1.5 border border-slate-200 rounded focus:outline-none focus:border-[#4ECDC4]"
                               onClick={(e) => e.stopPropagation()}
                             />
                           </div>
@@ -1079,11 +1079,11 @@ export default function Employees() {
                                     setShowManagerDropdown(false);
                                     setManagerSearch('');
                                   }}
-                                  className={`flex items-center gap-3 px-3 py-2 hover:bg-blue-50 cursor-pointer ${
-                                    form.reportingManagerId === emp.id ? 'bg-blue-50' : ''
+                                  className={`flex items-center gap-3 px-3 py-2 hover:bg-[#E8F5F5] cursor-pointer ${
+                                    form.reportingManagerId === emp.id ? 'bg-[#E8F5F5]' : ''
                                   }`}
                                 >
-                                  <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-700 flex-shrink-0">
+                                  <div className="w-7 h-7 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B] flex-shrink-0">
                                     {emp.fullName?.charAt(0)}
                                   </div>
                                   <div className="flex-1 min-w-0">
@@ -1091,7 +1091,7 @@ export default function Employees() {
                                     <p className="text-xs text-slate-400">{emp.empId} · {emp.designation || '—'}</p>
                                   </div>
                                   {form.reportingManagerId === emp.id && (
-                                    <span className="text-[#378ADD] text-xs">✓</span>
+                                    <span className="text-[#1B6B6B] text-xs">✓</span>
                                   )}
                                 </div>
                               ))}
@@ -1116,23 +1116,23 @@ export default function Employees() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">CTC per annum</label>
-                    <input type="number" min="0" name="ctcPerAnnum" value={form.ctcPerAnnum} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <input type="number" min="0" name="ctcPerAnnum" value={form.ctcPerAnnum} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Basic Salary / month</label>
-                    <input type="number" min="0" name="basicSalary" value={form.basicSalary} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <input type="number" min="0" name="basicSalary" value={form.basicSalary} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">HRA / month</label>
-                    <input type="number" min="0" name="hra" value={form.hra} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <input type="number" min="0" name="hra" value={form.hra} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">PF Number</label>
-                    <input name="pfNumber" value={form.pfNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <input name="pfNumber" value={form.pfNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">ESIC Number</label>
-                    <input name="esicNumber" value={form.esicNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]" />
+                    <input name="esicNumber" value={form.esicNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                   </div>
                 </div>
               </section>
@@ -1147,7 +1147,7 @@ export default function Employees() {
                       value={form.panNumber}
                       onChange={handleFormChange}
                       placeholder="e.g. ABCDE1234F"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD] uppercase"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4] uppercase"
                       maxLength={20}
                     />
                   </div>
@@ -1158,7 +1158,7 @@ export default function Employees() {
                       value={form.aadhaarNumber}
                       onChange={handleFormChange}
                       placeholder="12-digit number"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                       maxLength={20}
                     />
                   </div>
@@ -1169,7 +1169,7 @@ export default function Employees() {
                       value={form.drivingLicenceNumber}
                       onChange={handleFormChange}
                       placeholder="e.g. MH0120210012345"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#378ADD]"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                   </div>
                 </div>
@@ -1177,7 +1177,7 @@ export default function Employees() {
 
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowAddModal(false)} className="text-sm text-slate-500 hover:text-slate-700" disabled={saving}>Cancel</button>
-                <button type="submit" className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50" disabled={saving}>
+                <button type="submit" className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50" disabled={saving}>
                   {saving ? 'Saving…' : 'Save'}
                 </button>
               </div>

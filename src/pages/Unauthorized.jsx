@@ -34,7 +34,7 @@ export default function Unauthorized() {
       <button
         type="button"
         onClick={() => navigate(-1)}
-        className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700"
+        className="px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
       >
         Go Back
       </button>

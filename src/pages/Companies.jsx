@@ -22,7 +22,7 @@ import { useToast } from '../contexts/ToastContext';
 import { findAndDeleteFolder, deleteFileFromDrive } from '../utils/googleDrive';
 
 const COLOR_PRESETS = [
-  { name: 'Blue', value: '#378ADD' },
+  { name: 'Teal', value: '#1B6B6B' },
   { name: 'Green', value: '#1D9E75' },
   { name: 'Orange', value: '#D85A30' },
   { name: 'Purple', value: '#534AB7' },
@@ -371,7 +371,7 @@ export default function Companies() {
         <button
           type="button"
           onClick={() => { setEditingCompany(null); setShowAddModal(true); setForm({ name: '', initials: '', color: COLOR_PRESETS[0].value, industry: '', location: '' }); }}
-          className="inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2"
+          className="inline-flex items-center justify-center rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
         >
           Add Company
         </button>
@@ -408,7 +408,7 @@ export default function Companies() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search companies..."
-          className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+          className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
         />
       </div>
 
@@ -428,7 +428,7 @@ export default function Companies() {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(true)}
-                  className="text-[#378ADD] text-sm font-medium hover:underline"
+                  className="text-[#1B6B6B] text-sm font-medium hover:underline"
                 >
                   Add your first company
                 </button>
@@ -437,7 +437,7 @@ export default function Companies() {
                 type="button"
                 onClick={handleSeed}
                 disabled={seedLoading}
-                className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 mt-4 flex items-center gap-2 mx-auto"
+                className="px-6 py-3 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 mt-4 flex items-center gap-2 mx-auto"
               >
                 {seedLoading ? (
                   <>
@@ -461,7 +461,7 @@ export default function Companies() {
           {filteredCompanies.map((c) => (
             <div
               key={c.id}
-              className={`bg-white rounded-xl border border-slate-200 p-5 flex flex-col relative overflow-visible ${
+              className={`bg-white rounded-xl border border-slate-200 p-5 flex flex-col relative overflow-visible transition-colors hover:border-[#4ECDC4] ${
                 c.isActive === false ? 'opacity-60' : ''
               }`}
             >
@@ -477,7 +477,7 @@ export default function Companies() {
                 <div className="flex items-center gap-3">
                   <div
                     className="h-12 w-12 rounded-full flex items-center justify-center text-white font-semibold text-lg shrink-0"
-                    style={{ backgroundColor: c.color || '#378ADD' }}
+                    style={{ backgroundColor: c.color || '#1B6B6B' }}
                   >
                     {c.initials || c.name?.slice(0, 2)?.toUpperCase() || '—'}
                   </div>
@@ -517,7 +517,7 @@ export default function Companies() {
               <div className="mt-4 flex gap-2 relative z-10">
                 <Link
                   to={`/company/${c.id}/dashboard`}
-                  className="flex-1 inline-flex items-center justify-center rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium py-2"
+                  className="flex-1 inline-flex items-center justify-center rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium py-2"
                 >
                   Manage →
                 </Link>
@@ -592,7 +592,7 @@ export default function Companies() {
                   name="name"
                   value={form.name}
                   onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
                   required
                 />
               </div>
@@ -606,7 +606,7 @@ export default function Companies() {
                   value={form.initials}
                   onChange={handleFormChange}
                   maxLength={2}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] uppercase"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] uppercase"
                 />
               </div>
               <div>
@@ -632,7 +632,7 @@ export default function Companies() {
                   name="industry"
                   value={form.industry}
                   onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
                 >
                   <option value="">— Select —</option>
                   {INDUSTRIES.map((ind) => (
@@ -647,7 +647,7 @@ export default function Companies() {
                   name="location"
                   value={form.location}
                   onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
                 />
               </div>
               <div className="flex justify-end gap-3 pt-2">
@@ -662,7 +662,7 @@ export default function Companies() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-lg bg-[#378ADD] hover:bg-[#2a7bc7] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
                 >
                   {saving ? 'Saving…' : 'Save'}
                 </button>

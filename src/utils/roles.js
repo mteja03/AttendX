@@ -16,7 +16,7 @@ export const ROLE_COLORS = {
   admin: 'bg-purple-100 text-purple-700',
   hrmanager: 'bg-green-100 text-green-700',
   manager: 'bg-amber-100 text-amber-700',
-  itmanager: 'bg-blue-100 text-blue-700',
+  itmanager: 'bg-[#C5E8E8] text-[#1B6B6B]',
 };
 
 /** Company sidebar routes by login role */
