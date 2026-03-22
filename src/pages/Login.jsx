@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
   const { currentUser, loading, signInWithGoogle, authError } = useAuth();
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   if (!loading && currentUser) {
     return <Navigate to="/" replace />;
@@ -10,106 +12,319 @@ export default function Login() {
 
   const handleSignIn = async () => {
     try {
+      setIsSigningIn(true);
       await signInWithGoogle();
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('Error signing in with Google', error);
+      console.error('Sign in error:', error);
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
-  const formBranding = (
-    <div className="flex flex-col items-center mb-8">
-      <img
-        src="/logo/icon.png"
-        alt="AttendX"
-        className="w-20 h-20 rounded-2xl object-cover mb-4 shadow-lg"
-        onError={(e) => {
-          e.target.style.display = 'none';
-        }}
-      />
-      <div className="flex items-center justify-center gap-1 mb-1">
-        <span className="text-2xl font-bold text-[#1B6B6B] tracking-tight">Attend</span>
-        <span className="text-2xl font-bold text-[#4ECDC4] tracking-tight">X</span>
-      </div>
-      <p className="text-gray-400 text-sm">HR Management Platform</p>
-    </div>
-  );
-
-  const leftPanelFeatures = [
-    '✓ Multi-company HR management',
-    '✓ Employee lifecycle tracking',
-    '✓ Document management',
-    '✓ Asset tracking',
-    '✓ Onboarding & Offboarding',
-  ];
+  const busy = isSigningIn || loading;
 
   return (
-    <div className="min-h-screen flex">
-      <div className="hidden md:flex md:w-[42%] lg:w-[45%] bg-[#1B6B6B] flex-col justify-center items-center p-10 text-white">
-        <img
-          src="/logo/icon.png"
-          alt="AttendX"
-          className="w-24 h-24 rounded-2xl object-cover mb-6 shadow-lg"
-          onError={(e) => {
-            e.target.style.display = 'none';
+    <div
+      style={{
+        minHeight: '100vh',
+        background: '#F0F4F4',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: "'DM Sans', sans-serif",
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Subtle background texture + decorative orbs */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: `
+            radial-gradient(rgba(27, 107, 107, 0.04) 1px, transparent 1px)
+          `,
+          backgroundSize: '24px 24px',
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          top: '-120px',
+          right: '-120px',
+          width: '400px',
+          height: '400px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, #4ECDC420 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '-150px',
+          left: '-100px',
+          width: '500px',
+          height: '500px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, #1B6B6B15 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* Card */}
+      <div
+        style={{
+          background: 'white',
+          borderRadius: '24px',
+          padding: '52px 48px',
+          width: '100%',
+          maxWidth: '420px',
+          margin: '0 20px',
+          boxShadow:
+            '0 4px 6px -1px rgba(0,0,0,0.05), 0 20px 60px -10px rgba(27,107,107,0.15)',
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        {/* Logo */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            marginBottom: '40px',
           }}
-        />
-        <img
-          src="/logo/wordmark-light.jpg"
-          alt="AttendX"
-          className="h-10 object-contain mb-4 max-w-[240px]"
-          onError={(e) => {
-            e.target.style.display = 'none';
-          }}
-        />
-        <p className="text-white/70 text-sm text-center max-w-xs">HR Management Platform for modern teams</p>
-        <div className="mt-8 space-y-3 w-full max-w-xs">
-          {leftPanelFeatures.map((feature) => (
-            <p key={feature} className="text-white/70 text-sm flex items-center gap-2">
-              {feature}
-            </p>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex-1 flex items-center justify-center px-4 py-12 bg-slate-50">
-        <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-8">
-          {formBranding}
-
-          <div className="hidden md:block h-px bg-slate-200 mb-6" />
-
-          {authError && <p className="mb-4 text-xs text-red-600 text-center">{authError}</p>}
-
-          <button
-            type="button"
-            onClick={handleSignIn}
-            disabled={loading}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-white border-2 border-[#1B6B6B] hover:bg-[#E8F5F5] text-[#1B6B6B] text-sm font-medium px-4 py-2.5 transition-colors disabled:opacity-50"
+        >
+          <div
+            style={{
+              width: '72px',
+              height: '72px',
+              borderRadius: '20px',
+              overflow: 'hidden',
+              marginBottom: '20px',
+              boxShadow: '0 8px 24px rgba(27,107,107,0.2)',
+            }}
           >
-            <svg className="w-5 h-5" viewBox="0 0 48 48">
-              <path
-                fill="#FFC107"
-                d="M43.6 20.5H42V20H24v8h11.3C33.4 31.9 29.1 35 24 35 16.8 35 11 29.2 11 22S16.8 9 24 9c3.6 0 6.8 1.5 9.1 3.9l5.7-5.7C35.9 3.3 30.3 1 24 1 11.8 1 2 10.8 2 23s9.8 22 22 22 22-9.8 22-22c0-1.5-.1-2.5-.4-3.5z"
-              />
-              <path
-                fill="#FF3D00"
-                d="M6.3 14.7l6.6 4.8C14.7 16 18.9 13 24 13c3.6 0 6.8 1.5 9.1 3.9l5.7-5.7C35.9 6.3 30.3 4 24 4 16 4 8.9 8.1 6.3 14.7z"
-              />
-              <path
-                fill="#4CAF50"
-                d="M24 42c5-0.1 9.6-2 12.9-5.3l-6-4.9C29.5 33.3 26.9 34.5 24 34.5 19 34.5 14.7 31.4 13 27l-6.6 5C8.9 39.9 15.9 44 24 44z"
-              />
-              <path
-                fill="#1976D2"
-                d="M43.6 20.5H42V20H24v8h11.3c-1.1 2.9-3.1 5.3-5.9 6.8l.1.1 6 4.9C37 39.7 42 35 43.6 28.5c.4-1.3.6-2.7.6-4.5 0-1.5-.1-2.5-.4-3.5z"
-              />
-            </svg>
-            <span>Sign in with Google</span>
-          </button>
+            <img
+              src="/logo/icon.png"
+              alt="AttendX"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
+            />
+          </div>
 
-          <p className="mt-6 text-[11px] text-slate-500 text-center">Only authorized company emails can access this system.</p>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: '1px',
+              marginBottom: '8px',
+            }}
+          >
+            <span
+              style={{
+                fontSize: '28px',
+                fontWeight: '700',
+                color: '#1B6B6B',
+                letterSpacing: '-0.5px',
+              }}
+            >
+              Attend
+            </span>
+            <span
+              style={{
+                fontSize: '28px',
+                fontWeight: '700',
+                color: '#4ECDC4',
+                letterSpacing: '-0.5px',
+              }}
+            >
+              X
+            </span>
+          </div>
+
+          <p
+            style={{
+              fontSize: '14px',
+              color: '#94A3B8',
+              margin: 0,
+              letterSpacing: '0.3px',
+            }}
+          >
+            HR Management Platform
+          </p>
         </div>
+
+        {/* Divider with text */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            marginBottom: '24px',
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              height: '1px',
+              background: '#E8F0F0',
+            }}
+          />
+          <span
+            style={{
+              fontSize: '13px',
+              color: '#94A3B8',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Sign in to continue
+          </span>
+          <div
+            style={{
+              flex: 1,
+              height: '1px',
+              background: '#E8F0F0',
+            }}
+          />
+        </div>
+
+        {authError ? (
+          <p
+            style={{
+              textAlign: 'center',
+              fontSize: '13px',
+              color: '#DC2626',
+              marginBottom: '16px',
+              lineHeight: 1.5,
+            }}
+          >
+            {authError}
+          </p>
+        ) : null}
+
+        {/* Google Sign In Button */}
+        <button
+          type="button"
+          onClick={handleSignIn}
+          disabled={busy}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+            padding: '14px 24px',
+            background: busy ? '#E8F5F5' : '#1B6B6B',
+            color: busy ? '#1B6B6B' : 'white',
+            border: 'none',
+            borderRadius: '14px',
+            fontSize: '15px',
+            fontWeight: '600',
+            cursor: busy ? 'not-allowed' : 'pointer',
+            transition: 'all 0.2s ease',
+            letterSpacing: '0.2px',
+            boxShadow: busy ? 'none' : '0 4px 14px rgba(27,107,107,0.3)',
+          }}
+          onMouseEnter={(e) => {
+            if (!busy) {
+              const t = e.currentTarget;
+              t.style.background = '#155858';
+              t.style.transform = 'translateY(-1px)';
+              t.style.boxShadow = '0 6px 20px rgba(27,107,107,0.4)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!busy) {
+              const t = e.currentTarget;
+              t.style.background = '#1B6B6B';
+              t.style.transform = 'translateY(0)';
+              t.style.boxShadow = '0 4px 14px rgba(27,107,107,0.3)';
+            }
+          }}
+        >
+          {isSigningIn ? (
+            <>
+              <div
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  border: '2px solid #1B6B6B',
+                  borderTopColor: 'transparent',
+                  borderRadius: '50%',
+                  animation: 'loginSpin 0.8s linear infinite',
+                }}
+              />
+              Signing in...
+            </>
+          ) : (
+            <>
+              <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
+                <path
+                  fill="#4285F4"
+                  d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"
+                />
+                <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18z" />
+                <path
+                  fill="#EA4335"
+                  d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"
+                />
+              </svg>
+              Continue with Google
+            </>
+          )}
+        </button>
+
+        {/* Footer note */}
+        <p
+          style={{
+            textAlign: 'center',
+            fontSize: '12px',
+            color: '#B0BEC5',
+            marginTop: '20px',
+            marginBottom: 0,
+            lineHeight: '1.5',
+          }}
+        >
+          Only authorized accounts can access
+          <br />
+          this platform
+        </p>
       </div>
+
+      {/* Bottom brand text */}
+      <p
+        style={{
+          position: 'absolute',
+          bottom: '24px',
+          fontSize: '12px',
+          color: '#94A3B8',
+        }}
+      >
+        © 2026 AttendX · HR Platform
+      </p>
+
+      <style>
+        {`
+        @keyframes loginSpin {
+          to { transform: rotate(360deg); }
+        }
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+      `}
+      </style>
     </div>
   );
 }
