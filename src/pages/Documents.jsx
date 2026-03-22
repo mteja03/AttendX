@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { useAuth } from '../contexts/AuthContext';
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -65,6 +66,8 @@ function getMissingMandatory(emp) {
 }
 
 export default function Documents() {
+  const { role: userRole } = useAuth();
+  const canUpload = userRole === 'admin' || userRole === 'hrmanager';
   const { companyId } = useParams();
   const [company, setCompany] = useState(null);
   const [employees, setEmployees] = useState([]);
@@ -262,6 +265,13 @@ export default function Documents() {
         </div>
       ) : (
         <>
+          {!canUpload && (
+            <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-100 rounded-xl mb-4">
+              <span className="text-gray-400 text-sm">
+                🔒 Document uploads are managed by HR. Contact your HR Manager to upload or change employee documents.
+              </span>
+            </div>
+          )}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <p className="text-slate-500 text-sm">Total Employees</p>

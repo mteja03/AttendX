@@ -161,7 +161,7 @@ const navIcons = {
 };
 
 export default function Sidebar({ isOpen = false, onClose }) {
-  const { currentUser, role, signOut, userPermissions } = useAuth();
+  const { currentUser, role, signOut, userPermissions, isTokenValid } = useAuth();
   const { companyId, company } = useCompany();
   const isAdmin = role === 'admin';
   const inCompany = !!companyId;
@@ -347,6 +347,16 @@ export default function Sidebar({ isOpen = false, onClose }) {
           </div>
           {role && (
             <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium mb-2 ${roleBadgeClass}`}>{roleLabel}</span>
+          )}
+          {(role === 'admin' || role === 'hrmanager') && (
+            <div className="mx-0 mb-2 px-3 py-2 rounded-lg bg-white/5 flex items-center gap-2">
+              <div
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${isTokenValid() ? 'bg-[#4ECDC4]' : 'bg-amber-400'}`}
+              />
+              <span className="text-xs text-white/50">
+                Drive: {isTokenValid() ? 'Connected' : 'Session expired'}
+              </span>
+            </div>
           )}
           <button
             type="button"

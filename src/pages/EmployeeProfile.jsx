@@ -248,10 +248,10 @@ export default function EmployeeProfile() {
   const { companyId, empId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { currentUser, googleAccessToken, signOut, role: authRole } = useAuth();
+  const { currentUser, getValidToken, isTokenValid, role: authRole } = useAuth();
   const userRole = authRole;
   const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
-  const canUploadDocuments = userRole === 'admin' || userRole === 'hrmanager';
+  const canUpload = userRole === 'admin' || userRole === 'hrmanager';
   const { success, error: showError } = useToast();
   const [employee, setEmployee] = useState(null);
   const { company } = useCompany();
@@ -927,14 +927,6 @@ export default function EmployeeProfile() {
     showError(msg);
   };
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-    } finally {
-      navigate('/login');
-    }
-  };
-
   const validateFile = (file, docType) => {
     const accepts = Array.isArray(docType?.accepts)
       ? docType.accepts
@@ -965,8 +957,9 @@ export default function EmployeeProfile() {
 
   const handleUploadChecklistDoc = async (file, docId, docName, categoryName) => {
     if (!employee) return;
-    if (!googleAccessToken) {
-      showError('Please sign out and sign back in to enable Google Drive uploads');
+    const token = await getValidToken();
+    if (!token) {
+      showError('Please sign in again to upload documents');
       return;
     }
     const docType =
@@ -992,7 +985,7 @@ export default function EmployeeProfile() {
       const categoryFromChecklist = findDocCategory(docId, activeChecklist);
       const finalCategoryName = categoryFromChecklist || 'Additional Documents';
       const result = await uploadEmployeeDocument(
-        googleAccessToken,
+        token,
         file,
         getCompanyName(),
         employee.empId,
@@ -1027,8 +1020,9 @@ export default function EmployeeProfile() {
   const handleReplaceDoc = async (file, docId) => {
     const docEntry = docByType[docId];
     if (!docEntry?.fileId) return;
-    if (!googleAccessToken) {
-      showError('Please sign out and sign back in to enable Google Drive uploads');
+    const token = await getValidToken();
+    if (!token) {
+      showError('Please sign in again to upload documents');
       return;
     }
     const docType =
@@ -1053,12 +1047,12 @@ export default function EmployeeProfile() {
     setReplacingDocId(docEntry.fileId);
     try {
       try {
-        await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+        await deleteFileFromDrive(token, docEntry.fileId);
       } catch (_) {
         // ignore Drive delete failure
       }
       const result = await uploadEmployeeDocument(
-        googleAccessToken,
+        token,
         file,
         getCompanyName(),
         employee.empId,
@@ -1096,15 +1090,16 @@ export default function EmployeeProfile() {
 
   const handleDeleteChecklistDoc = async (docEntry) => {
     if (!docEntry?.fileId) return;
-    if (!googleAccessToken) {
-      showError('Please sign out and sign back in to manage documents');
+    const token = await getValidToken();
+    if (!token) {
+      showError('Please sign in again to upload documents');
       return;
     }
     let driveFailed = false;
     setDeletingDocId(docEntry.fileId);
     try {
       try {
-        await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+        await deleteFileFromDrive(token, docEntry.fileId);
       } catch (_) {
         driveFailed = true;
       }
@@ -1136,8 +1131,9 @@ export default function EmployeeProfile() {
       showError('Name and file required');
       return;
     }
-    if (!googleAccessToken) {
-      showError('Please sign out and sign back in to enable Google Drive uploads');
+    const token = await getValidToken();
+    if (!token) {
+      showError('Please sign in again to upload documents');
       return;
     }
     try {
@@ -1153,7 +1149,7 @@ export default function EmployeeProfile() {
     setUploadingDocId('additional');
     try {
       const result = await uploadEmployeeDocument(
-        googleAccessToken,
+        token,
         additionalDocFile,
         getCompanyName(),
         employee.empId,
@@ -1188,14 +1184,15 @@ export default function EmployeeProfile() {
   const handleDeleteAdditionalDoc = async (index) => {
     const docEntry = additionalDocs[index];
     if (!docEntry?.fileId) return;
-    if (!googleAccessToken) {
-      showError('Please sign out and sign back in to manage documents');
+    const token = await getValidToken();
+    if (!token) {
+      showError('Please sign in again to upload documents');
       return;
     }
     setDeletingDocId(docEntry.fileId);
     try {
       try {
-        await deleteFileFromDrive(googleAccessToken, docEntry.fileId);
+        await deleteFileFromDrive(token, docEntry.fileId);
       } catch (_) {
         // ignore Drive delete error
       }
@@ -2615,22 +2612,35 @@ export default function EmployeeProfile() {
 
       {tab === 'documents' && (
         <div className="space-y-6">
-          {!canUploadDocuments && (
-            <div className="flex items-center gap-2 p-3 bg-[#E8F5F5] border border-[#E8F5F5] rounded-lg mb-4">
-              <span className="text-[#1B6B6B] text-sm">ℹ️ Only HR Manager and Admin can upload or delete documents.</span>
+          {!canUpload && (
+            <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-100 rounded-xl mb-4">
+              <span className="text-gray-400 text-sm">
+                🔒 Document uploads are managed by HR. Contact your HR Manager to upload documents.
+              </span>
             </div>
           )}
-          {!googleAccessToken && canUploadDocuments && (
-            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-              <span className="text-amber-600 text-sm">
-                Google Drive session expired. Please sign out and sign back in to upload documents.
-              </span>
+          {canUpload && !isTokenValid() && (
+            <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4 gap-3 flex-wrap">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-amber-600 text-lg shrink-0">⏱️</span>
+                <div>
+                  <p className="text-sm font-medium text-amber-800">Google Drive session expired</p>
+                  <p className="text-xs text-amber-600">Click refresh to continue uploading</p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={handleSignOut}
-                className="text-xs bg-amber-500 text-white px-3 py-1.5 rounded-lg hover:bg-amber-600 whitespace-nowrap"
+                onClick={async () => {
+                  const refreshed = await getValidToken();
+                  if (refreshed) {
+                    success('✓ Drive session refreshed!');
+                  } else {
+                    showError('Please sign out and sign back in');
+                  }
+                }}
+                className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600 whitespace-nowrap"
               >
-                Sign out &amp; back in
+                🔄 Refresh Session
               </button>
             </div>
           )}
@@ -2712,7 +2722,7 @@ export default function EmployeeProfile() {
                                     View
                                   </button>
                                 )}
-                                {canUploadDocuments && (
+                                {canUpload && (
                                   <label className={`${rowBusy ? 'pointer-events-none opacity-50' : ''}`}>
                                     <span className="px-2.5 py-1 text-xs font-medium text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors inline-block cursor-pointer">
                                       Replace
@@ -2730,7 +2740,7 @@ export default function EmployeeProfile() {
                                     />
                                   </label>
                                 )}
-                                {canUploadDocuments && (
+                                {canUpload && (
                                   <button
                                     type="button"
                                     onClick={() => setDeleteConfirm({ type: 'checklist', doc: uploaded })}
@@ -2763,7 +2773,7 @@ export default function EmployeeProfile() {
                                 </div>
                               </div>
                               <div className="flex items-stretch sm:items-center gap-2 w-full sm:w-auto">
-                                {canUploadDocuments ? (
+                                {canUpload ? (
                                   <>
                                     <button
                                       type="button"
@@ -2807,7 +2817,7 @@ export default function EmployeeProfile() {
           <div className="border border-slate-200 rounded-xl overflow-hidden">
             <h3 className="px-4 py-3 bg-slate-50 font-medium text-slate-800">Additional Documents</h3>
             <div className="p-4 space-y-3">
-              {canUploadDocuments && (
+              {canUpload && (
                 <div className="flex flex-wrap items-end gap-3">
                   <input
                     type="text"
@@ -2852,7 +2862,7 @@ export default function EmployeeProfile() {
                       <span className="text-sm">{doc.name} — {formatDocDate(doc.uploadedAt)}</span>
                       <div className="flex gap-2">
                         {doc.webViewLink && <a href={doc.webViewLink} target="_blank" rel="noopener noreferrer" className="text-[#1B6B6B] text-xs">View</a>}
-                        {canUploadDocuments && (
+                        {canUpload && (
                           <button type="button" onClick={() => setDeleteConfirm({ type: 'additional', index: i })} className="text-red-600 text-xs">
                             Delete
                           </button>

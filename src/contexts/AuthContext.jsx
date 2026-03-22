@@ -1,9 +1,20 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/config';
 
 const AuthContext = createContext(null);
+
+/** Drive access token still within stored expiry window (55 min buffer) */
+export function isTokenValid() {
+  try {
+    const expiry = localStorage.getItem('gat_expiry');
+    if (!expiry) return false;
+    return Date.now() < parseInt(expiry, 10);
+  } catch {
+    return false;
+  }
+}
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
@@ -94,6 +105,8 @@ export function AuthProvider({ children }) {
 
             if (isValid) {
               setGoogleAccessToken(stored);
+              // eslint-disable-next-line no-console
+              console.log('✓ Drive token restored from storage');
             } else {
               try {
                 localStorage.removeItem('gat');
@@ -102,6 +115,8 @@ export function AuthProvider({ children }) {
                 // ignore
               }
               setGoogleAccessToken(null);
+              // eslint-disable-next-line no-console
+              console.log('Drive token expired, will refresh on next upload');
             }
           } catch (_) {
             setGoogleAccessToken(null);
@@ -127,6 +142,49 @@ export function AuthProvider({ children }) {
     return () => unsubscribe();
   }, []);
 
+  const persistDriveToken = useCallback((accessToken) => {
+    if (!accessToken) return;
+    setGoogleAccessToken(accessToken);
+    try {
+      localStorage.setItem('gat', accessToken);
+      const expiry = Date.now() + 55 * 60 * 1000;
+      localStorage.setItem('gat_expiry', String(expiry));
+    } catch (_) {
+      // ignore
+    }
+  }, []);
+
+  const getValidToken = useCallback(async () => {
+    try {
+      const stored = localStorage.getItem('gat');
+      const expiryStr = localStorage.getItem('gat_expiry');
+      const expiry = expiryStr ? parseInt(expiryStr, 10) : 0;
+      if (stored && expiry && Date.now() < expiry) {
+        setGoogleAccessToken(stored);
+        return stored;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    try {
+      const user = auth.currentUser;
+      if (!user) return null;
+      const result = await signInWithPopup(auth, googleProvider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const accessToken = credential?.accessToken;
+      if (accessToken) {
+        persistDriveToken(accessToken);
+        return accessToken;
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('Token refresh failed:', e);
+      return null;
+    }
+    return null;
+  }, [persistDriveToken]);
+
   const signInWithGoogle = async () => {
     setAuthError('');
     const result = await signInWithPopup(auth, googleProvider);
@@ -134,14 +192,7 @@ export function AuthProvider({ children }) {
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const accessToken = credential?.accessToken;
     if (accessToken) {
-      setGoogleAccessToken(accessToken);
-      try {
-        localStorage.setItem('gat', accessToken);
-        const expiry = Date.now() + 55 * 60 * 1000;
-        localStorage.setItem('gat_expiry', expiry.toString());
-      } catch (_) {
-        // ignore
-      }
+      persistDriveToken(accessToken);
     }
 
     if (user?.email?.toLowerCase() === 'mteja0852@gmail.com') {
@@ -182,12 +233,14 @@ export function AuthProvider({ children }) {
       companyId,
       userPermissions,
       googleAccessToken,
+      getValidToken,
+      isTokenValid,
       loading,
       authError,
       signInWithGoogle,
       signOut: signOutUser,
     }),
-    [currentUser, role, companyId, userPermissions, googleAccessToken, loading, authError],
+    [currentUser, role, companyId, userPermissions, googleAccessToken, getValidToken, loading, authError, isTokenValid],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

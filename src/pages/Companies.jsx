@@ -64,7 +64,7 @@ function CardSkeleton() {
 }
 
 export default function Companies() {
-  const { currentUser, googleAccessToken } = useAuth();
+  const { currentUser, getValidToken } = useAuth();
   const { success, error: showError } = useToast();
   const [companies, setCompanies] = useState([]);
   const [users, setUsers] = useState([]);
@@ -289,6 +289,7 @@ export default function Companies() {
     const companyId = company.id;
     const companyName = company.name || 'Company';
     let driveCleanupOk = true;
+    let driveToken = null;
 
     try {
       // Step 1 — Collect all Drive file IDs from all employees
@@ -303,11 +304,12 @@ export default function Companies() {
       });
 
       // Step 2 & 3 — Delete all Drive files and company folder
-      if (googleAccessToken) {
+      driveToken = await getValidToken();
+      if (driveToken) {
         for (const fileId of driveFileIds) {
           try {
             // eslint-disable-next-line no-await-in-loop
-            await deleteFileFromDrive(googleAccessToken, fileId);
+            await deleteFileFromDrive(driveToken, fileId);
           } catch (e) {
             driveCleanupOk = false;
             // eslint-disable-next-line no-console
@@ -315,7 +317,7 @@ export default function Companies() {
           }
         }
         try {
-          await findAndDeleteFolder(googleAccessToken, companyName, 'AttendX HR Documents');
+          await findAndDeleteFolder(driveToken, companyName, 'AttendX HR Documents');
         } catch (e) {
           driveCleanupOk = false;
           // eslint-disable-next-line no-console
@@ -345,7 +347,7 @@ export default function Companies() {
       // Step 5 — Toast based on Drive cleanup status
       if (driveCleanupOk) {
         success('Company and all documents deleted permanently');
-      } else if (!googleAccessToken) {
+      } else if (!driveToken) {
         showError(
           'Company deleted. Please manually remove the company folder from Google Drive (Google Drive access token not available).',
         );

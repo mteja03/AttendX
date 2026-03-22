@@ -17,6 +17,11 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
+// Offline access — Google may return a refresh token server-side; client re-auth via popup when access token expires
+googleProvider.setCustomParameters({
+  access_type: 'offline',
+  prompt: 'consent',
+});
 
 export { app, db, auth, googleProvider };
 export default app;
