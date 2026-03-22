@@ -325,15 +325,11 @@ export default function Reports() {
           return {
             id: role.id,
             role: role.title,
-            department: role.department,
             filled,
             salaryBand: role.salaryBand,
           };
         })
-        .sort(
-          (a, b) =>
-            (a.department || '').localeCompare(b.department || '') || (a.role || '').localeCompare(b.role || ''),
-        ),
+        .sort((a, b) => (a.role || '').localeCompare(b.role || '')),
     [roles, employees],
   );
 
@@ -1191,7 +1187,6 @@ export default function Reports() {
                 <thead>
                   <tr className="text-left text-gray-600 border-b border-gray-100">
                     <th className="py-2 pr-3 font-semibold">Role</th>
-                    <th className="py-2 pr-3 font-semibold">Department</th>
                     <th className="py-2 pr-3 font-semibold">Employees</th>
                     <th className="py-2 pr-3 font-semibold">Salary band</th>
                     <th className="py-2 font-semibold">Status</th>
@@ -1200,7 +1195,7 @@ export default function Reports() {
                 <tbody>
                   {roleVacancyData.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-6 text-center text-gray-400 text-sm">
+                      <td colSpan={4} className="py-6 text-center text-gray-400 text-sm">
                         No roles defined. Add roles in Library → Roles &amp; Responsibilities.
                       </td>
                     </tr>
@@ -1208,7 +1203,6 @@ export default function Reports() {
                     roleVacancyData.map((r) => (
                       <tr key={r.id || r.role} className="border-t border-gray-100">
                         <td className="py-2 pr-3 font-medium text-gray-900">{r.role}</td>
-                        <td className="py-2 pr-3 text-gray-600">{r.department || '—'}</td>
                         <td className="py-2 pr-3">
                           <span className={r.filled > 0 ? 'text-green-600 font-medium' : 'text-gray-400'}>
                             {r.filled} employee{r.filled !== 1 ? 's' : ''}

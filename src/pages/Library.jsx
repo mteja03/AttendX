@@ -23,19 +23,6 @@ const LIBRARY_TABS = [
   { id: 'roles', label: 'Roles & Responsibilities', icon: '👔' },
 ];
 
-const DEFAULT_DEPARTMENTS = [
-  'Engineering',
-  'Sales',
-  'HR',
-  'Finance',
-  'Operations',
-  'Marketing',
-  'Design',
-  'Legal',
-  'Management',
-  'Other',
-];
-
 const CATEGORIES = [
   'Leave',
   'Attendance',
@@ -198,7 +185,6 @@ const DEFAULT_ROLE_SEEDS = [
   {
     key: 'gm',
     title: 'General Manager',
-    department: 'Management',
     reportsTo: '',
     reportsToRoleId: null,
     salaryBand: { min: 1500000, max: 3000000, currency: 'INR' },
@@ -225,7 +211,6 @@ const DEFAULT_ROLE_SEEDS = [
   {
     key: 'hr',
     title: 'HR Manager',
-    department: 'HR',
     reportsTo: 'General Manager',
     salaryBand: { min: 600000, max: 1200000, currency: 'INR' },
     responsibilities: [
@@ -253,7 +238,6 @@ const DEFAULT_ROLE_SEEDS = [
   {
     key: 'sales',
     title: 'Sales Executive',
-    department: 'Sales',
     reportsTo: 'Sales Manager',
     reportsToRoleId: null,
     salaryBand: { min: 250000, max: 500000, currency: 'INR' },
@@ -294,7 +278,6 @@ function previewText(policy) {
 function createEmptyRoleForm() {
   return {
     title: '',
-    department: '',
     reportsToRoleId: '',
     isActive: true,
     salaryBand: { min: '', max: '', currency: 'INR' },
@@ -303,21 +286,6 @@ function createEmptyRoleForm() {
     skills: { technical: [], soft: [] },
     kpis: [{ metric: '', target: '' }],
   };
-}
-
-function getDeptColor(dept) {
-  const colors = {
-    Engineering: '#3B82F6',
-    HR: '#10B981',
-    Sales: '#F59E0B',
-    Finance: '#6366F1',
-    Operations: '#EC4899',
-    Marketing: '#14B8A6',
-    Design: '#8B5CF6',
-    Legal: '#64748B',
-    Management: '#1B6B6B',
-  };
-  return colors[dept] || '#9CA3AF';
 }
 
 /** Build role hierarchy using reportsToRoleId and reportsTo (title) */
@@ -349,7 +317,6 @@ function JobRoleNode({ node, employees, onView }) {
     (e) =>
       (e.designation || '').trim() === (node.title || '').trim() && (e.status || 'Active') === 'Active',
   ).length;
-  const deptColor = getDeptColor(node.department);
 
   return (
     <div className="flex flex-col items-center">
@@ -361,11 +328,13 @@ function JobRoleNode({ node, employees, onView }) {
           if (ev.key === 'Enter' || ev.key === ' ') onView(node);
         }}
         className="relative bg-white border-2 rounded-2xl p-4 w-52 cursor-pointer text-center hover:shadow-md transition-all hover:border-[#1B6B6B]"
-        style={{ borderColor: `${deptColor}40` }}
+        style={{ borderColor: '#1B6B6B40' }}
       >
-        <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ background: deptColor }} />
+        <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl bg-[#1B6B6B]" />
         <p className="text-sm font-bold text-gray-900 mt-1 leading-tight">{node.title}</p>
-        <p className="text-xs text-gray-400 mt-1">{node.department}</p>
+        {node.reportsTo && (
+          <p className="text-xs text-gray-400 mt-1">Reports to {node.reportsTo}</p>
+        )}
         {node.salaryBand?.min != null && (
           <div className="mt-2 px-2 py-1 bg-gray-50 rounded-lg">
             <p className="text-xs font-medium text-gray-600">
@@ -427,7 +396,6 @@ function roleDocToForm(role) {
   const sb = role.salaryBand || {};
   return {
     title: role.title || '',
-    department: role.department || '',
     reportsToRoleId: role.reportsToRoleId || '',
     isActive: role.isActive !== false,
     salaryBand: {
@@ -461,12 +429,6 @@ export default function Library() {
   const { success, error: showError } = useToast();
   const canEdit = role === 'admin' || role === 'hrmanager';
 
-  const departments = useMemo(() => {
-    const fromCo = company?.departments;
-    if (Array.isArray(fromCo) && fromCo.length > 0) return fromCo;
-    return DEFAULT_DEPARTMENTS;
-  }, [company?.departments]);
-
   const [libraryTab, setLibraryTab] = useState('policies');
   const [policies, setPolicies] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -488,7 +450,6 @@ export default function Library() {
   });
 
   const [roleSearch, setRoleSearch] = useState('');
-  const [deptFilter, setDeptFilter] = useState('');
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRoleId, setEditingRoleId] = useState(null);
   const [viewingRole, setViewingRole] = useState(null);
@@ -584,7 +545,6 @@ export default function Library() {
     const gm = DEFAULT_ROLE_SEEDS[0];
     batch.set(gmRef, {
       title: gm.title,
-      department: gm.department,
       reportsTo: gm.reportsTo,
       reportsToRoleId: null,
       salaryBand: gm.salaryBand,
@@ -601,7 +561,6 @@ export default function Library() {
     const hr = DEFAULT_ROLE_SEEDS[1];
     batch.set(hrRef, {
       title: hr.title,
-      department: hr.department,
       reportsTo: hr.reportsTo,
       reportsToRoleId: gmRef.id,
       salaryBand: hr.salaryBand,
@@ -618,7 +577,6 @@ export default function Library() {
     const se = DEFAULT_ROLE_SEEDS[2];
     batch.set(salesRef, {
       title: se.title,
-      department: se.department,
       reportsTo: se.reportsTo,
       reportsToRoleId: null,
       salaryBand: se.salaryBand,
@@ -689,25 +647,18 @@ export default function Library() {
     [roles, employees],
   );
 
-  const uniqueDepts = useMemo(
-    () => [...new Set(roles.map((r) => r.department).filter(Boolean))].sort(),
-    [roles],
-  );
-
   const filteredRoles = useMemo(() => {
     let list = rolesWithHeadcount;
-    if (deptFilter) list = list.filter((r) => r.department === deptFilter);
     const q = roleSearch.trim().toLowerCase();
     if (q) {
       list = list.filter(
         (r) =>
           (r.title || '').toLowerCase().includes(q) ||
-          (r.department || '').toLowerCase().includes(q) ||
           (r.reportsTo || '').toLowerCase().includes(q),
       );
     }
     return list;
-  }, [rolesWithHeadcount, deptFilter, roleSearch]);
+  }, [rolesWithHeadcount, roleSearch]);
 
   const totalHeadcount = useMemo(
     () => employees.filter((e) => (e.status || 'Active') === 'Active').length,
@@ -883,14 +834,14 @@ export default function Library() {
           : '';
       const techLine = (role.skills?.technical || []).map((s) => escapeHtml(s)).join(', ');
       const softLine = (role.skills?.soft || []).map((s) => escapeHtml(s)).join(', ');
-      const deptEsc = escapeHtml(role.department || '—');
       const reportsEsc = role.reportsTo ? escapeHtml(role.reportsTo) : '';
+      const roleLineMeta = reportsEsc ? `Reports to ${reportsEsc}` : 'Top level role';
 
       const inner = `
       <div class="print-highlight-card">
         <div class="print-field-label">Salary band (CTC per annum)</div>
         <div class="print-field-value" style="font-size:20px;color:#1B6B6B;margin-top:4px">₹${formatLakhs(role.salaryBand?.min)} — ₹${formatLakhs(role.salaryBand?.max)}</div>
-        <p class="print-meta" style="margin-top:8px">${deptEsc}${reportsEsc ? ` · Reports to ${reportsEsc}` : ''} · ${matchingEmps.length} employee(s) in role</p>
+        <p class="print-meta" style="margin-top:8px">${roleLineMeta} · ${matchingEmps.length} employee(s) in role</p>
       </div>
       <div class="print-section">
         <div class="print-section-title">Qualifications</div>
@@ -919,7 +870,7 @@ export default function Library() {
 
       const html = createPrintDocument({
         title: `${role.title} — Role Profile`,
-        subtitle: role.department || 'Role definition',
+        subtitle: 'Role definition',
         companyName: company?.name || '',
         generatedBy: currentUser?.email || '',
         content: inner,
@@ -1013,10 +964,6 @@ export default function Library() {
       showError('Role title is required');
       return;
     }
-    if (!roleForm.department) {
-      showError('Department is required');
-      return;
-    }
     const min = Number(roleForm.salaryBand.min);
     const max = Number(roleForm.salaryBand.max);
     if (roleForm.salaryBand.min !== '' && Number.isNaN(min)) {
@@ -1037,7 +984,6 @@ export default function Library() {
 
     const payload = {
       title: roleForm.title.trim(),
-      department: roleForm.department,
       reportsTo: reportsToTitle,
       reportsToRoleId: reportsToRid && reportsToRid !== editingRoleId ? reportsToRid : null,
       salaryBand: {
@@ -1213,13 +1159,13 @@ export default function Library() {
                 {roles.length} roles defined · {totalHeadcount} employees
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:flex-1 sm:max-w-xl sm:ml-auto">
               <input
                 type="search"
-                placeholder="Search roles..."
+                placeholder="Search by role title or reports-to…"
                 value={roleSearch}
                 onChange={(e) => setRoleSearch(e.target.value)}
-                className="text-sm border border-gray-200 rounded-xl px-3 py-2 w-full sm:w-48 min-h-[44px]"
+                className="text-sm border border-gray-200 rounded-xl px-3 py-2 w-full min-h-[44px]"
               />
               {canEdit && (
                 <button
@@ -1252,34 +1198,6 @@ export default function Library() {
             ))}
           </div>
 
-          {(rolesView === 'grid' || rolesView === 'list') && (
-            <div className="flex gap-2 flex-wrap mb-4">
-              <button
-                type="button"
-                onClick={() => setDeptFilter('')}
-                className={`text-xs px-3 py-1 rounded-full border font-medium min-h-[36px] ${
-                  !deptFilter ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                All
-              </button>
-              {uniqueDepts.map((dept) => (
-                <button
-                  key={dept}
-                  type="button"
-                  onClick={() => setDeptFilter(dept)}
-                  className={`text-xs px-3 py-1 rounded-full border font-medium min-h-[36px] ${
-                    deptFilter === dept
-                      ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]'
-                      : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                  }`}
-                >
-                  {dept}
-                </button>
-              ))}
-            </div>
-          )}
-
           {rolesView === 'grid' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredRoles.map((role) => {
@@ -1299,8 +1217,7 @@ export default function Library() {
                       <div className="min-w-0">
                         <h3 className="font-semibold text-gray-900">{role.title}</h3>
                         <p className="text-sm text-gray-400 mt-0.5">
-                          {role.department}
-                          {role.reportsTo ? ` · Reports to ${role.reportsTo}` : ''}
+                          {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level role'}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
@@ -1374,11 +1291,10 @@ export default function Library() {
 
           {rolesView === 'list' && (
             <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
-              <table className="w-full text-sm text-left min-w-[640px]">
+              <table className="w-full text-sm text-left min-w-[520px]">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                     <th className="px-4 py-3 font-semibold">Role</th>
-                    <th className="px-4 py-3 font-semibold">Department</th>
                     <th className="px-4 py-3 font-semibold">Reports to</th>
                     <th className="px-4 py-3 font-semibold text-right">Headcount</th>
                     <th className="px-4 py-3 font-semibold">Salary band</th>
@@ -1400,7 +1316,6 @@ export default function Library() {
                         role="button"
                       >
                         <td className="px-4 py-3 font-medium text-gray-900">{role.title}</td>
-                        <td className="px-4 py-3 text-gray-600">{role.department || '—'}</td>
                         <td className="px-4 py-3 text-gray-600">{role.reportsTo || '—'}</td>
                         <td className="px-4 py-3 text-right">
                           {headcount > 0 ? (
@@ -1682,23 +1597,7 @@ export default function Library() {
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Department *</label>
-                  <select
-                    value={roleForm.department}
-                    onChange={(e) => setRoleForm((f) => ({ ...f, department: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                    required
-                  >
-                    <option value="">Select department</option>
-                    {departments.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="relative" ref={reportsToDropdownRef}>
+                <div className="sm:col-span-2 relative" ref={reportsToDropdownRef}>
                   <label className="block text-xs text-gray-500 mb-1">Reports to</label>
                   <div
                     role="button"
@@ -1771,7 +1670,8 @@ export default function Library() {
                             if (!reportsToSearch.trim()) return true;
                             const q = reportsToSearch.toLowerCase();
                             return (
-                              (r.title || '').toLowerCase().includes(q) || (r.department || '').toLowerCase().includes(q)
+                              (r.title || '').toLowerCase().includes(q) ||
+                              (r.reportsTo || '').toLowerCase().includes(q)
                             );
                           })
                           .map((role) => {
@@ -1799,9 +1699,11 @@ export default function Library() {
                               >
                                 <div>
                                   <p className="text-sm font-medium text-gray-800">{role.title}</p>
-                                  <p className="text-xs text-gray-400">
-                                    {role.department}
-                                    {role.reportsTo ? ` · under ${role.reportsTo}` : ''}
+                                  <p className="text-xs text-gray-400 mt-0.5">
+                                    {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level role'}
+                                    {role.salaryBand?.min != null &&
+                                      role.salaryBand?.min !== '' &&
+                                      ` · ₹${formatLakhs(role.salaryBand.min)}–${formatLakhs(role.salaryBand.max)}`}
                                   </p>
                                 </div>
                                 {selected && <span className="text-[#1B6B6B]">✓</span>}
@@ -1813,7 +1715,8 @@ export default function Library() {
                           if (!reportsToSearch.trim()) return true;
                           const q = reportsToSearch.toLowerCase();
                           return (
-                            (r.title || '').toLowerCase().includes(q) || (r.department || '').toLowerCase().includes(q)
+                            (r.title || '').toLowerCase().includes(q) ||
+                            (r.reportsTo || '').toLowerCase().includes(q)
                           );
                         }).length === 0 && (
                           <p className="text-center py-4 text-sm text-gray-400">No roles found</p>
@@ -2077,9 +1980,10 @@ export default function Library() {
                 <div className="flex-1 min-w-0">
                   <h2 className="text-lg font-semibold text-gray-900">{viewingRole.title}</h2>
                   <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <span className="text-xs px-2 py-1 bg-[#E8F5F5] text-[#1B6B6B] rounded-full">{viewingRole.department}</span>
-                    {viewingRole.reportsTo && (
+                    {viewingRole.reportsTo ? (
                       <span className="text-xs text-gray-500">Reports to {viewingRole.reportsTo}</span>
+                    ) : (
+                      <span className="text-xs text-gray-500">Top level role</span>
                     )}
                     <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
                       {viewingRole.currentHeadcount ?? matchingEmployeesForRole(viewingRole).filter((e) => (e.status || 'Active') === 'Active').length}{' '}

@@ -1469,8 +1469,15 @@ export default function Employees() {
                       {selectedRole ? (
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="min-w-0 text-left">
-                            <span className="text-slate-800 font-medium">{selectedRole.title}</span>
-                            <span className="text-xs text-slate-400 ml-2">{selectedRole.department}</span>
+                            <p className="text-sm font-medium text-gray-900">{selectedRole.title}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {selectedRole.reportsTo
+                                ? `Reports to ${selectedRole.reportsTo}`
+                                : 'Top level role'}
+                              {selectedRole.salaryBand?.min != null &&
+                                selectedRole.salaryBand?.min !== '' &&
+                                ` · ₹${formatLakhs(selectedRole.salaryBand.min)}–${formatLakhs(selectedRole.salaryBand.max)}`}
+                            </p>
                           </div>
                         </div>
                       ) : (
@@ -1528,7 +1535,7 @@ export default function Employees() {
                               const q = roleSearch.toLowerCase();
                               return (
                                 (r.title || '').toLowerCase().includes(q) ||
-                                (r.department || '').toLowerCase().includes(q)
+                                (r.reportsTo || '').toLowerCase().includes(q)
                               );
                             })
                             .map((role) => (
@@ -1542,7 +1549,6 @@ export default function Employees() {
                                     ...prev,
                                     designation: role.title || '',
                                     designationRoleId: role.id,
-                                    department: prev.department || role.department || '',
                                   }));
                                   setShowRoleDropdown(false);
                                   setRoleSearch('');
@@ -1554,7 +1560,6 @@ export default function Employees() {
                                       ...prev,
                                       designation: role.title || '',
                                       designationRoleId: role.id,
-                                      department: prev.department || role.department || '',
                                     }));
                                     setShowRoleDropdown(false);
                                     setRoleSearch('');
@@ -1566,20 +1571,17 @@ export default function Employees() {
                               >
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex-1 min-w-0 text-left">
-                                    <p className="text-sm font-medium text-slate-900">{role.title}</p>
-                                    <p className="text-xs text-slate-400 mt-0.5">
-                                      {role.department}
-                                      {role.reportsTo ? ` · Reports to ${role.reportsTo}` : ''}
+                                    <p className="text-sm font-medium text-gray-900">{role.title}</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                      {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level role'}
+                                      {role.salaryBand?.min != null &&
+                                        role.salaryBand?.min !== '' &&
+                                        ` · ₹${formatLakhs(role.salaryBand.min)}–${formatLakhs(role.salaryBand.max)}`}
                                     </p>
                                   </div>
-                                  <div className="flex items-center gap-2 flex-shrink-0">
-                                    {role.salaryBand?.min != null && role.salaryBand?.min !== '' && (
-                                      <span className="text-xs text-[#1B6B6B] font-medium bg-[#E8F5F5] px-2 py-0.5 rounded-full whitespace-nowrap">
-                                        ₹{formatLakhs(role.salaryBand.min)}–{formatLakhs(role.salaryBand.max)}
-                                      </span>
-                                    )}
-                                    {selectedRole?.id === role.id && <span className="text-[#1B6B6B]">✓</span>}
-                                  </div>
+                                  {selectedRole?.id === role.id && (
+                                    <span className="text-[#1B6B6B] flex-shrink-0">✓</span>
+                                  )}
                                 </div>
                               </div>
                             ))}
