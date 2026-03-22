@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   addDoc,
   updateDoc,
   query,
   orderBy,
   where,
+  limit,
+  startAfter,
+  getCountFromServer,
   serverTimestamp,
   increment,
   Timestamp,
@@ -17,6 +19,8 @@ import {
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useCompany } from '../contexts/CompanyContext';
+import { SkeletonCard } from '../components/SkeletonRow';
 import { toDateString, toDisplayDate, toJSDate } from '../utils';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -28,6 +32,10 @@ const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
 const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
 const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 'Probationary', 'Seasonal', 'Other'];
 const JOINING_YEARS = ['All Years', 2020, 2021, 2022, 2023, 2024, 2025, 2026];
+
+const PAGE_SIZE = 50;
+const VISIBLE_ROWS = 20;
+const ROW_HEIGHT = 56;
 
 // Add Employee form is intentionally flexible:
 // Only blocking validations:
@@ -131,10 +139,18 @@ export default function Employees() {
   const navigate = useNavigate();
   const { success, error: showError } = useToast();
   const { role: userRole } = useAuth();
+  const { company } = useCompany();
   const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
   const [employees, setEmployees] = useState([]);
-  const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const lastDocRef = useRef(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [statsCounts, setStatsCounts] = useState({ active: 0, onLeave: 0, inactive: 0 });
+  const [searchAllMode, setSearchAllMode] = useState(false);
+  const searchTimeoutRef = useRef(null);
+  const [scrollTop, setScrollTop] = useState(0);
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -166,24 +182,198 @@ export default function Employees() {
   }, [showManagerDropdown]);
   const [showDownload, setShowDownload] = useState(false);
 
-  useEffect(() => {
-    if (!companyId) return;
-    const load = async () => {
+  const collRef = useMemo(
+    () => (companyId ? collection(db, 'companies', companyId, 'employees') : null),
+    [companyId],
+  );
+
+  const fetchAllEmployeesFallback = useCallback(async () => {
+    if (!collRef) return;
+    try {
+      const snap = await getDocs(collRef);
+      setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setHasMore(false);
+      lastDocRef.current = null;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+      showError('Failed to load employees');
+    }
+  }, [collRef, showError]);
+
+  const fetchTotalCount = useCallback(async () => {
+    if (!collRef) return;
+    try {
+      const snapshot = await getCountFromServer(collRef);
+      setTotalCount(snapshot.data().count);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+    }
+  }, [collRef]);
+
+  const fetchStatsCounts = useCallback(async () => {
+    if (!collRef) return;
+    try {
+      const [activeSnap, onLeaveSnap, inactiveSnap] = await Promise.all([
+        getCountFromServer(query(collRef, where('status', '==', 'Active'))),
+        getCountFromServer(query(collRef, where('status', '==', 'On Leave'))),
+        getCountFromServer(query(collRef, where('status', '==', 'Inactive'))),
+      ]);
+      setStatsCounts({
+        active: activeSnap.data().count,
+        onLeave: onLeaveSnap.data().count,
+        inactive: inactiveSnap.data().count,
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('Stats count failed', err);
+    }
+  }, [collRef]);
+
+  const fetchEmployees = useCallback(
+    async (reset = true) => {
+      if (!companyId || !collRef) return;
+      try {
+        if (reset) {
+          setLoading(true);
+          setEmployees([]);
+          lastDocRef.current = null;
+          setSearchAllMode(false);
+        } else {
+          setLoadingMore(true);
+        }
+
+        const constraints = [];
+        if (tab === 'active') constraints.push(where('status', '==', 'Active'));
+        else if (tab === 'onleave') constraints.push(where('status', '==', 'On Leave'));
+        else if (tab === 'inactive') constraints.push(where('status', '==', 'Inactive'));
+        if (filterDept !== 'All Departments') {
+          constraints.push(where('department', '==', filterDept.trim()));
+        }
+        if (filterBranch !== 'All Branches') {
+          constraints.push(where('branch', '==', filterBranch.trim()));
+        }
+        constraints.push(orderBy('fullName', 'asc'));
+        constraints.push(limit(PAGE_SIZE));
+        if (!reset && lastDocRef.current) {
+          constraints.push(startAfter(lastDocRef.current));
+        }
+
+        const q = query(collRef, ...constraints);
+        const snap = await getDocs(q);
+        const newEmployees = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const last = snap.docs[snap.docs.length - 1] || null;
+        lastDocRef.current = last;
+
+        if (reset) {
+          setEmployees(newEmployees);
+        } else {
+          setEmployees((prev) => [...prev, ...newEmployees]);
+        }
+        setHasMore(snap.docs.length === PAGE_SIZE);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Fetch error:', error);
+        if (error?.code === 'failed-precondition') {
+          // eslint-disable-next-line no-console
+          console.warn('Missing Firestore index, falling back to full load');
+          await fetchAllEmployeesFallback();
+        } else {
+          showError('Failed to load employees');
+        }
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [companyId, collRef, tab, filterDept, filterBranch, fetchAllEmployeesFallback, showError],
+  );
+
+  const searchAllEmployees = useCallback(
+    async (term) => {
+      if (!term || term.length < 3 || !collRef) return;
       setLoading(true);
       try {
-        const [empSnap, companySnap] = await Promise.all([
-          getDocs(query(collection(db, 'companies', companyId, 'employees'), orderBy('createdAt', 'desc'))),
-          getDoc(doc(db, 'companies', companyId)),
-        ]);
-        setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        if (companySnap.exists()) setCompany({ id: companySnap.id, ...companySnap.data() });
+        const snap = await getDocs(query(collRef, orderBy('fullName', 'asc')));
+        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const t = term.toLowerCase();
+        const filtered = all.filter(
+          (e) =>
+            e.fullName?.toLowerCase().includes(t) ||
+            e.empId?.toLowerCase().includes(t) ||
+            e.email?.toLowerCase().includes(t) ||
+            (e.phone && String(e.phone).includes(term)),
+        );
+        setEmployees(filtered);
+        setHasMore(false);
+        lastDocRef.current = null;
+        setTotalCount(filtered.length);
+        setSearchAllMode(true);
       } catch (err) {
-        showError('Failed to load employees');
+        // eslint-disable-next-line no-console
+        console.error(err);
+        showError('Search failed');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    };
-    load();
-  }, [companyId, showError]);
+    },
+    [collRef, showError],
+  );
+
+  const handleSearchChange = (term) => {
+    setSearch(term);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    if (!term.trim()) {
+      setSearchAllMode(false);
+      fetchEmployees(true);
+      fetchTotalCount();
+      fetchStatsCounts();
+      return;
+    }
+    if (term.trim().length < 3) {
+      if (searchAllMode) {
+        setSearchAllMode(false);
+        fetchEmployees(true);
+        fetchTotalCount();
+      }
+      return;
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      searchAllEmployees(term.trim());
+    }, 400);
+  };
+
+  useEffect(
+    () => () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!companyId) return;
+    fetchEmployees(true);
+    fetchTotalCount();
+    fetchStatsCounts();
+  }, [companyId, tab, filterDept, filterBranch, fetchEmployees, fetchTotalCount, fetchStatsCounts]);
+
+  const computeNextEmpId = useCallback(async () => {
+    if (!collRef) return 'EMP001';
+    try {
+      const snap = await getDocs(collRef);
+      const nums = snap
+        .docs.map((d) => d.data().empId && String(d.data().empId).replace(/^EMP/i, ''))
+        .filter((n) => /^\d+$/.test(n))
+        .map(Number);
+      const max = nums.length ? Math.max(...nums) : 0;
+      return `EMP${String(max + 1).padStart(3, '0')}`;
+    } catch {
+      return 'EMP001';
+    }
+  }, [collRef]);
 
   const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
   const designations = company?.designations?.length ? company.designations : DEFAULT_DESIGNATIONS;
@@ -232,28 +422,22 @@ export default function Employees() {
     setFilterJoiningYear('All Years');
   };
 
-  const nextEmpId = useMemo(() => {
-    const nums = employees
-      .map((e) => e.empId && e.empId.replace(/^EMP/i, ''))
-      .filter((n) => /^\d+$/.test(n))
-      .map(Number);
-    const max = nums.length ? Math.max(...nums) : 0;
-    return `EMP${String(max + 1).padStart(3, '0')}`;
-  }, [employees]);
-
   const filtered = useMemo(() => {
     let list = employees;
-    if (tab === 'active') list = list.filter((e) => (e.status || 'Active') === 'Active');
-    if (tab === 'onleave') list = list.filter((e) => (e.status || '') === 'On Leave');
-    if (tab === 'inactive') list = list.filter((e) => (e.status || '') === 'Inactive');
+    if (searchAllMode) {
+      if (tab === 'active') list = list.filter((e) => (e.status || 'Active') === 'Active');
+      if (tab === 'onleave') list = list.filter((e) => (e.status || '') === 'On Leave');
+      if (tab === 'inactive') list = list.filter((e) => (e.status || '') === 'Inactive');
+    }
     const term = search.trim().toLowerCase();
-    if (term) {
+    if (term && (!searchAllMode || term.length < 3)) {
       list = list.filter(
         (e) =>
           e.fullName?.toLowerCase().includes(term) ||
           e.email?.toLowerCase().includes(term) ||
           (e.empId || '').toLowerCase().includes(term) ||
-          (e.department || '').toLowerCase().includes(term),
+          (e.department || '').toLowerCase().includes(term) ||
+          (e.phone && String(e.phone).includes(search.trim())),
       );
     }
     if (filterDept !== 'All Departments') list = list.filter((e) => (e.department || '').trim() === filterDept);
@@ -270,7 +454,31 @@ export default function Employees() {
       });
     }
     return list;
-  }, [employees, tab, search, filterDept, filterDesignation, filterBranch, filterEmploymentType, filterCategory, filterJoiningYear]);
+  }, [
+    employees,
+    searchAllMode,
+    tab,
+    search,
+    filterDept,
+    filterDesignation,
+    filterBranch,
+    filterEmploymentType,
+    filterCategory,
+    filterJoiningYear,
+  ]);
+
+  const useVirtualList = filtered.length > 30;
+  const visibleWindow = useMemo(() => {
+    const startIndex = Math.floor(scrollTop / ROW_HEIGHT);
+    const endIndex = Math.min(startIndex + VISIBLE_ROWS, filtered.length);
+    return {
+      items: filtered.slice(startIndex, endIndex),
+      startIndex,
+      endIndex,
+      bottomSpacer: Math.max(0, filtered.length - endIndex) * ROW_HEIGHT,
+      topSpacer: startIndex * ROW_HEIGHT,
+    };
+  }, [filtered, scrollTop]);
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -372,6 +580,8 @@ export default function Employees() {
       const ref = await addDoc(collection(db, 'companies', companyId, 'employees'), payload);
       await updateDoc(doc(db, 'companies', companyId), { employeeCount: increment(1) });
       setEmployees((prev) => [{ id: ref.id, ...payload, createdAt: new Date() }, ...prev]);
+      setTotalCount((c) => c + 1);
+      fetchStatsCounts();
       setShowAddModal(false);
       setForm(initialForm);
       setManagerSearch('');
@@ -388,6 +598,7 @@ export default function Employees() {
     try {
       await updateDoc(doc(db, 'companies', companyId, 'employees', emp.id), { status: 'Inactive' });
       setEmployees((prev) => prev.map((e) => (e.id === emp.id ? { ...e, status: 'Inactive' } : e)));
+      fetchStatsCounts();
       success('Employee deactivated');
     } catch (err) {
       showError('Failed to deactivate');
@@ -476,9 +687,10 @@ export default function Employees() {
           {canEditEmployees && (
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
+                const id = await computeNextEmpId();
+                setForm({ ...initialForm, empId: id });
                 setShowAddModal(true);
-                setForm({ ...initialForm, empId: nextEmpId });
               }}
               className="inline-flex items-center justify-center rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
             >
@@ -504,15 +716,17 @@ export default function Employees() {
         <input
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, email, Emp ID, department..."
-          className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-64"
+          onChange={(e) => handleSearchChange(e.target.value)}
+          placeholder="Search (3+ chars searches all employees)..."
+          className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-72"
         />
       </div>
 
       <p className="text-sm text-slate-500 mb-3">
-        Showing {filtered.length} of {employees.length} employees
-        {activeFilterCount > 0 ? ` · ${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} active` : ''}
+        Showing {filtered.length} of {totalCount} employees
+        {employees.length < totalCount && !searchAllMode && hasMore ? ` · ${employees.length} loaded` : ''}
+        {searchAllMode ? ' · search all results' : ''}
+        {activeFilterCount > 0 ? ` · ${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} active (extra filters apply to loaded rows)` : ''}
       </p>
 
       <div className="mb-4">
@@ -603,41 +817,40 @@ export default function Employees() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          {[0, 1, 2, 3].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
-      ) : (
+      ) : null}
+
+      {!loading && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-slate-800">
-                {employees.filter((e) => (e.status || 'Active') === 'Active').length}
-              </p>
+              <p className="text-xl font-semibold text-slate-800">{statsCounts.active}</p>
               <p className="text-xs text-slate-500">Active</p>
             </div>
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-amber-600">
-                {employees.filter((e) => (e.status || '') === 'On Leave').length}
-              </p>
+              <p className="text-xl font-semibold text-amber-600">{statsCounts.onLeave}</p>
               <p className="text-xs text-slate-500">On Leave</p>
             </div>
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-slate-400">
-                {employees.filter((e) => (e.status || '') === 'Inactive').length}
-              </p>
+              <p className="text-xl font-semibold text-slate-400">{statsCounts.inactive}</p>
               <p className="text-xs text-slate-500">Inactive</p>
             </div>
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-[#1B6B6B]">
-                {new Set(employees.map((e) => e.department).filter(Boolean)).size}
-              </p>
-              <p className="text-xs text-slate-500">Departments</p>
+              <p className="text-xl font-semibold text-[#1B6B6B]">{departments.length}</p>
+              <p className="text-xs text-slate-500">Dept types</p>
             </div>
           </div>
 
-          <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+          <div
+            className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-slate-200 rounded-xl bg-white"
+            onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+          >
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500">
+            <thead className="bg-slate-50 text-slate-500 sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Emp ID</th>
                 <th className="px-4 py-3 text-left font-medium">Name + Email</th>
@@ -650,74 +863,157 @@ export default function Employees() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((emp) => (
-                <tr
-                  key={emp.id}
-                  className="border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-all"
-                  onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
-                  style={{ borderLeft: `3px solid ${getDeptColor(emp.department)}` }}
-                >
-                  <td className="px-4 py-3 font-mono text-slate-700">{emp.empId || '—'}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
-                        style={{ background: getDeptColor(emp.department) }}
-                      >
-                        {emp.fullName?.charAt(0) || '—'}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-slate-800">{emp.fullName || '—'}</p>
-                        <p className="text-xs text-slate-500">{emp.email || '—'}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">{emp.department || '—'}</td>
-                  <td className="px-4 py-3 text-slate-700">{emp.designation || '—'}</td>
-                  <td className="px-4 py-3 text-slate-700">{emp.phone || '—'}</td>
-                  <td className="px-4 py-3 text-slate-700">{toDisplayDate(emp.joiningDate)}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                        emp.status === 'Active'
-                          ? 'bg-green-100 text-green-800'
-                          : emp.status === 'On Leave'
-                            ? 'bg-[#C5E8E8] text-[#0F4444]'
-                            : emp.status === 'Offboarding'
-                              ? 'bg-orange-100 text-orange-800'
-                            : 'bg-slate-100 text-slate-600'
-                      }`}
+              {useVirtualList ? (
+                <>
+                  {visibleWindow.topSpacer > 0 && (
+                    <tr aria-hidden className="pointer-events-none">
+                      <td colSpan={8} style={{ height: visibleWindow.topSpacer, padding: 0, border: 'none' }} />
+                    </tr>
+                  )}
+                  {visibleWindow.items.map((emp) => (
+                    <tr
+                      key={emp.id}
+                      className="border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-all"
+                      style={{ height: ROW_HEIGHT, borderLeft: `3px solid ${getDeptColor(emp.department)}` }}
+                      onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
                     >
-                      {emp.status || 'Active'}
-                    </span>
-                    {emp.offboarding?.status === 'in_progress' && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <div className="w-16 bg-gray-100 rounded-full h-1">
+                      <td className="px-4 py-3 font-mono text-slate-700">{emp.empId || '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
                           <div
-                            className="bg-amber-500 h-1 rounded-full"
-                            style={{ width: `${emp.offboarding?.completionPct || 0}%` }}
-                          />
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
+                            style={{ background: getDeptColor(emp.department) }}
+                          >
+                            {emp.fullName?.charAt(0) || '—'}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-slate-800">{emp.fullName || '—'}</p>
+                            <p className="text-xs text-slate-500">{emp.email || '—'}</p>
+                          </div>
                         </div>
-                        <span className="text-xs text-amber-600">Offboarding</span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{emp.department || '—'}</td>
+                      <td className="px-4 py-3 text-slate-700">{emp.designation || '—'}</td>
+                      <td className="px-4 py-3 text-slate-700">{emp.phone || '—'}</td>
+                      <td className="px-4 py-3 text-slate-700">{toDisplayDate(emp.joiningDate)}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                            emp.status === 'Active'
+                              ? 'bg-green-100 text-green-800'
+                              : emp.status === 'On Leave'
+                                ? 'bg-[#C5E8E8] text-[#0F4444]'
+                                : emp.status === 'Offboarding'
+                                  ? 'bg-orange-100 text-orange-800'
+                                  : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {emp.status || 'Active'}
+                        </span>
+                        {emp.offboarding?.status === 'in_progress' && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <div className="w-16 bg-gray-100 rounded-full h-1">
+                              <div
+                                className="bg-amber-500 h-1 rounded-full"
+                                style={{ width: `${emp.offboarding?.completionPct || 0}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-amber-600">Offboarding</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#1B6B6B] text-xs font-medium hover:underline">
+                          {canEditEmployees ? 'View Profile' : 'View'}
+                        </button>
+                        {canEditEmployees && (emp.status || 'Active') === 'Active' && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeactivate(emp)}
+                            className="text-amber-600 text-xs font-medium hover:underline"
+                          >
+                            Deactivate
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {visibleWindow.bottomSpacer > 0 && (
+                    <tr aria-hidden className="pointer-events-none">
+                      <td colSpan={8} style={{ height: visibleWindow.bottomSpacer, padding: 0, border: 'none' }} />
+                    </tr>
+                  )}
+                </>
+              ) : (
+                filtered.map((emp) => (
+                  <tr
+                    key={emp.id}
+                    className="border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-all"
+                    onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
+                    style={{ borderLeft: `3px solid ${getDeptColor(emp.department)}` }}
+                  >
+                    <td className="px-4 py-3 font-mono text-slate-700">{emp.empId || '—'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
+                          style={{ background: getDeptColor(emp.department) }}
+                        >
+                          {emp.fullName?.charAt(0) || '—'}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">{emp.fullName || '—'}</p>
+                          <p className="text-xs text-slate-500">{emp.email || '—'}</p>
+                        </div>
                       </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
-                    <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#1B6B6B] text-xs font-medium hover:underline">
-                      {canEditEmployees ? 'View Profile' : 'View'}
-                    </button>
-                    {canEditEmployees && (emp.status || 'Active') === 'Active' && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeactivate(emp)}
-                        className="text-amber-600 text-xs font-medium hover:underline"
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">{emp.department || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{emp.designation || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{emp.phone || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{toDisplayDate(emp.joiningDate)}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                          emp.status === 'Active'
+                            ? 'bg-green-100 text-green-800'
+                            : emp.status === 'On Leave'
+                              ? 'bg-[#C5E8E8] text-[#0F4444]'
+                              : emp.status === 'Offboarding'
+                                ? 'bg-orange-100 text-orange-800'
+                                : 'bg-slate-100 text-slate-600'
+                        }`}
                       >
-                        Deactivate
+                        {emp.status || 'Active'}
+                      </span>
+                      {emp.offboarding?.status === 'in_progress' && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <div className="w-16 bg-gray-100 rounded-full h-1">
+                            <div
+                              className="bg-amber-500 h-1 rounded-full"
+                              style={{ width: `${emp.offboarding?.completionPct || 0}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-amber-600">Offboarding</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
+                      <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#1B6B6B] text-xs font-medium hover:underline">
+                        {canEditEmployees ? 'View Profile' : 'View'}
                       </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                      {canEditEmployees && (emp.status || 'Active') === 'Active' && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeactivate(emp)}
+                          className="text-amber-600 text-xs font-medium hover:underline"
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
               {filtered.length === 0 && (
                 <tr>
                   <td className="px-4 py-8 text-center text-slate-500" colSpan={8}>
@@ -728,6 +1024,26 @@ export default function Employees() {
             </tbody>
           </table>
         </div>
+
+          {hasMore && !searchAllMode && (
+            <div className="flex justify-center py-4">
+              <button
+                type="button"
+                onClick={() => fetchEmployees(false)}
+                disabled={loadingMore}
+                className="flex items-center gap-2 px-6 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {loadingMore ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  `Load more (${Math.max(0, totalCount - employees.length)} remaining)`
+                )}
+              </button>
+            </div>
+          )}
         </>
       )}
 

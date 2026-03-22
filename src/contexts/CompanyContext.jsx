@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 const CompanyContext = createContext(null);
@@ -12,23 +12,27 @@ export function CompanyProvider({ children, companyIdFromRoute }) {
     if (!companyIdFromRoute) {
       setCompany(null);
       setLoading(false);
-      return;
+      return undefined;
     }
-    let cancelled = false;
+
     setLoading(true);
-    getDoc(doc(db, 'companies', companyIdFromRoute))
-      .then((snap) => {
-        if (!cancelled) {
-          setCompany(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+    const unsub = onSnapshot(
+      doc(db, 'companies', companyIdFromRoute),
+      (snap) => {
+        if (snap.exists()) {
+          setCompany({ id: snap.id, ...snap.data() });
+        } else {
+          setCompany(null);
         }
-      })
-      .catch(() => {
-        if (!cancelled) setCompany(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+        setLoading(false);
+      },
+      () => {
+        setCompany(null);
+        setLoading(false);
+      },
+    );
+
+    return () => unsub();
   }, [companyIdFromRoute]);
 
   const value = useMemo(
@@ -36,11 +40,7 @@ export function CompanyProvider({ children, companyIdFromRoute }) {
     [companyIdFromRoute, company, loading],
   );
 
-  return (
-    <CompanyContext.Provider value={value}>
-      {children}
-    </CompanyContext.Provider>
-  );
+  return <CompanyContext.Provider value={value}>{children}</CompanyContext.Provider>;
 }
 
 export function useCompany() {

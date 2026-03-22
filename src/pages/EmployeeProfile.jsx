@@ -5,7 +5,6 @@ import {
   doc,
   getDoc,
   getDocs,
-  onSnapshot,
   updateDoc,
   query,
   orderBy,
@@ -17,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
+import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
 import {
   DOCUMENT_CHECKLIST,
@@ -253,7 +253,7 @@ export default function EmployeeProfile() {
   const canUploadDocuments = userRole === 'admin' || userRole === 'hrmanager';
   const { success, error: showError } = useToast();
   const [employee, setEmployee] = useState(null);
-  const [company, setCompany] = useState(null);
+  const { company } = useCompany();
   const [allEmployees, setAllEmployees] = useState([]);
   const [leaveList, setLeaveList] = useState([]);
   const [leaveError, setLeaveError] = useState(null);
@@ -273,6 +273,8 @@ export default function EmployeeProfile() {
   const [additionalDocCategory, setAdditionalDocCategory] = useState(DOCUMENT_CATEGORIES[0]);
   const [additionalDocFile, setAdditionalDocFile] = useState(null);
   const additionalFileInputRef = useRef(null);
+  const leaveFetchedRef = useRef(false);
+  const assetsFetchedRef = useRef(false);
   const [managerSearch, setManagerSearch] = useState('');
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
   const [assetList, setAssetList] = useState([]);
@@ -340,6 +342,10 @@ export default function EmployeeProfile() {
 
   useEffect(() => {
     if (!companyId || !empId) return;
+    leaveFetchedRef.current = false;
+    assetsFetchedRef.current = false;
+    setLeaveList([]);
+    setAssetList([]);
     const load = async () => {
       setLoading(true);
       try {
@@ -357,6 +363,9 @@ export default function EmployeeProfile() {
 
   useEffect(() => {
     if (!companyId || !empId) return;
+    if (tab !== 'leave' && tab !== 'timeline') return;
+    if (leaveFetchedRef.current) return;
+    leaveFetchedRef.current = true;
     let cancelled = false;
     const loadLeave = async () => {
       setLeaveError(null);
@@ -387,7 +396,7 @@ export default function EmployeeProfile() {
     return () => {
       cancelled = true;
     };
-  }, [companyId, empId]);
+  }, [companyId, empId, tab]);
 
   useEffect(() => {
     const close = () => {
@@ -398,9 +407,19 @@ export default function EmployeeProfile() {
     return () => document.removeEventListener('mousedown', close);
   }, [showProfileAssetDropdown]);
 
-  // Load assets for this employee/company
+  // Load assets when Assets / Timeline tab or asset modals need them (once per employee)
   useEffect(() => {
     if (!companyId) return;
+    const needAssets =
+      tab === 'assets' ||
+      tab === 'timeline' ||
+      showAssignAssetModal ||
+      showProfileAssignModal != null ||
+      returnConsumableModal != null ||
+      showAssetHistory;
+    if (!needAssets) return;
+    if (assetsFetchedRef.current) return;
+    assetsFetchedRef.current = true;
     const loadAssets = async () => {
       try {
         const snap = await getDocs(collection(db, 'companies', companyId, 'assets'));
@@ -412,32 +431,26 @@ export default function EmployeeProfile() {
       }
     };
     loadAssets();
-  }, [companyId]);
+  }, [companyId, tab, showAssignAssetModal, showProfileAssignModal, returnConsumableModal, showAssetHistory]);
 
   useEffect(() => {
-    if (!companyId) return;
-    const fetchEmployees = async () => {
+    if (!showEditModal || !companyId) return;
+    let cancelled = false;
+    const fetchEmployeesForManager = async () => {
       try {
         const snap = await getDocs(collection(db, 'companies', companyId, 'employees'));
-        setAllEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        if (!cancelled) setAllEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (e) {
+        // eslint-disable-next-line no-console
         console.warn('Could not load employees list:', e);
-        setAllEmployees([]);
+        if (!cancelled) setAllEmployees([]);
       }
     };
-    fetchEmployees();
-  }, [companyId]);
-
-  // Real-time company listener for documentTypes and other fields
-  useEffect(() => {
-    if (!companyId) return;
-    const unsub = onSnapshot(doc(db, 'companies', companyId), (snap) => {
-      if (snap.exists()) {
-        setCompany({ id: snap.id, ...snap.data() });
-      }
-    });
-    return () => unsub();
-  }, [companyId]);
+    fetchEmployeesForManager();
+    return () => {
+      cancelled = true;
+    };
+  }, [showEditModal, companyId]);
 
   useEffect(() => {
     if (searchParams.get('tab') === 'documents') setTab('documents');
