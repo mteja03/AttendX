@@ -162,12 +162,20 @@ const navIcons = {
 };
 
 export default function Sidebar({ isOpen = false, onClose }) {
-  const { currentUser, role, signOut } = useAuth();
+  const { currentUser, role, signOut, userPermissions } = useAuth();
   const { companyId, company } = useCompany();
   const isAdmin = role === 'admin';
   const inCompany = !!companyId;
 
   const companyNavItems = getNavItems(isAdmin ? 'admin' : role);
+
+  const canAccessModule = (module) => {
+    if (role === 'admin') return true;
+    if (!userPermissions) return true;
+    return userPermissions[module] !== false;
+  };
+
+  const visibleCompanyNavItems = companyNavItems.filter((item) => canAccessModule(item.to));
 
   const handleSignOut = async () => {
     try {
@@ -273,7 +281,7 @@ export default function Sidebar({ isOpen = false, onClose }) {
                 </div>
                 <p className="px-3 text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Current Company</p>
                 <div className="space-y-0.5">
-                  {companyNavItems.map(({ to, label }) => {
+                  {visibleCompanyNavItems.map(({ to, label }) => {
                     const Icon = navIcons[to] || NavIcon;
                     return (
                       <NavLink
@@ -304,7 +312,7 @@ export default function Sidebar({ isOpen = false, onClose }) {
               </div>
               <span className="text-sm font-medium truncate">{company?.name || 'Company'}</span>
             </div>
-            {companyNavItems.map(({ to, label }) => {
+            {visibleCompanyNavItems.map(({ to, label }) => {
               const Icon = navIcons[to] || NavIcon;
               return (
                 <NavLink

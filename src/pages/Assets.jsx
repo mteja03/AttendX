@@ -100,7 +100,7 @@ const buildAssetIdPrefix = (type) => {
 export default function Assets() {
   const { companyId } = useParams();
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, role: userRole } = useAuth();
   const { success, error: showError } = useToast();
   const [company, setCompany] = useState(null);
   const [assets, setAssets] = useState([]);
@@ -178,15 +178,24 @@ export default function Assets() {
     if (!companyId) return;
     const load = async () => {
       setLoading(true);
+      console.log('Fetching assets for:', companyId);
+      console.log('Current user role:', userRole);
+
       try {
-        const [companySnap, assetSnap, empSnap] = await Promise.all([
-          getDoc(doc(db, 'companies', companyId)),
-          getDocs(query(collection(db, 'companies', companyId, 'assets'), orderBy('createdAt', 'desc'))).catch(() =>
-            getDocs(collection(db, 'companies', companyId, 'assets')),
-          ),
-          getDocs(collection(db, 'companies', companyId, 'employees')),
-        ]);
+        const companySnap = await getDoc(doc(db, 'companies', companyId));
         if (companySnap.exists()) setCompany({ id: companySnap.id, ...companySnap.data() });
+      } catch (err) {
+        console.error('Company load error:', err?.code, err?.message);
+      }
+
+      try {
+        let assetSnap;
+        try {
+          assetSnap = await getDocs(query(collection(db, 'companies', companyId, 'assets'), orderBy('createdAt', 'desc')));
+        } catch {
+          assetSnap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+        }
+        console.log('Assets found:', assetSnap.docs.length);
         setAssets(
           assetSnap.docs.map((d) => ({
             id: d.id,
@@ -194,16 +203,30 @@ export default function Assets() {
             mode: d.data().mode || 'trackable',
           })),
         );
+      } catch (error) {
+        console.error('Assets fetch error:', error?.code, error?.message);
+        if (error?.code === 'permission-denied') {
+          showError('Permission denied. Contact admin.');
+        } else if (error?.code === 'failed-precondition') {
+          showError('Database index building. Try again in 2 minutes.');
+        } else {
+          showError(`Failed to load assets: ${error?.message || 'Unknown error'}`);
+        }
+        setAssets([]);
+      }
+
+      try {
+        const empSnap = await getDocs(collection(db, 'companies', companyId, 'employees'));
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to load assets', err);
-        showError('Failed to load assets');
+        console.error('Employees load error:', err?.code, err?.message);
+        setEmployees([]);
       }
+
       setLoading(false);
     };
     load();
-  }, [companyId, showError]);
+  }, [companyId, showError, userRole]);
 
   const assetTypes = useMemo(() => {
     const raw = company?.assetTypes;

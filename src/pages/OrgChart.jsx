@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { collection, onSnapshot } from 'firebase/firestore';
 import html2canvas from 'html2canvas';
 import { db } from '../firebase/config';
 import { useCompany } from '../contexts/CompanyContext';
+import { useToast } from '../contexts/ToastContext';
 
 function getDeptColor(dept) {
   const colors = {
@@ -127,10 +128,11 @@ export default function OrgChart() {
   const { companyId } = useParams();
   const navigate = useNavigate();
   const { company } = useCompany();
+  const { error: showErrorToast } = useToast();
   const [employees, setEmployees] = useState([]);
   const [search, setSearch] = useState('');
   const [zoom, setZoom] = useState(1);
-  const captureRef = useRef(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!companyId) return () => {};
@@ -153,22 +155,45 @@ export default function OrgChart() {
     };
   }, [employees, roots]);
 
-  const downloadPng = useCallback(async () => {
-    if (!captureRef.current) return;
+  const companyName = (company?.name || 'org-chart').replace(/\s+/g, '-');
+
+  const handleDownloadPNG = useCallback(async () => {
+    const chartElement = document.getElementById('org-chart-container');
+    if (!chartElement) return;
+
     try {
-      const canvas = await html2canvas(captureRef.current, {
-        backgroundColor: '#f8fafc',
+      setDownloading(true);
+
+      const originalTransform = chartElement.style.transform;
+      chartElement.style.transform = 'scale(1)';
+
+      const canvas = await html2canvas(chartElement, {
+        backgroundColor: '#F8FAFC',
         scale: 2,
         useCORS: true,
+        allowTaint: true,
+        scrollX: 0,
+        scrollY: 0,
+        width: chartElement.scrollWidth,
+        height: chartElement.scrollHeight,
+        windowWidth: chartElement.scrollWidth,
+        windowHeight: chartElement.scrollHeight,
+        logging: false,
       });
-      const a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = `${(company?.name || 'org-chart').replace(/\s+/g, '-')}-org-chart.png`;
-      a.click();
-    } catch (e) {
-      console.error(e);
+
+      chartElement.style.transform = originalTransform;
+
+      const link = document.createElement('a');
+      link.download = `${companyName}-org-chart.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (error) {
+      console.error('PNG download error:', error);
+      showErrorToast(`Download failed: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setDownloading(false);
     }
-  }, [company?.name]);
+  }, [companyName, showErrorToast]);
 
   if (!companyId) return null;
 
@@ -192,10 +217,11 @@ export default function OrgChart() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={downloadPng}
-            className="min-h-[44px] px-4 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={handleDownloadPNG}
+            disabled={downloading}
+            className="flex items-center gap-2 min-h-[44px] px-4 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 font-medium"
           >
-            Download PNG
+            {downloading ? 'Downloading…' : 'Download PNG'}
           </button>
           <button
             type="button"
@@ -232,16 +258,18 @@ export default function OrgChart() {
           </button>
         </div>
       ) : (
-        <div
-          ref={captureRef}
-          style={{
-            transform: `scale(${zoom})`,
-            transformOrigin: 'top center',
-            transition: 'transform 0.2s',
-          }}
-          className="overflow-auto p-6 sm:p-8 bg-slate-50 rounded-2xl border border-slate-100 min-h-[320px]"
-        >
-          <div className="flex flex-wrap gap-12 justify-center items-start">
+        <div className="overflow-auto rounded-2xl border border-slate-100 min-h-[320px] bg-slate-50">
+          <div
+            id="org-chart-container"
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: 'top center',
+              transition: 'transform 0.2s',
+              padding: '40px',
+              minWidth: '100%',
+            }}
+          >
+            <div className="flex flex-wrap gap-12 justify-center items-start">
             {roots.map((root) => (
               <OrgNode key={root.id} node={root} search={search} companyId={companyId} navigate={navigate} />
             ))}
@@ -249,6 +277,7 @@ export default function OrgChart() {
           {roots.length === 0 && (
             <p className="text-center text-slate-500 text-sm py-8">No employees to display.</p>
           )}
+          </div>
         </div>
       )}
 

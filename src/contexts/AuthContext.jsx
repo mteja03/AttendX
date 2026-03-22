@@ -10,6 +10,7 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(null);
   const [companyId, setCompanyId] = useState(null);
   const [googleAccessToken, setGoogleAccessToken] = useState(null);
+  const [userPermissions, setUserPermissions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
@@ -19,6 +20,7 @@ export function AuthProvider({ children }) {
         setCurrentUser(null);
         setRole(null);
         setCompanyId(null);
+        setUserPermissions(null);
         setGoogleAccessToken(null);
         try {
           localStorage.removeItem('gat');
@@ -46,6 +48,7 @@ export function AuthProvider({ children }) {
             setCurrentUser(null);
             setRole(null);
             setCompanyId(null);
+            setUserPermissions(null);
             setAuthError('Access denied. Contact your HR admin to get access.');
             setLoading(false);
             return;
@@ -58,6 +61,7 @@ export function AuthProvider({ children }) {
             setCurrentUser(null);
             setRole(null);
             setCompanyId(null);
+            setUserPermissions(null);
             setAuthError('Your account has been deactivated. Contact HR admin.');
             setLoading(false);
             return;
@@ -66,6 +70,7 @@ export function AuthProvider({ children }) {
           setCurrentUser(firebaseUser);
           setRole(data.role || null);
           setCompanyId(data.companyId ?? null);
+          setUserPermissions(data.permissions ?? null);
           setAuthError('');
           try {
             const refUsed = snap.ref;
@@ -109,6 +114,7 @@ export function AuthProvider({ children }) {
           setCurrentUser(null);
           setRole(null);
           setCompanyId(null);
+          setUserPermissions(null);
           setAuthError('Access denied. Contact your HR admin to get access.');
           setLoading(false);
         }
@@ -174,13 +180,14 @@ export function AuthProvider({ children }) {
       role,
       userRole: role,
       companyId,
+      userPermissions,
       googleAccessToken,
       loading,
       authError,
       signInWithGoogle,
       signOut: signOutUser,
     }),
-    [currentUser, role, companyId, googleAccessToken, loading, authError],
+    [currentUser, role, companyId, userPermissions, googleAccessToken, loading, authError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

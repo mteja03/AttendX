@@ -1,16 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  addDoc,
-  arrayUnion,
-  collection,
-  doc,
-  getDocs,
-  onSnapshot,
-  serverTimestamp,
-  updateDoc,
-  writeBatch,
-} from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, onSnapshot, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -77,7 +67,6 @@ All leave applications must be submitted through AttendX at least 2 days in adva
 5. APPROVAL
 Leave is subject to manager approval. Emergency leave should be communicated via phone.`,
     version: '1.0',
-    requiresAcknowledgement: true,
     isActive: true,
   },
   {
@@ -104,7 +93,6 @@ The company has zero tolerance for any form of harassment or discrimination.
 6. CONFLICT OF INTEREST
 Employees must disclose any conflict of interest to HR immediately.`,
     version: '1.0',
-    requiresAcknowledgement: true,
     isActive: true,
   },
   {
@@ -131,7 +119,6 @@ Only licensed software approved by IT may be installed on company devices.
 6. INCIDENTS
 Any security incident must be reported to IT immediately.`,
     version: '1.0',
-    requiresAcknowledgement: true,
     isActive: true,
   },
   {
@@ -152,7 +139,6 @@ Repeated late arrivals may be recorded and reviewed with your manager.
 4. ABSENCE
 Unplanned absence must be reported to your manager as soon as possible.`,
     version: '1.0',
-    requiresAcknowledgement: true,
     isActive: true,
   },
   {
@@ -173,10 +159,18 @@ Use equipment only as trained and intended.
 4. FIRST AID
 Know the location of first-aid kits and emergency contacts.`,
     version: '1.0',
-    requiresAcknowledgement: true,
     isActive: true,
   },
 ];
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 function previewText(policy) {
   const d = policy.description?.trim();
@@ -195,14 +189,12 @@ export default function Policies() {
   const canManage = role === 'admin' || role === 'hrmanager';
 
   const [policies, setPolicies] = useState([]);
-  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [categoryTab, setCategoryTab] = useState('All');
   const [showAddModal, setShowAddModal] = useState(false);
   const [viewingPolicy, setViewingPolicy] = useState(null);
   const [editingPolicy, setEditingPolicy] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [ackSaving, setAckSaving] = useState(false);
 
   const [form, setForm] = useState({
     title: '',
@@ -211,15 +203,8 @@ export default function Policies() {
     content: '',
     version: '1.0',
     effectiveDate: new Date().toISOString().slice(0, 10),
-    requiresAcknowledgement: true,
     isActive: true,
   });
-
-  const myEmployee = useMemo(() => {
-    const em = currentUser?.email?.toLowerCase();
-    if (!em) return null;
-    return employees.find((e) => (e.email || '').toLowerCase() === em) || null;
-  }, [currentUser, employees]);
 
   const seedDefaultsIfEmpty = useCallback(async () => {
     if (!companyId || !currentUser?.email) return;
@@ -234,7 +219,6 @@ export default function Policies() {
         ...p,
         fileUrl: null,
         fileId: null,
-        acknowledgements: [],
         effectiveDate: now,
         createdAt: now,
         createdBy: currentUser.email,
@@ -270,14 +254,6 @@ export default function Policies() {
     return unsub;
   }, [companyId]);
 
-  useEffect(() => {
-    if (!companyId) return () => {};
-    const unsub = onSnapshot(collection(db, 'companies', companyId, 'employees'), (snap) => {
-      setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
-  }, [companyId]);
-
   const filtered = useMemo(() => {
     if (categoryTab === 'All') return policies;
     return policies.filter((p) => p.category === categoryTab);
@@ -292,7 +268,6 @@ export default function Policies() {
       content: '',
       version: '1.0',
       effectiveDate: new Date().toISOString().slice(0, 10),
-      requiresAcknowledgement: true,
       isActive: true,
     });
     setShowAddModal(true);
@@ -308,7 +283,6 @@ export default function Policies() {
       content: policy.content || '',
       version: policy.version || '1.0',
       effectiveDate: toJSDate(policy.effectiveDate) ? toJSDate(policy.effectiveDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-      requiresAcknowledgement: !!policy.requiresAcknowledgement,
       isActive: policy.isActive !== false,
     });
     setShowAddModal(true);
@@ -331,7 +305,6 @@ export default function Policies() {
         content: form.content,
         version: form.version.trim() || '1.0',
         effectiveDate: effective,
-        requiresAcknowledgement: form.requiresAcknowledgement,
         isActive: form.isActive,
         fileUrl: editingPolicy?.fileUrl ?? null,
         fileId: editingPolicy?.fileId ?? null,
@@ -344,7 +317,6 @@ export default function Policies() {
       } else {
         await addDoc(collection(db, 'companies', companyId, 'policies'), {
           ...payload,
-          acknowledgements: [],
           createdAt: serverTimestamp(),
           createdBy: currentUser.email,
         });
@@ -359,67 +331,94 @@ export default function Policies() {
     setSaving(false);
   };
 
-  const handleAcknowledge = async (policy) => {
-    if (!companyId || !currentUser) return;
-    const email = (currentUser.email || '').toLowerCase();
-    const empId = myEmployee?.id || currentUser.uid;
-    const empName = myEmployee?.fullName || currentUser.displayName || email || 'User';
-
-    const existing = (policy.acknowledgements || []).some(
-      (a) => a.employeeId === empId || (a.userEmail && a.userEmail.toLowerCase() === email),
-    );
-    if (existing) {
-      showError('Already acknowledged');
+  const printPolicy = useCallback((policy) => {
+    if (!policy) return;
+    const cat = escapeHtml(policy.category);
+    const title = escapeHtml(policy.title);
+    const ver = escapeHtml(policy.version || '1.0');
+    const eff = escapeHtml(toDisplayDate(policy.effectiveDate));
+    const desc = policy.description ? escapeHtml(policy.description) : '';
+    const content = escapeHtml(policy.content || '');
+    const printContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${title}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 40px;
+      color: #1f2937;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .header {
+      border-bottom: 2px solid #1B6B6B;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    .category {
+      font-size: 12px;
+      color: #1B6B6B;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+    h1 {
+      font-size: 24px;
+      color: #1B6B6B;
+      margin: 0 0 8px;
+    }
+    .meta {
+      font-size: 13px;
+      color: #6b7280;
+      margin-top: 8px;
+    }
+    .content {
+      font-size: 14px;
+      line-height: 1.8;
+      white-space: pre-wrap;
+      color: #374151;
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 16px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 11px;
+      color: #9ca3af;
+      display: flex;
+      justify-content: space-between;
+    }
+    @media print {
+      body { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="category">${cat}</div>
+    <h1>${title}</h1>
+    <div class="meta">Version ${ver} · Effective: ${eff}</div>
+    ${desc ? `<p style="color:#6b7280;font-size:14px;margin-top:8px">${desc}</p>` : ''}
+  </div>
+  <div class="content">${content}</div>
+  <div class="footer">
+    <span>AttendX HR Platform</span>
+    <span>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+  </div>
+</body>
+</html>`;
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    if (!printWindow) {
+      showError('Pop-up blocked — allow pop-ups to print');
       return;
     }
-
-    setAckSaving(true);
-    try {
-      await updateDoc(doc(db, 'companies', companyId, 'policies', policy.id), {
-        acknowledgements: arrayUnion({
-          employeeId: empId,
-          employeeName: empName,
-          userEmail: email,
-          acknowledgedAt: new Date(),
-        }),
-        updatedAt: serverTimestamp(),
-      });
-      success('Thank you — acknowledgement recorded');
-      setViewingPolicy((v) =>
-        v && v.id === policy.id
-          ? {
-              ...v,
-              acknowledgements: [
-                ...(v.acknowledgements || []),
-                { employeeId: empId, employeeName: empName, userEmail: email, acknowledgedAt: new Date() },
-              ],
-            }
-          : v,
-      );
-    } catch (err) {
-      console.error(err);
-      showError('Failed to acknowledge');
-    }
-    setAckSaving(false);
-  };
-
-  const findMyAck = (policy) => {
-    const email = (currentUser?.email || '').toLowerCase();
-    const empId = myEmployee?.id || currentUser?.uid;
-    return (policy.acknowledgements || []).find(
-      (a) => a.employeeId === empId || (a.userEmail && a.userEmail.toLowerCase() === email),
-    );
-  };
-
-  const ackStats = (policy) => {
-    const activeEmps = employees.filter((e) => (e.status || 'Active') === 'Active');
-    const acknowledged = activeEmps.filter((e) =>
-      (policy.acknowledgements || []).some(
-        (a) => a.employeeId === e.id || (a.userEmail && (e.email || '').toLowerCase() === a.userEmail.toLowerCase()),
-      ),
-    ).length;
-    return { acknowledged, total: activeEmps.length };
-  };
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }, [showError]);
 
   if (!companyId) return null;
 
@@ -496,25 +495,32 @@ export default function Policies() {
 
               <p className="text-sm text-gray-500 line-clamp-2 mb-3">{previewText(policy)}</p>
 
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
-                  <span>Effective: {toDisplayDate(policy.effectiveDate)}</span>
-                  {policy.requiresAcknowledgement && (
-                    <span className="flex items-center gap-1 text-amber-600">
-                      ✓ {policy.acknowledgements?.length || 0} acknowledged
-                    </span>
-                  )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-gray-400">Effective: {toDisplayDate(policy.effectiveDate)}</span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setViewingPolicy(policy);
+                    }}
+                    className="text-xs text-[#1B6B6B] font-medium hover:underline"
+                  >
+                    View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setViewingPolicy(policy);
+                      setTimeout(() => printPolicy(policy), 100);
+                    }}
+                    className="text-xs text-gray-400 hover:text-gray-600"
+                    title="Print"
+                  >
+                    🖨️
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setViewingPolicy(policy);
-                  }}
-                  className="text-xs text-[#1B6B6B] font-medium hover:underline flex-shrink-0"
-                >
-                  View →
-                </button>
               </div>
             </div>
           ))}
@@ -597,15 +603,6 @@ export default function Policies() {
               <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={form.requiresAcknowledgement}
-                  onChange={(e) => setForm((f) => ({ ...f, requiresAcknowledgement: e.target.checked }))}
-                  className="rounded border-slate-300"
-                />
-                Employees must acknowledge reading this policy
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
                   checked={form.isActive}
                   onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
                   className="rounded border-slate-300"
@@ -653,7 +650,14 @@ export default function Policies() {
                   v{viewingPolicy.version || '1.0'} · Effective {toDisplayDate(viewingPolicy.effectiveDate)}
                 </p>
               </div>
-              <div className="flex items-center gap-2 ml-auto">
+              <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
+                <button
+                  type="button"
+                  onClick={() => printPolicy(viewingPolicy)}
+                  className="flex items-center gap-2 min-h-[44px] px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                >
+                  🖨️ Print
+                </button>
                 {canManage && (
                   <button
                     type="button"
@@ -677,60 +681,6 @@ export default function Policies() {
             <div className="p-4 sm:p-6 flex-1 overflow-y-auto">
               {viewingPolicy.description && <p className="text-sm text-gray-500 mb-4">{viewingPolicy.description}</p>}
               <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed max-w-none">{viewingPolicy.content || '—'}</div>
-
-              {viewingPolicy.requiresAcknowledgement && (
-                <>
-                  {findMyAck(viewingPolicy) ? (
-                    <div className="flex items-center gap-2 p-3 bg-green-50 rounded-xl border border-green-100 mt-4">
-                      <span className="text-green-600">✓</span>
-                      <span className="text-sm text-green-700">
-                        You acknowledged this policy on {toDisplayDate(findMyAck(viewingPolicy).acknowledgedAt)}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-100">
-                      <p className="text-sm text-amber-800 mb-3">Please read and acknowledge this policy.</p>
-                      <button
-                        type="button"
-                        disabled={ackSaving}
-                        onClick={() => handleAcknowledge(viewingPolicy)}
-                        className="px-4 py-2 min-h-[44px] bg-[#1B6B6B] text-white rounded-xl text-sm font-medium disabled:opacity-50"
-                      >
-                        I have read and understood this policy
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {canManage && viewingPolicy.requiresAcknowledgement && employees.length > 0 && (
-                <div className="mt-4 border-t border-slate-100 pt-4">
-                  <p className="text-sm font-medium text-slate-800 mb-3">
-                    Acknowledgements ({ackStats(viewingPolicy).acknowledged}/{ackStats(viewingPolicy).total} active employees)
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {employees
-                      .filter((e) => (e.status || 'Active') === 'Active')
-                      .map((emp) => {
-                        const ack = (viewingPolicy.acknowledgements || []).find(
-                          (a) =>
-                            a.employeeId === emp.id ||
-                            (a.userEmail && (emp.email || '').toLowerCase() === a.userEmail.toLowerCase()),
-                        );
-                        return (
-                          <div
-                            key={emp.id}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${
-                              ack ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                            }`}
-                          >
-                            {ack ? '✓' : '○'} {emp.fullName || emp.empId}
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>

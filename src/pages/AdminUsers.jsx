@@ -12,7 +12,37 @@ import {
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { canAccessUserManagement } from '../utils/roles';
+import { canAccessUserManagement, ROLE_LABELS } from '../utils/roles';
+
+const DEFAULT_MODULE_PERMISSIONS = {
+  employees: true,
+  leave: true,
+  documents: true,
+  assets: true,
+  reports: true,
+  policies: true,
+  calendar: true,
+  onboarding: true,
+  offboarding: true,
+  orgchart: true,
+  settings: false,
+  team: false,
+};
+
+const PERMISSION_MODULES = [
+  { key: 'employees', label: 'Employees', icon: '👥' },
+  { key: 'leave', label: 'Leave', icon: '🏖️' },
+  { key: 'documents', label: 'Documents', icon: '📄' },
+  { key: 'assets', label: 'Assets', icon: '📦' },
+  { key: 'reports', label: 'Reports', icon: '📊' },
+  { key: 'policies', label: 'Policies', icon: '📋' },
+  { key: 'calendar', label: 'Calendar', icon: '🗓️' },
+  { key: 'onboarding', label: 'Onboarding', icon: '🎯' },
+  { key: 'offboarding', label: 'Offboarding', icon: '👋' },
+  { key: 'orgchart', label: 'Org Chart', icon: '🏢' },
+  { key: 'settings', label: 'Settings', icon: '⚙️' },
+  { key: 'team', label: 'Team Members', icon: '👤' },
+];
 
 const ROLE_OPTIONS = [
   { value: 'hrmanager', label: 'HR Manager' },
@@ -46,6 +76,9 @@ export default function AdminUsers() {
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
   const [removeConfirm, setRemoveConfirm] = useState(null);
+  const [editingPermissionsUser, setEditingPermissionsUser] = useState(null);
+  const [permissionDraft, setPermissionDraft] = useState(DEFAULT_MODULE_PERMISSIONS);
+  const [savingPermissions, setSavingPermissions] = useState(false);
 
   const isAdmin = canAccessUserManagement(role);
 
@@ -167,6 +200,7 @@ export default function AdminUsers() {
         createdAt: serverTimestamp(),
         photoURL: '',
         addedBy: currentUser?.email || '',
+        permissions: { ...DEFAULT_MODULE_PERMISSIONS },
       });
       setUsers((prev) => [
         {
@@ -178,6 +212,7 @@ export default function AdminUsers() {
           isActive: true,
           createdAt: new Date(),
           photoURL: '',
+          permissions: { ...DEFAULT_MODULE_PERMISSIONS },
         },
         ...prev.filter((u) => u.id !== email),
       ]);
@@ -219,6 +254,37 @@ export default function AdminUsers() {
     } catch (err) {
       showError('Failed to remove user');
     }
+  };
+
+  const openPermissionsModal = (user) => {
+    setEditingPermissionsUser(user);
+    setPermissionDraft({
+      ...DEFAULT_MODULE_PERMISSIONS,
+      ...(user.permissions && typeof user.permissions === 'object' ? user.permissions : {}),
+    });
+  };
+
+  const togglePermission = (key) => {
+    setPermissionDraft((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const savePermissions = async () => {
+    if (!editingPermissionsUser) return;
+    setSavingPermissions(true);
+    try {
+      await updateDoc(doc(db, 'users', editingPermissionsUser.id), {
+        permissions: permissionDraft,
+      });
+      setUsers((prev) =>
+        prev.map((u) => (u.id === editingPermissionsUser.id ? { ...u, permissions: { ...permissionDraft } } : u)),
+      );
+      success('Permissions saved!');
+      setEditingPermissionsUser(null);
+    } catch (e) {
+      console.error(e);
+      showError('Failed to save permissions');
+    }
+    setSavingPermissions(false);
   };
 
   if (!isAdmin) {
@@ -367,38 +433,45 @@ export default function AdminUsers() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{formatDate(u.createdAt)}</td>
-                  <td className="px-4 py-3 space-x-2">
-                    {u.role !== 'admin' && (
-                      <>
-                        {u.isActive !== false ? (
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {u.role !== 'admin' && (
+                        <>
                           <button
                             type="button"
-                            onClick={() => handleDeactivate(u)}
-                            className="text-xs font-medium text-amber-600 hover:text-amber-700"
+                            onClick={() => openPermissionsModal(u)}
+                            className="text-xs px-2.5 py-1 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
                           >
-                            Deactivate
+                            Permissions
                           </button>
-                        ) : (
+                          {u.isActive !== false ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeactivate(u)}
+                              className="text-xs font-medium text-amber-600 hover:text-amber-700"
+                            >
+                              Deactivate
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleActivate(u)}
+                              className="text-xs font-medium text-green-600 hover:text-green-700"
+                            >
+                              Activate
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => handleActivate(u)}
-                            className="text-xs font-medium text-green-600 hover:text-green-700"
+                            onClick={() => setRemoveConfirm(u)}
+                            className="text-xs font-medium text-red-600 hover:text-red-700"
                           >
-                            Activate
+                            Remove
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setRemoveConfirm(u)}
-                          className="text-xs font-medium text-red-600 hover:text-red-700"
-                        >
-                          Remove
-                        </button>
-                      </>
-                    )}
-                    {u.role === 'admin' && (
-                      <span className="text-xs text-slate-400">—</span>
-                    )}
+                        </>
+                      )}
+                      {u.role === 'admin' && <span className="text-xs text-slate-400">—</span>}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -482,6 +555,64 @@ export default function AdminUsers() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {editingPermissionsUser && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 className="font-semibold text-slate-800 mb-1">Permissions</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              {editingPermissionsUser.name || editingPermissionsUser.email} ·{' '}
+              {ROLE_LABELS[editingPermissionsUser.role] || editingPermissionsUser.role}
+            </p>
+            <div className="space-y-2">
+              {PERMISSION_MODULES.map((module) => (
+                <div
+                  key={module.key}
+                  className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-gray-50"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span aria-hidden>{module.icon}</span>
+                    <span className="text-sm text-gray-800 truncate">{module.label}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => togglePermission(module.key)}
+                    className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+                      permissionDraft[module.key] ? 'bg-[#1B6B6B]' : 'bg-gray-200'
+                    }`}
+                    aria-pressed={!!permissionDraft[module.key]}
+                    aria-label={`Toggle ${module.label}`}
+                  >
+                    <span
+                      className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                        permissionDraft[module.key] ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setEditingPermissionsUser(null)}
+                className="flex-1 py-2 border border-slate-200 rounded-xl text-sm text-gray-600 hover:bg-slate-50"
+                disabled={savingPermissions}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={savePermissions}
+                disabled={savingPermissions}
+                className="flex-1 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
+              >
+                {savingPermissions ? 'Saving…' : 'Save Permissions'}
+              </button>
+            </div>
           </div>
         </div>
       )}
