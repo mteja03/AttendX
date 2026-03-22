@@ -144,16 +144,19 @@ export default function Sidebar() {
   return (
     <aside className="flex flex-col h-screen bg-[#1B6B6B] w-56 fixed left-0 top-0 overflow-hidden text-white">
       <div className="flex items-center gap-3 p-4 border-b border-white/10 flex-shrink-0">
-        <img
-          src="/logo/icon.png"
-          alt="AttendX"
-          className="w-9 h-9 rounded-xl object-cover flex-shrink-0"
-          onError={(e) => {
-            e.target.style.display = 'none';
-            const el = e.target.nextElementSibling;
-            if (el) el.style.display = 'flex';
-          }}
-        />
+        <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-white/10 p-0.5">
+          <img
+            src="/logo/icon.png"
+            alt="AttendX"
+            className="w-full h-full rounded-lg object-cover"
+            onError={(e) => {
+              const wrap = e.target.parentElement;
+              if (wrap) wrap.style.display = 'none';
+              const fb = wrap?.nextElementSibling;
+              if (fb) fb.style.display = 'flex';
+            }}
+          />
+        </div>
         <div
           style={{ display: 'none' }}
           className="w-9 h-9 rounded-xl bg-[#4ECDC4] flex items-center justify-center text-[#1B6B6B] font-bold text-sm flex-shrink-0"

@@ -27,17 +27,21 @@ export default function Login() {
           e.target.style.display = 'none';
         }}
       />
-      <img
-        src="/logo/wordmark-light.jpg"
-        alt="AttendX"
-        className="h-8 object-contain mb-2"
-        onError={(e) => {
-          e.target.style.display = 'none';
-        }}
-      />
+      <div className="flex items-center justify-center gap-1 mb-1">
+        <span className="text-2xl font-bold text-[#1B6B6B] tracking-tight">Attend</span>
+        <span className="text-2xl font-bold text-[#4ECDC4] tracking-tight">X</span>
+      </div>
       <p className="text-gray-400 text-sm">HR Management Platform</p>
     </div>
   );
+
+  const leftPanelFeatures = [
+    '✓ Multi-company HR management',
+    '✓ Employee lifecycle tracking',
+    '✓ Document management',
+    '✓ Asset tracking',
+    '✓ Onboarding & Offboarding',
+  ];
 
   return (
     <div className="min-h-screen flex">
@@ -51,14 +55,21 @@ export default function Login() {
           }}
         />
         <img
-          src="/logo/wordmark-dark.jpg"
+          src="/logo/wordmark-light.jpg"
           alt="AttendX"
           className="h-10 object-contain mb-4 max-w-[240px]"
           onError={(e) => {
             e.target.style.display = 'none';
           }}
         />
-        <p className="text-white/70 text-sm mt-2 text-center max-w-xs">HR Management Platform for modern teams</p>
+        <p className="text-white/70 text-sm text-center max-w-xs">HR Management Platform for modern teams</p>
+        <div className="mt-8 space-y-3 w-full max-w-xs">
+          {leftPanelFeatures.map((feature) => (
+            <p key={feature} className="text-white/70 text-sm flex items-center gap-2">
+              {feature}
+            </p>
+          ))}
+        </div>
       </div>
 
       <div className="flex-1 flex items-center justify-center px-4 py-12 bg-slate-50">
