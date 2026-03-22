@@ -393,20 +393,27 @@ export default function Employees() {
     fetchStatsCounts();
   }, [companyId, tab, filterDept, filterBranch, fetchEmployees, fetchTotalCount, fetchStatsCounts]);
 
-  const computeNextEmpId = useCallback(async () => {
-    if (!collRef) return 'EMP001';
-    try {
-      const snap = await getDocs(collRef);
-      const nums = snap
-        .docs.map((d) => d.data().empId && String(d.data().empId).replace(/^EMP/i, ''))
-        .filter((n) => /^\d+$/.test(n))
-        .map(Number);
-      const max = nums.length ? Math.max(...nums) : 0;
-      return `EMP${String(max + 1).padStart(3, '0')}`;
-    } catch {
-      return 'EMP001';
-    }
-  }, [collRef]);
+  /** Suggested next Emp ID from currently loaded employees (server still validates uniqueness). */
+  const nextEmpId = useMemo(() => {
+    if (employees.length === 0) return 'EMP001';
+
+    const empNumbers = employees
+      .map((e) => {
+        const match = e.empId?.match(/\d+$/);
+        return match ? parseInt(match[0], 10) : NaN;
+      })
+      .filter((n) => !Number.isNaN(n) && n > 0);
+
+    if (empNumbers.length === 0) return 'EMP001';
+
+    const maxNum = Math.max(...empNumbers);
+    const nextNum = maxNum + 1;
+
+    const sample = employees.find((e) => e.empId && /\d/.test(String(e.empId)));
+    const prefix = sample?.empId ? String(sample.empId).replace(/\d+$/, '') || 'EMP' : 'EMP';
+
+    return `${prefix}${String(nextNum).padStart(3, '0')}`;
+  }, [employees]);
 
   const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
   const designationFilterOptions = useMemo(() => {
@@ -761,9 +768,8 @@ export default function Employees() {
           {canEditEmployees && (
             <button
               type="button"
-              onClick={async () => {
-                const id = await computeNextEmpId();
-                setForm({ ...initialForm, empId: id });
+              onClick={() => {
+                setForm({ ...initialForm, empId: nextEmpId });
                 setSelectedRole(null);
                 setRoleSearch('');
                 setShowRoleDropdown(false);
