@@ -364,9 +364,19 @@ export default function Companies() {
   return (
     <div className="p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-800">All Companies</h1>
-          <p className="text-slate-500 text-sm mt-1">Manage companies on the platform.</p>
+        <div className="flex items-center gap-3 min-w-0">
+          <img
+            src="/logo/icon.png"
+            alt=""
+            className="w-10 h-10 rounded-xl object-cover shrink-0"
+            onError={(e) => {
+              e.target.style.display = 'none';
+            }}
+          />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold text-slate-800">All Companies</h1>
+            <p className="text-slate-500 text-sm mt-1">Manage companies on the platform.</p>
+          </div>
         </div>
         <button
           type="button"

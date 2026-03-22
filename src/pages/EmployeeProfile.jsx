@@ -2335,22 +2335,6 @@ export default function EmployeeProfile() {
     printWindow.print();
   };
 
-  if (loading) {
-    return (
-      <div className="p-8 flex justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
-      </div>
-    );
-  }
-  if (!employee) {
-    return (
-      <div className="p-8">
-        <p className="text-slate-500">Employee not found.</p>
-        <Link to={`/company/${companyId}/employees`} className="text-[#1B6B6B] text-sm mt-2 inline-block">← Employees</Link>
-      </div>
-    );
-  }
-
   const allTabs = useMemo(
     () => [
       { id: 'personal', label: 'Personal Info' },
@@ -2376,6 +2360,22 @@ export default function EmployeeProfile() {
       setTab(visibleTabs[0]?.id || 'personal');
     }
   }, [visibleTabs, tab]);
+
+  if (loading) {
+    return (
+      <div className="p-8 flex justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
+      </div>
+    );
+  }
+  if (!employee) {
+    return (
+      <div className="p-8">
+        <p className="text-slate-500">Employee not found.</p>
+        <Link to={`/company/${companyId}/employees`} className="text-[#1B6B6B] text-sm mt-2 inline-block">← Employees</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8">

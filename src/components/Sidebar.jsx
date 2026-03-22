@@ -1,27 +1,7 @@
-import { useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { ROLE_COLORS, ROLE_LABELS, getNavItems } from '../utils/roles';
-
-function BrandMark() {
-  const [imgErr, setImgErr] = useState(false);
-  if (imgErr) {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-[#4ECDC4] flex items-center justify-center text-[#1B6B6B] font-bold text-sm shrink-0">
-        AX
-      </div>
-    );
-  }
-  return (
-    <img
-      src="/logo/icon.png"
-      alt="AttendX"
-      className="w-8 h-8 rounded-lg object-contain shrink-0 bg-white/10"
-      onError={() => setImgErr(true)}
-    />
-  );
-}
 
 function NavIcon({ className }) {
   return (
@@ -163,11 +143,26 @@ export default function Sidebar() {
 
   return (
     <aside className="flex flex-col h-screen bg-[#1B6B6B] w-56 fixed left-0 top-0 overflow-hidden text-white">
-      <div className="flex-shrink-0 flex items-center gap-3 p-4 border-b border-white/10">
-        <BrandMark />
+      <div className="flex items-center gap-3 p-4 border-b border-white/10 flex-shrink-0">
+        <img
+          src="/logo/icon.png"
+          alt="AttendX"
+          className="w-9 h-9 rounded-xl object-cover flex-shrink-0"
+          onError={(e) => {
+            e.target.style.display = 'none';
+            const el = e.target.nextElementSibling;
+            if (el) el.style.display = 'flex';
+          }}
+        />
+        <div
+          style={{ display: 'none' }}
+          className="w-9 h-9 rounded-xl bg-[#4ECDC4] flex items-center justify-center text-[#1B6B6B] font-bold text-sm flex-shrink-0"
+        >
+          AX
+        </div>
         <div>
-          <p className="text-white font-semibold text-base tracking-wide">AttendX</p>
-          <p className="text-white/50 text-xs">HR Platform</p>
+          <p className="text-white font-bold text-base tracking-wide leading-none">AttendX</p>
+          <p className="text-white/40 text-xs mt-0.5">HR Platform</p>
         </div>
       </div>
 

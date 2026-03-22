@@ -1,31 +1,8 @@
-import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-function LoginBrandIcon({ className = '' }) {
-  const [imgErr, setImgErr] = useState(false);
-  if (imgErr) {
-    return (
-      <div
-        className={`rounded-2xl bg-[#1B6B6B] flex items-center justify-center text-[#4ECDC4] font-bold text-2xl ${className}`}
-      >
-        AX
-      </div>
-    );
-  }
-  return (
-    <img
-      src="/logo/icon.png"
-      alt="AttendX"
-      className={`rounded-2xl object-contain bg-white ${className}`}
-      onError={() => setImgErr(true)}
-    />
-  );
-}
-
 export default function Login() {
-  const { currentUser, loading, signInWithGoogle } = useAuth();
-  const { authError } = useAuth();
+  const { currentUser, loading, signInWithGoogle, authError } = useAuth();
 
   if (!loading && currentUser) {
     return <Navigate to="/" replace />;
@@ -40,26 +17,53 @@ export default function Login() {
     }
   };
 
+  const formBranding = (
+    <div className="flex flex-col items-center mb-8">
+      <img
+        src="/logo/icon.png"
+        alt="AttendX"
+        className="w-20 h-20 rounded-2xl object-cover mb-4 shadow-lg"
+        onError={(e) => {
+          e.target.style.display = 'none';
+        }}
+      />
+      <img
+        src="/logo/wordmark-light.jpg"
+        alt="AttendX"
+        className="h-8 object-contain mb-2"
+        onError={(e) => {
+          e.target.style.display = 'none';
+        }}
+      />
+      <p className="text-gray-400 text-sm">HR Management Platform</p>
+    </div>
+  );
+
   return (
     <div className="min-h-screen flex">
       <div className="hidden md:flex md:w-[42%] lg:w-[45%] bg-[#1B6B6B] flex-col justify-center items-center p-10 text-white">
-        <LoginBrandIcon className="w-24 h-24 mb-6" />
-        <h2 className="text-2xl font-bold tracking-wide">AttendX</h2>
+        <img
+          src="/logo/icon.png"
+          alt="AttendX"
+          className="w-24 h-24 rounded-2xl object-cover mb-6 shadow-lg"
+          onError={(e) => {
+            e.target.style.display = 'none';
+          }}
+        />
+        <img
+          src="/logo/wordmark-dark.jpg"
+          alt="AttendX"
+          className="h-10 object-contain mb-4 max-w-[240px]"
+          onError={(e) => {
+            e.target.style.display = 'none';
+          }}
+        />
         <p className="text-white/70 text-sm mt-2 text-center max-w-xs">HR Management Platform for modern teams</p>
       </div>
 
       <div className="flex-1 flex items-center justify-center px-4 py-12 bg-slate-50">
         <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-8">
-          <div className="flex md:hidden flex-col items-center mb-6">
-            <LoginBrandIcon className="w-16 h-16 mb-3" />
-            <h1 className="text-2xl font-bold text-gray-900">AttendX</h1>
-            <p className="text-gray-500 text-sm mt-1">HR Management Platform</p>
-          </div>
-
-          <div className="hidden md:flex flex-col items-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-            <p className="text-gray-500 text-sm mt-1">Sign in to continue to AttendX</p>
-          </div>
+          {formBranding}
 
           <div className="hidden md:block h-px bg-slate-200 mb-6" />
 
