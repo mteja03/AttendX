@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+// Context files intentionally export multiple values — fast refresh limitation accepted for provider files.
 import { createContext, useContext, useCallback, useState } from 'react';
 
 const ToastContext = createContext(null);

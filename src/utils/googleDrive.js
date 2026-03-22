@@ -157,7 +157,6 @@ export async function findAndDeleteFolder(accessToken, folderName, parentName) {
         headers,
       },
     );
-    console.log('Deleted Drive folder:', folderName);
   } catch (e) {
     console.warn('Could not delete Drive folder:', folderName, e.message);
   }

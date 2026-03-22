@@ -1,3 +1,4 @@
+// Seed utility — console output is intentional for CLI / dev progress
 import { collection, addDoc, getDocs, doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from './config';
 

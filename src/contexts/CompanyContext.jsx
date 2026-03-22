@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+// Context files intentionally export multiple values — fast refresh limitation accepted for provider files.
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -10,29 +12,37 @@ export function CompanyProvider({ children, companyIdFromRoute }) {
 
   useEffect(() => {
     if (!companyIdFromRoute) {
-      setCompany(null);
-      setLoading(false);
-      return undefined;
-    }
-
-    setLoading(true);
-    const unsub = onSnapshot(
-      doc(db, 'companies', companyIdFromRoute),
-      (snap) => {
-        if (snap.exists()) {
-          setCompany({ id: snap.id, ...snap.data() });
-        } else {
-          setCompany(null);
-        }
-        setLoading(false);
-      },
-      () => {
+      const id = requestAnimationFrame(() => {
         setCompany(null);
         setLoading(false);
-      },
-    );
+      });
+      return () => cancelAnimationFrame(id);
+    }
 
-    return () => unsub();
+    let unsub = null;
+    const id = requestAnimationFrame(() => {
+      setLoading(true);
+      unsub = onSnapshot(
+        doc(db, 'companies', companyIdFromRoute),
+        (snap) => {
+          if (snap.exists()) {
+            setCompany({ id: snap.id, ...snap.data() });
+          } else {
+            setCompany(null);
+          }
+          setLoading(false);
+        },
+        () => {
+          setCompany(null);
+          setLoading(false);
+        },
+      );
+    });
+
+    return () => {
+      cancelAnimationFrame(id);
+      if (unsub) unsub();
+    };
   }, [companyIdFromRoute]);
 
   const value = useMemo(

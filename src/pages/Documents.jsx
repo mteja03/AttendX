@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
+import { PLATFORM_CONFIG } from '../config/constants';
 import PageLoader from '../components/PageLoader';
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
 import * as XLSX from 'xlsx';
@@ -68,7 +69,7 @@ function getMissingMandatory(emp) {
 
 export default function Documents() {
   const { role: userRole } = useAuth();
-  const canUpload = userRole === 'admin' || userRole === 'hrmanager';
+  const canUpload = PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(userRole);
   const { companyId } = useParams();
   const [company, setCompany] = useState(null);
   const [employees, setEmployees] = useState([]);

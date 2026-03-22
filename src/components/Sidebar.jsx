@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
+import { PLATFORM_CONFIG } from '../config/constants';
 import { ROLE_COLORS, ROLE_LABELS, getNavItems } from '../utils/roles';
 
 function NavIcon({ className }) {
@@ -349,7 +350,7 @@ function Sidebar({ isOpen = false, onClose }) {
           {role && (
             <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium mb-2 ${roleBadgeClass}`}>{roleLabel}</span>
           )}
-          {(role === 'admin' || role === 'hrmanager') && (
+          {PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(role) && (
             <div className="mx-0 mb-2 px-3 py-2 rounded-lg bg-white/5 flex items-center gap-2">
               <div
                 className={`w-2 h-2 rounded-full flex-shrink-0 ${isTokenValid() ? 'bg-[#4ECDC4]' : 'bg-amber-400'}`}

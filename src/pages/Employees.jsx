@@ -20,6 +20,7 @@ import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
+import { PLATFORM_CONFIG } from '../config/constants';
 import { SkeletonCard } from '../components/SkeletonRow';
 import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
 import * as XLSX from 'xlsx';
@@ -32,7 +33,7 @@ const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (
 const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 'Probationary', 'Seasonal', 'Other'];
 const JOINING_YEARS = ['All Years', 2020, 2021, 2022, 2023, 2024, 2025, 2026];
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = PLATFORM_CONFIG.EMPLOYEES_PAGE_SIZE;
 const VISIBLE_ROWS = 20;
 const ROW_HEIGHT = 56;
 

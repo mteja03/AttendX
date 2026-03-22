@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
+import { PLATFORM_CONFIG } from '../config/constants';
 import PageLoader from '../components/PageLoader';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
@@ -250,7 +251,7 @@ export default function EmployeeProfile() {
   const { currentUser, getValidToken, isTokenValid, role: authRole } = useAuth();
   const userRole = authRole;
   const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
-  const canUpload = userRole === 'admin' || userRole === 'hrmanager';
+  const canUpload = PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(userRole);
   const needsDriveToken = canUpload;
   const { success, error: showError } = useToast();
   const [employee, setEmployee] = useState(null);
