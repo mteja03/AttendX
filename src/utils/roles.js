@@ -30,6 +30,7 @@ export function getNavItems(role) {
       { to: 'leave', label: 'Leave' },
       { to: 'documents', label: 'Documents' },
       { to: 'assets', label: 'Assets' },
+      { to: 'reports', label: 'Reports' },
       { to: 'team', label: 'Team Members' },
       { to: 'settings', label: 'Settings' },
     ];

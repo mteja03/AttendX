@@ -11,6 +11,7 @@ import EmployeeProfile from './pages/EmployeeProfile';
 import TeamMembers from './pages/TeamMembers';
 import Settings from './pages/Settings';
 import Assets from './pages/Assets';
+import Reports from './pages/Reports';
 import Login from './pages/Login';
 import Unauthorized from './pages/Unauthorized';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -145,6 +146,14 @@ function AppRoutes() {
             element={
               <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager', 'itmanager']}>
                 <Assets />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="reports"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <Reports />
               </RoleRoute>
             }
           />
