@@ -13,6 +13,7 @@
     "autoprefixer": "^10.4.27",
     "file-saver": "^2.0.5",
     "firebase": "^12.10.0",
+    "html2canvas": "^1.4.1",
     "jszip": "^3.10.1",
     "postcss": "^8.5.8",
     "react": "^19.2.4",

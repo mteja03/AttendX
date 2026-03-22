@@ -20,6 +20,12 @@ service cloud.firestore {
       match /teamMembers/{memberId} {
         allow read, write: if request.auth != null;
       }
+      match /policies/{policyId} {
+        allow read, write: if request.auth != null;
+      }
+      match /events/{eventId} {
+        allow read, write: if request.auth != null;
+      }
     }
   }
 }

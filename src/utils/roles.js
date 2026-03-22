@@ -28,20 +28,23 @@ export function getNavItems(role) {
       ...base,
       { to: 'employees', label: 'Employees' },
       { to: 'leave', label: 'Leave' },
+      { to: 'calendar', label: 'Calendar' },
       { to: 'documents', label: 'Documents' },
+      { to: 'policies', label: 'Policies' },
       { to: 'assets', label: 'Assets' },
       { to: 'reports', label: 'Reports' },
       { to: 'team', label: 'Team Members' },
+      { to: 'orgchart', label: 'Org Chart' },
       { to: 'settings', label: 'Settings' },
     ];
   }
 
   if (role === 'manager') {
-    return [...base, { to: 'employees', label: 'My Team' }, { to: 'leave', label: 'Leave' }];
+    return [...base, { to: 'employees', label: 'My Team' }, { to: 'leave', label: 'Leave' }, { to: 'calendar', label: 'Calendar' }];
   }
 
   if (role === 'itmanager') {
-    return [...base, { to: 'employees', label: 'Employees' }, { to: 'assets', label: 'Assets' }];
+    return [...base, { to: 'employees', label: 'Employees' }, { to: 'assets', label: 'Assets' }, { to: 'calendar', label: 'Calendar' }];
   }
 
   return base;

@@ -12,6 +12,9 @@ import TeamMembers from './pages/TeamMembers';
 import Settings from './pages/Settings';
 import Assets from './pages/Assets';
 import Reports from './pages/Reports';
+import Policies from './pages/Policies';
+import OrgChart from './pages/OrgChart';
+import CompanyCalendar from './pages/Calendar';
 import Login from './pages/Login';
 import Unauthorized from './pages/Unauthorized';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -134,10 +137,26 @@ function AppRoutes() {
             }
           />
           <Route
+            path="calendar"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager', 'itmanager']}>
+                <CompanyCalendar />
+              </RoleRoute>
+            }
+          />
+          <Route
             path="documents"
             element={
               <RoleRoute allowedRoles={['admin', 'hrmanager']}>
                 <Documents />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="policies"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <Policies />
               </RoleRoute>
             }
           />
@@ -162,6 +181,14 @@ function AppRoutes() {
             element={
               <RoleRoute allowedRoles={['admin', 'hrmanager']}>
                 <TeamMembers />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="orgchart"
+            element={
+              <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <OrgChart />
               </RoleRoute>
             }
           />
