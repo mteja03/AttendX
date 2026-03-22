@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   collection,
@@ -7,7 +7,6 @@ import {
   getDocs,
   updateDoc,
   query,
-  orderBy,
   where,
   Timestamp,
   serverTimestamp,
@@ -23,7 +22,6 @@ import {
   DOCUMENT_CHECKLIST,
   DOCUMENT_CATEGORIES,
   getDocById,
-  acceptsFile,
 } from '../utils/documentTypes';
 import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDrive';
 import { toDisplayDate, toJSDate, toDateString } from '../utils';
@@ -387,8 +385,6 @@ export default function EmployeeProfile() {
         });
         setLeaveList(list);
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Leave fetch error:', error);
         if (!cancelled) {
           setLeaveError(error?.message || 'Failed to load leave');
           setLeaveList([]);
@@ -427,9 +423,7 @@ export default function EmployeeProfile() {
       try {
         const snap = await getDocs(collection(db, 'companies', companyId, 'assets'));
         setAssetList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('Could not load assets for employee profile', e);
+      } catch {
         setAssetList([]);
       }
     };
@@ -443,9 +437,7 @@ export default function EmployeeProfile() {
       try {
         const snap = await getDocs(collection(db, 'companies', companyId, 'employees'));
         if (!cancelled) setAllEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('Could not load employees list:', e);
+      } catch {
         if (!cancelled) setAllEmployees([]);
       }
     };
@@ -669,8 +661,11 @@ export default function EmployeeProfile() {
     return null;
   };
 
-  const isChecklistDoc = (uploadedDoc) =>
-    activeChecklist.some((cat) => (cat.documents || []).some((d) => d.id === uploadedDoc?.id));
+  const isChecklistDoc = useCallback(
+    (uploadedDoc) =>
+      activeChecklist.some((cat) => (cat.documents || []).some((d) => d.id === uploadedDoc?.id)),
+    [activeChecklist],
+  );
 
   const totalMandatory = useMemo(
     () =>
@@ -703,7 +698,7 @@ export default function EmployeeProfile() {
     const docs = employee?.documents || [];
     // Only show docs that are truly not part of the current checklist
     return docs.filter((d) => !isChecklistDoc(d));
-  }, [employee?.documents, activeChecklist]);
+  }, [employee?.documents, isChecklistDoc]);
   const mandatoryUploaded = useMemo(() => {
     let n = 0;
     activeChecklist.forEach((cat) => {
@@ -850,7 +845,7 @@ export default function EmployeeProfile() {
       setShowManagerDropdown(false);
       setManagerSearch('');
       success('Employee updated');
-    } catch (err) {
+    } catch {
       showError('Failed to update');
     }
     setSaving(false);
@@ -905,9 +900,7 @@ export default function EmployeeProfile() {
       } else {
         setDeactivateConfirm(true);
       }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to check assets before deactivation', err);
+    } catch {
       showError('Could not check assigned assets');
     }
     setSaving(false);
@@ -957,7 +950,7 @@ export default function EmployeeProfile() {
     return null;
   };
 
-  const handleUploadChecklistDoc = async (file, docId, docName, categoryName) => {
+  const handleUploadChecklistDoc = async (file, docId, docName) => {
     if (!employee) return;
     const token = await getValidToken();
     if (!token) {
@@ -1050,7 +1043,7 @@ export default function EmployeeProfile() {
     try {
       try {
         await deleteFileFromDrive(token, docEntry.fileId);
-      } catch (_) {
+      } catch {
         // ignore Drive delete failure
       }
       const result = await uploadEmployeeDocument(
@@ -1102,7 +1095,7 @@ export default function EmployeeProfile() {
     try {
       try {
         await deleteFileFromDrive(token, docEntry.fileId);
-      } catch (_) {
+      } catch {
         driveFailed = true;
       }
       if (empRef) {
@@ -1195,7 +1188,7 @@ export default function EmployeeProfile() {
     try {
       try {
         await deleteFileFromDrive(token, docEntry.fileId);
-      } catch (_) {
+      } catch {
         // ignore Drive delete error
       }
       if (empRef) {
@@ -1296,13 +1289,16 @@ export default function EmployeeProfile() {
       // negative daysBefore = after exit (subtracting negative adds)
       due.setDate(due.getDate() - Number(daysBefore || 0));
       return Timestamp.fromDate(due);
-    } catch (e) {
+    } catch {
       return Timestamp.fromDate(new Date());
     }
   };
 
   const offboarding = employee?.offboarding || null;
-  const offTasks = Array.isArray(offboarding?.tasks) ? offboarding.tasks : [];
+  const offTasks = useMemo(
+    () => (Array.isArray(employee?.offboarding?.tasks) ? employee.offboarding.tasks : []),
+    [employee?.offboarding],
+  );
   const offCompleted = offTasks.filter((t) => t.completed).length;
   const offTotal = offTasks.length;
   const offPct = offTotal ? Math.round((offCompleted / offTotal) * 100) : (offboarding?.completionPct || 0);
@@ -1346,9 +1342,8 @@ export default function EmployeeProfile() {
         if (templateDoc.exists() && Array.isArray(templateDoc.data()?.tasks) && templateDoc.data().tasks.length > 0) {
           templateTasks = templateDoc.data().tasks;
         }
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('No offboarding template found, using default:', e?.message || e);
+      } catch {
+        /* use default template */
       }
 
       const assetsSnap = await getDocs(collection(db, 'companies', companyId, 'assets'));
@@ -1443,8 +1438,6 @@ export default function EmployeeProfile() {
       setEmployee((prev) => (prev ? { ...prev, ...payload } : prev));
       success(`Offboarding started for ${employee.fullName}. Exit date: ${toDisplayDate(exitDateTs)}`);
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Offboarding start error:', error?.message, error);
       showError(`Failed to start offboarding: ${error?.message || 'Unknown error'}`);
     }
     setSaving(false);
@@ -1538,9 +1531,8 @@ export default function EmployeeProfile() {
             }
           }
         }
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('Could not auto-return asset:', e?.message || e);
+      } catch {
+        /* ignore auto-return errors */
       }
       if (assetAutoReturned) {
         try {
@@ -1604,15 +1596,16 @@ export default function EmployeeProfile() {
       const due = new Date(joining);
       due.setDate(due.getDate() + (Number(daysFromJoining) || 0));
       return Timestamp.fromDate(due);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('Date calc error:', e);
+    } catch {
       return Timestamp.fromDate(new Date());
     }
   };
 
   const onboarding = employee?.onboarding || null;
-  const onboardingTasks = Array.isArray(onboarding?.tasks) ? onboarding.tasks : [];
+  const onboardingTasks = useMemo(
+    () => (Array.isArray(employee?.onboarding?.tasks) ? employee.onboarding.tasks : []),
+    [employee?.onboarding],
+  );
   const onboardingCompleted = onboardingTasks.filter((t) => t.completed).length;
   const onboardingTotal = onboardingTasks.length;
   const onboardingPct =
@@ -1630,8 +1623,6 @@ export default function EmployeeProfile() {
   const handleStartOnboarding = async () => {
     if (!companyId || !empId || !employee || !currentUser) return;
     try {
-      // eslint-disable-next-line no-console
-      console.log('Starting onboarding for:', empId, 'in company:', companyId);
       setSaving(true);
       let templateTasks = DEFAULT_ONBOARDING_TEMPLATE.tasks;
       try {
@@ -1639,12 +1630,9 @@ export default function EmployeeProfile() {
         if (templateDoc.exists() && Array.isArray(templateDoc.data()?.tasks) && templateDoc.data().tasks.length > 0) {
           templateTasks = templateDoc.data().tasks;
         }
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('No template found, using default:', e?.message || e);
+      } catch {
+        /* use default template */
       }
-      // eslint-disable-next-line no-console
-      console.log('Template tasks count:', templateTasks.length);
 
       const now = Timestamp.now();
       const sanitizedTasks = templateTasks
@@ -1683,8 +1671,6 @@ export default function EmployeeProfile() {
       setEmployee((prev) => (prev ? { ...prev, ...payload } : prev));
       success('Onboarding started');
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Onboarding start error:', error?.message, error);
       showError(`Failed to start: ${error?.message || 'Unknown error'}`);
     }
     setSaving(false);
@@ -1757,17 +1743,6 @@ export default function EmployeeProfile() {
   const handleAssignAssetChange = (e) => {
     const { name, value } = e.target;
     setAssignAssetForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const openAssignAssetModal = () => {
-    const today = new Date().toISOString().slice(0, 10);
-    setAssignAssetForm({
-      assetId: '',
-      issueDate: today,
-      condition: 'Good',
-      notes: '',
-    });
-    setShowAssignAssetModal(true);
   };
 
   const openProfileAssignModal = () => {
@@ -1852,9 +1827,7 @@ export default function EmployeeProfile() {
       setProfileAssetSearch('');
       setIssueConsumableAsset(null);
       setProfileAssignMode('trackable');
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to assign asset from profile', err);
+    } catch {
       showError('Failed to assign asset');
     }
     setSaving(false);
@@ -1929,9 +1902,7 @@ export default function EmployeeProfile() {
       setShowProfileAssignModal(null);
       setIssueConsumableAsset(null);
       setProfileAssignMode('trackable');
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to issue consumable from profile', err);
+    } catch {
       showError('Failed to issue consumable');
     }
   };
@@ -2009,9 +1980,7 @@ export default function EmployeeProfile() {
       );
       success('Asset returned');
       setReturnAsset(null);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to return asset from profile', err);
+    } catch {
       showError('Failed to return asset');
     }
     setSaving(false);
@@ -2100,8 +2069,6 @@ export default function EmployeeProfile() {
       setReturnCondition('Good');
       setReturnNotes('');
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to return consumable from profile', error);
       showError(`Return failed: ${error?.message || 'Unknown error'}`);
     }
   };
@@ -2115,8 +2082,6 @@ export default function EmployeeProfile() {
     try {
       const now = new Date();
       const tsNow = Timestamp.fromDate(now);
-      // return all assets
-      // eslint-disable-next-line no-restricted-syntax
       for (const asset of pendingReturnAssets) {
         if (asset.kind === 'trackable') {
           const assetRef = doc(db, 'companies', companyId, 'assets', asset.docId);
@@ -2701,7 +2666,7 @@ export default function EmployeeProfile() {
                       const acceptAttr = acceptList.join(',');
                       const hint = `${acceptList.map((e) => e.replace('.', '').toUpperCase()).join(', ')} · Max ${doc.maxSizeMB || 5}MB`;
                       return (
-                        <li key={doc.id} className="px-4">
+                        <li key={doc.id} className="px-4" title={hint}>
                           {uploaded ? (
                             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex items-center gap-3 w-full">
                               <div
@@ -2800,7 +2765,7 @@ export default function EmployeeProfile() {
                                       disabled={!!uploadingDocId}
                                       onChange={(e) => {
                                         const f = e.target.files?.[0];
-                                        if (f) handleUploadChecklistDoc(f, doc.id, doc.name, cat.category);
+                                        if (f) handleUploadChecklistDoc(f, doc.id, doc.name);
                                         e.target.value = '';
                                       }}
                                     />
@@ -3865,7 +3830,7 @@ export default function EmployeeProfile() {
                     setEmployee((prev) => (prev ? { ...prev, status: 'Inactive' } : null));
                     setDeactivateConfirm(false);
                     success('Employee deactivated');
-                  } catch (err) {
+                  } catch {
                     showError('Failed to deactivate');
                   }
                   setSaving(false);
@@ -4465,7 +4430,7 @@ export default function EmployeeProfile() {
                     await markTaskComplete(completingTask.id, taskNotes);
                     setCompletingTask(null);
                     setTaskNotes('');
-                  } catch (e) {
+                  } catch {
                     showError('Failed to update task');
                   }
                 }}
@@ -4506,7 +4471,7 @@ export default function EmployeeProfile() {
                     await markOffboardingTaskComplete(completingOffTask.id, offTaskNotes);
                     setCompletingOffTask(null);
                     setOffTaskNotes('');
-                  } catch (e) {
+                  } catch {
                     showError('Failed to update task');
                   }
                 }}

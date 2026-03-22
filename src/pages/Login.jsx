@@ -15,7 +15,6 @@ export default function Login() {
       setIsSigningIn(true);
       await signInWithGoogle();
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('Sign in error:', error);
     } finally {
       setIsSigningIn(false);

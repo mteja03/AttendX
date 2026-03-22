@@ -229,9 +229,8 @@ export default function Reports() {
       } else {
         setCompany(null);
       }
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error(e);
+    } catch {
+      /* ignore fetch errors; UI shows empty state */
     } finally {
       setLoading(false);
     }

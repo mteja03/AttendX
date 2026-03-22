@@ -98,8 +98,6 @@ export default function Companies() {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        console.log('Companies snapshot:', snapshot.docs.length, 'companies found');
-        console.log('Companies data:', snapshot.docs.map((d) => ({ id: d.id, name: d.data().name })));
         const companiesData = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
@@ -262,7 +260,7 @@ export default function Companies() {
     try {
       await updateDoc(doc(db, 'companies', company.id), { isActive: false });
       success('Company deactivated');
-    } catch (err) {
+    } catch {
       showError('Failed to deactivate');
     }
   };
@@ -272,7 +270,7 @@ export default function Companies() {
     try {
       await updateDoc(doc(db, 'companies', company.id), { isActive: true });
       success('Company activated');
-    } catch (err) {
+    } catch {
       showError('Failed to activate');
     }
   };
@@ -308,20 +306,15 @@ export default function Companies() {
       if (driveToken) {
         for (const fileId of driveFileIds) {
           try {
-            // eslint-disable-next-line no-await-in-loop
             await deleteFileFromDrive(driveToken, fileId);
-          } catch (e) {
+          } catch {
             driveCleanupOk = false;
-            // eslint-disable-next-line no-console
-            console.warn('Could not delete Drive file:', fileId, e.message);
           }
         }
         try {
           await findAndDeleteFolder(driveToken, companyName, 'AttendX HR Documents');
-        } catch (e) {
+        } catch {
           driveCleanupOk = false;
-          // eslint-disable-next-line no-console
-          console.warn('Could not delete Drive folder for company:', companyName, e.message);
         }
       } else {
         driveCleanupOk = false;

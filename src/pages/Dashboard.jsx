@@ -361,7 +361,7 @@ export default function Dashboard() {
         prev.map((l) => (l.id === leaveDoc.id ? { ...l, status: 'Approved' } : l)),
       );
       success('Leave approved');
-    } catch (err) {
+    } catch {
       showError('Failed to approve');
     }
     setActioningId(null);
@@ -378,7 +378,7 @@ export default function Dashboard() {
         prev.map((l) => (l.id === leaveDoc.id ? { ...l, status: 'Rejected' } : l)),
       );
       success('Leave rejected');
-    } catch (err) {
+    } catch {
       showError('Failed to reject');
     }
     setActioningId(null);

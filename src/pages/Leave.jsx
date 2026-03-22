@@ -201,7 +201,7 @@ export default function Leave() {
         }
         setLeaveList(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => (e.status || 'Active') !== 'Inactive'));
-      } catch (err) {
+      } catch {
         showError('Failed to load leave data');
       }
       setLoading(false);
@@ -320,7 +320,7 @@ export default function Leave() {
       await updateDoc(empRef, { [key]: increment(leaveDoc.days || 0) });
       setLeaveList((prev) => prev.map((l) => (l.id === leaveDoc.id ? { ...l, status: 'Approved' } : l)));
       success('Leave approved');
-    } catch (err) {
+    } catch {
       showError('Failed to approve');
     }
     setActioningId(null);
@@ -335,7 +335,7 @@ export default function Leave() {
       });
       setLeaveList((prev) => prev.map((l) => (l.id === leaveDoc.id ? { ...l, status: 'Rejected' } : l)));
       success('Leave rejected');
-    } catch (err) {
+    } catch {
       showError('Failed to reject');
     }
     setActioningId(null);
@@ -364,7 +364,7 @@ export default function Leave() {
       });
       setLeaveList((prev) => [
         {
-          id: 'temp',
+          id: `leave_${Date.now()}`,
           employeeId: form.employeeId,
           employeeName: emp.fullName,
           leaveType: form.leaveType,
@@ -383,7 +383,7 @@ export default function Leave() {
       setEmpSearch('');
       setShowEmpDropdown(false);
       success('Leave added');
-    } catch (err) {
+    } catch {
       showError('Failed to add leave');
     }
     setSaving(false);

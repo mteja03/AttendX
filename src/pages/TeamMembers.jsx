@@ -99,14 +99,17 @@ export default function TeamMembers() {
       });
       setMembers(merged);
       setEmployees(emps);
-    } catch (err) {
+    } catch {
       showError('Failed to load team members');
     }
     setLoading(false);
   }, [companyId, showError]);
 
   useEffect(() => {
-    fetchData();
+    const id = requestAnimationFrame(() => {
+      fetchData();
+    });
+    return () => cancelAnimationFrame(id);
   }, [fetchData]);
 
   const employeesWithoutAccess = useMemo(() => {
@@ -183,7 +186,7 @@ export default function TeamMembers() {
       setGrantRole('');
       setShowEmpPicker(false);
       await fetchData();
-    } catch (err) {
+    } catch {
       showError('Failed to grant access');
     }
     setSaving(false);
@@ -205,7 +208,7 @@ export default function TeamMembers() {
       await updateDoc(doc(db, 'users', member.id), { isActive: false });
       success('Member deactivated');
       await fetchData();
-    } catch (err) {
+    } catch {
       showError('Failed to deactivate');
     }
   };
@@ -219,7 +222,7 @@ export default function TeamMembers() {
       await updateDoc(doc(db, 'users', member.id), { isActive: true });
       success('Member activated');
       await fetchData();
-    } catch (err) {
+    } catch {
       showError('Failed to activate');
     }
   };
@@ -234,7 +237,7 @@ export default function TeamMembers() {
       success('Access removed');
       setRemoveConfirm(null);
       await fetchData();
-    } catch (err) {
+    } catch {
       showError('Failed to remove access');
     }
   };
@@ -251,7 +254,7 @@ export default function TeamMembers() {
       setChangeRoleFor(null);
       setNewRoleValue('');
       await fetchData();
-    } catch (err) {
+    } catch {
       showError('Failed to change role');
     }
   };

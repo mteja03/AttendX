@@ -5,10 +5,8 @@ import {
   doc,
   getDoc,
   getDocs,
-  query,
   setDoc,
   updateDoc,
-  where,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -202,7 +200,7 @@ const DEFAULT_OFFBOARDING_TEMPLATE = {
 
 export default function Settings() {
   const { companyId } = useParams();
-  const { role, currentUser } = useAuth();
+  const { currentUser } = useAuth();
   const { success, error: showError } = useToast();
   const [company, setCompany] = useState(null);
   const [employees, setEmployees] = useState([]);
@@ -220,7 +218,6 @@ export default function Settings() {
   const [addingSection, setAddingSection] = useState(null);
   const [addValue, setAddValue] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [sectionSearch, setSectionSearch] = useState({});
   const [deactivateConfirm, setDeactivateConfirm] = useState(false);
   const [tab, setTab] = useState('company');
   const [newAssetType, setNewAssetType] = useState('');
@@ -236,11 +233,7 @@ export default function Settings() {
   const [savingOffTemplate, setSavingOffTemplate] = useState(false);
   const [showOffCategoryPicker, setShowOffCategoryPicker] = useState(false);
   const [policiesForOnboarding, setPoliciesForOnboarding] = useState([]);
-  const isAdmin = role === 'admin';
   const activeTab = tab;
-
-  // eslint-disable-next-line no-console
-  console.log('Company ID in settings:', companyId);
 
   useEffect(() => {
     if (companyId) {
@@ -288,7 +281,7 @@ export default function Settings() {
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setAssets(assetSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setCompanyLeaves(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (err) {
+      } catch {
         showError('Failed to load settings');
       }
       setLoading(false);
@@ -313,7 +306,7 @@ export default function Settings() {
         } else {
           setDocTypes(DOCUMENT_CHECKLIST);
         }
-      } catch (err) {
+      } catch {
         showError('Failed to load document types');
         setDocTypes(DOCUMENT_CHECKLIST);
       }
@@ -337,53 +330,24 @@ export default function Settings() {
   useEffect(() => {
     if (activeTab !== 'onboarding') return;
 
-    // eslint-disable-next-line no-console
-    console.log('Loading template for company:', companyId);
-    // eslint-disable-next-line no-console
-    console.log('Active tab:', activeTab);
-    // eslint-disable-next-line no-console
-    console.log('DB instance:', db);
-
     const loadTemplate = async () => {
       try {
         setTemplateLoading(true);
-        // eslint-disable-next-line no-console
-        console.log('Loading template, companyId:', companyId);
 
-        if (!companyId) {
-          // eslint-disable-next-line no-console
-          console.error('No companyId available');
-          setTemplateTasks(DEFAULT_ONBOARDING_TEMPLATE.tasks);
-          return;
-        }
-
-        if (!db) {
-          // eslint-disable-next-line no-console
-          console.error('No db instance');
+        if (!companyId || !db) {
           setTemplateTasks(DEFAULT_ONBOARDING_TEMPLATE.tasks);
           return;
         }
 
         const templateRef = doc(db, 'companies', companyId, 'settings', 'onboardingTemplate');
-        // eslint-disable-next-line no-console
-        console.log('Template ref path:', templateRef.path);
-
         const templateDoc = await getDoc(templateRef);
-        // eslint-disable-next-line no-console
-        console.log('Template exists:', templateDoc.exists());
 
         if (templateDoc.exists() && templateDoc.data()?.tasks?.length > 0) {
-          // eslint-disable-next-line no-console
-          console.log('Loaded tasks:', templateDoc.data().tasks.length);
           setTemplateTasks(templateDoc.data().tasks);
         } else {
-          // eslint-disable-next-line no-console
-          console.log('Using default template');
           setTemplateTasks(DEFAULT_ONBOARDING_TEMPLATE.tasks);
         }
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Load template error:', error.message, error);
         setTemplateTasks(DEFAULT_ONBOARDING_TEMPLATE.tasks);
         showError(`Failed to load template: ${error.message}`);
       } finally {
@@ -412,8 +376,6 @@ export default function Settings() {
           setOffTemplateTasks(DEFAULT_OFFBOARDING_TEMPLATE.tasks);
         }
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Load offboarding template error:', error.message, error);
         setOffTemplateTasks(DEFAULT_OFFBOARDING_TEMPLATE.tasks);
         showError(`Failed to load offboarding template: ${error.message}`);
       } finally {
@@ -446,7 +408,7 @@ export default function Settings() {
         const normalized = normalizeLeaveTypeObjects(data?.leaveTypes);
         setLeaveTypes(normalized);
         setLeaveAllowances(buildLeaveAllowancesFromData(data, normalized));
-      } catch (err) {
+      } catch {
         showError('Failed to load leave settings');
       }
     };
@@ -503,7 +465,7 @@ export default function Settings() {
       });
       setCompany((prev) => (prev ? { ...prev, leaveTypes, leavePolicy: leaveAllowances } : null));
       success('Leave policy saved successfully!');
-    } catch (err) {
+    } catch {
       showError('Failed to save leave policy');
     }
     setSaving(false);
@@ -568,7 +530,7 @@ export default function Settings() {
       setAddingSection(null);
       const section = SECTIONS.find((s) => s.key === sectionKey);
       success(section ? `${section.label} added` : 'Added');
-    } catch (err) {
+    } catch {
       showError('Failed to add');
     }
     setSaving(false);
@@ -585,7 +547,7 @@ export default function Settings() {
       setCompany((prev) => (prev ? { ...prev, [sectionKey]: next } : null));
       setDeleteConfirm(null);
       success(section ? `${section.label} removed` : 'Removed');
-    } catch (err) {
+    } catch {
       showError('Failed to remove');
     }
   };
@@ -604,7 +566,7 @@ export default function Settings() {
       setCompanyForm((p) => ({ ...p, color: companyColor }));
       setCompany((prev) => (prev ? { ...prev, ...companyForm, color: companyColor } : null));
       success('Company details saved');
-    } catch (err) {
+    } catch {
       showError('Failed to save');
     }
     setSaving(false);
@@ -615,7 +577,7 @@ export default function Settings() {
       await updateDoc(doc(db, 'companies', companyId), { isActive: false });
       setDeactivateConfirm(false);
       success('Company deactivated');
-    } catch (err) {
+    } catch {
       showError('Failed to deactivate company');
     }
   };
@@ -838,7 +800,7 @@ export default function Settings() {
       try {
         await saveAssetTypes(next);
         success('Asset type updated');
-      } catch (e) {
+      } catch {
         showError('Failed to update asset type');
       }
     };
@@ -853,7 +815,7 @@ export default function Settings() {
       try {
         await saveAssetTypes(next);
         success('Asset type deleted');
-      } catch (e) {
+      } catch {
         showError('Failed to delete asset type');
       }
     };
@@ -872,7 +834,7 @@ export default function Settings() {
         setNewAssetType('');
         setNewAssetMode('trackable');
         success('Asset type added');
-      } catch (e) {
+      } catch {
         showError('Failed to add asset type');
       }
     };
@@ -1306,8 +1268,6 @@ export default function Settings() {
     };
 
     const handleAddTask = (category = 'Day 1') => {
-      // eslint-disable-next-line no-console
-      console.log('Add task clicked');
       const newTask = {
         id: `task_${Date.now()}`,
         title: '',
@@ -1319,8 +1279,6 @@ export default function Settings() {
         order: (templateTasks?.length || 0) + 1,
         linkedPolicyId: '',
       };
-      // eslint-disable-next-line no-console
-      console.log('Adding task:', newTask);
       setTemplateTasks((prev) => [...(prev || []), newTask]);
     };
 
@@ -1330,17 +1288,6 @@ export default function Settings() {
 
     const handleSaveTemplate = async () => {
       try {
-        // eslint-disable-next-line no-console
-        console.log('Save clicked');
-        // eslint-disable-next-line no-console
-        console.log('Saving template...');
-        // eslint-disable-next-line no-console
-        console.log('Company ID:', companyId);
-        // eslint-disable-next-line no-console
-        console.log('Template tasks:', templateTasks);
-        // eslint-disable-next-line no-console
-        console.log('DB:', db);
-
         if (!companyId) {
           showError('Company ID not found');
           return;
@@ -1365,9 +1312,6 @@ export default function Settings() {
           linkedPolicyId: t.linkedPolicyId || '',
         }));
 
-        // eslint-disable-next-line no-console
-        console.log('Clean tasks to save:', cleanTasks.length);
-
         const templateRef = doc(db, 'companies', companyId, 'settings', 'onboardingTemplate');
         await setDoc(templateRef, {
           tasks: cleanTasks,
@@ -1375,14 +1319,8 @@ export default function Settings() {
           updatedBy: currentUser?.email || 'admin',
         });
 
-        // eslint-disable-next-line no-console
-        console.log('Template saved successfully!');
-        // eslint-disable-next-line no-console
-        console.log('✅ Template saved to:', templateRef.path);
         success(`${cleanTasks.length} tasks saved successfully!`);
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Save error:', error.message, error);
         showError(`Save failed: ${error.message}`);
       } finally {
         setSavingTemplate(false);
@@ -1642,8 +1580,6 @@ export default function Settings() {
         });
         success(`Offboarding template saved! ${cleanTasks.length} tasks saved.`);
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Save offboarding template error:', error.message, error);
         showError(`Save failed: ${error.message}`);
       } finally {
         setSavingOffTemplate(false);

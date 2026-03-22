@@ -179,8 +179,6 @@ export default function Assets() {
     if (!companyId) return;
     const load = async () => {
       setLoading(true);
-      console.log('Fetching assets for:', companyId);
-      console.log('Current user role:', userRole);
 
       try {
         const companySnap = await getDoc(doc(db, 'companies', companyId));
@@ -458,9 +456,7 @@ export default function Assets() {
       setAssets((prev) => [{ id: ref.id, ...payload }, ...prev]);
       setShowAddModal(false);
       success('Asset added');
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to add asset', err);
+    } catch {
       showError('Failed to add asset');
     }
     setSaving(false);
@@ -549,9 +545,7 @@ export default function Assets() {
 
       success(`${asset.name || asset.assetId} assigned to ${emp.fullName || ''}`);
       setShowAssignModal(false);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to assign asset', err);
+    } catch {
       showError('Failed to assign asset');
     }
     setSaving(false);
@@ -630,9 +624,7 @@ export default function Assets() {
 
       success(`${asset.name || asset.assetId} returned`);
       setShowReturnModal(false);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to return asset', err);
+    } catch {
       showError('Failed to return asset');
     }
     setSaving(false);
@@ -765,9 +757,7 @@ export default function Assets() {
 
       success(`${issueAsset.name || issueAsset.assetId} issued to ${emp.fullName}`);
       setShowIssueModal(false);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to issue consumable', err);
+    } catch {
       showError('Failed to issue consumable');
     }
   };
@@ -858,9 +848,7 @@ export default function Assets() {
 
       success(`${qty} ${returnConsumableAsset.name || returnConsumableAsset.assetId} returned by ${returnConsumableAssignment.employeeName}`);
       setShowReturnConsumableModal(false);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to return consumable', err);
+    } catch {
       showError('Failed to return consumable');
     }
   };
@@ -940,9 +928,7 @@ export default function Assets() {
 
       success('Stock updated');
       setShowEditStockModal(false);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to edit stock', err);
+    } catch {
       showError('Failed to edit stock');
     }
   };

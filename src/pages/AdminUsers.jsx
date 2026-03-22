@@ -130,13 +130,13 @@ export default function AdminUsers() {
         const noEmail = allUsers.filter((u) => !(u.email || '').trim());
         setUsers([...withEmail, ...noEmail]);
         setCompanies(companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (err) {
+      } catch {
         showError('Failed to load users');
       }
       setLoading(false);
     };
     load();
-  }, [isAdmin, currentUser?.uid, showError]);
+  }, [isAdmin, currentUser, showError]);
 
   const companyMap = useMemo(
     () => Object.fromEntries(companies.map((c) => [c.id, c.name])),
@@ -220,7 +220,7 @@ export default function AdminUsers() {
       setShowForm(false);
       setForm({ email: '', name: '', role: 'hrmanager', companyId: '' });
       success('User added');
-    } catch (err) {
+    } catch {
       showError('Failed to add user');
     }
     setSaving(false);
@@ -231,7 +231,7 @@ export default function AdminUsers() {
       await updateDoc(doc(db, 'users', user.id), { isActive: false });
       setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, isActive: false } : u)));
       success('User deactivated');
-    } catch (err) {
+    } catch {
       showError('Failed to deactivate');
     }
   };
@@ -241,7 +241,7 @@ export default function AdminUsers() {
       await updateDoc(doc(db, 'users', user.id), { isActive: true });
       setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, isActive: true } : u)));
       success('User activated');
-    } catch (err) {
+    } catch {
       showError('Failed to activate');
     }
   };
@@ -252,7 +252,7 @@ export default function AdminUsers() {
       setUsers((prev) => prev.filter((u) => u.id !== user.id));
       setRemoveConfirm(null);
       success('User removed');
-    } catch (err) {
+    } catch {
       showError('Failed to remove user');
     }
   };

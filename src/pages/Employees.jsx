@@ -212,9 +212,7 @@ export default function Employees() {
       try {
         const snap = await getDocs(collection(db, 'companies', companyId, 'roles'));
         setRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn('Could not fetch roles:', error?.message ?? String(error));
+      } catch {
         setRoles([]);
       }
     };
@@ -260,9 +258,7 @@ export default function Employees() {
       setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setHasMore(false);
       lastDocRef.current = null;
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error(err);
+    } catch {
       showError('Failed to load employees');
     }
   }, [collRef, showError]);
@@ -272,9 +268,8 @@ export default function Employees() {
     try {
       const snapshot = await getCountFromServer(collRef);
       setTotalCount(snapshot.data().count);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error(err);
+    } catch {
+      /* ignore count errors */
     }
   }, [collRef]);
 
@@ -291,9 +286,8 @@ export default function Employees() {
         onLeave: onLeaveSnap.data().count,
         inactive: inactiveSnap.data().count,
       });
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn('Stats count failed', err);
+    } catch {
+      /* ignore stats count errors */
     }
   }, [collRef]);
 
@@ -339,11 +333,7 @@ export default function Employees() {
         }
         setHasMore(snap.docs.length === PAGE_SIZE);
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Fetch error:', error);
         if (error?.code === 'failed-precondition') {
-          // eslint-disable-next-line no-console
-          console.warn('Missing Firestore index, falling back to full load');
           await fetchAllEmployeesFallback();
         } else {
           showError('Failed to load employees');
@@ -376,9 +366,7 @@ export default function Employees() {
         lastDocRef.current = null;
         setTotalCount(filtered.length);
         setSearchAllMode(true);
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error(err);
+      } catch {
         showError('Search failed');
       } finally {
         setLoading(false);
@@ -681,7 +669,7 @@ export default function Employees() {
       fetchStatsCounts();
       handleCloseAddModal();
       success('Employee added');
-    } catch (err) {
+    } catch {
       showError('Failed to add employee');
     }
     setSaving(false);
@@ -693,7 +681,7 @@ export default function Employees() {
       setEmployees((prev) => prev.map((e) => (e.id === emp.id ? { ...e, status: 'Inactive' } : e)));
       fetchStatsCounts();
       success('Employee deactivated');
-    } catch (err) {
+    } catch {
       showError('Failed to deactivate');
     }
   };
@@ -1883,9 +1871,7 @@ export default function Employees() {
                     </form>
                   </>
                 );
-              } catch (err) {
-                // eslint-disable-next-line no-console
-                console.error('Add employee modal:', err);
+              } catch {
                 return (
                   <div className="p-6 text-center">
                     <p className="text-red-500 mb-4">Something went wrong loading the form.</p>
