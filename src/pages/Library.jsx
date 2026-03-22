@@ -1586,19 +1586,20 @@ export default function Library() {
             </div>
 
             <form onSubmit={handleSaveRole} className="space-y-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs text-gray-500 mb-1">Role title *</label>
-                  <input
-                    value={roleForm.title}
-                    onChange={(e) => setRoleForm((f) => ({ ...f, title: e.target.value }))}
-                    placeholder="e.g. Sales Executive"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                    required
-                  />
-                </div>
-                <div className="sm:col-span-2 relative" ref={reportsToDropdownRef}>
-                  <label className="block text-xs text-gray-500 mb-1">Reports to</label>
+              <div className="mb-4">
+                <label className="text-xs text-gray-500 block mb-1">Role title *</label>
+                <input
+                  value={roleForm.title}
+                  onChange={(e) => setRoleForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder="e.g. Sales Executive"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="text-xs text-gray-500 block mb-1">Reports To</label>
+                <div className="relative w-full" ref={reportsToDropdownRef}>
                   <div
                     role="button"
                     tabIndex={0}
@@ -1725,18 +1726,19 @@ export default function Library() {
                     </div>
                   )}
                 </div>
-                <div className="sm:col-span-2 flex items-center gap-2">
-                  <input
-                    id="role-active"
-                    type="checkbox"
-                    checked={roleForm.isActive}
-                    onChange={(e) => setRoleForm((f) => ({ ...f, isActive: e.target.checked }))}
-                    className="rounded border-gray-300"
-                  />
-                  <label htmlFor="role-active" className="text-sm text-gray-700">
-                    Active
-                  </label>
-                </div>
+              </div>
+
+              <div className="mb-6 flex items-center gap-2">
+                <input
+                  id="role-active"
+                  type="checkbox"
+                  checked={roleForm.isActive}
+                  onChange={(e) => setRoleForm((f) => ({ ...f, isActive: e.target.checked }))}
+                  className="rounded border-gray-300"
+                />
+                <label htmlFor="role-active" className="text-sm text-gray-700">
+                  Active
+                </label>
               </div>
 
               <div className="bg-gray-50 rounded-xl p-4 mb-6">
