@@ -179,9 +179,9 @@ export default function Employees() {
       try {
         const snap = await getDocs(collection(db, 'companies', companyId, 'roles'));
         setRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (e) {
+      } catch (error) {
         // eslint-disable-next-line no-console
-        console.error('Roles fetch:', e);
+        console.warn('Could not fetch roles:', error?.message ?? String(error));
         setRoles([]);
       }
     };
@@ -1224,18 +1224,32 @@ export default function Employees() {
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] min-h-0 flex flex-col overflow-hidden sm:my-8">
             {(() => {
               try {
                 return (
                   <>
-                    <div className="flex justify-center mb-4 sm:hidden">
+                    <div className="flex justify-center pt-2 pb-1 sm:hidden flex-shrink-0">
                       <div className="w-10 h-1 bg-gray-200 rounded-full" />
                     </div>
-                    <h2 className="text-lg font-semibold text-slate-800 mb-4">Add Employee</h2>
-                    <form onSubmit={handleAddEmployee} className="space-y-6">
-              <section>
-                <h3 className="text-sm font-medium text-slate-700 mb-3">Personal Info</h3>
+                    <div className="flex items-center justify-between px-6 py-4 sm:px-6 sm:py-5 border-b border-gray-100 flex-shrink-0">
+                      <h2 className="text-lg font-semibold text-slate-800">Add Employee</h2>
+                      <button
+                        type="button"
+                        onClick={handleCloseAddModal}
+                        className="text-slate-400 hover:text-slate-600 min-h-[44px] min-w-[44px] rounded-lg flex items-center justify-center text-xl leading-none"
+                        aria-label="Close"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <form onSubmit={handleAddEmployee} className="flex flex-col flex-1 min-h-0">
+                      <div className="flex-1 overflow-y-auto p-6 min-h-0">
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
+                  <span className="text-base">👤</span>
+                  Personal Info
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-medium text-slate-600 mb-1">Full Name</label>
@@ -1275,14 +1289,15 @@ export default function Employees() {
                       <option value="Other">Other</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Highest Qualification</label>
-                    <select name="qualification" value={form.qualification} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
-                      <option value="">—</option>
-                      {qualifications.map((q) => <option key={q} value={q}>{q}</option>)}
-                      {!qualifications.includes('Other') && <option value="Other">Other</option>}
-                    </select>
-                  </div>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
+                  <span className="text-base">📍</span>
+                  Address
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-medium text-slate-600 mb-1">Street Address</label>
                     <input
@@ -1342,10 +1357,13 @@ export default function Employees() {
                     />
                   </div>
                 </div>
-              </section>
+              </div>
 
-              <section>
-                <h3 className="text-sm font-medium text-gray-700 mt-2 mb-3 pb-2 border-b">Emergency Contact</h3>
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
+                  <span className="text-base">🚨</span>
+                  Emergency Contact
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Contact Name</label>
@@ -1408,10 +1426,13 @@ export default function Employees() {
                     />
                   </div>
                 </div>
-              </section>
+              </div>
 
-              <section>
-                <h3 className="text-sm font-medium text-slate-700 mb-3">Employment Details</h3>
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
+                  <span className="text-base">💼</span>
+                  Employment Details
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Emp ID</label>
@@ -1432,14 +1453,6 @@ export default function Employees() {
                       <option value="">—</option>
                       {departments.map((d) => <option key={d} value={d}>{d}</option>)}
                       {!departments.includes('Other') && <option value="Other">Other</option>}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Branch</label>
-                    <select name="branch" value={form.branch} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
-                      <option value="">—</option>
-                      {branches.map((b) => <option key={b} value={b}>{b}</option>)}
-                      {!branches.includes('Other') && <option value="Other">Other</option>}
                     </select>
                   </div>
                   <div className="sm:col-span-2 relative" ref={roleDropdownRef}>
@@ -1575,6 +1588,14 @@ export default function Employees() {
                     )}
                   </div>
                   <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Branch</label>
+                    <select name="branch" value={form.branch} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
+                      <option value="">—</option>
+                      {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+                      {!branches.includes('Other') && <option value="Other">Other</option>}
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Employment Type</label>
                     <select name="employmentType" value={form.employmentType} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
                       {employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -1587,6 +1608,14 @@ export default function Employees() {
                       <option value="">—</option>
                       {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                       {!categories.includes('Other') && <option value="Other">Other</option>}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Qualification</label>
+                    <select name="qualification" value={form.qualification} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
+                      <option value="">—</option>
+                      {qualifications.map((q) => <option key={q} value={q}>{q}</option>)}
+                      {!qualifications.includes('Other') && <option value="Other">Other</option>}
                     </select>
                   </div>
                   <div>
@@ -1731,10 +1760,13 @@ export default function Employees() {
                     </div>
                   </div>
                 </div>
-              </section>
+              </div>
 
-              <section>
-                <h3 className="text-sm font-medium text-slate-700 mb-3">Compensation (₹)</h3>
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
+                  <span className="text-base">💰</span>
+                  Compensation
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">CTC per annum</label>
@@ -1749,19 +1781,14 @@ export default function Employees() {
                     <label className="block text-xs font-medium text-slate-600 mb-1">HRA / month</label>
                     <input type="number" min="0" name="hra" value={form.hra} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">PF Number</label>
-                    <input name="pfNumber" value={form.pfNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">ESIC Number</label>
-                    <input name="esicNumber" value={form.esicNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
-                  </div>
                 </div>
-              </section>
+              </div>
 
-              <section>
-                <h3 className="text-sm font-medium text-slate-700 mb-3">Identity Documents</h3>
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
+                  <span className="text-base">🪪</span>
+                  Statutory &amp; Identity
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">PAN Number</label>
@@ -1775,6 +1802,14 @@ export default function Employees() {
                     />
                   </div>
                   <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">PF Number</label>
+                    <input name="pfNumber" value={form.pfNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">ESIC Number</label>
+                    <input name="esicNumber" value={form.esicNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
+                  </div>
+                  <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Aadhaar Number</label>
                     <input
                       name="aadhaarNumber"
@@ -1785,7 +1820,7 @@ export default function Employees() {
                       maxLength={20}
                     />
                   </div>
-                  <div>
+                  <div className="sm:col-span-2">
                     <label className="block text-xs font-medium text-slate-600 mb-1">Driving Licence No.</label>
                     <input
                       name="drivingLicenceNumber"
@@ -1796,17 +1831,27 @@ export default function Employees() {
                     />
                   </div>
                 </div>
-              </section>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={handleCloseAddModal} className="text-sm text-slate-500 hover:text-slate-700" disabled={saving}>
-                  Cancel
-                </button>
-                <button type="submit" className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50" disabled={saving}>
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
               </div>
-            </form>
+                      </div>
+
+                      <div className="p-6 border-t border-gray-100 flex-shrink-0 flex gap-3 justify-end">
+                        <button
+                          type="button"
+                          onClick={handleCloseAddModal}
+                          className="rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 px-4 py-2 min-h-[44px]"
+                          disabled={saving}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 min-h-[44px] disabled:opacity-50"
+                          disabled={saving}
+                        >
+                          {saving ? 'Saving...' : 'Add Employee'}
+                        </button>
+                      </div>
+                    </form>
                   </>
                 );
               } catch (err) {
