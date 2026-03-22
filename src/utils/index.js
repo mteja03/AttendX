@@ -54,3 +54,20 @@ export function formatNumber(num) {
   if (num == null) return '—';
   return new Intl.NumberFormat('en-IN').format(num);
 }
+
+/** Compact salary display (lakhs / crores) */
+export function formatLakhs(amount) {
+  if (amount == null || amount === '') return '0';
+  const n = Number(amount);
+  if (Number.isNaN(n) || n === 0) return '0';
+  if (n >= 10000000) {
+    return `${(n / 10000000).toFixed(1)}Cr`;
+  }
+  if (n >= 100000) {
+    return `${(n / 100000).toFixed(1)}L`;
+  }
+  if (n >= 1000) {
+    return `${Math.round(n / 1000)}K`;
+  }
+  return String(n);
+}

@@ -282,6 +282,27 @@ export default function Dashboard() {
 
   const recentLeave = useMemo(() => leaveList.slice(0, 5), [leaveList]);
 
+  const upcomingLeaveThisWeek = useMemo(() => {
+    const today = new Date();
+    const weekEnd = new Date(today);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    const todayStr = toDateString(today);
+    const weekEndStr = toDateString(weekEnd);
+    const ids = new Set();
+    leaveList.forEach((l) => {
+      if (l.status !== 'Approved') return;
+      const start = toDateString(l.startDate);
+      const end = toDateString(l.endDate);
+      if (!start || !end) return;
+      if (end < todayStr || start > weekEndStr) return;
+      if (l.employeeId) ids.add(l.employeeId);
+    });
+    return [...ids]
+      .map((id) => employees.find((e) => e.id === id))
+      .filter(Boolean)
+      .slice(0, 8);
+  }, [leaveList, employees]);
+
   const birthdayData = useMemo(() => {
     const now = new Date();
     const todayMonth = now.getMonth();
@@ -409,6 +430,37 @@ export default function Dashboard() {
           {statCards.map((stat) => (
             <StatCard key={stat.title} {...stat} />
           ))}
+        </div>
+      )}
+
+      {!statsLoading && upcomingLeaveThisWeek.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6 px-1">
+          <p className="text-sm text-gray-600">
+            <span className="font-medium text-gray-800">Coming up:</span>{' '}
+            {upcomingLeaveThisWeek.length} employee{upcomingLeaveThisWeek.length !== 1 ? 's' : ''} on approved leave in
+            the next 7 days
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex -space-x-2">
+              {upcomingLeaveThisWeek.map((e) => (
+                <button
+                  key={e.id}
+                  type="button"
+                  onClick={() => handleEmployeeClick(e.id)}
+                  className="w-8 h-8 rounded-full border-2 border-white bg-[#C5E8E8] text-[10px] font-semibold text-[#1B6B6B] flex items-center justify-center hover:ring-2 hover:ring-[#4ECDC4] transition-all"
+                  title={e.fullName || e.empId}
+                >
+                  {(e.fullName || '?').charAt(0)}
+                </button>
+              ))}
+            </div>
+            <Link
+              to={`/company/${companyId}/calendar`}
+              className="text-sm text-[#1B6B6B] font-medium hover:underline whitespace-nowrap"
+            >
+              Open calendar →
+            </Link>
+          </div>
         </div>
       )}
 

@@ -20,7 +20,7 @@ import {
 } from 'recharts';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
-import { toDateString, toDisplayDate, toJSDate } from '../utils';
+import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 
@@ -196,6 +196,7 @@ export default function Reports() {
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [company, setCompany] = useState(null);
+  const [roles, setRoles] = useState([]);
   const [activeTab, setActiveTab] = useState('headcount');
   const [empFilterDept, setEmpFilterDept] = useState('All');
   const [empFilterBranch, setEmpFilterBranch] = useState('All');
@@ -210,15 +211,18 @@ export default function Reports() {
     if (!companyId) return;
     setLoading(true);
     try {
-      const [empSnap, leaveSnap, assetSnap, compSnap] = await Promise.all([
+      const [empSnap, leaveSnap, assetSnap, compSnap, rolesSnap] = await Promise.all([
         getDocs(collection(db, 'companies', companyId, 'employees')),
         getDocs(collection(db, 'companies', companyId, 'leave')),
         getDocs(collection(db, 'companies', companyId, 'assets')),
         getDoc(doc(db, 'companies', companyId)),
+        getDocs(collection(db, 'companies', companyId, 'roles')).catch(() => ({ docs: [] })),
       ]);
       setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setLeaveList(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setAssets(assetSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const rd = rolesSnap && Array.isArray(rolesSnap.docs) ? rolesSnap.docs : [];
+      setRoles(rd.map((d) => ({ id: d.id, ...d.data() })));
       if (compSnap.exists()) {
         setCompany({ id: compSnap.id, ...compSnap.data() });
       } else {
@@ -308,6 +312,30 @@ export default function Reports() {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
   }, [employees]);
+
+  const roleVacancyData = useMemo(
+    () =>
+      roles
+        .filter((r) => r.isActive !== false)
+        .map((role) => {
+          const filled = employees.filter(
+            (e) =>
+              (e.designation || '').trim() === (role.title || '').trim() && (e.status || 'Active') === 'Active',
+          ).length;
+          return {
+            id: role.id,
+            role: role.title,
+            department: role.department,
+            filled,
+            salaryBand: role.salaryBand,
+          };
+        })
+        .sort(
+          (a, b) =>
+            (a.department || '').localeCompare(b.department || '') || (a.role || '').localeCompare(b.role || ''),
+        ),
+    [roles, employees],
+  );
 
   const typeData = useMemo(() => {
     const acc = {};
@@ -1156,6 +1184,58 @@ export default function Reports() {
               </ResponsiveContainer>
             </ChartCard>
           </div>
+
+          <ChartCard title="Role vacancy analysis">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm border-collapse">
+                <thead>
+                  <tr className="text-left text-gray-600 border-b border-gray-100">
+                    <th className="py-2 pr-3 font-semibold">Role</th>
+                    <th className="py-2 pr-3 font-semibold">Department</th>
+                    <th className="py-2 pr-3 font-semibold">Employees</th>
+                    <th className="py-2 pr-3 font-semibold">Salary band</th>
+                    <th className="py-2 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roleVacancyData.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-center text-gray-400 text-sm">
+                        No roles defined. Add roles in Library → Roles &amp; Responsibilities.
+                      </td>
+                    </tr>
+                  ) : (
+                    roleVacancyData.map((r) => (
+                      <tr key={r.id || r.role} className="border-t border-gray-100">
+                        <td className="py-2 pr-3 font-medium text-gray-900">{r.role}</td>
+                        <td className="py-2 pr-3 text-gray-600">{r.department || '—'}</td>
+                        <td className="py-2 pr-3">
+                          <span className={r.filled > 0 ? 'text-green-600 font-medium' : 'text-gray-400'}>
+                            {r.filled} employee{r.filled !== 1 ? 's' : ''}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 text-[#1B6B6B] font-medium">
+                          {r.salaryBand?.min != null && r.salaryBand?.min !== ''
+                            ? `₹${formatLakhs(r.salaryBand.min)}–${formatLakhs(r.salaryBand.max)}`
+                            : '—'}
+                        </td>
+                        <td className="py-2">
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              r.filled > 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                            }`}
+                          >
+                            {r.filled > 0 ? 'Filled' : 'Vacant'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </ChartCard>
+
           <div className="mt-4 flex flex-wrap gap-2 items-center">
             <button
               type="button"

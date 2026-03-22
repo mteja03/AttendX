@@ -1532,6 +1532,7 @@ export default function EmployeeProfile() {
           daysFromJoining: t.daysFromJoining || 0,
           isRequired: t.isRequired || false,
           order: t.order || 0,
+          linkedPolicyId: t.linkedPolicyId || '',
           completed: false,
           completedAt: null,
           completedBy: null,
@@ -3406,6 +3407,16 @@ export default function EmployeeProfile() {
 
                           {task.description && (
                             <p className="text-xs text-gray-400 mt-0.5">{task.description}</p>
+                          )}
+
+                          {task.linkedPolicyId && (
+                            <Link
+                              to={`/company/${companyId}/library?tab=policies&policyId=${task.linkedPolicyId}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs text-[#1B6B6B] hover:underline mt-1 inline-block font-medium"
+                            >
+                              View policy
+                            </Link>
                           )}
 
                           <div className="flex items-center gap-3 mt-1.5 flex-wrap">

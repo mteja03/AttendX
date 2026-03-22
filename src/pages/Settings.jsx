@@ -38,7 +38,6 @@ const SIZE_OPTIONS = [
 
 const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal'];
-const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
 const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
 const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
 const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 'Probationary', 'Seasonal', 'Other'];
@@ -120,7 +119,6 @@ function buildLeaveAllowancesFromData(data, normalizedTypes) {
 const SECTIONS = [
   { key: 'departments', label: 'Department', plural: 'Departments', field: 'department', defaults: DEFAULT_DEPARTMENTS },
   { key: 'branches', label: 'Branch', plural: 'Branches', field: 'branch', defaults: DEFAULT_BRANCHES },
-  { key: 'designations', label: 'Designation', plural: 'Designations', field: 'designation', defaults: DEFAULT_DESIGNATIONS },
   { key: 'employmentTypes', label: 'Employment Type', plural: 'Employment Types', field: 'employmentType', defaults: DEFAULT_EMPLOYMENT_TYPES },
   { key: 'categories', label: 'Category', plural: 'Categories', field: 'category', defaults: DEFAULT_CATEGORIES },
   { key: 'qualifications', label: 'Qualification', plural: 'Qualifications', field: 'qualification', defaults: DEFAULT_QUALIFICATIONS },
@@ -236,6 +234,7 @@ export default function Settings() {
   const [offTemplateLoading, setOffTemplateLoading] = useState(false);
   const [savingOffTemplate, setSavingOffTemplate] = useState(false);
   const [showOffCategoryPicker, setShowOffCategoryPicker] = useState(false);
+  const [policiesForOnboarding, setPoliciesForOnboarding] = useState([]);
   const isAdmin = role === 'admin';
   const activeTab = tab;
 
@@ -321,6 +320,18 @@ export default function Settings() {
     };
     fetchDocTypes();
   }, [tab, companyId, showError]);
+
+  useEffect(() => {
+    if (!companyId || activeTab !== 'onboarding') return;
+    (async () => {
+      try {
+        const snap = await getDocs(collection(db, 'companies', companyId, 'policies'));
+        setPoliciesForOnboarding(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch {
+        setPoliciesForOnboarding([]);
+      }
+    })();
+  }, [companyId, activeTab]);
 
   useEffect(() => {
     if (activeTab !== 'onboarding') return;
@@ -815,12 +826,8 @@ export default function Settings() {
       return { section, items, countFn, newVal, setNewVal };
     });
 
-    const left = cards.filter((c) =>
-      ['departments', 'branches', 'designations'].includes(c.section.key),
-    );
-    const right = cards.filter((c) =>
-      ['employmentTypes', 'categories', 'qualifications'].includes(c.section.key),
-    );
+    const left = cards.filter((c) => ['departments', 'branches', 'employmentTypes'].includes(c.section.key));
+    const right = cards.filter((c) => ['categories', 'qualifications'].includes(c.section.key));
 
     const handleToggleAssetTypeMode = async (typeName) => {
       const current = normalizedAssetTypes.find((t) => t.name === typeName);
@@ -1296,18 +1303,24 @@ export default function Settings() {
       );
     };
 
-    const handleAddTask = () => {
+    const taskSuggestsPolicyLink = (title, description) => {
+      const s = `${title || ''} ${description || ''}`.toLowerCase();
+      return /policy|handbook|acknowledge|read/.test(s);
+    };
+
+    const handleAddTask = (category = 'Day 1') => {
       // eslint-disable-next-line no-console
       console.log('Add task clicked');
       const newTask = {
         id: `task_${Date.now()}`,
         title: '',
         description: '',
-        category: 'Day 1',
+        category: category || 'Day 1',
         assignedTo: 'hr',
         daysFromJoining: 0,
         isRequired: false,
         order: (templateTasks?.length || 0) + 1,
+        linkedPolicyId: '',
       };
       // eslint-disable-next-line no-console
       console.log('Adding task:', newTask);
@@ -1352,6 +1365,7 @@ export default function Settings() {
           daysFromJoining: Number(t.daysFromJoining) || 0,
           isRequired: Boolean(t.isRequired),
           order: Number(t.order) || index,
+          linkedPolicyId: t.linkedPolicyId || '',
         }));
 
         // eslint-disable-next-line no-console
@@ -1405,6 +1419,7 @@ export default function Settings() {
                   daysFromJoining: 0,
                   isRequired: false,
                   order: (templateTasks?.length || 0) + 1,
+                  linkedPolicyId: '',
                 };
                 setTemplateTasks((prev) => [...(Array.isArray(prev) ? prev : []), newTask]);
                 setTimeout(() => {
@@ -1476,6 +1491,27 @@ export default function Settings() {
                             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             placeholder="Optional description"
                           />
+                        </div>
+
+                        {taskSuggestsPolicyLink(t.title, t.description) && (
+                          <p className="text-xs text-[#1B6B6B] mt-2 bg-[#E8F5F5] rounded-lg px-2 py-1.5">
+                            Link to a policy in Library?
+                          </p>
+                        )}
+                        <div className="mt-2">
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Link to policy (optional)</label>
+                          <select
+                            value={t.linkedPolicyId || ''}
+                            onChange={(e) => updateTask(t.id, 'linkedPolicyId', e.target.value)}
+                            className="w-full max-w-md text-xs border border-slate-300 rounded-lg px-2 py-1.5"
+                          >
+                            <option value="">No linked policy</option>
+                            {policiesForOnboarding.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.title}
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3">

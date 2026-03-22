@@ -21,12 +21,11 @@ import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { SkeletonCard } from '../components/SkeletonRow';
-import { toDateString, toDisplayDate, toJSDate } from '../utils';
+import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
-const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
 const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
 const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
 const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
@@ -113,6 +112,7 @@ const initialForm = {
   department: '',
   branch: '',
   designation: '',
+  designationRoleId: '',
   employmentType: 'Full-time',
   category: '',
   joiningDate: toDateString(new Date()),
@@ -167,6 +167,26 @@ export default function Employees() {
   const [saving, setSaving] = useState(false);
   const [managerSearch, setManagerSearch] = useState('');
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
+  const [roles, setRoles] = useState([]);
+  const [roleSearch, setRoleSearch] = useState('');
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [selectedRole, setSelectedRole] = useState(null);
+  const roleDropdownRef = useRef(null);
+
+  useEffect(() => {
+    if (!companyId) return;
+    const fetchRoles = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'companies', companyId, 'roles'));
+        setRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('Roles fetch:', e);
+        setRoles([]);
+      }
+    };
+    fetchRoles();
+  }, [companyId]);
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -180,6 +200,19 @@ export default function Employees() {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showManagerDropdown]);
+
+  useEffect(() => {
+    if (!showRoleDropdown) return undefined;
+    const onDown = (e) => {
+      if (roleDropdownRef.current && !roleDropdownRef.current.contains(e.target)) {
+        setShowRoleDropdown(false);
+        setRoleSearch('');
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showRoleDropdown]);
+
   const [showDownload, setShowDownload] = useState(false);
 
   const collRef = useMemo(
@@ -376,7 +409,13 @@ export default function Employees() {
   }, [collRef]);
 
   const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
-  const designations = company?.designations?.length ? company.designations : DEFAULT_DESIGNATIONS;
+  const designationFilterOptions = useMemo(() => {
+    const fromEmp = [...new Set(employees.map((e) => (e.designation || '').trim()).filter(Boolean))].sort();
+    if (fromEmp.length) return fromEmp;
+    return [
+      ...new Set(roles.filter((r) => r.isActive !== false).map((r) => (r.title || '').trim()).filter(Boolean)),
+    ].sort();
+  }, [employees, roles]);
   const employmentTypes = company?.employmentTypes?.length ? company.employmentTypes : DEFAULT_EMPLOYMENT_TYPES;
   const branches = company?.branches?.length ? company.branches : DEFAULT_BRANCHES;
   const qualifications = company?.qualifications?.length ? company.qualifications : DEFAULT_QUALIFICATIONS;
@@ -480,12 +519,50 @@ export default function Employees() {
     };
   }, [filtered, scrollTop]);
 
+  const handleCloseAddModal = () => {
+    setShowAddModal(false);
+    setForm(initialForm);
+    setFormErrors({});
+    setFormWarnings({});
+    setSelectedRole(null);
+    setRoleSearch('');
+    setShowRoleDropdown(false);
+    setManagerSearch('');
+    setShowManagerDropdown(false);
+  };
+
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
     if (formErrors[name]) setFormErrors((prev) => ({ ...prev, [name]: null }));
     if (formWarnings[name]) setFormWarnings((prev) => ({ ...prev, [name]: null }));
   };
+
+  useEffect(() => {
+    if (!selectedRole?.salaryBand || selectedRole.salaryBand.min === '' || selectedRole.salaryBand.min == null) {
+      setFormWarnings((prev) => ({ ...prev, ctcPerAnnum: null }));
+      return;
+    }
+    const ctc = form.ctcPerAnnum ? Number(form.ctcPerAnnum) : NaN;
+    if (!form.ctcPerAnnum || Number.isNaN(ctc)) {
+      setFormWarnings((prev) => ({ ...prev, ctcPerAnnum: null }));
+      return;
+    }
+    const min = Number(selectedRole.salaryBand.min);
+    const max = Number(selectedRole.salaryBand.max);
+    if (Number.isNaN(min) || Number.isNaN(max)) {
+      setFormWarnings((prev) => ({ ...prev, ctcPerAnnum: null }));
+      return;
+    }
+    if (ctc < min || ctc > max) {
+      setFormWarnings((prev) => ({
+        ...prev,
+        ctcPerAnnum: `⚠️ CTC ${(ctc / 100000).toFixed(1)}L is outside the ${selectedRole.title} salary band (₹${formatLakhs(min)}–₹${formatLakhs(max)})`,
+      }));
+    } else {
+      setFormWarnings((prev) => ({ ...prev, ctcPerAnnum: null }));
+    }
+  }, [selectedRole, form.ctcPerAnnum]);
 
   const validate = () => {
     const err = {};
@@ -552,6 +629,7 @@ export default function Employees() {
         department: form.department || null,
         branch: form.branch || null,
         designation: form.designation || null,
+        designationRoleId: form.designationRoleId || null,
         employmentType: form.employmentType || 'Full-time',
         category: form.category || null,
         qualification: form.qualification || null,
@@ -582,11 +660,7 @@ export default function Employees() {
       setEmployees((prev) => [{ id: ref.id, ...payload, createdAt: new Date() }, ...prev]);
       setTotalCount((c) => c + 1);
       fetchStatsCounts();
-      setShowAddModal(false);
-      setForm(initialForm);
-      setManagerSearch('');
-      setShowManagerDropdown(false);
-      setFormErrors({});
+      handleCloseAddModal();
       success('Employee added');
     } catch (err) {
       showError('Failed to add employee');
@@ -690,6 +764,9 @@ export default function Employees() {
               onClick={async () => {
                 const id = await computeNextEmpId();
                 setForm({ ...initialForm, empId: id });
+                setSelectedRole(null);
+                setRoleSearch('');
+                setShowRoleDropdown(false);
                 setShowAddModal(true);
               }}
               className="inline-flex items-center justify-center min-h-[44px] rounded-lg bg-[#1B6B6B] hover:bg-[#155858] active:bg-[#0f4444] text-white text-sm font-medium px-4 py-2"
@@ -781,10 +858,14 @@ export default function Employees() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-0.5">Designation</label>
+                <label className="block text-xs text-slate-500 mb-0.5">Role / Designation</label>
                 <select value={filterDesignation} onChange={(e) => setFilterDesignation(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
                   <option>All Designations</option>
-                  {designations.map((d) => <option key={d} value={d}>{d}</option>)}
+                  {designationFilterOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -1138,11 +1219,15 @@ export default function Employees() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-center mb-4 sm:hidden">
-              <div className="w-10 h-1 bg-gray-200 rounded-full" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Add Employee</h2>
-            <form onSubmit={handleAddEmployee} className="space-y-6">
+            {(() => {
+              try {
+                return (
+                  <>
+                    <div className="flex justify-center mb-4 sm:hidden">
+                      <div className="w-10 h-1 bg-gray-200 rounded-full" />
+                    </div>
+                    <h2 className="text-lg font-semibold text-slate-800 mb-4">Add Employee</h2>
+                    <form onSubmit={handleAddEmployee} className="space-y-6">
               <section>
                 <h3 className="text-sm font-medium text-slate-700 mb-3">Personal Info</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1351,13 +1436,137 @@ export default function Employees() {
                       {!branches.includes('Other') && <option value="Other">Other</option>}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Designation</label>
-                    <select name="designation" value={form.designation} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
-                      <option value="">—</option>
-                      {designations.map((d) => <option key={d} value={d}>{d}</option>)}
-                      {!designations.includes('Other') && <option value="Other">Other</option>}
-                    </select>
+                  <div className="sm:col-span-2 relative" ref={roleDropdownRef}>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Role / Designation</label>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setShowRoleDropdown(true)}
+                      onKeyDown={(ev) => {
+                        if (ev.key === 'Enter' || ev.key === ' ') setShowRoleDropdown(true);
+                      }}
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px]"
+                    >
+                      {selectedRole ? (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="min-w-0 text-left">
+                            <span className="text-slate-800 font-medium">{selectedRole.title}</span>
+                            <span className="text-xs text-slate-400 ml-2">{selectedRole.department}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">Select role/designation…</span>
+                      )}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {selectedRole && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedRole(null);
+                              setForm((prev) => ({ ...prev, designation: '', designationRoleId: '' }));
+                            }}
+                            className="text-slate-400 hover:text-slate-600 text-xs"
+                          >
+                            ✕
+                          </button>
+                        )}
+                        <span className="text-slate-400 text-xs">▾</span>
+                      </div>
+                    </div>
+                    {selectedRole?.salaryBand?.min != null && selectedRole?.salaryBand?.min !== '' && (
+                      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#1B6B6B] bg-[#E8F5F5] px-3 py-1.5 rounded-lg">
+                        <span>ℹ️</span>
+                        <span>
+                          Salary band for this role: ₹{formatLakhs(selectedRole.salaryBand.min)} – ₹
+                          {formatLakhs(selectedRole.salaryBand.max)} per annum
+                        </span>
+                      </div>
+                    )}
+                    {showRoleDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-[60] max-h-64 overflow-hidden">
+                        <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
+                          <input
+                            autoFocus
+                            placeholder="Search by role or department…"
+                            value={roleSearch}
+                            onChange={(e) => setRoleSearch(e.target.value)}
+                            className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                        <div className="overflow-y-auto max-h-52">
+                          {roles.length === 0 && (
+                            <div className="px-3 py-4 text-center">
+                              <p className="text-sm text-slate-400 mb-2">No roles defined yet</p>
+                              <p className="text-xs text-slate-400">Add roles in Library → Roles &amp; Responsibilities</p>
+                            </div>
+                          )}
+                          {roles
+                            .filter((r) => r.isActive !== false)
+                            .filter((r) => {
+                              if (!roleSearch.trim()) return true;
+                              const q = roleSearch.toLowerCase();
+                              return (
+                                (r.title || '').toLowerCase().includes(q) ||
+                                (r.department || '').toLowerCase().includes(q)
+                              );
+                            })
+                            .map((role) => (
+                              <div
+                                key={role.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                  setSelectedRole(role);
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    designation: role.title || '',
+                                    designationRoleId: role.id,
+                                    department: prev.department || role.department || '',
+                                  }));
+                                  setShowRoleDropdown(false);
+                                  setRoleSearch('');
+                                }}
+                                onKeyDown={(ev) => {
+                                  if (ev.key === 'Enter' || ev.key === ' ') {
+                                    setSelectedRole(role);
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      designation: role.title || '',
+                                      designationRoleId: role.id,
+                                      department: prev.department || role.department || '',
+                                    }));
+                                    setShowRoleDropdown(false);
+                                    setRoleSearch('');
+                                  }
+                                }}
+                                className={`px-3 py-3 hover:bg-[#E8F5F5] cursor-pointer border-b border-slate-50 last:border-0 transition-colors ${
+                                  selectedRole?.id === role.id ? 'bg-[#E8F5F5]' : ''
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex-1 min-w-0 text-left">
+                                    <p className="text-sm font-medium text-slate-900">{role.title}</p>
+                                    <p className="text-xs text-slate-400 mt-0.5">
+                                      {role.department}
+                                      {role.reportsTo ? ` · Reports to ${role.reportsTo}` : ''}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    {role.salaryBand?.min != null && role.salaryBand?.min !== '' && (
+                                      <span className="text-xs text-[#1B6B6B] font-medium bg-[#E8F5F5] px-2 py-0.5 rounded-full whitespace-nowrap">
+                                        ₹{formatLakhs(role.salaryBand.min)}–{formatLakhs(role.salaryBand.max)}
+                                      </span>
+                                    )}
+                                    {selectedRole?.id === role.id && <span className="text-[#1B6B6B]">✓</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Employment Type</label>
@@ -1524,6 +1733,7 @@ export default function Employees() {
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">CTC per annum</label>
                     <input type="number" min="0" name="ctcPerAnnum" value={form.ctcPerAnnum} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
+                    {formWarnings.ctcPerAnnum && <p className="text-xs text-amber-600 mt-1">{formWarnings.ctcPerAnnum}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Basic Salary / month</label>
@@ -1583,12 +1793,29 @@ export default function Employees() {
               </section>
 
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowAddModal(false)} className="text-sm text-slate-500 hover:text-slate-700" disabled={saving}>Cancel</button>
+                <button type="button" onClick={handleCloseAddModal} className="text-sm text-slate-500 hover:text-slate-700" disabled={saving}>
+                  Cancel
+                </button>
                 <button type="submit" className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50" disabled={saving}>
                   {saving ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </form>
+                  </>
+                );
+              } catch (err) {
+                // eslint-disable-next-line no-console
+                console.error('Add employee modal:', err);
+                return (
+                  <div className="p-6 text-center">
+                    <p className="text-red-500 mb-4">Something went wrong loading the form.</p>
+                    <button type="button" onClick={handleCloseAddModal} className="px-4 py-2 bg-gray-100 rounded-lg text-sm">
+                      Close
+                    </button>
+                  </div>
+                );
+              }
+            })()}
           </div>
         </div>
       )}

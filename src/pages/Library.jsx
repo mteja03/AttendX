@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import {
   addDoc,
@@ -15,7 +15,7 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
-import { toDisplayDate, toJSDate } from '../utils';
+import { formatLakhs, toDisplayDate, toJSDate } from '../utils';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 
 const LIBRARY_TABS = [
@@ -281,22 +281,6 @@ const DEFAULT_ROLE_SEEDS = [
   },
 ];
 
-function formatLakhs(amount) {
-  if (amount == null || amount === '') return '0';
-  const n = Number(amount);
-  if (Number.isNaN(n) || n === 0) return '0';
-  if (n >= 10000000) {
-    return `${(n / 10000000).toFixed(1)}Cr`;
-  }
-  if (n >= 100000) {
-    return `${(n / 100000).toFixed(1)}L`;
-  }
-  if (n >= 1000) {
-    return `${Math.round(n / 1000)}K`;
-  }
-  return String(n);
-}
-
 function previewText(policy) {
   const d = policy.description?.trim();
   if (d) {
@@ -471,6 +455,7 @@ function roleDocToForm(role) {
 export default function Library() {
   const { companyId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser, role } = useAuth();
   const { company } = useCompany();
   const { success, error: showError } = useToast();
@@ -514,6 +499,9 @@ export default function Library() {
   const [rolesView, setRolesView] = useState('grid');
   const [archZoom, setArchZoom] = useState(0.9);
   const [archDownloading, setArchDownloading] = useState(false);
+  const [reportsToSearch, setReportsToSearch] = useState('');
+  const [showReportsToDropdown, setShowReportsToDropdown] = useState(false);
+  const reportsToDropdownRef = useRef(null);
 
   useEffect(() => {
     document.title = 'Library · AttendX';
@@ -521,6 +509,44 @@ export default function Library() {
       document.title = 'AttendX';
     };
   }, []);
+
+  useEffect(() => {
+    if (!showRoleModal) {
+      setReportsToSearch('');
+      setShowReportsToDropdown(false);
+    }
+  }, [showRoleModal]);
+
+  useEffect(() => {
+    if (!showReportsToDropdown) return undefined;
+    const onDown = (e) => {
+      if (reportsToDropdownRef.current && !reportsToDropdownRef.current.contains(e.target)) {
+        setShowReportsToDropdown(false);
+        setReportsToSearch('');
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showReportsToDropdown]);
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t === 'roles') setLibraryTab('roles');
+    else if (t === 'policies') setLibraryTab('policies');
+  }, [searchParams]);
+
+  useEffect(() => {
+    const policyId = searchParams.get('policyId');
+    if (!policyId || !policies.length) return;
+    const p = policies.find((x) => x.id === policyId);
+    if (p) {
+      setLibraryTab('policies');
+      setViewingPolicy(p);
+      const next = new URLSearchParams(searchParams);
+      next.delete('policyId');
+      setSearchParams(next, { replace: true });
+    }
+  }, [policies, searchParams, setSearchParams]);
 
   const seedPoliciesIfEmpty = useCallback(async () => {
     if (!companyId || !currentUser?.email) return;
@@ -1672,20 +1698,129 @@ export default function Library() {
                     ))}
                   </select>
                 </div>
-                <div>
+                <div className="relative" ref={reportsToDropdownRef}>
                   <label className="block text-xs text-gray-500 mb-1">Reports to</label>
-                  <select
-                    value={roleForm.reportsToRoleId}
-                    onChange={(e) => setRoleForm((f) => ({ ...f, reportsToRoleId: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setShowReportsToDropdown(true)}
+                    onKeyDown={(ev) => {
+                      if (ev.key === 'Enter' || ev.key === ' ') setShowReportsToDropdown(true);
+                    }}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px]"
                   >
-                    <option value="">None (Top level)</option>
-                    {reportsToOptions.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.title}
-                      </option>
-                    ))}
-                  </select>
+                    {roleForm.reportsToRoleId ? (
+                      <span className="text-gray-800">
+                        {roles.find((r) => r.id === roleForm.reportsToRoleId)?.title || '—'}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">None (Top level role)</span>
+                    )}
+                    <div className="flex items-center gap-1">
+                      {!!roleForm.reportsToRoleId && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRoleForm((f) => ({ ...f, reportsToRoleId: '' }));
+                          }}
+                          className="text-gray-400 hover:text-gray-600 text-xs"
+                        >
+                          ✕
+                        </button>
+                      )}
+                      <span className="text-gray-400 text-xs">▾</span>
+                    </div>
+                  </div>
+
+                  {showReportsToDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-[80] max-h-52 overflow-hidden">
+                      <div className="p-2 border-b border-gray-100">
+                        <input
+                          autoFocus
+                          placeholder="Search role..."
+                          value={reportsToSearch}
+                          onChange={(e) => setReportsToSearch(e.target.value)}
+                          className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <div className="overflow-y-auto max-h-40">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            setRoleForm((f) => ({ ...f, reportsToRoleId: '' }));
+                            setShowReportsToDropdown(false);
+                            setReportsToSearch('');
+                          }}
+                          onKeyDown={(ev) => {
+                            if (ev.key === 'Enter' || ev.key === ' ') {
+                              setRoleForm((f) => ({ ...f, reportsToRoleId: '' }));
+                              setShowReportsToDropdown(false);
+                              setReportsToSearch('');
+                            }
+                          }}
+                          className="px-3 py-2.5 hover:bg-gray-50 cursor-pointer text-sm text-gray-400 border-b border-gray-50"
+                        >
+                          None (Top level role)
+                        </div>
+                        {reportsToOptions
+                          .filter((r) => {
+                            if (editingRoleId && r.id === editingRoleId) return false;
+                            if (!reportsToSearch.trim()) return true;
+                            const q = reportsToSearch.toLowerCase();
+                            return (
+                              (r.title || '').toLowerCase().includes(q) || (r.department || '').toLowerCase().includes(q)
+                            );
+                          })
+                          .map((role) => {
+                            const selected = roleForm.reportsToRoleId === role.id;
+                            return (
+                              <div
+                                key={role.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                  setRoleForm((f) => ({ ...f, reportsToRoleId: role.id }));
+                                  setShowReportsToDropdown(false);
+                                  setReportsToSearch('');
+                                }}
+                                onKeyDown={(ev) => {
+                                  if (ev.key === 'Enter' || ev.key === ' ') {
+                                    setRoleForm((f) => ({ ...f, reportsToRoleId: role.id }));
+                                    setShowReportsToDropdown(false);
+                                    setReportsToSearch('');
+                                  }
+                                }}
+                                className={`flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 ${
+                                  selected ? 'bg-blue-50' : ''
+                                }`}
+                              >
+                                <div>
+                                  <p className="text-sm font-medium text-gray-800">{role.title}</p>
+                                  <p className="text-xs text-gray-400">
+                                    {role.department}
+                                    {role.reportsTo ? ` · under ${role.reportsTo}` : ''}
+                                  </p>
+                                </div>
+                                {selected && <span className="text-[#1B6B6B]">✓</span>}
+                              </div>
+                            );
+                          })}
+                        {reportsToOptions.filter((r) => {
+                          if (editingRoleId && r.id === editingRoleId) return false;
+                          if (!reportsToSearch.trim()) return true;
+                          const q = reportsToSearch.toLowerCase();
+                          return (
+                            (r.title || '').toLowerCase().includes(q) || (r.department || '').toLowerCase().includes(q)
+                          );
+                        }).length === 0 && (
+                          <p className="text-center py-4 text-sm text-gray-400">No roles found</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="sm:col-span-2 flex items-center gap-2">
                   <input
