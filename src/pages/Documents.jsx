@@ -266,10 +266,14 @@ export default function Documents() {
       ) : (
         <>
           {!canUpload && (
-            <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-100 rounded-xl mb-4">
-              <span className="text-gray-400 text-sm">
-                🔒 Document uploads are managed by HR. Contact your HR Manager to upload or change employee documents.
-              </span>
+            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100 mb-4">
+              <span className="text-2xl shrink-0">📂</span>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Document viewing only</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Only HR Managers can upload or change employee documents
+                </p>
+              </div>
             </div>
           )}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">

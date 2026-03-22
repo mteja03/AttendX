@@ -252,6 +252,7 @@ export default function EmployeeProfile() {
   const userRole = authRole;
   const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
   const canUpload = userRole === 'admin' || userRole === 'hrmanager';
+  const needsDriveToken = canUpload;
   const { success, error: showError } = useToast();
   const [employee, setEmployee] = useState(null);
   const { company } = useCompany();
@@ -2613,13 +2614,17 @@ export default function EmployeeProfile() {
       {tab === 'documents' && (
         <div className="space-y-6">
           {!canUpload && (
-            <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-100 rounded-xl mb-4">
-              <span className="text-gray-400 text-sm">
-                🔒 Document uploads are managed by HR. Contact your HR Manager to upload documents.
-              </span>
+            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100 mb-4">
+              <span className="text-2xl shrink-0">📂</span>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Document viewing only</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Only HR Managers can upload or manage documents
+                </p>
+              </div>
             </div>
           )}
-          {canUpload && !isTokenValid() && (
+          {needsDriveToken && !isTokenValid() && (
             <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4 gap-3 flex-wrap">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-amber-600 text-lg shrink-0">⏱️</span>

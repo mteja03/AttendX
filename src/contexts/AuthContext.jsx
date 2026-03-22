@@ -5,6 +5,10 @@ import { auth, googleProvider, db } from '../firebase/config';
 
 const AuthContext = createContext(null);
 
+export function roleNeedsDriveAccess(r) {
+  return r === 'admin' || r === 'hrmanager';
+}
+
 /** Drive access token still within stored expiry window (55 min buffer) */
 export function isTokenValid() {
   try {
@@ -98,15 +102,32 @@ export function AuthProvider({ children }) {
               console.warn('Could not refresh ID token:', e);
             }
 
-            const stored = localStorage.getItem('gat');
-            const expiryStr = localStorage.getItem('gat_expiry');
-            const expiry = expiryStr ? parseInt(expiryStr, 10) : null;
-            const isValid = stored && expiry && Date.now() < expiry;
+            const userRole = data.role || null;
+            const needsDrive = roleNeedsDriveAccess(userRole);
 
-            if (isValid) {
-              setGoogleAccessToken(stored);
-              // eslint-disable-next-line no-console
-              console.log('✓ Drive token restored from storage');
+            if (needsDrive) {
+              const stored = localStorage.getItem('gat');
+              const expiryStr = localStorage.getItem('gat_expiry');
+              const expiry = expiryStr ? parseInt(expiryStr, 10) : null;
+              const tokenStillValid = !!(stored && expiry && Date.now() < expiry);
+
+              if (stored && tokenStillValid) {
+                setGoogleAccessToken(stored);
+                // eslint-disable-next-line no-console
+                console.log('✓ Drive token restored');
+              } else {
+                try {
+                  localStorage.removeItem('gat');
+                  localStorage.removeItem('gat_expiry');
+                } catch (_) {
+                  // ignore
+                }
+                setGoogleAccessToken(null);
+                if (stored && !tokenStillValid) {
+                  // eslint-disable-next-line no-console
+                  console.log('Drive token expired, will refresh on next upload');
+                }
+              }
             } else {
               try {
                 localStorage.removeItem('gat');
@@ -115,8 +136,6 @@ export function AuthProvider({ children }) {
                 // ignore
               }
               setGoogleAccessToken(null);
-              // eslint-disable-next-line no-console
-              console.log('Drive token expired, will refresh on next upload');
             }
           } catch (_) {
             setGoogleAccessToken(null);
@@ -155,6 +174,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   const getValidToken = useCallback(async () => {
+    if (!roleNeedsDriveAccess(role)) {
+      return null;
+    }
+
     try {
       const stored = localStorage.getItem('gat');
       const expiryStr = localStorage.getItem('gat_expiry');
@@ -183,17 +206,14 @@ export function AuthProvider({ children }) {
       return null;
     }
     return null;
-  }, [persistDriveToken]);
+  }, [persistDriveToken, role]);
 
   const signInWithGoogle = async () => {
     setAuthError('');
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    const accessToken = credential?.accessToken;
-    if (accessToken) {
-      persistDriveToken(accessToken);
-    }
+    const accessToken = credential?.accessToken ?? null;
 
     if (user?.email?.toLowerCase() === 'mteja0852@gmail.com') {
       const email = 'mteja0852@gmail.com';
@@ -210,6 +230,35 @@ export function AuthProvider({ children }) {
           isActive: true,
           createdAt: new Date(),
         });
+      }
+    }
+
+    const email = user?.email?.toLowerCase();
+    let userRef = doc(db, 'users', email || '');
+    let userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) {
+      userRef = doc(db, 'users', user.uid);
+      userSnap = await getDoc(userRef);
+    }
+
+    const userRole = userSnap.exists() ? userSnap.data()?.role : null;
+    const needsDrive = roleNeedsDriveAccess(userRole);
+
+    if (needsDrive && accessToken) {
+      persistDriveToken(accessToken);
+      // eslint-disable-next-line no-console
+      console.log('✓ Drive token stored for', userRole);
+    } else {
+      try {
+        localStorage.removeItem('gat');
+        localStorage.removeItem('gat_expiry');
+      } catch (_) {
+        // ignore
+      }
+      setGoogleAccessToken(null);
+      if (!needsDrive) {
+        // eslint-disable-next-line no-console
+        console.log('Drive token not needed for role:', userRole);
       }
     }
   };
@@ -240,7 +289,7 @@ export function AuthProvider({ children }) {
       signInWithGoogle,
       signOut: signOutUser,
     }),
-    [currentUser, role, companyId, userPermissions, googleAccessToken, getValidToken, loading, authError, isTokenValid],
+    [currentUser, role, companyId, userPermissions, googleAccessToken, getValidToken, loading, authError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
