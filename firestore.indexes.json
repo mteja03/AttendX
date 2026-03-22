@@ -66,6 +66,16 @@
         { "fieldPath": "assignedToId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "employees",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "onboarding.status", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "employees",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "offboarding.status", "order": "ASCENDING" }]
     }
   ],
   "fieldOverrides": []

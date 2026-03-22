@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   collection,
@@ -8,11 +8,41 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  where,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import StatCard from '../components/StatCard';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { toDateString, toDisplayDate, toJSDate } from '../utils';
+
+const EMPTY_ASSET_STATS = {
+  total: 0,
+  assigned: 0,
+  available: 0,
+  damaged: 0,
+  consumableIssued: 0,
+};
+
+function enrichOnboarding(emp) {
+  const tasks = Array.isArray(emp.onboarding?.tasks) ? emp.onboarding.tasks : [];
+  const done = tasks.filter((t) => t.completed).length;
+  const total = tasks.length;
+  const pct = total ? Math.round((done / total) * 100) : emp.onboarding?.completionPct || 0;
+  return { ...emp, _onboardingDone: done, _onboardingTotal: total, _onboardingPct: pct };
+}
+
+function enrichOffboarding(emp) {
+  const tasks = Array.isArray(emp.offboarding?.tasks) ? emp.offboarding.tasks : [];
+  const done = tasks.filter((t) => t.completed).length;
+  const total = tasks.length;
+  const pct = total ? Math.round((done / total) * 100) : emp.offboarding?.completionPct || 0;
+  return { ...emp, _offDone: done, _offTotal: total, _offPct: pct };
+}
+
+function isFailedPrecondition(err) {
+  return err?.code === 'failed-precondition' || String(err?.message || '').toLowerCase().includes('index');
+}
 
 function UsersIcon({ className }) {
   return (
@@ -51,67 +81,176 @@ const STATUS_STYLE = {
 export default function Dashboard() {
   const { companyId } = useParams();
   const navigate = useNavigate();
+  const { role } = useAuth();
   const { success, error: showError } = useToast();
   const [employees, setEmployees] = useState([]);
   const [leaveList, setLeaveList] = useState([]);
-  const [assetStats, setAssetStats] = useState({
-    total: 0,
-    assigned: 0,
-    available: 0,
-    damaged: 0,
-    consumableIssued: 0,
-  });
-  const [loading, setLoading] = useState(true);
+  const [onboardingEmployees, setOnboardingEmployees] = useState([]);
+  const [offboardingEmployees, setOffboardingEmployees] = useState([]);
+  const [assetStats, setAssetStats] = useState(EMPTY_ASSET_STATS);
+  const [employeesLoaded, setEmployeesLoaded] = useState(false);
+  const [leaveLoaded, setLeaveLoaded] = useState(false);
   const [actioningId, setActioningId] = useState(null);
   const [birthdayCardOpen, setBirthdayCardOpen] = useState(true);
-  const [dashError, setDashError] = useState(null);
+
+  const showAssetOverview = role === 'admin' || role === 'hrmanager' || role === 'itmanager';
+
+  const fetchEmployees = useCallback(async () => {
+    if (!companyId) return;
+    try {
+      let snap;
+      try {
+        snap = await getDocs(query(collection(db, 'companies', companyId, 'employees'), orderBy('createdAt', 'desc')));
+      } catch (e) {
+        if (isFailedPrecondition(e)) {
+          snap = await getDocs(collection(db, 'companies', companyId, 'employees'));
+        } else {
+          throw e;
+        }
+      }
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      rows.sort((a, b) => {
+        const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds ?? 0;
+        const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds ?? 0;
+        return tb - ta;
+      });
+      setEmployees(rows);
+    } catch (e) {
+      console.error('Employees fetch:', e);
+      setEmployees([]);
+    } finally {
+      setEmployeesLoaded(true);
+    }
+  }, [companyId]);
+
+  const fetchLeave = useCallback(async () => {
+    if (!companyId) return;
+    try {
+      let snap;
+      try {
+        snap = await getDocs(query(collection(db, 'companies', companyId, 'leave'), orderBy('appliedAt', 'desc')));
+      } catch (e) {
+        if (isFailedPrecondition(e)) {
+          snap = await getDocs(collection(db, 'companies', companyId, 'leave'));
+        } else {
+          throw e;
+        }
+      }
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      rows.sort((a, b) => {
+        const ta = a.appliedAt?.toMillis?.() ?? a.appliedAt?.seconds ?? 0;
+        const tb = b.appliedAt?.toMillis?.() ?? b.appliedAt?.seconds ?? 0;
+        return tb - ta;
+      });
+      setLeaveList(rows);
+    } catch (e) {
+      console.error('Leave fetch:', e);
+      setLeaveList([]);
+    } finally {
+      setLeaveLoaded(true);
+    }
+  }, [companyId]);
+
+  const fetchAssets = useCallback(async () => {
+    if (!companyId) return;
+    try {
+      const snap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+      const assetData = snap.docs.map((d) => d.data());
+      const trackable = assetData.filter((a) => (a.mode || 'trackable') === 'trackable');
+      const consumable = assetData.filter((a) => (a.mode || 'trackable') === 'consumable');
+
+      setAssetStats({
+        total: assetData.length,
+        assigned: trackable.filter((a) => a.status === 'Assigned').length,
+        available: trackable.filter((a) => a.status === 'Available').length,
+        damaged: trackable.filter((a) => a.status === 'Damaged' || a.status === 'Lost').length,
+        consumableIssued: consumable.reduce((sum, a) => sum + (Number(a.issuedCount) || 0), 0),
+      });
+    } catch (e) {
+      console.error('Assets fetch:', e);
+      setAssetStats({ ...EMPTY_ASSET_STATS });
+    }
+  }, [companyId]);
+
+  const fetchOnboarding = useCallback(async () => {
+    if (!companyId) return;
+    const mapAndSort = (rows) =>
+      rows
+        .map(enrichOnboarding)
+        .sort((a, b) => (b._onboardingPct || 0) - (a._onboardingPct || 0))
+        .slice(0, 6);
+
+    try {
+      const snap = await getDocs(
+        query(collection(db, 'companies', companyId, 'employees'), where('onboarding.status', '==', 'in_progress')),
+      );
+      setOnboardingEmployees(mapAndSort(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+    } catch (e) {
+      if (isFailedPrecondition(e)) {
+        try {
+          const snap = await getDocs(collection(db, 'companies', companyId, 'employees'));
+          const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const filtered = all.filter((emp) => emp.onboarding?.status === 'in_progress');
+          setOnboardingEmployees(mapAndSort(filtered));
+        } catch (e2) {
+          console.error('Onboarding fallback:', e2);
+          setOnboardingEmployees([]);
+        }
+      } else {
+        console.error('Onboarding fetch:', e);
+        setOnboardingEmployees([]);
+      }
+    }
+  }, [companyId]);
+
+  const fetchOffboarding = useCallback(async () => {
+    if (!companyId) return;
+    const mapAndSort = (rows) =>
+      rows
+        .map(enrichOffboarding)
+        .sort((a, b) => {
+          const aExit = toJSDate(a.offboarding?.exitDate);
+          const bExit = toJSDate(b.offboarding?.exitDate);
+          if (aExit && bExit) return aExit - bExit;
+          if (aExit) return -1;
+          if (bExit) return 1;
+          return (b._offPct || 0) - (a._offPct || 0);
+        })
+        .slice(0, 6);
+
+    try {
+      const snap = await getDocs(
+        query(collection(db, 'companies', companyId, 'employees'), where('offboarding.status', '==', 'in_progress')),
+      );
+      setOffboardingEmployees(mapAndSort(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+    } catch (e) {
+      if (isFailedPrecondition(e)) {
+        try {
+          const snap = await getDocs(collection(db, 'companies', companyId, 'employees'));
+          const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const filtered = all.filter((emp) => emp.offboarding?.status === 'in_progress');
+          setOffboardingEmployees(mapAndSort(filtered));
+        } catch (e2) {
+          console.error('Offboarding fallback:', e2);
+          setOffboardingEmployees([]);
+        }
+      } else {
+        console.error('Offboarding fetch:', e);
+        setOffboardingEmployees([]);
+      }
+    }
+  }, [companyId]);
 
   useEffect(() => {
     if (!companyId) return;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [empSnap, leaveSnap] = await Promise.all([
-          getDocs(query(collection(db, 'companies', companyId, 'employees'), orderBy('createdAt', 'desc'))),
-          getDocs(query(collection(db, 'companies', companyId, 'leave'), orderBy('appliedAt', 'desc'))),
-        ]);
-        setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setLeaveList(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (err) {
-        console.error(err);
-        setDashError(err);
-        showError('Failed to load dashboard data');
-      }
-      setLoading(false);
-    };
-    load();
-  }, [companyId, showError]);
-
-  useEffect(() => {
-    if (!companyId) return;
-    const loadAssets = async () => {
-      try {
-        const assetsSnap = await getDocs(collection(db, 'companies', companyId, 'assets'));
-        const assets = assetsSnap.docs.map((d) => d.data());
-        const trackable = assets.filter((a) => (a.mode || 'trackable') === 'trackable');
-        const consumable = assets.filter((a) => (a.mode || 'trackable') === 'consumable');
-
-        setAssetStats({
-          total: assets.length,
-          assigned: trackable.filter((a) => a.status === 'Assigned').length,
-          available: trackable.filter((a) => a.status === 'Available').length,
-          damaged: trackable.filter((a) => a.status === 'Damaged' || a.status === 'Lost').length,
-          consumableIssued: consumable.reduce((sum, a) => sum + (a.issuedCount || 0), 0),
-        });
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to load asset stats', err);
-        setDashError(err);
-        showError('Failed to load asset stats');
-      }
-    };
-    loadAssets();
-  }, [companyId, showError]);
+    setEmployeesLoaded(false);
+    setLeaveLoaded(false);
+    fetchEmployees();
+    fetchLeave();
+    fetchAssets();
+    fetchOnboarding();
+    fetchOffboarding();
+  }, [companyId, fetchEmployees, fetchLeave, fetchAssets, fetchOnboarding, fetchOffboarding]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -188,41 +327,6 @@ export default function Dashboard() {
     return { todayList, upcomingList, thisMonthTotal, thisMonthSample };
   }, [employees]);
 
-  const onboardingEmployees = useMemo(() => {
-    return employees
-      .filter((e) => e?.onboarding?.status === 'in_progress')
-      .map((e) => {
-        const tasks = Array.isArray(e.onboarding?.tasks) ? e.onboarding.tasks : [];
-        const done = tasks.filter((t) => t.completed).length;
-        const total = tasks.length;
-        const pct = total ? Math.round((done / total) * 100) : e.onboarding?.completionPct || 0;
-        return { ...e, _onboardingDone: done, _onboardingTotal: total, _onboardingPct: pct };
-      })
-      .sort((a, b) => (b._onboardingPct || 0) - (a._onboardingPct || 0))
-      .slice(0, 6);
-  }, [employees]);
-
-  const offboardingEmployees = useMemo(() => {
-    return employees
-      .filter((e) => e?.offboarding?.status === 'in_progress')
-      .map((e) => {
-        const tasks = Array.isArray(e.offboarding?.tasks) ? e.offboarding.tasks : [];
-        const done = tasks.filter((t) => t.completed).length;
-        const total = tasks.length;
-        const pct = total ? Math.round((done / total) * 100) : e.offboarding?.completionPct || 0;
-        return { ...e, _offDone: done, _offTotal: total, _offPct: pct };
-      })
-      .sort((a, b) => {
-        const aExit = toJSDate(a.offboarding?.exitDate);
-        const bExit = toJSDate(b.offboarding?.exitDate);
-        if (aExit && bExit) return aExit - bExit;
-        if (aExit) return -1;
-        if (bExit) return 1;
-        return (b._offPct || 0) - (a._offPct || 0);
-      })
-      .slice(0, 6);
-  }, [employees]);
-
   const handleApprove = async (leaveDoc) => {
     setActioningId(leaveDoc.id);
     try {
@@ -280,6 +384,8 @@ export default function Dashboard() {
     { title: 'New Joiners (30 days)', value: String(stats.newJoiners), icon: UserAddIcon, subtitle: 'Last 30 days' },
   ];
 
+  const statsLoading = !employeesLoaded || !leaveLoaded;
+
   return (
     <div className="p-4 sm:p-8">
       <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
@@ -289,23 +395,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {dashError ? (
-        <div className="p-8 text-center">
-          <p className="text-red-500 mb-4">
-            Something went wrong loading the dashboard.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setDashError(null);
-              window.location.reload();
-            }}
-            className="px-4 py-2 bg-[#1B6B6B] text-white rounded-lg text-sm"
-          >
-            Reload
-          </button>
-        </div>
-      ) : loading ? (
+      {statsLoading ? (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="bg-white rounded-xl border border-slate-200 p-6 animate-pulse">
@@ -315,46 +405,48 @@ export default function Dashboard() {
           ))}
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-            {statCards.map((stat) => (
-              <StatCard key={stat.title} {...stat} />
-            ))}
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+          {statCards.map((stat) => (
+            <StatCard key={stat.title} {...stat} />
+          ))}
+        </div>
+      )}
+
+      {showAssetOverview && (
+        <div className="bg-white border rounded-xl p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-gray-700">Asset Overview</h3>
+            <button
+              type="button"
+              onClick={() => navigate(`/company/${companyId}/assets`)}
+              className="text-xs text-[#1B6B6B] hover:underline"
+            >
+              View all →
+            </button>
           </div>
 
-          <div className="bg-white border rounded-xl p-4 mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-700">Asset Overview</h3>
-              <button
-                type="button"
-                onClick={() => navigate(`/company/${companyId}/assets`)}
-                className="text-xs text-[#1B6B6B] hover:underline"
-              >
-                View all →
-              </button>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="text-center">
+              <p className="text-lg font-semibold text-gray-800">{assetStats?.total ?? 0}</p>
+              <p className="text-xs text-gray-400">Total assets</p>
             </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="text-center">
-                <p className="text-lg font-semibold text-gray-800">{assetStats.total}</p>
-                <p className="text-xs text-gray-400">Total assets</p>
-              </div>
-              <div className="text-center">
-                <p className="text-lg font-semibold text-green-600">{assetStats.assigned}</p>
-                <p className="text-xs text-gray-400">Assigned</p>
-              </div>
-              <div className="text-center">
-                <p className="text-lg font-semibold text-[#1B6B6B]">{assetStats.available}</p>
-                <p className="text-xs text-gray-400">Available</p>
-              </div>
-              <div className="text-center">
-                <p className="text-lg font-semibold text-red-500">{assetStats.damaged}</p>
-                <p className="text-xs text-gray-400">Damaged/Lost</p>
-              </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-green-600">{assetStats?.assigned ?? 0}</p>
+              <p className="text-xs text-gray-400">Assigned</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-[#1B6B6B]">{assetStats?.available ?? 0}</p>
+              <p className="text-xs text-gray-400">Available</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-red-500">{assetStats?.damaged ?? 0}</p>
+              <p className="text-xs text-gray-400">Damaged/Lost</p>
             </div>
           </div>
+        </div>
+      )}
 
-          <div className="bg-white border rounded-xl p-4 mb-6">
+      <div className="bg-white border rounded-xl p-4 mb-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
                 🎯 Onboarding in Progress
@@ -468,8 +560,6 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-        </>
-      )}
 
       <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3 mb-6">
         <button
@@ -586,7 +676,7 @@ export default function Dashboard() {
         <h2 className="text-lg font-semibold text-slate-800 px-6 py-4 border-b border-slate-100">
           Recent Leave Requests
         </h2>
-        {loading ? (
+        {!leaveLoaded ? (
           <div className="p-6 text-slate-500 text-sm">Loading…</div>
         ) : recentLeave.length === 0 ? (
           <div className="p-8 text-center text-slate-500 text-sm">No leave requests yet.</div>
