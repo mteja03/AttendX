@@ -324,14 +324,22 @@ export default function Reports() {
           ).length;
           return {
             id: role.id,
+            title: role.title,
             role: role.title,
             filled,
             salaryBand: role.salaryBand,
+            reportsTo: role.reportsTo,
           };
         })
-        .sort((a, b) => (a.role || '').localeCompare(b.role || '')),
+        .sort((a, b) => (a.title || '').localeCompare(b.title || '')),
     [roles, employees],
   );
+
+  const roleVacancySummary = useMemo(() => {
+    const totalFilled = roleVacancyData.reduce((sum, r) => sum + r.filled, 0);
+    const totalVacant = roleVacancyData.filter((r) => r.filled === 0).length;
+    return { totalFilled, totalVacant };
+  }, [roleVacancyData]);
 
   const typeData = useMemo(() => {
     const acc = {};
@@ -1181,54 +1189,71 @@ export default function Reports() {
             </ChartCard>
           </div>
 
-          <ChartCard title="Role vacancy analysis">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm border-collapse">
-                <thead>
-                  <tr className="text-left text-gray-600 border-b border-gray-100">
-                    <th className="py-2 pr-3 font-semibold">Role</th>
-                    <th className="py-2 pr-3 font-semibold">Employees</th>
-                    <th className="py-2 pr-3 font-semibold">Salary band</th>
-                    <th className="py-2 font-semibold">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roleVacancyData.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-6 text-center text-gray-400 text-sm">
-                        No roles defined. Add roles in Library → Roles &amp; Responsibilities.
-                      </td>
-                    </tr>
-                  ) : (
-                    roleVacancyData.map((r) => (
-                      <tr key={r.id || r.role} className="border-t border-gray-100">
-                        <td className="py-2 pr-3 font-medium text-gray-900">{r.role}</td>
-                        <td className="py-2 pr-3">
-                          <span className={r.filled > 0 ? 'text-green-600 font-medium' : 'text-gray-400'}>
-                            {r.filled} employee{r.filled !== 1 ? 's' : ''}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-3 text-[#1B6B6B] font-medium">
-                          {r.salaryBand?.min != null && r.salaryBand?.min !== ''
-                            ? `₹${formatLakhs(r.salaryBand.min)}–${formatLakhs(r.salaryBand.max)}`
-                            : '—'}
-                        </td>
-                        <td className="py-2">
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                              r.filled > 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                            }`}
-                          >
-                            {r.filled > 0 ? 'Filled' : 'Vacant'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+          <div className="bg-white border border-gray-100 rounded-2xl p-5 mt-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-700">Role Vacancy Analysis</h3>
+              <div className="flex gap-3 text-xs">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                  {roleVacancySummary.totalFilled} filled
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                  {roleVacancySummary.totalVacant} vacant
+                </span>
+              </div>
             </div>
-          </ChartCard>
+            {roleVacancyData.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-sm text-gray-400">No roles defined yet.</p>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/company/${companyId}/policies?tab=roles`)}
+                  className="text-sm text-[#1B6B6B] hover:underline mt-1"
+                >
+                  Add roles in Library →
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {roleVacancyData.map((role) => (
+                  <div
+                    key={role.id || role.title}
+                    className="flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{role.title}</p>
+                      {role.reportsTo && <p className="text-xs text-gray-400">Reports to {role.reportsTo}</p>}
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      {role.salaryBand?.min != null && role.salaryBand?.min !== '' && (
+                        <span className="text-xs text-[#1B6B6B] bg-[#E8F5F5] px-2 py-0.5 rounded-full whitespace-nowrap">
+                          ₹{formatLakhs(role.salaryBand.min)}–{formatLakhs(role.salaryBand.max)}
+                        </span>
+                      )}
+                      <div className="text-right">
+                        <span
+                          className={`text-sm font-semibold ${role.filled > 0 ? 'text-green-600' : 'text-amber-500'}`}
+                        >
+                          {role.filled}
+                        </span>
+                        <span className="text-xs text-gray-400 ml-1">
+                          {role.filled === 1 ? 'employee' : 'employees'}
+                        </span>
+                      </div>
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded-full font-medium w-16 text-center ${
+                          role.filled > 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                        }`}
+                      >
+                        {role.filled > 0 ? 'Filled' : 'Vacant'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="mt-4 flex flex-wrap gap-2 items-center">
             <button

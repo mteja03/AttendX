@@ -282,26 +282,28 @@ export default function Dashboard() {
 
   const recentLeave = useMemo(() => leaveList.slice(0, 5), [leaveList]);
 
-  const upcomingLeaveThisWeek = useMemo(() => {
+  const onLeaveThisWeek = useMemo(() => {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const weekEnd = new Date(today);
-    weekEnd.setDate(weekEnd.getDate() + 7);
-    const todayStr = toDateString(today);
-    const weekEndStr = toDateString(weekEnd);
-    const ids = new Set();
-    leaveList.forEach((l) => {
-      if (l.status !== 'Approved') return;
-      const start = toDateString(l.startDate);
-      const end = toDateString(l.endDate);
-      if (!start || !end) return;
-      if (end < todayStr || start > weekEndStr) return;
-      if (l.employeeId) ids.add(l.employeeId);
-    });
-    return [...ids]
-      .map((id) => employees.find((e) => e.id === id))
-      .filter(Boolean)
-      .slice(0, 8);
-  }, [leaveList, employees]);
+    weekEnd.setDate(today.getDate() + 7);
+    const todayTime = today.getTime();
+    const weekEndTime = weekEnd.getTime();
+
+    const overlaps = (leave) => {
+      if (leave.status !== 'Approved') return false;
+      const start = toJSDate(leave.startDate);
+      const end = toJSDate(leave.endDate);
+      if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+      const s = new Date(start);
+      s.setHours(0, 0, 0, 0);
+      const e = new Date(end);
+      e.setHours(0, 0, 0, 0);
+      return s.getTime() <= weekEndTime && e.getTime() >= todayTime;
+    };
+
+    return employees.filter((emp) => leaveList.some((l) => l.employeeId === emp.id && overlaps(l)));
+  }, [employees, leaveList]);
 
   const birthdayData = useMemo(() => {
     const now = new Date();
@@ -433,33 +435,64 @@ export default function Dashboard() {
         </div>
       )}
 
-      {!statsLoading && upcomingLeaveThisWeek.length > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6 px-1">
-          <p className="text-sm text-gray-600">
-            <span className="font-medium text-gray-800">Coming up:</span>{' '}
-            {upcomingLeaveThisWeek.length} employee{upcomingLeaveThisWeek.length !== 1 ? 's' : ''} on approved leave in
-            the next 7 days
-          </p>
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex -space-x-2">
-              {upcomingLeaveThisWeek.map((e) => (
-                <button
-                  key={e.id}
-                  type="button"
-                  onClick={() => handleEmployeeClick(e.id)}
-                  className="w-8 h-8 rounded-full border-2 border-white bg-[#C5E8E8] text-[10px] font-semibold text-[#1B6B6B] flex items-center justify-center hover:ring-2 hover:ring-[#4ECDC4] transition-all"
-                  title={e.fullName || e.empId}
-                >
-                  {(e.fullName || '?').charAt(0)}
-                </button>
-              ))}
+      {!statsLoading && onLeaveThisWeek.length > 0 && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => navigate(`/company/${companyId}/calendar`)}
+          onKeyDown={(ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') navigate(`/company/${companyId}/calendar`);
+          }}
+          className="bg-white border border-gray-100 rounded-2xl p-4 mb-6 cursor-pointer hover:border-[#4ECDC4] transition-colors group"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-base">📅</span>
+              <h3 className="text-sm font-medium text-gray-700">On Leave This Week</h3>
+              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                {onLeaveThisWeek.length} employee{onLeaveThisWeek.length > 1 ? 's' : ''}
+              </span>
             </div>
-            <Link
-              to={`/company/${companyId}/calendar`}
-              className="text-sm text-[#1B6B6B] font-medium hover:underline whitespace-nowrap"
-            >
-              Open calendar →
-            </Link>
+            <span className="text-xs text-[#1B6B6B] group-hover:underline">View Calendar →</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {onLeaveThisWeek.slice(0, 8).map((emp) => {
+              const leave = leaveList.find(
+                (l) =>
+                  l.employeeId === emp.id &&
+                  l.status === 'Approved' &&
+                  (() => {
+                    const start = toJSDate(l.startDate);
+                    const end = toJSDate(l.endDate);
+                    if (!start || !end) return false;
+                    const t0 = new Date();
+                    t0.setHours(0, 0, 0, 0);
+                    const t7 = new Date(t0);
+                    t7.setDate(t7.getDate() + 7);
+                    const s = new Date(start);
+                    s.setHours(0, 0, 0, 0);
+                    const e = new Date(end);
+                    e.setHours(0, 0, 0, 0);
+                    return s.getTime() <= t7.getTime() && e.getTime() >= t0.getTime();
+                  })(),
+              );
+              const leaveTypeLabel = (leave?.leaveType || leave?.type || '').split(' ')[0];
+              return (
+                <div
+                  key={emp.id}
+                  className="flex items-center gap-1.5 bg-amber-50 border border-amber-100 rounded-full px-2.5 py-1"
+                >
+                  <div className="w-5 h-5 rounded-full bg-amber-200 flex items-center justify-center text-xs font-medium text-amber-800 flex-shrink-0">
+                    {emp.fullName?.charAt(0)}
+                  </div>
+                  <span className="text-xs text-amber-800 font-medium">{emp.fullName?.split(' ')[0]}</span>
+                  {leave && leaveTypeLabel && <span className="text-xs text-amber-500">· {leaveTypeLabel}</span>}
+                </div>
+              );
+            })}
+            {onLeaveThisWeek.length > 8 && (
+              <div className="flex items-center px-2.5 py-1 text-xs text-gray-400">+{onLeaveThisWeek.length - 8} more</div>
+            )}
           </div>
         </div>
       )}

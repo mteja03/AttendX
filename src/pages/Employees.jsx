@@ -95,6 +95,38 @@ const getDeptColor = (dept) => {
   return colors[dept] || '#9CA3AF';
 };
 
+/** CTC vs role salary band — guideline only, not blocking save */
+function validateCTC(ctcValue, role) {
+  if (!role?.salaryBand || role.salaryBand.min === '' || role.salaryBand.min == null) return null;
+  const str = ctcValue != null ? String(ctcValue).trim() : '';
+  if (!str) return null;
+  const ctc = Number(str);
+  if (Number.isNaN(ctc)) return null;
+  const min = Number(role.salaryBand.min);
+  const max = Number(role.salaryBand.max);
+  const title = role.title || 'this role';
+  if (Number.isNaN(min)) return null;
+  const maxOk = !Number.isNaN(max) && role.salaryBand.max !== '' && role.salaryBand.max != null;
+  const bandStr = `₹${formatLakhs(min)}–${maxOk ? formatLakhs(max) : '—'}`;
+
+  if (ctc < min) {
+    return {
+      type: 'warning',
+      message: `⚠️ CTC ₹${formatLakhs(ctc)} is below ${title} band (${bandStr})`,
+    };
+  }
+  if (maxOk && ctc > max) {
+    return {
+      type: 'warning',
+      message: `⚠️ CTC ₹${formatLakhs(ctc)} is above ${title} band (₹${formatLakhs(min)}–${formatLakhs(max)})`,
+    };
+  }
+  return {
+    type: 'success',
+    message: `✓ CTC is within ${title} band (${maxOk ? `₹${formatLakhs(min)}–${formatLakhs(max)}` : `≥ ₹${formatLakhs(min)}`})`,
+  };
+}
+
 const initialForm = {
   fullName: '',
   email: '',
@@ -171,6 +203,7 @@ export default function Employees() {
   const [roleSearch, setRoleSearch] = useState('');
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
+  const [ctcValidation, setCtcValidation] = useState(null);
   const roleDropdownRef = useRef(null);
 
   useEffect(() => {
@@ -536,6 +569,7 @@ export default function Employees() {
     setShowRoleDropdown(false);
     setManagerSearch('');
     setShowManagerDropdown(false);
+    setCtcValidation(null);
   };
 
   const handleFormChange = (e) => {
@@ -546,29 +580,7 @@ export default function Employees() {
   };
 
   useEffect(() => {
-    if (!selectedRole?.salaryBand || selectedRole.salaryBand.min === '' || selectedRole.salaryBand.min == null) {
-      setFormWarnings((prev) => ({ ...prev, ctcPerAnnum: null }));
-      return;
-    }
-    const ctc = form.ctcPerAnnum ? Number(form.ctcPerAnnum) : NaN;
-    if (!form.ctcPerAnnum || Number.isNaN(ctc)) {
-      setFormWarnings((prev) => ({ ...prev, ctcPerAnnum: null }));
-      return;
-    }
-    const min = Number(selectedRole.salaryBand.min);
-    const max = Number(selectedRole.salaryBand.max);
-    if (Number.isNaN(min) || Number.isNaN(max)) {
-      setFormWarnings((prev) => ({ ...prev, ctcPerAnnum: null }));
-      return;
-    }
-    if (ctc < min || ctc > max) {
-      setFormWarnings((prev) => ({
-        ...prev,
-        ctcPerAnnum: `⚠️ CTC ${(ctc / 100000).toFixed(1)}L is outside the ${selectedRole.title} salary band (₹${formatLakhs(min)}–₹${formatLakhs(max)})`,
-      }));
-    } else {
-      setFormWarnings((prev) => ({ ...prev, ctcPerAnnum: null }));
-    }
+    setCtcValidation(validateCTC(form.ctcPerAnnum, selectedRole));
   }, [selectedRole, form.ctcPerAnnum]);
 
   const validate = () => {
@@ -1501,12 +1513,9 @@ export default function Employees() {
                       </div>
                     </div>
                     {selectedRole?.salaryBand?.min != null && selectedRole?.salaryBand?.min !== '' && (
-                      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#1B6B6B] bg-[#E8F5F5] px-3 py-1.5 rounded-lg">
-                        <span>ℹ️</span>
-                        <span>
-                          Salary band for this role: ₹{formatLakhs(selectedRole.salaryBand.min)} – ₹
-                          {formatLakhs(selectedRole.salaryBand.max)} per annum
-                        </span>
+                      <div className="mt-1.5 text-xs text-[#1B6B6B] bg-[#E8F5F5] px-3 py-1.5 rounded-lg">
+                        💰 {selectedRole.title} salary band: ₹{formatLakhs(selectedRole.salaryBand.min)} – ₹
+                        {formatLakhs(selectedRole.salaryBand.max)} per annum
                       </div>
                     )}
                     {showRoleDropdown && (
@@ -1514,7 +1523,7 @@ export default function Employees() {
                         <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
                           <input
                             autoFocus
-                            placeholder="Search by role or department…"
+                            placeholder="Search by role or reports-to…"
                             value={roleSearch}
                             onChange={(e) => setRoleSearch(e.target.value)}
                             className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]"
@@ -1770,10 +1779,28 @@ export default function Employees() {
                   Compensation
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
+                  <div className="sm:col-span-2">
                     <label className="block text-xs font-medium text-slate-600 mb-1">CTC per annum</label>
-                    <input type="number" min="0" name="ctcPerAnnum" value={form.ctcPerAnnum} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
-                    {formWarnings.ctcPerAnnum && <p className="text-xs text-amber-600 mt-1">{formWarnings.ctcPerAnnum}</p>}
+                    <input
+                      type="number"
+                      min="0"
+                      name="ctcPerAnnum"
+                      value={form.ctcPerAnnum}
+                      onChange={handleFormChange}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                    />
+                    {ctcValidation && (
+                      <div
+                        className={`flex items-center gap-2 mt-1.5 px-3 py-1.5 rounded-lg text-xs ${
+                          ctcValidation.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                        }`}
+                      >
+                        {ctcValidation.message}
+                      </div>
+                    )}
+                    {selectedRole?.salaryBand?.min != null && selectedRole?.salaryBand?.min !== '' && (
+                      <p className="text-xs text-gray-400 mt-1.5">This is a guideline, not a restriction.</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Basic Salary / month</label>

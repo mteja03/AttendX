@@ -497,7 +497,7 @@ export default function Library() {
   }, [searchParams]);
 
   useEffect(() => {
-    const policyId = searchParams.get('policyId');
+    const policyId = searchParams.get('policyId') || searchParams.get('policy');
     if (!policyId || !policies.length) return;
     const p = policies.find((x) => x.id === policyId);
     if (p) {
@@ -505,6 +505,7 @@ export default function Library() {
       setViewingPolicy(p);
       const next = new URLSearchParams(searchParams);
       next.delete('policyId');
+      next.delete('policy');
       setSearchParams(next, { replace: true });
     }
   }, [policies, searchParams, setSearchParams]);

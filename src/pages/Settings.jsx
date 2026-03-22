@@ -1493,26 +1493,27 @@ export default function Settings() {
                           />
                         </div>
 
-                        {taskSuggestsPolicyLink(t.title, t.description) && (
-                          <p className="text-xs text-[#1B6B6B] mt-2 bg-[#E8F5F5] rounded-lg px-2 py-1.5">
-                            Link to a policy in Library?
-                          </p>
+                        {policiesForOnboarding.length > 0 && (
+                          <div className="mt-1.5">
+                            {taskSuggestsPolicyLink(t.title, t.description) && (
+                              <p className="text-xs text-[#1B6B6B] mb-1.5 bg-[#E8F5F5] rounded-lg px-2 py-1.5">
+                                Link to a policy in Library?
+                              </p>
+                            )}
+                            <select
+                              value={t.linkedPolicyId || ''}
+                              onChange={(e) => updateTask(t.id, 'linkedPolicyId', e.target.value)}
+                              className="w-full text-xs border border-slate-300 rounded-lg px-2 py-1.5 text-gray-600 bg-white"
+                            >
+                              <option value="">No linked policy</option>
+                              {policiesForOnboarding.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  📋 {p.title}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         )}
-                        <div className="mt-2">
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Link to policy (optional)</label>
-                          <select
-                            value={t.linkedPolicyId || ''}
-                            onChange={(e) => updateTask(t.id, 'linkedPolicyId', e.target.value)}
-                            className="w-full max-w-md text-xs border border-slate-300 rounded-lg px-2 py-1.5"
-                          >
-                            <option value="">No linked policy</option>
-                            {policiesForOnboarding.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.title}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3">
                           <div>

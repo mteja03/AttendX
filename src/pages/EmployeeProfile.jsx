@@ -1352,6 +1352,10 @@ export default function EmployeeProfile() {
         console.warn('No offboarding template found, using default:', e?.message || e);
       }
 
+      const assetsSnap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+      const latestAssets = assetsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setAssetList(latestAssets);
+
       const exitDateTs = Timestamp.fromDate(new Date(offboardingExitDate));
       const now = Timestamp.now();
 
@@ -1375,6 +1379,53 @@ export default function EmployeeProfile() {
         }))
         .map((t) => Object.fromEntries(Object.entries(t).filter(([, v]) => v !== undefined)));
 
+      const modeOf = (a) => a.mode || 'trackable';
+      const assetRows = [];
+      latestAssets.forEach((a) => {
+        if (modeOf(a) === 'trackable' && a.assignedToId === empId && a.status === 'Assigned') {
+          assetRows.push({ asset: a, mode: 'trackable' });
+        }
+        if (modeOf(a) === 'consumable' && Array.isArray(a.assignments)) {
+          a.assignments.forEach((asgn, idx) => {
+            if (asgn.employeeId === empId && !asgn.returned) {
+              assetRows.push({ asset: a, mode: 'consumable', assignmentIndex: idx, asgn });
+            }
+          });
+        }
+      });
+
+      const maxOrder = sanitized.reduce((m, t) => Math.max(m, Number(t.order) || 0), 0);
+      const assetTasks = assetRows.map((row, i) => {
+        const a = row.asset;
+        const descParts = [`Asset ID: ${a.assetId || a.id}`];
+        if (a.serialNumber) descParts.push(`SN: ${a.serialNumber}`);
+        if (row.mode === 'consumable') {
+          descParts.push(`Quantity issued: ${row.asgn?.quantity ?? 1}`);
+        }
+        return {
+          id: `asset_return_${a.id}_${row.mode}_${row.assignmentIndex ?? 't'}_${i}`,
+          title: `Return ${a.name || a.assetId || 'asset'}`,
+          description: descParts.join(' · '),
+          category: 'Asset Return',
+          assignedTo: 'admin',
+          daysBefore: 0,
+          isRequired: a.isReturnable !== false,
+          order: maxOrder + 1 + i,
+          assetId: a.id,
+          assetMode: row.mode,
+          consumableAssignmentIndex: row.assignmentIndex,
+          consumableIssueSeconds: row.asgn?.issueDate?.seconds ?? row.asgn?.issueDate?._seconds ?? null,
+          isAssetTask: true,
+          completed: false,
+          completedAt: null,
+          completedBy: null,
+          notes: '',
+          dueDate: calculateOffboardingDueDate(exitDateTs, 0),
+        };
+      });
+
+      const allTasks = [...sanitized, ...assetTasks];
+
       const payload = {
         offboarding: {
           status: 'in_progress',
@@ -1383,7 +1434,7 @@ export default function EmployeeProfile() {
           startedAt: now,
           completedAt: null,
           completionPct: 0,
-          tasks: sanitized,
+          tasks: allTasks,
         },
         status: 'Offboarding',
         updatedAt: serverTimestamp(),
@@ -1402,6 +1453,7 @@ export default function EmployeeProfile() {
 
   const markOffboardingTaskComplete = async (taskId, notes) => {
     if (!companyId || !empId || !employee || !currentUser || !offboarding) return;
+    const taskMeta = offTasks.find((t) => t.id === taskId);
     const now = Timestamp.now();
     const nextTasks = offTasks.map((t) =>
       t.id === taskId
@@ -1427,9 +1479,85 @@ export default function EmployeeProfile() {
     };
 
     await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
+
+    let assetAutoReturned = false;
+    if (taskMeta?.isAssetTask && taskMeta?.assetId) {
+      try {
+        const assetRef = doc(db, 'companies', companyId, 'assets', taskMeta.assetId);
+        const assetSnap = await getDoc(assetRef);
+        if (assetSnap.exists()) {
+          const ad = assetSnap.data();
+          const mode = taskMeta.assetMode || ad.mode || 'trackable';
+          if (mode === 'trackable' && ad.assignedToId === empId && ad.status === 'Assigned') {
+            const returnTs = Timestamp.now();
+            const historyEntry = {
+              action: 'returned',
+              employeeId: empId,
+              employeeName: employee.fullName || '',
+              date: returnTs,
+              condition: ad.condition || 'Good',
+              notes: 'Returned during offboarding',
+              performedBy: currentUser.email || '',
+            };
+            await updateDoc(assetRef, {
+              status: 'Available',
+              assignedToId: null,
+              assignedToName: null,
+              assignedToEmpId: null,
+              returnDate: returnTs,
+              history: [...(Array.isArray(ad.history) ? ad.history : []), historyEntry],
+            });
+            assetAutoReturned = true;
+          } else if (mode === 'consumable' && taskMeta.consumableAssignmentIndex != null) {
+            const assignments = Array.isArray(ad.assignments) ? [...ad.assignments] : [];
+            const idx = taskMeta.consumableAssignmentIndex;
+            const asgn = assignments[idx];
+            if (asgn && asgn.employeeId === empId && !asgn.returned) {
+              const qty = Number(asgn.quantity) || 1;
+              const returnTs = Timestamp.now();
+              const nextAssignments = assignments.map((x, j) =>
+                j === idx ? { ...x, quantity: 0, returned: true, returnDate: returnTs } : x,
+              );
+              await updateDoc(assetRef, {
+                assignments: nextAssignments,
+                availableStock: (Number(ad.availableStock) || 0) + qty,
+                issuedCount: Math.max(0, (Number(ad.issuedCount) || 0) - qty),
+                history: [
+                  ...(Array.isArray(ad.history) ? ad.history : []),
+                  {
+                    action: 'returned',
+                    employeeId: empId,
+                    employeeName: employee.fullName || '',
+                    quantity: qty,
+                    date: returnTs,
+                    notes: 'Returned during offboarding',
+                    performedBy: currentUser.email || '',
+                  },
+                ],
+              });
+              assetAutoReturned = true;
+            }
+          }
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('Could not auto-return asset:', e?.message || e);
+      }
+      if (assetAutoReturned) {
+        try {
+          const snap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+          setAssetList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
     setEmployee((prev) => (prev ? { ...prev, offboarding: payload.offboarding, status: payload.status } : prev));
     if (status === 'completed') {
       success(`✅ Offboarding completed for ${employee.fullName}! Employee has been deactivated.`);
+    } else if (assetAutoReturned) {
+      success(`✓ ${taskMeta?.title || 'Task'} marked complete and asset returned in inventory`);
     } else {
       success('Task marked complete');
     }
@@ -3410,13 +3538,16 @@ export default function EmployeeProfile() {
                           )}
 
                           {task.linkedPolicyId && (
-                            <Link
-                              to={`/company/${companyId}/library?tab=policies&policyId=${task.linkedPolicyId}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-xs text-[#1B6B6B] hover:underline mt-1 inline-block font-medium"
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/company/${companyId}/policies?policy=${task.linkedPolicyId}`);
+                              }}
+                              className="text-xs text-[#1B6B6B] hover:underline flex items-center gap-1 mt-1 text-left"
                             >
-                              View policy
-                            </Link>
+                              📋 View linked policy →
+                            </button>
                           )}
 
                           <div className="flex items-center gap-3 mt-1.5 flex-wrap">
@@ -3647,6 +3778,21 @@ export default function EmployeeProfile() {
                               )}
                             </div>
                             {task.description && <p className="text-xs text-gray-400 mt-0.5">{task.description}</p>}
+                            {task.isAssetTask && (
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">📦 Asset Return</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/company/${companyId}/assets`);
+                                  }}
+                                  className="text-xs text-[#1B6B6B] hover:underline"
+                                >
+                                  View in Assets →
+                                </button>
+                              </div>
+                            )}
                             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                               <span className="text-xs text-gray-400">Due: {task.dueDate ? toDisplayDate(task.dueDate) : '—'}</span>
                               <span className="text-xs text-gray-400">· {getAssignedLabel(task.assignedTo)}</span>
