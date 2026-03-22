@@ -12,6 +12,7 @@ import {
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import PageLoader from '../components/PageLoader';
 import { canAccessUserManagement, ROLE_LABELS } from '../utils/roles';
 
 const DEFAULT_MODULE_PERMISSIONS = {
@@ -383,9 +384,7 @@ export default function AdminUsers() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
-        </div>
+        <PageLoader />
       ) : (
         <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
           <table className="min-w-full text-sm">

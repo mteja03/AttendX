@@ -13,6 +13,7 @@ import {
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import PageLoader from '../components/PageLoader';
 import { DOCUMENT_CHECKLIST } from '../utils/documentTypes';
 
 const FORMAT_OPTIONS = [
@@ -720,8 +721,8 @@ export default function Settings() {
 
   if (loading) {
     return (
-      <div className="p-8 flex justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
+      <div className="p-8">
+        <PageLoader />
       </div>
     );
   }
@@ -1171,11 +1172,7 @@ export default function Settings() {
 
   const renderDocumentsTab = () => (
     <div className="space-y-4">
-      {docTypesLoading && (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin w-6 h-6 border-2 border-[#4ECDC4] border-t-transparent rounded-full" />
-        </div>
-      )}
+      {docTypesLoading && <PageLoader />}
       {!docTypesLoading && docTypes && docTypes.map((cat) => (
         <div key={cat.category} className="bg-white border rounded-xl p-4 mb-4">
           <div className="flex items-center justify-between mb-3">

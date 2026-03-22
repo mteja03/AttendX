@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
+import PageLoader from '../components/PageLoader';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
 import {
@@ -2357,8 +2358,8 @@ export default function EmployeeProfile() {
 
   if (loading) {
     return (
-      <div className="p-8 flex justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
+      <div className="p-8">
+        <PageLoader />
       </div>
     );
   }

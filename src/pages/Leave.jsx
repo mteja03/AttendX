@@ -17,6 +17,7 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
+import PageLoader from '../components/PageLoader';
 import { toDisplayDate, toJSDate } from '../utils';
 
 const DEFAULT_LEAVE_TYPE_OBJECTS = [
@@ -594,9 +595,7 @@ export default function Leave() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
-        </div>
+        <PageLoader />
       ) : (
         <>
           <div className="hidden lg:block overflow-x-auto border border-slate-200 rounded-xl bg-white">

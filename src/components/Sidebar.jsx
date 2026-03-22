@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
@@ -160,7 +161,7 @@ const navIcons = {
   settings: SettingsIcon,
 };
 
-export default function Sidebar({ isOpen = false, onClose }) {
+function Sidebar({ isOpen = false, onClose }) {
   const { currentUser, role, signOut, userPermissions, isTokenValid } = useAuth();
   const { companyId, company } = useCompany();
   const isAdmin = role === 'admin';
@@ -371,3 +372,5 @@ export default function Sidebar({ isOpen = false, onClose }) {
     </>
   );
 }
+
+export default memo(Sidebar);

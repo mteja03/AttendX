@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
+import PageLoader from '../components/PageLoader';
 import { useAuth } from '../contexts/AuthContext';
 import { toDisplayDate } from '../utils';
 import { ROLE_LABELS, ROLE_COLORS } from '../utils/roles';
@@ -303,9 +304,7 @@ export default function TeamMembers() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
-        </div>
+        <PageLoader />
       ) : (
         <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
           <table className="min-w-full text-sm">

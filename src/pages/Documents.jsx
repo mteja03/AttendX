@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
+import PageLoader from '../components/PageLoader';
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -260,9 +261,7 @@ export default function Documents() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
-        </div>
+        <PageLoader />
       ) : (
         <>
           {!canUpload && (

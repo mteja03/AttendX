@@ -18,6 +18,7 @@ import {
   Line,
   ResponsiveContainer,
 } from 'recharts';
+import PageLoader from '../components/PageLoader';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
@@ -1035,8 +1036,8 @@ export default function Reports() {
 
   if (loading) {
     return (
-      <div className="p-4 sm:p-8 flex justify-center items-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-10 w-10 border-2 border-[#1B6B6B] border-t-transparent" />
+      <div className="p-4 sm:p-8">
+        <PageLoader />
       </div>
     );
   }

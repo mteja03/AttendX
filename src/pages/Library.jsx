@@ -15,6 +15,7 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
+import PageLoader from '../components/PageLoader';
 import { formatLakhs, toDisplayDate, toJSDate } from '../utils';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 
@@ -1073,9 +1074,7 @@ export default function Library() {
       {libraryTab === 'policies' && (
         <>
           {loading ? (
-            <div className="flex justify-center py-16">
-              <div className="animate-spin rounded-full h-10 w-10 border-2 border-[#1B6B6B] border-t-transparent" />
-            </div>
+            <PageLoader />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {policies.map((policy) => (
