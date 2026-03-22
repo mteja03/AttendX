@@ -650,18 +650,18 @@ export default function Employees() {
   if (!companyId) return null;
 
   return (
-    <div className="p-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <div className="p-4 sm:p-8">
+      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-800">Employees</h1>
-          <p className="text-slate-500 mt-1">Manage employee records and directory</p>
+          <h1 className="text-xl font-semibold text-slate-800">Employees</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage employee records and directory</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowDownload((o) => !o)}
-              className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 bg-white"
+              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
             >
               Download ▾
             </button>
@@ -670,14 +670,14 @@ export default function Employees() {
                 <button
                   type="button"
                   onClick={downloadCSV}
-                  className="block w-full text-left px-4 py-2 text-sm hover:bg-slate-50"
+                  className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100"
                 >
                   Download CSV
                 </button>
                 <button
                   type="button"
                   onClick={downloadExcel}
-                  className="block w-full text-left px-4 py-2 text-sm hover:bg-slate-50 rounded-b-lg"
+                  className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100 rounded-b-lg"
                 >
                   Download Excel
                 </button>
@@ -692,7 +692,7 @@ export default function Employees() {
                 setForm({ ...initialForm, empId: id });
                 setShowAddModal(true);
               }}
-              className="inline-flex items-center justify-center rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
+              className="inline-flex items-center justify-center min-h-[44px] rounded-lg bg-[#1B6B6B] hover:bg-[#155858] active:bg-[#0f4444] text-white text-sm font-medium px-4 py-2"
             >
               Add Employee
             </button>
@@ -700,25 +700,27 @@ export default function Employees() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-4">
-        {['all', 'active', 'onleave', 'inactive'].map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-              tab === t ? 'bg-[#1B6B6B] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            {t === 'all' ? 'All' : t === 'active' ? 'Active' : t === 'onleave' ? 'On Leave' : 'Inactive'}
-          </button>
-        ))}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center mb-4">
+        <div className="flex flex-wrap gap-2 overflow-x-auto scrollbar-none -mx-1 px-1 sm:mx-0 sm:px-0 pb-1 sm:pb-0">
+          {['all', 'active', 'onleave', 'inactive'].map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`rounded-lg min-h-[44px] px-3 py-2 text-sm font-medium flex-shrink-0 active:opacity-90 ${
+                tab === t ? 'bg-[#1B6B6B] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
+              }`}
+            >
+              {t === 'all' ? 'All' : t === 'active' ? 'Active' : t === 'onleave' ? 'On Leave' : 'Inactive'}
+            </button>
+          ))}
+        </div>
         <input
           type="text"
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
           placeholder="Search (3+ chars searches all employees)..."
-          className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-72"
+          className="w-full sm:ml-auto sm:w-72 min-h-[44px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
         />
       </div>
 
@@ -734,7 +736,7 @@ export default function Employees() {
           <button
             type="button"
             onClick={() => setFilterOpen((o) => !o)}
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200"
+            className="inline-flex items-center gap-2 min-h-[44px] rounded-lg px-3 py-2 text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-300"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-slate-500">
               <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -768,8 +770,9 @@ export default function Employees() {
         )}
 
         {filterOpen && (
-          <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 mb-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="overflow-x-auto scrollbar-none -mx-4 px-4 lg:mx-0 lg:px-0 mb-2">
+            <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 min-w-0 lg:min-w-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 min-w-[min(100%,520px)] sm:min-w-0">
               <div>
                 <label className="block text-xs text-slate-500 mb-0.5">Department</label>
                 <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
@@ -812,6 +815,7 @@ export default function Employees() {
                 </select>
               </div>
             </div>
+            </div>
           </div>
         )}
       </div>
@@ -846,7 +850,7 @@ export default function Employees() {
           </div>
 
           <div
-            className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-slate-200 rounded-xl bg-white"
+            className="hidden lg:block overflow-x-auto overflow-y-auto max-h-[70vh] border border-slate-200 rounded-xl bg-white"
             onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
           >
           <table className="min-w-full text-sm">
@@ -1025,13 +1029,97 @@ export default function Employees() {
           </table>
         </div>
 
+          <div className="lg:hidden space-y-3">
+            {filtered.map((emp) => (
+              <div
+                key={emp.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') navigate(`/company/${companyId}/employees/${emp.id}`);
+                }}
+                className="bg-white border border-gray-100 rounded-2xl p-4 cursor-pointer hover:border-gray-200 active:bg-gray-50"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white flex-shrink-0"
+                    style={{ background: getDeptColor(emp.department) }}
+                  >
+                    {emp.fullName?.charAt(0) || '—'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{emp.fullName || '—'}</p>
+                    <p className="text-xs text-gray-400 truncate">
+                      {emp.empId || '—'} · {emp.department || '—'}
+                    </p>
+                  </div>
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${
+                      emp.status === 'Active'
+                        ? 'bg-green-100 text-green-700'
+                        : emp.status === 'On Leave'
+                          ? 'bg-[#C5E8E8] text-[#0F4444]'
+                          : emp.status === 'Offboarding'
+                            ? 'bg-orange-100 text-orange-800'
+                            : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {emp.status || 'Active'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
+                  <div>
+                    <span className="text-gray-400">Role</span>
+                    <p className="text-gray-700 font-medium truncate">{emp.designation || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Joined</span>
+                    <p className="text-gray-700 font-medium">{toDisplayDate(emp.joiningDate)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Phone</span>
+                    <p className="text-gray-700 font-medium">{emp.phone || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Branch</span>
+                    <p className="text-gray-700 font-medium truncate">{emp.branch || '—'}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 mt-3" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
+                    className="min-h-[44px] px-3 rounded-xl text-xs font-medium text-[#1B6B6B] border border-gray-200 hover:bg-gray-50 active:bg-gray-100"
+                  >
+                    {canEditEmployees ? 'View Profile' : 'View'}
+                  </button>
+                  {canEditEmployees && (emp.status || 'Active') === 'Active' && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeactivate(emp)}
+                      className="min-h-[44px] px-3 rounded-xl text-xs font-medium text-amber-700 border border-amber-200 hover:bg-amber-50 active:bg-amber-100"
+                    >
+                      Deactivate
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <p className="text-center text-slate-500 py-8 text-sm">No employees found.</p>
+            )}
+          </div>
+
           {hasMore && !searchAllMode && (
             <div className="flex justify-center py-4">
               <button
                 type="button"
                 onClick={() => fetchEmployees(false)}
                 disabled={loadingMore}
-                className="flex items-center gap-2 px-6 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                className="flex items-center justify-center gap-2 min-h-[44px] px-6 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50"
               >
                 {loadingMore ? (
                   <>
@@ -1048,8 +1136,11 @@ export default function Employees() {
       )}
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Add Employee</h2>
             <form onSubmit={handleAddEmployee} className="space-y-6">
               <section>

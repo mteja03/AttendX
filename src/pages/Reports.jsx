@@ -762,15 +762,15 @@ export default function Reports() {
 
   if (loading) {
     return (
-      <div className="p-8 flex justify-center items-center min-h-[50vh]">
+      <div className="p-4 sm:p-8 flex justify-center items-center min-h-[50vh]">
         <div className="animate-spin rounded-full h-10 w-10 border-2 border-[#1B6B6B] border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="p-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <div className="p-4 sm:p-8">
+      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
           <p className="text-sm text-gray-500">
@@ -789,21 +789,21 @@ export default function Reports() {
           <button
             type="button"
             onClick={fetchAllData}
-            className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+            className="flex items-center justify-center gap-2 min-h-[44px] px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 active:bg-gray-100"
           >
             ↻ Refresh
           </button>
         </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto pb-2 mb-6 border-b border-gray-100">
+      <div className="flex gap-1 overflow-x-auto scrollbar-none pb-2 mb-6 border-b border-gray-100 -mx-4 px-4 lg:mx-0 lg:px-0">
         {REPORT_TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm whitespace-nowrap font-medium transition-all ${
-              activeTab === tab.id ? 'bg-[#1B6B6B] text-white' : 'text-gray-500 hover:bg-gray-100'
+            className={`flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg text-sm whitespace-nowrap font-medium flex-shrink-0 transition-all active:opacity-90 ${
+              activeTab === tab.id ? 'bg-[#1B6B6B] text-white' : 'text-gray-500 hover:bg-gray-100 active:bg-gray-200'
             }`}
           >
             <span>{tab.icon}</span>
@@ -815,7 +815,7 @@ export default function Reports() {
       {/* HEADCOUNT */}
       {activeTab === 'headcount' && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={headcountStats.total} label="Total Employees" />
             <StatCard value={headcountStats.active} label="Active Employees" />
             <StatCard value={headcountStats.onLeaveToday} label="On Leave Today" />
@@ -929,7 +929,7 @@ export default function Reports() {
       {/* EMPLOYEES */}
       {activeTab === 'employee' && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={employeeSummary.total} label="Total" />
             <StatCard value={employeeSummary.active} label="Active" />
             <StatCard value={employeeSummary.inactive} label="Inactive" />
@@ -1026,7 +1026,7 @@ export default function Reports() {
       {/* LEAVE */}
       {activeTab === 'leave' && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={leaveStats.total} label={`Leave requests (${currentYear})`} />
             <StatCard value={leaveStats.approved} label="Approved" />
             <StatCard value={leaveStats.pending} label="Pending" />
@@ -1127,7 +1127,7 @@ export default function Reports() {
       {/* ASSETS */}
       {activeTab === 'asset' && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={assetStats.total} label="Total assets" />
             <StatCard value={assetStats.assigned} label="Assigned (trackable)" />
             <StatCard value={assetStats.available} label="Available (trackable)" />
@@ -1226,7 +1226,7 @@ export default function Reports() {
       {/* DOCUMENTS */}
       {activeTab === 'document' && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={docStats.full} label="100% mandatory docs" />
             <StatCard value={docStats.missing} label="With missing mandatory" />
             <StatCard value={docStats.totalDocs} label="Total documents uploaded" />
@@ -1306,7 +1306,7 @@ export default function Reports() {
       {/* ONBOARDING */}
       {activeTab === 'onboarding' && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={onboardingStats.started} label="Onboardings started" />
             <StatCard value={onboardingStats.completed} label="Completed" />
             <StatCard value={onboardingStats.inProgress} label="In progress" />
@@ -1410,7 +1410,7 @@ export default function Reports() {
       {/* OFFBOARDING */}
       {activeTab === 'offboarding' && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={offboardingStats.total} label="Total offboarding records" />
             <StatCard value={offboardingStats.completed} label="Completed (exited)" />
             <StatCard value={offboardingStats.inProgress} label="In progress" />

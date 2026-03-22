@@ -1015,7 +1015,7 @@ export default function Settings() {
     );
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="space-y-4">
           {left.map(renderCard)}
         </div>
@@ -1819,21 +1819,23 @@ export default function Settings() {
   );
 
   return (
-    <div className="p-8 max-w-4xl">
-      <h1 className="text-2xl font-semibold text-slate-800 mb-2">Settings</h1>
-      <p className="text-slate-500 text-sm mb-4">Manage company configuration, lists and policies.</p>
+    <div className="p-4 sm:p-8 max-w-4xl">
+      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-800">Settings</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage company configuration, lists and policies.</p>
+        </div>
+      </div>
 
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex gap-1 overflow-x-auto scrollbar-none pb-2 mb-6 -mx-4 px-4 lg:mx-0 lg:px-0">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={
-              tab === t.id
-                ? 'bg-[#1B6B6B] text-white rounded-full px-4 py-2 text-sm font-medium'
-                : 'text-gray-600 px-4 py-2 text-sm rounded-full hover:bg-gray-100'
-            }
+            className={`flex-shrink-0 min-h-[44px] px-4 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-colors active:opacity-90 ${
+              tab === t.id ? 'bg-[#1B6B6B] text-white' : 'text-gray-600 hover:bg-gray-100 active:bg-gray-200'
+            }`}
           >
             {t.label}
           </button>
@@ -1849,8 +1851,11 @@ export default function Settings() {
       {tab === 'danger' && renderDangerTab()}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h3 className="text-lg font-semibold text-slate-800 mb-2">
               Delete {deleteConfirm.name}?
             </h3>
@@ -1876,8 +1881,11 @@ export default function Settings() {
       )}
 
       {deactivateConfirm && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h3 className="text-lg font-semibold text-slate-800 mb-2">Deactivate this company?</h3>
             <p className="text-sm text-slate-600 mb-4">
               Team members will lose access. You can reactivate from the Companies page.

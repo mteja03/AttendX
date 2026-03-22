@@ -2391,15 +2391,21 @@ export default function EmployeeProfile() {
   }
 
   return (
-    <div className="p-8">
-      <Link to={`/company/${companyId}/employees`} className="text-sm text-slate-600 hover:text-[#1B6B6B] mb-4 inline-block">← Employees</Link>
+    <div className="p-4 sm:p-8">
+      <Link
+        to={`/company/${companyId}/employees`}
+        className="text-sm text-slate-600 hover:text-[#1B6B6B] active:text-[#155858] mb-4 inline-flex items-center min-h-[44px]"
+      >
+        ← Employees
+      </Link>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-        <div className="flex flex-wrap items-start gap-6">
-          <div className="h-14 w-14 rounded-full flex items-center justify-center text-white text-xl font-bold shrink-0" style={{ backgroundColor: deptColor }}>
-            {(employee.fullName || '?').slice(0, 2).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="h-14 w-14 rounded-full flex items-center justify-center text-white text-xl font-bold shrink-0" style={{ backgroundColor: deptColor }}>
+              {(employee.fullName || '?').slice(0, 2).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-slate-800">{employee.fullName || '—'}</h1>
             <div className="flex flex-wrap gap-2 mt-2">
               <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">{employee.designation || '—'}</span>
@@ -2426,13 +2432,14 @@ export default function EmployeeProfile() {
                 {getTenure(employee.joiningDate)}
               </span>
             </p>
+            </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 sm:ml-auto">
             {canEditEmployees && (
               <button
                 type="button"
                 onClick={openEdit}
-                className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
+                className="rounded-lg min-h-[44px] px-4 inline-flex items-center justify-center bg-[#1B6B6B] hover:bg-[#155858] active:bg-[#0f4444] text-white text-sm font-medium"
               >
                 Edit
               </button>
@@ -2440,7 +2447,7 @@ export default function EmployeeProfile() {
             <button
               type="button"
               onClick={handlePrintProfile}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path
@@ -2456,7 +2463,7 @@ export default function EmployeeProfile() {
               <button
                 type="button"
                 onClick={handleDeactivate}
-                className="rounded-lg border border-red-300 text-red-600 hover:bg-red-50 text-sm font-medium px-4 py-2"
+                className="rounded-lg min-h-[44px] px-4 inline-flex items-center justify-center border border-red-300 text-red-600 hover:bg-red-50 active:bg-red-100 text-sm font-medium"
               >
                 Deactivate
               </button>
@@ -2465,9 +2472,16 @@ export default function EmployeeProfile() {
         </div>
       </div>
 
-      <div className="flex gap-2 border-b border-slate-200 mb-6">
+      <div className="flex overflow-x-auto scrollbar-none border-b border-gray-100 mb-6 -mx-4 px-4 lg:mx-0 lg:px-0">
         {visibleTabs.map((t) => (
-          <button key={t.id} type="button" onClick={() => setTab(t.id)} className={`px-4 py-2 text-sm font-medium rounded-t-lg ${tab === t.id ? 'bg-white border border-slate-200 border-b-white -mb-px text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`flex-shrink-0 px-4 py-2 min-h-[44px] text-sm font-medium whitespace-nowrap rounded-t-lg transition-colors active:bg-slate-100 ${
+              tab === t.id ? 'bg-white border border-slate-200 border-b-white -mb-px text-slate-800' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
             {t.label}
           </button>
         ))}
@@ -2475,7 +2489,7 @@ export default function EmployeeProfile() {
 
       {tab === 'personal' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="space-y-3">
               <p><span className="text-slate-500 text-sm">Full Name</span><br />{employee.fullName || '—'}</p>
               <p><span className="text-slate-500 text-sm">Father&apos;s Name</span><br />{employee.fatherName || '—'}</p>
@@ -2575,7 +2589,7 @@ export default function EmployeeProfile() {
           <div className="bg-white border rounded-xl p-4 mt-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Emergency Contact</h3>
             {employee.emergencyContact?.name ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-gray-400">Name</p>
                   <p className="text-sm text-gray-800 font-medium">
@@ -2746,8 +2760,8 @@ export default function EmployeeProfile() {
                               </div>
                             </div>
                           ) : (
-                            <div className="flex items-center justify-between py-3 border-b last:border-0">
-                              <div className="flex items-center gap-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 px-1 sm:px-0 border-b last:border-0 gap-2">
+                              <div className="flex items-center gap-3 min-w-0">
                                 <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 border-gray-300" />
                                 <div>
                                   <p className="text-sm font-medium text-gray-800">
@@ -2765,7 +2779,7 @@ export default function EmployeeProfile() {
                                   </p>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-stretch sm:items-center gap-2 w-full sm:w-auto">
                                 {canUploadDocuments ? (
                                   <>
                                     <button
@@ -2775,7 +2789,7 @@ export default function EmployeeProfile() {
                                         if (input) input.click();
                                       }}
                                       disabled={uploadingDocId === doc.id}
-                                      className="px-4 py-1.5 bg-[#1B6B6B] text-white text-sm rounded-lg hover:bg-[#155858] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                      className="w-full sm:w-auto min-h-[44px] px-4 inline-flex items-center justify-center bg-[#1B6B6B] text-white text-sm rounded-lg hover:bg-[#155858] active:bg-[#0f4444] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                                     >
                                       {uploadingDocId === doc.id ? 'Uploading...' : 'Upload'}
                                     </button>
@@ -2869,8 +2883,8 @@ export default function EmployeeProfile() {
           </div>
 
           {deleteConfirm && (
-            <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+              <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6">
                 <h3 className="text-lg font-semibold text-slate-800 mb-2">
                   Delete {deleteConfirm.type === 'checklist' ? deleteConfirm.doc.name : 'document'}?
                 </h3>
@@ -2993,8 +3007,8 @@ export default function EmployeeProfile() {
       )}
 
       {showEditModal && form && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Edit Employee</h2>
                     <form onSubmit={handleSaveEdit} className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
@@ -3806,8 +3820,8 @@ export default function EmployeeProfile() {
       )}
 
       {deactivateConfirm && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-2">Deactivate {employee?.fullName}?</h3>
             <p className="text-sm text-slate-600 mb-4">They will be marked as Inactive.</p>
             <div className="flex justify-end gap-3">
@@ -3840,8 +3854,8 @@ export default function EmployeeProfile() {
       )}
 
       {showAssignAssetModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Assign Asset</h2>
             <form onSubmit={handleSaveAssignFromProfile} className="space-y-4">
               <div>
@@ -3929,8 +3943,8 @@ export default function EmployeeProfile() {
       )}
 
       {showProfileAssignModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-3xl sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Assign / Issue Asset</h2>
 
             <div className="mb-5">
@@ -3940,7 +3954,7 @@ export default function EmployeeProfile() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {/* Trackable assignment */}
               <div className="space-y-4">
                 <h3 className="text-sm font-medium text-slate-700">Trackable (Assign)</h3>
@@ -4243,8 +4257,8 @@ export default function EmployeeProfile() {
       )}
 
       {returnAsset && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Return Asset</h2>
             <form onSubmit={handleSaveReturnFromProfile} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -4322,8 +4336,8 @@ export default function EmployeeProfile() {
       )}
 
       {returnConsumableModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-gray-900 mb-1">
               Return {returnConsumableModal.asset?.name}
             </h3>
@@ -4397,8 +4411,8 @@ export default function EmployeeProfile() {
       )}
 
       {completingTask && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
             <h3 className="font-medium mb-3">
               Complete: {completingTask.title}
             </h3>
@@ -4438,8 +4452,8 @@ export default function EmployeeProfile() {
       )}
 
       {completingOffTask && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
             <h3 className="font-medium mb-3">
               Complete: {completingOffTask.title}
             </h3>
@@ -4479,8 +4493,8 @@ export default function EmployeeProfile() {
       )}
 
       {deactivateChoiceOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-gray-900 mb-1">Start offboarding instead?</h3>
             <p className="text-sm text-gray-500 mb-4">
               This employee does not have offboarding started. Would you like to start the offboarding process instead of directly deactivating?
@@ -4519,8 +4533,8 @@ export default function EmployeeProfile() {
       )}
 
       {showAssetReturnWarning && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-xl">
                 ⚠️

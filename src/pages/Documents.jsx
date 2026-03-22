@@ -215,17 +215,17 @@ export default function Documents() {
   };
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="p-4 sm:p-8">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-800">Documents</h1>
-          <p className="text-slate-500 mt-1">Company document completion overview (Google Drive)</p>
+          <h1 className="text-xl font-semibold text-slate-800">Documents</h1>
+          <p className="text-sm text-gray-500 mt-1">Company document completion overview (Google Drive)</p>
         </div>
         <div className="relative">
           <button
             type="button"
             onClick={() => setShowDownload((o) => !o)}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 bg-white"
+            className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
           >
             Download Report ▾
           </button>
@@ -237,7 +237,7 @@ export default function Documents() {
                   downloadDocumentReport('csv');
                   setShowDownload(false);
                 }}
-                className="block w-full text-left px-4 py-2 text-sm hover:bg-slate-50"
+                className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100"
               >
                 Download CSV
               </button>
@@ -247,7 +247,7 @@ export default function Documents() {
                   downloadDocumentReport('excel');
                   setShowDownload(false);
                 }}
-                className="block w-full text-left px-4 py-2 text-sm hover:bg-slate-50 rounded-b-lg"
+                className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100 rounded-b-lg"
               >
                 Download Excel
               </button>
@@ -262,7 +262,7 @@ export default function Documents() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <p className="text-slate-500 text-sm">Total Employees</p>
               <p className="text-xl font-semibold text-slate-800">{stats.total}</p>
@@ -281,25 +281,27 @@ export default function Documents() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3 mb-4">
-            <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              {departments.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              <option value="All">All</option>
-              <option value="Complete">Complete</option>
-              <option value="Incomplete">Incomplete</option>
-              <option value="Not Started">Not Started</option>
-            </select>
-            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              <option value="All">All</option>
-              {activeChecklist.map((c) => (
-                <option key={c.category} value={c.category}>Missing: {c.category}</option>
-              ))}
-            </select>
+          <div className="overflow-x-auto scrollbar-none -mx-4 px-4 lg:mx-0 lg:px-0 mb-4">
+            <div className="flex gap-2 min-w-max pb-1">
+              <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 min-h-[44px] text-sm flex-shrink-0">
+                {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 min-h-[44px] text-sm flex-shrink-0">
+                <option value="All">All</option>
+                <option value="Complete">Complete</option>
+                <option value="Incomplete">Incomplete</option>
+                <option value="Not Started">Not Started</option>
+              </select>
+              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 min-h-[44px] text-sm flex-shrink-0">
+                <option value="All">All</option>
+                {activeChecklist.map((c) => (
+                  <option key={c.category} value={c.category}>Missing: {c.category}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+          <div className="hidden lg:block overflow-x-auto border border-slate-200 rounded-xl bg-white">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
@@ -346,6 +348,42 @@ export default function Documents() {
             </table>
           </div>
 
+          <div className="lg:hidden space-y-3">
+            {filtered.map((emp) => {
+              const kyc = getCategoryStatus(emp, 'KYC Documents', activeChecklist);
+              const employment = getCategoryStatus(emp, 'Employment Documents', activeChecklist);
+              const education = getCategoryStatus(emp, 'Education Certificates', activeChecklist);
+              const prevEmp = getCategoryStatus(emp, 'Previous Employment', activeChecklist);
+              const pct = getOverallPct(emp);
+              return (
+                <div key={emp.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-800 truncate">{emp.fullName || '—'}</p>
+                      <p className="text-xs text-slate-500">{emp.department || '—'}</p>
+                    </div>
+                    <span className={`text-sm font-semibold flex-shrink-0 ${pct === 100 ? 'text-green-700' : pct > 0 ? 'text-amber-700' : 'text-slate-500'}`}>
+                      {pct}%
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs mb-3">
+                    <span>KYC {statusBadge(kyc.status)}</span>
+                    <span>Emp {statusBadge(employment.status)}</span>
+                    <span>Edu {statusBadge(education.status)}</span>
+                    <span>Prev {statusBadge(prevEmp.status)}</span>
+                  </div>
+                  <Link
+                    to={`/company/${companyId}/employees/${emp.id}?tab=documents`}
+                    className="inline-flex items-center justify-center w-full min-h-[44px] rounded-xl bg-[#1B6B6B] text-white text-sm font-medium hover:bg-[#155858] active:bg-[#0f4444]"
+                  >
+                    View Documents
+                  </Link>
+                </div>
+              );
+            })}
+            {filtered.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No employees match filters.</p>}
+          </div>
+
           <div className="mt-6 border border-amber-200 rounded-xl overflow-hidden">
             <button
               type="button"
@@ -363,15 +401,32 @@ export default function Documents() {
                 ) : (
                   <ul className="space-y-3">
                     {missingMandatoryList.map(({ emp, missing }) => (
-                      <li key={emp.id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
-                        <div>
+                      <li
+                        key={emp.id}
+                        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-3 border-b border-slate-100 last:border-0"
+                      >
+                        <div className="min-w-0">
                           <p className="font-medium text-slate-800">{emp.fullName || '—'}</p>
                           <p className="text-slate-500 text-xs mt-0.5">
                             Missing: {missing.map((d) => d.name).join(', ')}
                           </p>
                         </div>
-                        <Link to={`/company/${companyId}/employees/${emp.id}?tab=documents`} className="text-[#1B6B6B] text-sm font-medium hover:underline">View Documents</Link>
-                        <button type="button" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50" disabled title="Coming soon">Send Reminder</button>
+                        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                          <Link
+                            to={`/company/${companyId}/employees/${emp.id}?tab=documents`}
+                            className="inline-flex items-center justify-center min-h-[44px] px-3 rounded-xl text-[#1B6B6B] text-sm font-medium border border-[#C5E8E8] hover:bg-[#E8F5F5] active:bg-[#C5E8E8]"
+                          >
+                            View Documents
+                          </Link>
+                          <button
+                            type="button"
+                            className="min-h-[44px] rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 active:bg-slate-100"
+                            disabled
+                            title="Coming soon"
+                          >
+                            Send Reminder
+                          </button>
+                        </div>
                       </li>
                     ))}
                   </ul>

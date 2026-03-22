@@ -267,9 +267,9 @@ export default function Dashboard() {
 
   if (!companyId) {
     return (
-      <div className="p-8">
-        <h1 className="text-2xl font-semibold text-slate-800">Dashboard</h1>
-        <p className="text-slate-500 mt-1">Select a company to view dashboard.</p>
+      <div className="p-4 sm:p-8">
+        <h1 className="text-xl font-semibold text-slate-800">Dashboard</h1>
+        <p className="text-sm text-gray-500 mt-1">Select a company to view dashboard.</p>
       </div>
     );
   }
@@ -281,10 +281,12 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-slate-800">Dashboard</h1>
-        <p className="text-slate-500 mt-1">Company overview</p>
+    <div className="p-4 sm:p-8">
+      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-800">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">Company overview</p>
+        </div>
       </div>
 
       {dashError ? (
@@ -304,7 +306,7 @@ export default function Dashboard() {
           </button>
         </div>
       ) : loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="bg-white rounded-xl border border-slate-200 p-6 animate-pulse">
               <div className="h-4 bg-slate-200 rounded w-24 mb-2" />
@@ -314,7 +316,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
             {statCards.map((stat) => (
               <StatCard key={stat.title} {...stat} />
             ))}
@@ -332,7 +334,7 @@ export default function Dashboard() {
               </button>
             </div>
 
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="text-center">
                 <p className="text-lg font-semibold text-gray-800">{assetStats.total}</p>
                 <p className="text-xs text-gray-400">Total assets</p>
@@ -469,18 +471,18 @@ export default function Dashboard() {
         </>
       )}
 
-      <div className="flex flex-wrap gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3 mb-6">
         <button
           type="button"
           onClick={() => navigate(`/company/${companyId}/employees`)}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
+          className="inline-flex items-center justify-center gap-2 min-h-[44px] rounded-lg bg-[#1B6B6B] hover:bg-[#155858] active:bg-[#0f4444] text-white text-sm font-medium px-4 py-2"
         >
           <UserAddIcon className="w-4 h-4" />
           Add Employee
         </button>
         <Link
           to={`/company/${companyId}/leave`}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2"
+          className="inline-flex items-center justify-center gap-2 min-h-[44px] rounded-lg border border-slate-300 hover:bg-slate-50 active:bg-slate-100 text-slate-700 text-sm font-medium px-4 py-2"
         >
           <CalendarIcon className="w-4 h-4" />
           View Leave Requests
@@ -589,70 +591,129 @@ export default function Dashboard() {
         ) : recentLeave.length === 0 ? (
           <div className="p-8 text-center text-slate-500 text-sm">No leave requests yet.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium">Employee</th>
-                  <th className="px-4 py-2 text-left font-medium">Type</th>
-                  <th className="px-4 py-2 text-left font-medium">Dates</th>
-                  <th className="px-4 py-2 text-left font-medium">Status</th>
-                  <th className="px-4 py-2 text-left font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentLeave.map((l) => (
-                  <tr key={l.id} className="border-t border-slate-100">
-                    <td className="px-4 py-3 font-medium text-slate-800">
+          <>
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-medium">Employee</th>
+                    <th className="px-4 py-2 text-left font-medium">Type</th>
+                    <th className="px-4 py-2 text-left font-medium">Dates</th>
+                    <th className="px-4 py-2 text-left font-medium">Status</th>
+                    <th className="px-4 py-2 text-left font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentLeave.map((l) => (
+                    <tr key={l.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3 font-medium text-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => handleEmployeeClick(l.employeeId)}
+                          className="cursor-pointer hover:text-teal-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!l.employeeId}
+                        >
+                          {l.employeeName || '—'}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${LEAVE_TYPE_STYLE[l.leaveType] || 'bg-[#E8F5F5] text-[#1B6B6B]'}`}>
+                          {l.leaveType || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {toDisplayDate(l.startDate)} – {toDisplayDate(l.endDate)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[l.status] || 'bg-slate-100'}`}>
+                          {l.status || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {l.status === 'Pending' && (
+                          <span className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={actioningId === l.id}
+                              onClick={() => handleApprove(l)}
+                              className="text-xs font-medium text-green-600 hover:text-green-700 disabled:opacity-50"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              disabled={actioningId === l.id}
+                              onClick={() => handleReject(l)}
+                              className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                            >
+                              Reject
+                            </button>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="lg:hidden space-y-3 p-4">
+              {recentLeave.map((leave) => (
+                <div key={leave.id} className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-[#E8F5F5] flex items-center justify-center text-xs font-medium text-[#1B6B6B] flex-shrink-0">
+                        {leave.employeeName?.charAt(0) || '?'}
+                      </div>
+                      <div className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => handleEmployeeClick(leave.employeeId)}
+                          disabled={!leave.employeeId}
+                          className="text-sm font-medium text-slate-800 truncate text-left hover:text-[#1B6B6B] disabled:opacity-60"
+                        >
+                          {leave.employeeName || '—'}
+                        </button>
+                        <p className="text-xs text-gray-400 truncate">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${LEAVE_TYPE_STYLE[leave.leaveType] || 'bg-[#E8F5F5] text-[#1B6B6B]'}`}>
+                            {leave.leaveType || '—'}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${STATUS_STYLE[leave.status] || 'bg-slate-100'}`}>
+                      {leave.status || '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>
+                      {toDisplayDate(leave.startDate)} → {toDisplayDate(leave.endDate)}
+                    </span>
+                  </div>
+                  {leave.status === 'Pending' && (
+                    <div className="flex gap-2 mt-3">
                       <button
                         type="button"
-                        onClick={() => handleEmployeeClick(l.employeeId)}
-                        className="cursor-pointer hover:text-teal-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={!l.employeeId}
+                        disabled={actioningId === leave.id}
+                        onClick={() => handleApprove(leave)}
+                        className="flex-1 min-h-[44px] py-2 bg-green-600 text-white rounded-xl text-xs font-medium disabled:opacity-50"
                       >
-                        {l.employeeName || '—'}
+                        Approve
                       </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${LEAVE_TYPE_STYLE[l.leaveType] || 'bg-[#E8F5F5] text-[#1B6B6B]'}`}>
-                        {l.leaveType || '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {toDisplayDate(l.startDate)} – {toDisplayDate(l.endDate)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[l.status] || 'bg-slate-100'}`}>
-                        {l.status || '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {l.status === 'Pending' && (
-                        <span className="flex gap-2">
-                          <button
-                            type="button"
-                            disabled={actioningId === l.id}
-                            onClick={() => handleApprove(l)}
-                            className="text-xs font-medium text-green-600 hover:text-green-700 disabled:opacity-50"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            type="button"
-                            disabled={actioningId === l.id}
-                            onClick={() => handleReject(l)}
-                            className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
-                          >
-                            Reject
-                          </button>
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      <button
+                        type="button"
+                        disabled={actioningId === leave.id}
+                        onClick={() => handleReject(leave)}
+                        className="flex-1 min-h-[44px] py-2 bg-red-100 text-red-600 rounded-xl text-xs font-medium disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

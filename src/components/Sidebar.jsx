@@ -124,7 +124,7 @@ const navIcons = {
   settings: SettingsIcon,
 };
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen = false, onClose }) {
   const { currentUser, role, signOut } = useAuth();
   const { companyId, company } = useCompany();
   const isAdmin = role === 'admin';
@@ -141,7 +141,7 @@ export default function Sidebar() {
   };
 
   const linkClass = (isActive) =>
-    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+    `flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors active:bg-white/10 ${
       isActive
         ? 'bg-[#4ECDC4] text-[#1B6B6B]'
         : 'text-white/70 hover:bg-white/[0.08] hover:text-white'
@@ -151,8 +151,29 @@ export default function Sidebar() {
   const roleLabel = ROLE_LABELS[role] || role || 'User';
 
   return (
-    <aside className="flex flex-col h-screen bg-[#1B6B6B] w-56 fixed left-0 top-0 overflow-hidden text-white">
-      <div className="flex items-center gap-3 p-4 border-b border-white/10 flex-shrink-0">
+    <>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={onClose} role="presentation" aria-hidden />
+      )}
+
+      <aside
+        className={`
+          flex flex-col h-screen bg-[#1B6B6B] fixed left-0 top-0 overflow-hidden text-white
+          z-50 w-64 transition-transform duration-300 ease-out
+          lg:translate-x-0 lg:w-56
+          ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}
+      >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 z-10 text-white/60 hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center lg:hidden"
+        aria-label="Close menu"
+      >
+        ✕
+      </button>
+
+      <div className="flex items-center gap-3 p-4 border-b border-white/10 flex-shrink-0 pr-14 lg:pr-4">
         <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-white/10 p-0.5">
           <img
             src="/logo/icon.png"
@@ -184,11 +205,11 @@ export default function Sidebar() {
             <div>
               <p className="px-3 text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Admin Controls</p>
               <div className="space-y-0.5">
-                <NavLink to="/companies" className={({ isActive }) => linkClass(isActive)}>
+                <NavLink to="/companies" onClick={() => onClose?.()} className={({ isActive }) => linkClass(isActive)}>
                   <BuildingIcon className="w-5 h-5 shrink-0" />
                   All Companies
                 </NavLink>
-                <NavLink to="/admin/users" className={({ isActive }) => linkClass(isActive)}>
+                <NavLink to="/admin/users" onClick={() => onClose?.()} className={({ isActive }) => linkClass(isActive)}>
                   <UsersIcon className="w-5 h-5 shrink-0" />
                   Platform Users
                 </NavLink>
@@ -197,7 +218,11 @@ export default function Sidebar() {
 
             {inCompany && (
               <div>
-                <Link to="/companies" className="flex items-center gap-2 px-3 py-2 text-white/60 hover:text-white text-sm">
+                <Link
+                  to="/companies"
+                  onClick={() => onClose?.()}
+                  className="flex items-center gap-2 px-3 py-2 min-h-[44px] text-white/60 hover:text-white active:bg-white/10 text-sm rounded-lg"
+                >
                   ← All Companies
                 </Link>
                 <div className="flex items-center gap-2 mt-2 mb-2 px-3 py-2 rounded-lg bg-white/10">
@@ -214,7 +239,12 @@ export default function Sidebar() {
                   {companyNavItems.map(({ to, label }) => {
                     const Icon = navIcons[to] || NavIcon;
                     return (
-                      <NavLink key={to} to={`/company/${companyId}/${to}`} className={({ isActive }) => linkClass(isActive)}>
+                      <NavLink
+                        key={to}
+                        to={`/company/${companyId}/${to}`}
+                        onClick={() => onClose?.()}
+                        className={({ isActive }) => linkClass(isActive)}
+                      >
                         <Icon className="w-5 h-5 shrink-0" />
                         {label}
                       </NavLink>
@@ -240,7 +270,12 @@ export default function Sidebar() {
             {companyNavItems.map(({ to, label }) => {
               const Icon = navIcons[to] || NavIcon;
               return (
-                <NavLink key={to} to={`/company/${companyId}/${to}`} className={({ isActive }) => linkClass(isActive)}>
+                <NavLink
+                  key={to}
+                  to={`/company/${companyId}/${to}`}
+                  onClick={() => onClose?.()}
+                  className={({ isActive }) => linkClass(isActive)}
+                >
                   <Icon className="w-5 h-5 shrink-0" />
                   {label}
                 </NavLink>
@@ -269,11 +304,16 @@ export default function Sidebar() {
           {role && (
             <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium mb-2 ${roleBadgeClass}`}>{roleLabel}</span>
           )}
-          <button type="button" onClick={handleSignOut} className="w-full text-left text-xs text-white/60 hover:text-red-200">
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="w-full text-left text-xs text-white/60 hover:text-red-200 min-h-[44px] py-2 rounded-lg active:bg-white/10"
+          >
             Sign Out
           </button>
         </div>
       )}
     </aside>
+    </>
   );
 }

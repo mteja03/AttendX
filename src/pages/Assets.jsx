@@ -963,18 +963,18 @@ export default function Assets() {
   if (!companyId) return null;
 
   return (
-    <div className="p-8">
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="p-4 sm:p-8">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-800">Assets</h1>
-          <p className="text-slate-500 mt-1">Manage company assets and assignments</p>
+          <h1 className="text-xl font-semibold text-slate-800">Assets</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage company assets and assignments</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowDownload((o) => !o)}
-              className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 bg-white"
+              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
             >
               Download ▾
             </button>
@@ -986,7 +986,7 @@ export default function Assets() {
                     downloadAssets('csv');
                     setShowDownload(false);
                   }}
-                  className="block w-full text-left px-4 py-2 text-sm hover:bg-slate-50"
+                  className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100"
                 >
                   Download CSV
                 </button>
@@ -996,7 +996,7 @@ export default function Assets() {
                     downloadAssets('excel');
                     setShowDownload(false);
                   }}
-                  className="block w-full text-left px-4 py-2 text-sm hover:bg-slate-50 rounded-b-lg"
+                  className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100 rounded-b-lg"
                 >
                   Download Excel
                 </button>
@@ -1006,7 +1006,7 @@ export default function Assets() {
           <button
             type="button"
             onClick={handleOpenAdd}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#1B6B6B] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#155858]"
+            className="inline-flex items-center justify-center gap-2 min-h-[44px] rounded-lg bg-[#1B6B6B] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#155858] active:bg-[#0f4444]"
           >
             + Add Asset
           </button>
@@ -1039,64 +1039,66 @@ export default function Assets() {
             placeholder="Search by asset, ID, serial, or employee..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+            className="flex-1 min-h-[44px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
           />
-          <div className="flex gap-2">
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
-            >
-              <option>All Types</option>
-              {assetTypes.map((t) => (
-                <option key={t.name} value={t.name}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            {(search || filterType !== 'All Types' || filterStatus !== 'All') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch('');
-                  setFilterType('All Types');
-                  setFilterStatus('All');
-                }}
-                className="text-xs text-slate-500 hover:text-slate-700 px-2"
+          <div className="overflow-x-auto scrollbar-none -mx-1 px-1 md:mx-0 md:px-0">
+            <div className="flex gap-2 min-w-max md:min-w-0">
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="rounded-lg border border-slate-300 px-2 py-2 min-h-[44px] text-xs flex-shrink-0"
               >
-                Clear filters
-              </button>
-            )}
+                <option>All Types</option>
+                {assetTypes.map((t) => (
+                  <option key={t.name} value={t.name}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="rounded-lg border border-slate-300 px-2 py-2 min-h-[44px] text-xs flex-shrink-0"
+              >
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              {(search || filterType !== 'All Types' || filterStatus !== 'All') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setFilterType('All Types');
+                    setFilterStatus('All');
+                  }}
+                  className="text-xs text-slate-500 hover:text-slate-700 active:text-slate-900 px-3 py-2 min-h-[44px] flex-shrink-0 rounded-lg"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg w-fit">
-        {['all', 'trackable', 'consumable'].map((v) => (
-          <button
-            key={v}
-            type="button"
-            onClick={() => setAssetView(v)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-all ${
-              assetView === v
-                ? 'bg-white text-gray-800 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {v === 'all' ? 'All Assets' : v === 'trackable' ? '🔵 Trackable' : '🟢 Consumable'}
-          </button>
-        ))}
+      <div className="overflow-x-auto scrollbar-none -mx-1 px-1 mb-4 lg:mx-0 lg:px-0">
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit min-w-max">
+          {['all', 'trackable', 'consumable'].map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setAssetView(v)}
+              className={`px-4 py-2 min-h-[44px] rounded-md text-sm font-medium capitalize transition-all flex-shrink-0 active:opacity-90 ${
+                assetView === v ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700 active:bg-gray-200/50'
+              }`}
+            >
+              {v === 'all' ? 'All Assets' : v === 'trackable' ? '🔵 Trackable' : '🟢 Consumable'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -1104,7 +1106,8 @@ export default function Assets() {
           <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
         </div>
       ) : (
-        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+        <>
+        <div className="hidden lg:block overflow-x-auto border border-slate-200 rounded-xl bg-white">
           {(assetView === 'all' || assetView === 'trackable') && (
             <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
@@ -1285,12 +1288,139 @@ export default function Assets() {
             <div className="mt-6 p-6 text-center text-slate-500 text-sm">No consumable assets found.</div>
           )}
         </div>
+
+        <div className="lg:hidden space-y-3">
+          {(assetView === 'all' || assetView === 'trackable') &&
+            trackableAssets.map((asset) => (
+              <div key={asset.id} className="bg-white border border-gray-100 rounded-2xl p-4 mb-3 shadow-sm">
+                <div className="flex items-start justify-between mb-2 gap-2">
+                  <div className="min-w-0">
+                    <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600">{asset.assetId}</span>
+                    <p className="font-medium text-gray-900 mt-1">{asset.name || '—'}</p>
+                    <p className="text-xs text-gray-400">
+                      {asset.type || '—'}
+                      {(asset.brand || asset.model) && ` · ${[asset.brand, asset.model].filter(Boolean).join(' ')}`}
+                    </p>
+                  </div>
+                  <span
+                    className={`inline-flex items-center text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${getStatusBadgeClass(asset.status || 'Available')}`}
+                  >
+                    {asset.status || 'Available'}
+                  </span>
+                </div>
+
+                {asset.assignedToName && (
+                  <p className="text-xs text-gray-500 mb-2">
+                    Assigned to: {asset.assignedToName}
+                    {asset.assignedToEmpId ? ` (${asset.assignedToEmpId})` : ''}
+                  </p>
+                )}
+
+                <div className="flex gap-2 flex-wrap">
+                  {(asset.status === 'Available' || !asset.status) && (
+                    <button
+                      type="button"
+                      onClick={() => openAssignModal(asset)}
+                      className="flex-1 min-w-[120px] min-h-[44px] py-2 bg-[#1B6B6B] text-white rounded-xl text-xs font-medium hover:bg-[#155858] active:bg-[#0f4444]"
+                    >
+                      Assign
+                    </button>
+                  )}
+                  {asset.status === 'Assigned' && (
+                    <button
+                      type="button"
+                      onClick={() => openReturnModal(asset)}
+                      className="flex-1 min-w-[120px] min-h-[44px] py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100"
+                    >
+                      Return
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openHistoryModal(asset)}
+                    className="min-h-[44px] px-3 py-2 border border-gray-200 rounded-xl text-xs text-gray-500 hover:bg-gray-50 active:bg-gray-100"
+                  >
+                    History
+                  </button>
+                </div>
+              </div>
+            ))}
+
+          {(assetView === 'all' || assetView === 'trackable') &&
+            trackableAssets.length === 0 &&
+            (assetView === 'trackable' || consumableAssets.length === 0) && (
+              <p className="text-center text-slate-500 py-8 text-sm">No assets found.</p>
+            )}
+
+          {(assetView === 'all' || assetView === 'consumable') &&
+            consumableAssets.map((a) => {
+              const total = Number(a.totalStock) || 0;
+              const available = Number(a.availableStock) || 0;
+              const issuedCount = Number(a.issuedCount) || 0;
+              const pct = total ? Math.min((available / total) * 100, 100) : 0;
+              return (
+                <div key={a.id} className="bg-white border border-green-100 rounded-2xl p-4 mb-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-9 h-9 rounded-lg bg-green-50 flex items-center justify-center text-xs">{getAssetIcon(a.type)}</div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-800 truncate">{a.name || '—'}</p>
+                      <p className="text-xs text-gray-400">{a.type || '—'} · {a.assetId || ''}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                      <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                      {available}/{total}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-3">
+                    {issuedCount} issued · {available} available
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {available > 0 && (
+                      <button
+                        type="button"
+                        className="flex-1 min-h-[44px] py-2 bg-[#1B6B6B] text-white rounded-xl text-xs font-medium"
+                        onClick={() => openIssueModal(a)}
+                      >
+                        Issue
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="flex-1 min-h-[44px] py-2 border border-gray-200 rounded-xl text-xs text-gray-600"
+                      onClick={() => openViewIssuedModal(a)}
+                    >
+                      View Issued
+                    </button>
+                    <button
+                      type="button"
+                      className="min-h-[44px] px-3 py-2 border border-gray-200 rounded-xl text-xs text-gray-500"
+                      onClick={() => openEditStockModal(a)}
+                    >
+                      Edit Stock
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+          {assetView === 'consumable' && consumableAssets.length === 0 && (
+            <p className="text-center text-slate-500 py-8 text-sm">No consumable assets found.</p>
+          )}
+        </div>
+        </>
       )}
 
       {/* Add Asset Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-3">
               Add Asset
               {selectedAddAssetMode === 'trackable' ? (
@@ -1605,8 +1735,11 @@ export default function Assets() {
 
       {/* Assign Asset Modal */}
       {showAssignModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Assign Asset</h2>
             <form onSubmit={handleSaveAssignment} className="space-y-4">
               <div>
@@ -1713,8 +1846,11 @@ export default function Assets() {
 
       {/* Return Asset Modal */}
       {showReturnModal && selectedAsset && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Return Asset</h2>
             <form onSubmit={handleSaveReturn} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1793,8 +1929,11 @@ export default function Assets() {
 
       {/* Consumable: Issue Modal */}
       {showIssueModal && issueAsset && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Issue Consumable</h2>
             <form onSubmit={handleSaveIssueConsumable} className="space-y-4">
               <div>
@@ -1891,8 +2030,11 @@ export default function Assets() {
 
       {/* Consumable: View Issued Modal */}
       {showViewIssuedModal && issuedAsset && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Issued Consumables</h2>
             <p className="text-xs text-slate-500 mb-4">
               {issuedAsset.name || issuedAsset.assetId} · {issuedAsset.type}
@@ -1945,8 +2087,11 @@ export default function Assets() {
 
       {/* Consumable: Return Modal */}
       {showReturnConsumableModal && returnConsumableAsset && returnConsumableAssignment && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Return Consumable</h2>
             <form onSubmit={handleSaveReturnConsumable} className="space-y-4">
               <div>
@@ -2023,8 +2168,11 @@ export default function Assets() {
 
       {/* Consumable: Edit Stock Modal */}
       {showEditStockModal && editStockAsset && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Edit Stock</h2>
             <form onSubmit={handleSaveEditStock} className="space-y-4">
               <div>
@@ -2086,8 +2234,11 @@ export default function Assets() {
 
       {/* History Modal */}
       {showHistoryModal && selectedAsset && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl my-8 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-xl sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-2">Asset History</h2>
             <p className="text-xs text-slate-500 mb-4">
               {selectedAsset.assetId} · {selectedAsset.name}

@@ -401,11 +401,11 @@ export default function Leave() {
   const filtersActive = !!(filterEmployee || filterType || filterDept || filterFrom || filterTo || filterStatusDropdown);
 
   return (
-    <div className="p-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <div className="p-4 sm:p-8">
+      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-800">Leave</h1>
-          <p className="text-slate-500 text-sm mt-1">Leave requests and balance</p>
+          <h1 className="text-xl font-semibold text-slate-800">Leave</h1>
+          <p className="text-sm text-gray-500 mt-1">Leave requests and balance</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
@@ -413,7 +413,7 @@ export default function Leave() {
               type="button"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => setShowDownload((v) => !v)}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 active:bg-gray-100"
             >
               Download ▾
             </button>
@@ -422,14 +422,14 @@ export default function Leave() {
                 <button
                   type="button"
                   onClick={() => downloadLeaveReport('csv')}
-                  className="block w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50"
+                  className="block w-full text-left min-h-[44px] px-4 py-2.5 text-sm hover:bg-gray-50 active:bg-gray-100"
                 >
                   Download CSV
                 </button>
                 <button
                   type="button"
                   onClick={() => downloadLeaveReport('excel')}
-                  className="block w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 border-t border-gray-100"
+                  className="block w-full text-left min-h-[44px] px-4 py-2.5 text-sm hover:bg-gray-50 active:bg-gray-100 border-t border-gray-100"
                 >
                   Download Excel
                 </button>
@@ -439,7 +439,7 @@ export default function Leave() {
           <button
             type="button"
             onClick={openAddModal}
-            className="inline-flex items-center justify-center rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
+            className="inline-flex items-center justify-center min-h-[44px] rounded-lg bg-[#1B6B6B] hover:bg-[#155858] active:bg-[#0f4444] text-white text-sm font-medium px-4 py-2"
           >
             Add Leave
           </button>
@@ -449,7 +449,7 @@ export default function Leave() {
       <button
         type="button"
         onClick={() => setShowBalance(!showBalance)}
-        className="mb-4 text-sm font-medium text-slate-600 hover:text-slate-800"
+        className="mb-4 min-h-[44px] text-sm font-medium text-slate-600 hover:text-slate-800 active:text-slate-900 px-1 rounded-lg"
       >
         {showBalance ? '▼' : '▶'} Leave Balance
       </button>
@@ -498,95 +498,99 @@ export default function Leave() {
         </div>
       )}
 
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {['Pending', 'Approved', 'Rejected', 'All'].map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => {
-              setTab(t);
-              setFilterStatusDropdown('');
-            }}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-              tab === t && !filterStatusDropdown ? 'bg-[#1B6B6B] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
+      <div className="overflow-x-auto scrollbar-none -mx-4 px-4 lg:mx-0 lg:px-0 mb-4">
+        <div className="flex gap-2 min-w-max pb-1">
+          {['Pending', 'Approved', 'Rejected', 'All'].map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => {
+                setTab(t);
+                setFilterStatusDropdown('');
+              }}
+              className={`rounded-lg min-h-[44px] px-3 py-2 text-sm font-medium flex-shrink-0 active:opacity-90 ${
+                tab === t && !filterStatusDropdown ? 'bg-[#1B6B6B] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
-        <input
-          placeholder="Search employee..."
-          value={filterEmployee}
-          onChange={(e) => setFilterEmployee(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 w-44"
-        />
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
-        >
-          <option value="">All leave types</option>
-          {leaveTypes.map((lt) => (
-            <option key={lt.name} value={lt.name}>
-              {lt.name} ({lt.shortCode})
-              {!lt.isPaid ? ' — Unpaid' : ''}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filterDept}
-          onChange={(e) => setFilterDept(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
-        >
-          <option value="">All departments</option>
-          {departments.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filterStatusDropdown}
-          onChange={(e) => setFilterStatusDropdown(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
-        >
-          <option value="">Status: use tab above</option>
-          <option value="Pending">Pending</option>
-          <option value="Approved">Approved</option>
-          <option value="Rejected">Rejected</option>
-          <option value="All">All</option>
-        </select>
-        <input
-          type="date"
-          value={filterFrom}
-          onChange={(e) => setFilterFrom(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
-        />
-        <input
-          type="date"
-          value={filterTo}
-          onChange={(e) => setFilterTo(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
-        />
-        {filtersActive && (
-          <button
-            type="button"
-            onClick={() => {
-              setFilterEmployee('');
-              setFilterType('');
-              setFilterDept('');
-              setFilterFrom('');
-              setFilterTo('');
-              setFilterStatusDropdown('');
-            }}
-            className="text-sm text-red-500 hover:text-red-700 px-3 py-1.5"
+      <div className="overflow-x-auto scrollbar-none -mx-4 px-4 lg:mx-0 lg:px-0 mb-4">
+        <div className="flex gap-2 min-w-max p-3 bg-gray-50 rounded-xl border border-gray-200">
+          <input
+            placeholder="Search employee..."
+            value={filterEmployee}
+            onChange={(e) => setFilterEmployee(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] w-44 flex-shrink-0"
+          />
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] flex-shrink-0"
           >
-            Clear filters
-          </button>
-        )}
+            <option value="">All leave types</option>
+            {leaveTypes.map((lt) => (
+              <option key={lt.name} value={lt.name}>
+                {lt.name} ({lt.shortCode})
+                {!lt.isPaid ? ' — Unpaid' : ''}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filterDept}
+            onChange={(e) => setFilterDept(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] flex-shrink-0"
+          >
+            <option value="">All departments</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filterStatusDropdown}
+            onChange={(e) => setFilterStatusDropdown(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] flex-shrink-0"
+          >
+            <option value="">Status: use tab above</option>
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+            <option value="All">All</option>
+          </select>
+          <input
+            type="date"
+            value={filterFrom}
+            onChange={(e) => setFilterFrom(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] flex-shrink-0"
+          />
+          <input
+            type="date"
+            value={filterTo}
+            onChange={(e) => setFilterTo(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] flex-shrink-0"
+          />
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterEmployee('');
+                setFilterType('');
+                setFilterDept('');
+                setFilterFrom('');
+                setFilterTo('');
+                setFilterStatusDropdown('');
+              }}
+              className="text-sm text-red-500 hover:text-red-700 active:text-red-800 px-3 py-2 min-h-[44px] flex-shrink-0 rounded-lg"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -594,86 +598,151 @@ export default function Leave() {
           <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4ECDC4] border-t-transparent" />
         </div>
       ) : (
-        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium">Employee</th>
-                <th className="px-4 py-3 text-left font-medium">Leave Type</th>
-                <th className="px-4 py-3 text-left font-medium">Start</th>
-                <th className="px-4 py-3 text-left font-medium">End</th>
-                <th className="px-4 py-3 text-left font-medium">Days</th>
-                <th className="px-4 py-3 text-left font-medium">Reason</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-left font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLeave.map((l) => (
-                <tr key={l.id} className="border-t border-slate-100">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
-                        {(l.employeeName || '?').slice(0, 2).toUpperCase()}
-                      </div>
-                      <span className="font-medium text-slate-800">{l.employeeName || '—'}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${leaveTypeBadgeClass(l.leaveType, leaveTypes)}`}>
-                      {l.leaveType || '—'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">{l.startDate ? toDisplayDate(l.startDate) : '—'}</td>
-                  <td className="px-4 py-3 text-slate-700">{l.endDate ? toDisplayDate(l.endDate) : '—'}</td>
-                  <td className="px-4 py-3 text-slate-700">{l.days ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-600 max-w-[180px] truncate" title={l.reason}>
-                    {l.reason || '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[l.status] || 'bg-slate-100'}`}>
-                      {l.status || '—'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {l.status === 'Pending' && (
-                      <span className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={actioningId === l.id}
-                          onClick={() => handleApprove(l)}
-                          className="text-green-600 text-xs font-medium hover:underline disabled:opacity-50"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          disabled={actioningId === l.id}
-                          onClick={() => handleReject(l)}
-                          className="text-red-600 text-xs font-medium hover:underline disabled:opacity-50"
-                        >
-                          Reject
-                        </button>
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {filteredLeave.length === 0 && (
+        <>
+          <div className="hidden lg:block overflow-x-auto border border-slate-200 rounded-xl bg-white">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <td className="px-4 py-8 text-center text-slate-500" colSpan={8}>
-                    No leave requests.
-                  </td>
+                  <th className="px-4 py-3 text-left font-medium">Employee</th>
+                  <th className="px-4 py-3 text-left font-medium">Leave Type</th>
+                  <th className="px-4 py-3 text-left font-medium">Start</th>
+                  <th className="px-4 py-3 text-left font-medium">End</th>
+                  <th className="px-4 py-3 text-left font-medium">Days</th>
+                  <th className="px-4 py-3 text-left font-medium">Reason</th>
+                  <th className="px-4 py-3 text-left font-medium">Status</th>
+                  <th className="px-4 py-3 text-left font-medium">Actions</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filteredLeave.map((l) => (
+                  <tr key={l.id} className="border-t border-slate-100">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
+                          {(l.employeeName || '?').slice(0, 2).toUpperCase()}
+                        </div>
+                        <span className="font-medium text-slate-800">{l.employeeName || '—'}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${leaveTypeBadgeClass(l.leaveType, leaveTypes)}`}>
+                        {l.leaveType || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">{l.startDate ? toDisplayDate(l.startDate) : '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{l.endDate ? toDisplayDate(l.endDate) : '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{l.days ?? '—'}</td>
+                    <td className="px-4 py-3 text-slate-600 max-w-[180px] truncate" title={l.reason}>
+                      {l.reason || '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[l.status] || 'bg-slate-100'}`}>
+                        {l.status || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {l.status === 'Pending' && (
+                        <span className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={actioningId === l.id}
+                            onClick={() => handleApprove(l)}
+                            className="text-green-600 text-xs font-medium hover:underline disabled:opacity-50"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            disabled={actioningId === l.id}
+                            onClick={() => handleReject(l)}
+                            className="text-red-600 text-xs font-medium hover:underline disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {filteredLeave.length === 0 && (
+                  <tr>
+                    <td className="px-4 py-8 text-center text-slate-500" colSpan={8}>
+                      No leave requests.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="lg:hidden space-y-3">
+            {filteredLeave.map((leave) => (
+              <div key={leave.id} className="bg-white border border-gray-100 rounded-2xl p-4 mb-3 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-[#E8F5F5] flex items-center justify-center text-xs font-medium text-[#1B6B6B] flex-shrink-0">
+                      {leave.employeeName?.charAt(0) || '?'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{leave.employeeName || '—'}</p>
+                      <p className="text-xs text-gray-400 truncate">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${leaveTypeBadgeClass(leave.leaveType, leaveTypes)}`}>
+                          {leave.leaveType || '—'}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${STATUS_STYLE[leave.status] || 'bg-slate-100 text-slate-600'}`}>
+                    {leave.status || '—'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>
+                    {leave.startDate ? toDisplayDate(leave.startDate) : '—'} → {leave.endDate ? toDisplayDate(leave.endDate) : '—'}
+                  </span>
+                  <span className="font-medium text-slate-700">{leave.days ?? '—'} day(s)</span>
+                </div>
+
+                {leave.reason && (
+                  <p className="text-xs text-gray-400 mt-2 truncate" title={leave.reason}>
+                    {leave.reason}
+                  </p>
+                )}
+
+                {leave.status === 'Pending' && (
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      type="button"
+                      disabled={actioningId === leave.id}
+                      onClick={() => handleApprove(leave)}
+                      className="flex-1 min-h-[44px] py-2 bg-green-600 text-white rounded-xl text-xs font-medium hover:bg-green-700 active:bg-green-800 disabled:opacity-50"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={actioningId === leave.id}
+                      onClick={() => handleReject(leave)}
+                      className="flex-1 min-h-[44px] py-2 bg-red-100 text-red-600 rounded-xl text-xs font-medium hover:bg-red-200 active:bg-red-300 disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {filteredLeave.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No leave requests.</p>}
+          </div>
+        </>
       )}
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4 sm:hidden">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Add Leave</h2>
             <form onSubmit={handleAddLeave} className="space-y-4">
               <div>
