@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import html2canvas from 'html2canvas';
 import {
   addDoc,
   collection,
@@ -15,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
 import { toDisplayDate, toJSDate } from '../utils';
+import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 
 const LIBRARY_TABS = [
   { id: 'policies', label: 'Policies', icon: '📋' },
@@ -295,15 +297,6 @@ function formatLakhs(amount) {
   return String(n);
 }
 
-function escapeHtml(str) {
-  if (str == null) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 function previewText(policy) {
   const d = policy.description?.trim();
   if (d) {
@@ -326,6 +319,124 @@ function createEmptyRoleForm() {
     skills: { technical: [], soft: [] },
     kpis: [{ metric: '', target: '' }],
   };
+}
+
+function getDeptColor(dept) {
+  const colors = {
+    Engineering: '#3B82F6',
+    HR: '#10B981',
+    Sales: '#F59E0B',
+    Finance: '#6366F1',
+    Operations: '#EC4899',
+    Marketing: '#14B8A6',
+    Design: '#8B5CF6',
+    Legal: '#64748B',
+    Management: '#1B6B6B',
+  };
+  return colors[dept] || '#9CA3AF';
+}
+
+/** Build role hierarchy using reportsToRoleId and reportsTo (title) */
+function buildRoleTree(roleList) {
+  if (!roleList?.length) return [];
+  const byId = {};
+  roleList.forEach((r) => {
+    byId[r.id] = { ...r, children: [] };
+  });
+  const childIds = new Set();
+  roleList.forEach((r) => {
+    const node = byId[r.id];
+    let parent = r.reportsToRoleId && byId[r.reportsToRoleId];
+    if (!parent && r.reportsTo) {
+      const p = roleList.find((x) => x.title === r.reportsTo && x.id !== r.id);
+      if (p) parent = byId[p.id];
+    }
+    if (parent && parent.id !== r.id) {
+      parent.children.push(node);
+      childIds.add(r.id);
+    }
+  });
+  return roleList.filter((r) => !childIds.has(r.id)).map((r) => byId[r.id]);
+}
+
+function JobRoleNode({ node, employees, onView }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const headcount = employees.filter(
+    (e) =>
+      (e.designation || '').trim() === (node.title || '').trim() && (e.status || 'Active') === 'Active',
+  ).length;
+  const deptColor = getDeptColor(node.department);
+
+  return (
+    <div className="flex flex-col items-center">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onView(node)}
+        onKeyDown={(ev) => {
+          if (ev.key === 'Enter' || ev.key === ' ') onView(node);
+        }}
+        className="relative bg-white border-2 rounded-2xl p-4 w-52 cursor-pointer text-center hover:shadow-md transition-all hover:border-[#1B6B6B]"
+        style={{ borderColor: `${deptColor}40` }}
+      >
+        <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ background: deptColor }} />
+        <p className="text-sm font-bold text-gray-900 mt-1 leading-tight">{node.title}</p>
+        <p className="text-xs text-gray-400 mt-1">{node.department}</p>
+        {node.salaryBand?.min != null && (
+          <div className="mt-2 px-2 py-1 bg-gray-50 rounded-lg">
+            <p className="text-xs font-medium text-gray-600">
+              ₹{formatLakhs(node.salaryBand.min)} — ₹{formatLakhs(node.salaryBand.max)}
+            </p>
+          </div>
+        )}
+        <div className="mt-2 flex items-center justify-center gap-1">
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              headcount > 0 ? 'bg-[#E8F5F5] text-[#1B6B6B]' : 'bg-gray-100 text-gray-400'
+            }`}
+          >
+            {headcount > 0 ? `${headcount} employee${headcount !== 1 ? 's' : ''}` : 'Vacant'}
+          </span>
+        </div>
+        {node.children?.length > 0 && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setCollapsed(!collapsed);
+            }}
+            className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 w-7 h-7 rounded-full bg-[#1B6B6B] text-white text-xs flex items-center justify-center shadow-md hover:bg-[#155858] z-10"
+            aria-label={collapsed ? 'Expand' : 'Collapse'}
+          >
+            {collapsed ? '+' : '−'}
+          </button>
+        )}
+      </div>
+
+      {!collapsed && node.children?.length > 0 && (
+        <div className="mt-6 relative w-full flex flex-col items-center">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-6 bg-gray-300" />
+          {node.children.length > 1 && (
+            <div
+              className="absolute top-6 h-0.5 bg-gray-300"
+              style={{
+                left: `calc(50% - ${(node.children.length - 1) * 112}px)`,
+                width: `${(node.children.length - 1) * 224}px`,
+              }}
+            />
+          )}
+          <div className="flex gap-8 items-start mt-6 flex-wrap justify-center">
+            {node.children.map((child) => (
+              <div key={child.id} className="relative flex flex-col items-center">
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-0.5 h-6 bg-gray-300" />
+                <JobRoleNode node={child} employees={employees} onView={onView} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function roleDocToForm(role) {
@@ -400,6 +511,9 @@ export default function Library() {
   const [savingRole, setSavingRole] = useState(false);
   const [techSkillDraft, setTechSkillDraft] = useState('');
   const [softSkillDraft, setSoftSkillDraft] = useState('');
+  const [rolesView, setRolesView] = useState('grid');
+  const [archZoom, setArchZoom] = useState(0.9);
+  const [archDownloading, setArchDownloading] = useState(false);
 
   useEffect(() => {
     document.title = 'Library · AttendX';
@@ -574,6 +688,41 @@ export default function Library() {
     [employees],
   );
 
+  const roleRoots = useMemo(() => buildRoleTree(roles), [roles]);
+
+  const downloadArchitecturePNG = useCallback(async () => {
+    const el = document.getElementById('job-architecture-capture');
+    if (!el) return;
+    try {
+      setArchDownloading(true);
+      const prev = el.style.transform;
+      el.style.transform = 'scale(1)';
+      const canvas = await html2canvas(el, {
+        backgroundColor: '#F9FAFB',
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        scrollX: 0,
+        scrollY: 0,
+        width: el.scrollWidth,
+        height: el.scrollHeight,
+        windowWidth: el.scrollWidth,
+        windowHeight: el.scrollHeight,
+        logging: false,
+      });
+      el.style.transform = prev;
+      const link = document.createElement('a');
+      link.download = `${(company?.name || 'company').replace(/\s+/g, '-')}-job-architecture.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (e) {
+      console.error(e);
+      showError(`Download failed: ${e?.message || 'Unknown error'}`);
+    } finally {
+      setArchDownloading(false);
+    }
+  }, [company?.name, showError]);
+
   const openAddPolicy = () => {
     setEditingPolicy(null);
     setForm({
@@ -651,53 +800,34 @@ export default function Library() {
   const printPolicy = useCallback(
     (policy) => {
       if (!policy) return;
-      const cat = escapeHtml(policy.category);
-      const title = escapeHtml(policy.title);
+      const cat = escapeHtml(policy.category || '—');
       const ver = escapeHtml(policy.version || '1.0');
       const eff = escapeHtml(toDisplayDate(policy.effectiveDate));
       const desc = policy.description ? escapeHtml(policy.description) : '';
-      const content = escapeHtml(policy.content || '');
-      const printContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>${title}</title>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 40px; color: #1f2937; max-width: 800px; margin: 0 auto; }
-    .header { border-bottom: 2px solid #1B6B6B; padding-bottom: 20px; margin-bottom: 30px; }
-    .category { font-size: 12px; color: #1B6B6B; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-    h1 { font-size: 24px; color: #1B6B6B; margin: 0 0 8px; }
-    .meta { font-size: 13px; color: #6b7280; margin-top: 8px; }
-    .content { font-size: 14px; line-height: 1.8; white-space: pre-wrap; color: #374151; }
-    .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; display: flex; justify-content: space-between; }
-    @media print { body { padding: 20px; } }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="category">${cat}</div>
-    <h1>${title}</h1>
-    <div class="meta">Version ${ver} · Effective: ${eff}</div>
-    ${desc ? `<p style="color:#6b7280;font-size:14px;margin-top:8px">${desc}</p>` : ''}
-  </div>
-  <div class="content">${content}</div>
-  <div class="footer">
-    <span>AttendX HR Platform</span>
-    <span>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-  </div>
-</body>
-</html>`;
-      const printWindow = window.open('', '_blank', 'width=800,height=600');
-      if (!printWindow) {
-        showError('Pop-up blocked — allow pop-ups to print');
-        return;
-      }
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+      const body = escapeHtml(policy.content || '');
+      const inner = `
+      <div class="print-section">
+        <div class="print-grid-2">
+          <div><div class="print-field-label">Category</div><div class="print-field-value">${cat}</div></div>
+          <div><div class="print-field-label">Version</div><div class="print-field-value">${ver}</div></div>
+          <div><div class="print-field-label">Effective date</div><div class="print-field-value">${eff}</div></div>
+        </div>
+        ${desc ? `<p class="print-body-text" style="margin-top:16px;color:#6b7280">${desc}</p>` : ''}
+      </div>
+      <div class="print-section">
+        <div class="print-section-title">Policy content</div>
+        <div class="print-body-text">${body}</div>
+      </div>`;
+      const html = createPrintDocument({
+        title: policy.title,
+        subtitle: `${policy.category || ''} Policy`,
+        companyName: company?.name || '',
+        generatedBy: currentUser?.email || '',
+        content: inner,
+      });
+      if (!openPrintWindow(html)) showError('Pop-up blocked — allow pop-ups to print');
     },
-    [showError],
+    [company?.name, currentUser?.email, showError],
   );
 
   const resolveReportsToTitle = (rid) => {
@@ -710,103 +840,67 @@ export default function Library() {
     (role) => {
       if (!role) return;
       const matchingEmps = employees.filter((e) => (e.designation || '').trim() === (role.title || '').trim());
-      const title = escapeHtml(role.title);
-      const dept = escapeHtml(role.department || '—');
-      const reports = role.reportsTo ? escapeHtml(role.reportsTo) : '';
       const edu = escapeHtml(role.qualifications?.education || '—');
       const exp = escapeHtml(role.qualifications?.experience || '—');
       const notes = role.qualifications?.notes ? escapeHtml(role.qualifications.notes) : '';
-      const respHtml = (role.responsibilities || [])
-        .map(
-          (r, i) =>
-            `<div class="resp-item"><span style="color:#1B6B6B;font-weight:bold">${i + 1}.</span><span>${escapeHtml(r)}</span></div>`,
-        )
+      const respList = (role.responsibilities || [])
+        .map((r) => `<li style="margin-bottom:6px;font-size:13px">${escapeHtml(r)}</li>`)
         .join('');
-      const techHtml = (role.skills?.technical || [])
-        .map((s) => `<span class="skill-pill tech-skill">${escapeHtml(s)}</span>`)
-        .join('');
-      const softHtml = (role.skills?.soft || [])
-        .map((s) => `<span class="skill-pill soft-skill">${escapeHtml(s)}</span>`)
-        .join('');
-      const kpiSection =
+      const kpiRows =
         role.kpis?.length > 0
-          ? `<div class="section"><div class="section-title">KPIs</div><table class="kpi-table"><tr><th>Metric</th><th>Target</th></tr>${role.kpis
+          ? role.kpis
               .map(
                 (kpi) =>
                   `<tr><td>${escapeHtml(kpi.metric)}</td><td>${escapeHtml(kpi.target)}</td></tr>`,
               )
-              .join('')}</table></div>`
+              .join('')
           : '';
+      const techLine = (role.skills?.technical || []).map((s) => escapeHtml(s)).join(', ');
+      const softLine = (role.skills?.soft || []).map((s) => escapeHtml(s)).join(', ');
+      const deptEsc = escapeHtml(role.department || '—');
+      const reportsEsc = role.reportsTo ? escapeHtml(role.reportsTo) : '';
 
-      const printContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>${title} - Role Profile</title>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 40px; color: #1f2937; max-width: 800px; margin: 0 auto; }
-    .header { background: #1B6B6B; color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; }
-    .title { font-size: 24px; font-weight: bold; margin: 0 0 4px; }
-    .subtitle { opacity: 0.8; font-size: 14px; }
-    .section { margin-bottom: 24px; }
-    .section-title { font-size: 13px; font-weight: 600; color: #1B6B6B; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 12px; }
-    .salary-band { background: #E8F5F5; border: 1px solid #4ECDC4; border-radius: 8px; padding: 16px; text-align: center; margin-bottom: 24px; }
-    .salary-label { font-size: 12px; color: #1B6B6B; margin-bottom: 4px; }
-    .salary-value { font-size: 22px; font-weight: bold; color: #1B6B6B; }
-    .resp-item { display: flex; gap: 8px; margin-bottom: 6px; font-size: 13px; }
-    .kpi-table { width: 100%; border-collapse: collapse; }
-    .kpi-table th { background: #f9fafb; padding: 8px 12px; text-align: left; font-size: 12px; color: #6b7280; border: 1px solid #e5e7eb; }
-    .kpi-table td { padding: 8px 12px; font-size: 13px; border: 1px solid #e5e7eb; }
-    .skill-pill { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 12px; margin: 2px; }
-    .tech-skill { background: #EFF6FF; color: #1D4ED8; }
-    .soft-skill { background: #F0FDF4; color: #166534; }
-    .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; display: flex; justify-content: space-between; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="title">${title}</div>
-    <div class="subtitle">${dept}${reports ? ` · Reports to ${reports}` : ''} · ${matchingEmps.length} employee(s)</div>
-  </div>
-  <div class="salary-band">
-    <div class="salary-label">SALARY BAND (CTC per annum)</div>
-    <div class="salary-value">₹${formatLakhs(role.salaryBand?.min)} — ₹${formatLakhs(role.salaryBand?.max)}</div>
-  </div>
-  <div class="section">
-    <div class="section-title">Qualifications & Experience</div>
-    <p style="font-size:13px"><strong>Education:</strong> ${edu}</p>
-    <p style="font-size:13px;margin-top:6px"><strong>Experience:</strong> ${exp}</p>
-    ${notes ? `<p style="font-size:13px;margin-top:6px;color:#6b7280">${notes}</p>` : ''}
-  </div>
-  <div class="section">
-    <div class="section-title">Key Responsibilities</div>
-    ${respHtml}
-  </div>
-  <div class="section">
-    <div class="section-title">Skills</div>
-    <p style="font-size:12px;color:#6b7280;margin-bottom:8px">Technical Skills</p>
-    ${techHtml}
-    <p style="font-size:12px;color:#6b7280;margin:12px 0 8px">Soft Skills</p>
-    ${softHtml}
-  </div>
-  ${kpiSection}
-  <div class="footer">
-    <span>AttendX HR Platform · Role Profile</span>
-    <span>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-  </div>
-</body>
-</html>`;
-      const printWindow = window.open('', '_blank', 'width=800,height=600');
-      if (!printWindow) {
-        showError('Pop-up blocked — allow pop-ups to print');
-        return;
-      }
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+      const inner = `
+      <div class="print-highlight-card">
+        <div class="print-field-label">Salary band (CTC per annum)</div>
+        <div class="print-field-value" style="font-size:20px;color:#1B6B6B;margin-top:4px">₹${formatLakhs(role.salaryBand?.min)} — ₹${formatLakhs(role.salaryBand?.max)}</div>
+        <p class="print-meta" style="margin-top:8px">${deptEsc}${reportsEsc ? ` · Reports to ${reportsEsc}` : ''} · ${matchingEmps.length} employee(s) in role</p>
+      </div>
+      <div class="print-section">
+        <div class="print-section-title">Qualifications</div>
+        <div class="print-grid-2">
+          <div><div class="print-field-label">Education</div><div class="print-field-value">${edu}</div></div>
+          <div><div class="print-field-label">Experience</div><div class="print-field-value">${exp}</div></div>
+        </div>
+        ${notes ? `<p class="print-body-text" style="margin-top:12px;color:#6b7280">${notes}</p>` : ''}
+      </div>
+      <div class="print-section">
+        <div class="print-section-title">Responsibilities</div>
+        <ol style="padding-left:20px;margin:0">${respList || '<li>—</li>'}</ol>
+      </div>
+      <div class="print-section">
+        <div class="print-section-title">Skills</div>
+        <div class="print-field-label">Technical</div>
+        <div class="print-field-value" style="margin-bottom:12px">${techLine || '—'}</div>
+        <div class="print-field-label">Soft</div>
+        <div class="print-field-value">${softLine || '—'}</div>
+      </div>
+      ${
+        kpiRows
+          ? `<div class="print-section"><div class="print-section-title">KPIs</div><table class="print-table"><thead><tr><th>Metric</th><th>Target</th></tr></thead><tbody>${kpiRows}</tbody></table></div>`
+          : ''
+      }`;
+
+      const html = createPrintDocument({
+        title: `${role.title} — Role Profile`,
+        subtitle: role.department || 'Role definition',
+        companyName: company?.name || '',
+        generatedBy: currentUser?.email || '',
+        content: inner,
+      });
+      if (!openPrintWindow(html)) showError('Pop-up blocked — allow pop-ups to print');
     },
-    [employees, showError],
+    [employees, company?.name, currentUser?.email, showError],
   );
 
   const openAddRole = () => {
@@ -1113,123 +1207,261 @@ export default function Library() {
             </div>
           </div>
 
-          <div className="flex gap-2 flex-wrap mb-4">
-            <button
-              type="button"
-              onClick={() => setDeptFilter('')}
-              className={`text-xs px-3 py-1 rounded-full border font-medium min-h-[36px] ${
-                !deptFilter ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              All
-            </button>
-            {uniqueDepts.map((dept) => (
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit mb-4">
+            {[
+              { id: 'grid', icon: '⊞', label: 'Grid' },
+              { id: 'list', icon: '☰', label: 'List' },
+              { id: 'architecture', icon: '⬡', label: 'Job Architecture' },
+            ].map((v) => (
               <button
-                key={dept}
+                key={v.id}
                 type="button"
-                onClick={() => setDeptFilter(dept)}
-                className={`text-xs px-3 py-1 rounded-full border font-medium min-h-[36px] ${
-                  deptFilter === dept
-                    ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]'
-                    : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                onClick={() => setRolesView(v.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  rolesView === v.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                {dept}
+                {v.icon} {v.label}
               </button>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredRoles.map((role) => {
-              const headcount = role.currentHeadcount ?? 0;
-              return (
-                <div
-                  key={role.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setViewingRole(role)}
-                  onKeyDown={(ev) => {
-                    if (ev.key === 'Enter' || ev.key === ' ') setViewingRole(role);
-                  }}
-                  className="bg-white border border-gray-100 rounded-2xl p-5 cursor-pointer hover:border-[#4ECDC4] hover:shadow-sm transition-all text-left"
+          {(rolesView === 'grid' || rolesView === 'list') && (
+            <div className="flex gap-2 flex-wrap mb-4">
+              <button
+                type="button"
+                onClick={() => setDeptFilter('')}
+                className={`text-xs px-3 py-1 rounded-full border font-medium min-h-[36px] ${
+                  !deptFilter ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                All
+              </button>
+              {uniqueDepts.map((dept) => (
+                <button
+                  key={dept}
+                  type="button"
+                  onClick={() => setDeptFilter(dept)}
+                  className={`text-xs px-3 py-1 rounded-full border font-medium min-h-[36px] ${
+                    deptFilter === dept
+                      ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]'
+                      : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                  }`}
                 >
-                  <div className="flex items-start justify-between mb-3 gap-2">
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-gray-900">{role.title}</h3>
-                      <p className="text-sm text-gray-400 mt-0.5">
-                        {role.department}
-                        {role.reportsTo ? ` · Reports to ${role.reportsTo}` : ''}
-                      </p>
+                  {dept}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {rolesView === 'grid' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredRoles.map((role) => {
+                const headcount = role.currentHeadcount ?? 0;
+                return (
+                  <div
+                    key={role.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setViewingRole(role)}
+                    onKeyDown={(ev) => {
+                      if (ev.key === 'Enter' || ev.key === ' ') setViewingRole(role);
+                    }}
+                    className="bg-white border border-gray-100 rounded-2xl p-5 cursor-pointer hover:border-[#4ECDC4] hover:shadow-sm transition-all text-left"
+                  >
+                    <div className="flex items-start justify-between mb-3 gap-2">
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-gray-900">{role.title}</h3>
+                        <p className="text-sm text-gray-400 mt-0.5">
+                          {role.department}
+                          {role.reportsTo ? ` · Reports to ${role.reportsTo}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {headcount > 0 ? (
+                          <span className="text-xs px-2 py-1 bg-[#E8F5F5] text-[#1B6B6B] rounded-full font-medium whitespace-nowrap">
+                            {headcount} employee{headcount !== 1 ? 's' : ''}
+                          </span>
+                        ) : (
+                          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-400 rounded-full whitespace-nowrap">Vacant</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {headcount > 0 ? (
-                        <span className="text-xs px-2 py-1 bg-[#E8F5F5] text-[#1B6B6B] rounded-full font-medium whitespace-nowrap">
-                          {headcount} employee{headcount !== 1 ? 's' : ''}
-                        </span>
-                      ) : (
-                        <span className="text-xs px-2 py-1 bg-gray-100 text-gray-400 rounded-full whitespace-nowrap">Vacant</span>
+
+                    <div className="flex items-center gap-2 mb-3 p-2.5 bg-gray-50 rounded-xl">
+                      <span className="text-xs text-gray-400">Salary Band</span>
+                      <span className="text-sm font-semibold text-gray-800 ml-auto">
+                        ₹{formatLakhs(role.salaryBand?.min)} — ₹{formatLakhs(role.salaryBand?.max)}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 mb-3">
+                      {(role.responsibilities || []).slice(0, 2).map((r, i) => (
+                        <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500">
+                          <span className="text-[#1B6B6B] mt-0.5 flex-shrink-0">•</span>
+                          <span className="line-clamp-1">{r}</span>
+                        </div>
+                      ))}
+                      {(role.responsibilities || []).length > 2 && (
+                        <p className="text-xs text-gray-400 ml-3">+{(role.responsibilities || []).length - 2} more</p>
                       )}
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2 mb-3 p-2.5 bg-gray-50 rounded-xl">
-                    <span className="text-xs text-gray-400">Salary Band</span>
-                    <span className="text-sm font-semibold text-gray-800 ml-auto">
-                      ₹{formatLakhs(role.salaryBand?.min)} — ₹{formatLakhs(role.salaryBand?.max)}
-                    </span>
-                  </div>
+                    <div className="flex flex-wrap gap-1">
+                      {[...(role.skills?.technical || []), ...(role.skills?.soft || [])].slice(0, 4).map((skill, i) => (
+                        <span key={i} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
 
-                  <div className="space-y-1 mb-3">
-                    {(role.responsibilities || []).slice(0, 2).map((r, i) => (
-                      <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500">
-                        <span className="text-[#1B6B6B] mt-0.5 flex-shrink-0">•</span>
-                        <span className="line-clamp-1">{r}</span>
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
+                      <span className="text-xs text-gray-400">
+                        {(role.kpis || []).length} KPIs · {(role.responsibilities || []).length} responsibilities
+                      </span>
+                      <div className="flex gap-2" onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>
+                        {canEdit && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEditRole(role)}
+                              className="text-xs text-[#1B6B6B] hover:underline"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePrintRole(role)}
+                              className="text-xs text-gray-400 hover:text-gray-600"
+                            >
+                              🖨️
+                            </button>
+                          </>
+                        )}
                       </div>
-                    ))}
-                    {(role.responsibilities || []).length > 2 && (
-                      <p className="text-xs text-gray-400 ml-3">+{(role.responsibilities || []).length - 2} more</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {rolesView === 'list' && (
+            <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
+              <table className="w-full text-sm text-left min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                    <th className="px-4 py-3 font-semibold">Role</th>
+                    <th className="px-4 py-3 font-semibold">Department</th>
+                    <th className="px-4 py-3 font-semibold">Reports to</th>
+                    <th className="px-4 py-3 font-semibold text-right">Headcount</th>
+                    <th className="px-4 py-3 font-semibold">Salary band</th>
+                    {canEdit && <th className="px-4 py-3 font-semibold text-right">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRoles.map((role) => {
+                    const headcount = role.currentHeadcount ?? 0;
+                    return (
+                      <tr
+                        key={role.id}
+                        className="border-b border-gray-50 hover:bg-gray-50/80 cursor-pointer"
+                        onClick={() => setViewingRole(role)}
+                        onKeyDown={(ev) => {
+                          if (ev.key === 'Enter' || ev.key === ' ') setViewingRole(role);
+                        }}
+                        tabIndex={0}
+                        role="button"
+                      >
+                        <td className="px-4 py-3 font-medium text-gray-900">{role.title}</td>
+                        <td className="px-4 py-3 text-gray-600">{role.department || '—'}</td>
+                        <td className="px-4 py-3 text-gray-600">{role.reportsTo || '—'}</td>
+                        <td className="px-4 py-3 text-right">
+                          {headcount > 0 ? (
+                            <span className="text-xs px-2 py-1 bg-[#E8F5F5] text-[#1B6B6B] rounded-full font-medium">{headcount}</span>
+                          ) : (
+                            <span className="text-xs text-gray-400">Vacant</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                          ₹{formatLakhs(role.salaryBand?.min)} — ₹{formatLakhs(role.salaryBand?.max)}
+                        </td>
+                        {canEdit && (
+                          <td className="px-4 py-3 text-right" onClick={(ev) => ev.stopPropagation()}>
+                            <button type="button" onClick={() => openEditRole(role)} className="text-xs text-[#1B6B6B] hover:underline mr-2">
+                              Edit
+                            </button>
+                            <button type="button" onClick={() => handlePrintRole(role)} className="text-xs text-gray-400 hover:text-gray-600">
+                              🖨️
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {rolesView === 'architecture' && (
+            <>
+              <div className="flex gap-2 items-center mb-4">
+                <button
+                  type="button"
+                  onClick={() => setArchZoom((z) => Math.min(z + 0.1, 1.5))}
+                  className="w-8 h-8 border border-gray-200 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                  aria-label="Zoom in"
+                >
+                  +
+                </button>
+                <span className="text-xs text-gray-400 w-12 text-center">{Math.round(archZoom * 100)}%</span>
+                <button
+                  type="button"
+                  onClick={() => setArchZoom((z) => Math.max(z - 0.1, 0.4))}
+                  className="w-8 h-8 border border-gray-200 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                  aria-label="Zoom out"
+                >
+                  −
+                </button>
+              </div>
+
+              <div id="job-architecture-container" className="overflow-auto p-8 bg-gray-50 rounded-2xl min-h-96">
+                <div className="flex justify-end mb-4">
+                  <button
+                    type="button"
+                    onClick={downloadArchitecturePNG}
+                    disabled={archDownloading || roles.length === 0}
+                    className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 bg-white rounded-lg text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {archDownloading ? 'Preparing…' : 'Download PNG'}
+                  </button>
+                </div>
+
+                <div
+                  id="job-architecture-capture"
+                  style={{
+                    transform: `scale(${archZoom})`,
+                    transformOrigin: 'top center',
+                  }}
+                >
+                  <div className="flex flex-col items-center pb-8">
+                    {roles.length === 0 ? (
+                      <p className="text-sm text-gray-500">No roles to display.</p>
+                    ) : roleRoots.length === 0 ? (
+                      <p className="text-sm text-gray-500">No root roles — check reporting lines.</p>
+                    ) : (
+                      roleRoots.map((root) => (
+                        <JobRoleNode key={root.id} node={root} employees={employees} onView={setViewingRole} />
+                      ))
                     )}
                   </div>
-
-                  <div className="flex flex-wrap gap-1">
-                    {[...(role.skills?.technical || []), ...(role.skills?.soft || [])].slice(0, 4).map((skill, i) => (
-                      <span key={i} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
-                    <span className="text-xs text-gray-400">
-                      {(role.kpis || []).length} KPIs · {(role.responsibilities || []).length} responsibilities
-                    </span>
-                    <div className="flex gap-2" onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>
-                      {canEdit && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => openEditRole(role)}
-                            className="text-xs text-[#1B6B6B] hover:underline"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handlePrintRole(role)}
-                            className="text-xs text-gray-400 hover:text-gray-600"
-                          >
-                            🖨️
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            </>
+          )}
 
-          {filteredRoles.length === 0 && (
+          {rolesView !== 'architecture' && filteredRoles.length === 0 && (
             <p className="text-center text-slate-500 py-12 text-sm">No roles match your filters.</p>
           )}
         </>

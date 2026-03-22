@@ -19,8 +19,10 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { db } from '../firebase/config';
+import { useAuth } from '../contexts/AuthContext';
 import { toDateString, toDisplayDate, toJSDate } from '../utils';
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
+import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 
 const CHART_COLORS = ['#1B6B6B', '#4ECDC4', '#2BB8B0', '#155858', '#7EDDD8', '#0F4444', '#A8EDEA', '#264653', '#2A9D8F'];
 
@@ -188,6 +190,7 @@ function DownloadExcelButton({ onClick, label = 'Download Excel' }) {
 export default function Reports() {
   const { companyId } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [leaveList, setLeaveList] = useState([]);
   const [assets, setAssets] = useState([]);
@@ -758,6 +761,244 @@ export default function Reports() {
     return 'bg-green-500';
   };
 
+  const handlePrintReport = (tabId) => {
+    const tabMeta = REPORT_TABS.find((t) => t.id === tabId);
+    const esc = escapeHtml;
+    const total = employees.length || 1;
+    const tm = totalMandatory || defaultTotalMandatory;
+
+    let content = '';
+    switch (tabId) {
+      case 'headcount':
+        content = `
+          <div class="print-section">
+            <div class="print-section-title">Summary</div>
+            <div class="print-grid-2">
+              <div><div class="print-field-label">Total employees</div><div class="print-field-value">${headcountStats.total}</div></div>
+              <div><div class="print-field-label">Active</div><div class="print-field-value">${headcountStats.active}</div></div>
+              <div><div class="print-field-label">On leave today</div><div class="print-field-value">${headcountStats.onLeaveToday}</div></div>
+              <div><div class="print-field-label">New joiners (MTD)</div><div class="print-field-value">${headcountStats.newJoiners}</div></div>
+            </div>
+          </div>
+          <div class="print-section">
+            <div class="print-section-title">Department summary</div>
+            <table class="print-table">
+              <thead><tr><th>Department</th><th>Employees</th><th>% of total</th></tr></thead>
+              <tbody>
+              ${deptData
+                .map(
+                  (d) =>
+                    `<tr><td>${esc(d.name)}</td><td>${d.count}</td><td>${((d.count / total) * 100).toFixed(0)}%</td></tr>`,
+                )
+                .join('')}
+              </tbody>
+            </table>
+          </div>`;
+        break;
+      case 'employee':
+        content = `
+          <div class="print-section">
+            <div class="print-section-title">Employees (${filteredEmployeesForReport.length} shown)</div>
+            <table class="print-table">
+              <thead><tr>
+                <th>Emp ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Branch</th>
+                <th>Employment type</th><th>Category</th><th>Joining</th><th>Tenure</th><th>Status</th><th>Onboarding</th><th>Docs %</th>
+              </tr></thead>
+              <tbody>
+                ${filteredEmployeesForReport
+                  .map(
+                    (emp) =>
+                      `<tr>
+                        <td>${esc(emp.empId || '—')}</td>
+                        <td>${esc(emp.fullName || '—')}</td>
+                        <td>${esc(emp.department || '—')}</td>
+                        <td>${esc(emp.designation || '—')}</td>
+                        <td>${esc(emp.branch || '—')}</td>
+                        <td>${esc(emp.employmentType || '—')}</td>
+                        <td>${esc(emp.category || '—')}</td>
+                        <td>${esc(toDisplayDate(emp.joiningDate) || '—')}</td>
+                        <td>${esc(tenureLabel(emp.joiningDate))}</td>
+                        <td>${esc(emp.status || 'Active')}</td>
+                        <td>${esc(emp.onboarding?.status || 'not_started')}</td>
+                        <td>${getOverallPct(emp, activeChecklist, tm)}%</td>
+                      </tr>`,
+                  )
+                  .join('')}
+              </tbody>
+            </table>
+          </div>`;
+        break;
+      case 'leave':
+        content = `
+          <div class="print-section">
+            <div class="print-section-title">Leave by type (${currentYear})</div>
+            <table class="print-table">
+              <thead><tr><th>Type</th><th>Total requests</th><th>Approved</th></tr></thead>
+              <tbody>
+              ${leaveByType
+                .map((row) => `<tr><td>${esc(row.name)}</td><td>${row.total}</td><td>${row.approved}</td></tr>`)
+                .join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="print-section">
+            <div class="print-section-title">Monthly trend (${currentYear})</div>
+            <table class="print-table">
+              <thead><tr><th>Month</th><th>Requests</th></tr></thead>
+              <tbody>
+              ${monthlyLeave
+                .map((m) => `<tr><td>${esc(m.month)}</td><td>${m.count}</td></tr>`)
+                .join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="print-section">
+            <div class="print-section-title">Leave balance (approved days used / policy)</div>
+            <table class="print-table">
+              <thead><tr><th>Employee</th>${paidLeaveTypes.map((lt) => `<th>${esc(lt.shortCode)}</th>`).join('')}</tr></thead>
+              <tbody>
+                ${employees
+                  .map((emp) => {
+                    const row = leaveBalanceByEmp[emp.id];
+                    if (!row) return '';
+                    return `<tr><td>${esc(emp.fullName || '—')}</td>${paidLeaveTypes
+                      .map((lt) => {
+                        const used = row[lt.shortCode] || 0;
+                        const allowed = getAllowanceForType(lt, leavePolicyMap);
+                        return `<td>${used} / ${allowed}</td>`;
+                      })
+                      .join('')}</tr>`;
+                  })
+                  .join('')}
+              </tbody>
+            </table>
+          </div>`;
+        break;
+      case 'asset':
+        content = `
+          <div class="print-section">
+            <div class="print-section-title">Asset register</div>
+            <table class="print-table">
+              <thead><tr><th>Type</th><th>Name</th><th>Mode</th><th>Status</th><th>Asset ID</th></tr></thead>
+              <tbody>
+              ${assets
+                .map(
+                  (a) =>
+                    `<tr><td>${esc(a.type || '—')}</td><td>${esc(a.name || '—')}</td><td>${esc(a.mode || 'trackable')}</td><td>${esc(
+                      a.status || '—',
+                    )}</td><td>${esc(a.assetId || '—')}</td></tr>`,
+                )
+                .join('')}
+              </tbody>
+            </table>
+          </div>`;
+        break;
+      case 'document':
+        content = `
+          <div class="print-section">
+            <div class="print-section-title">Missing mandatory documents</div>
+            <table class="print-table">
+              <thead><tr><th>Name</th><th>Emp ID</th><th>Department</th><th>Completion %</th><th>Missing</th></tr></thead>
+              <tbody>
+              ${missingDocTableRows
+                .map(
+                  ({ emp, pct, missing }) =>
+                    `<tr>
+                      <td>${esc(emp.fullName || '—')}</td>
+                      <td>${esc(emp.empId || '—')}</td>
+                      <td>${esc(emp.department || '—')}</td>
+                      <td>${pct}%</td>
+                      <td>${esc(missing.join(', '))}</td>
+                    </tr>`,
+                )
+                .join('')}
+              </tbody>
+            </table>
+          </div>`;
+        break;
+      case 'onboarding':
+        content = `
+          <div class="print-section">
+            <div class="print-section-title">New joiners (last 90 days)</div>
+            <table class="print-table">
+              <thead><tr><th>Name</th><th>Join date</th><th>Tenure</th><th>Onboarding %</th><th>Status</th><th>Tasks left</th></tr></thead>
+              <tbody>
+              ${newJoinersTable
+                .map(
+                  ({ e, pct, left, status }) =>
+                    `<tr>
+                      <td>${esc(e.fullName || '—')}</td>
+                      <td>${esc(toDisplayDate(e.joiningDate) || '—')}</td>
+                      <td>${esc(tenureLabel(e.joiningDate))}</td>
+                      <td>${pct}%</td>
+                      <td>${esc(status)}</td>
+                      <td>${left}</td>
+                    </tr>`,
+                )
+                .join('')}
+              </tbody>
+            </table>
+          </div>`;
+        break;
+      case 'offboarding':
+        content = `
+          <div class="print-section">
+            <div class="print-section-title">Active offboarding</div>
+            <table class="print-table">
+              <thead><tr><th>Name</th><th>Department</th><th>Exit date</th><th>Days left</th><th>Reason</th><th>Completion</th><th>Pending tasks</th></tr></thead>
+              <tbody>
+              ${activeOffboardingRows
+                .map(({ e, daysLeft, pct, pending }) => {
+                  const dl = daysLeft == null ? '—' : daysLeft < 0 ? 'Past' : String(daysLeft);
+                  return `<tr>
+                    <td>${esc(e.fullName || '—')}</td>
+                    <td>${esc(e.department || '—')}</td>
+                    <td>${esc(toDisplayDate(e.offboarding?.exitDate) || '—')}</td>
+                    <td>${esc(dl)}</td>
+                    <td>${esc(e.offboarding?.exitReason || '—')}</td>
+                    <td>${pct}%</td>
+                    <td>${pending}</td>
+                  </tr>`;
+                })
+                .join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="print-section">
+            <div class="print-section-title">Completed offboarding</div>
+            <table class="print-table">
+              <thead><tr><th>Name</th><th>Department</th><th>Exit date</th><th>Reason</th><th>Status</th></tr></thead>
+              <tbody>
+              ${completedOffboardingRows
+                .map(
+                  ({ e }) =>
+                    `<tr>
+                      <td>${esc(e.fullName || '—')}</td>
+                      <td>${esc(e.department || '—')}</td>
+                      <td>${esc(toDisplayDate(e.offboarding?.exitDate) || '—')}</td>
+                      <td>${esc(e.offboarding?.exitReason || '—')}</td>
+                      <td>${esc(e.status || 'Inactive')}</td>
+                    </tr>`,
+                )
+                .join('')}
+              </tbody>
+            </table>
+          </div>`;
+        break;
+      default:
+        content = '<p class="print-body-text">No printable content.</p>';
+    }
+
+    const html = createPrintDocument({
+      title: `${tabMeta?.label || 'Report'} report`,
+      subtitle: 'HR Analytics Report',
+      companyName: companyDisplayName,
+      generatedBy: currentUser?.email || '',
+      content,
+    });
+    openPrintWindow(html);
+  };
+
   if (!companyId) return null;
 
   if (loading) {
@@ -915,14 +1156,23 @@ export default function Reports() {
               </ResponsiveContainer>
             </ChartCard>
           </div>
-          <DownloadExcelButton
-            onClick={() =>
-              downloadReport(safeCompanyFile, 'Headcount', deptData, [
-                { header: 'Department', accessor: (r) => r.name },
-                { header: 'Count', accessor: (r) => r.count },
-              ])
-            }
-          />
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => handlePrintReport('headcount')}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+            >
+              🖨️ Print Report
+            </button>
+            <DownloadExcelButton
+              onClick={() =>
+                downloadReport(safeCompanyFile, 'Headcount', deptData, [
+                  { header: 'Department', accessor: (r) => r.name },
+                  { header: 'Count', accessor: (r) => r.count },
+                ])
+              }
+            />
+          </div>
         </>
       )}
 
@@ -1012,7 +1262,14 @@ export default function Reports() {
           <p className="text-sm text-gray-500 mb-4">
             Total showing: {filteredEmployeesForReport.length} of {employees.length} employees
           </p>
-          <div className="flex gap-2 mt-4">
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => handlePrintReport('employee')}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+            >
+              🖨️ Print Report
+            </button>
             <button type="button" onClick={downloadEmployeeCSV} className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">
               Download CSV
             </button>
@@ -1106,7 +1363,14 @@ export default function Reports() {
               </table>
             </div>
           </ChartCard>
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => handlePrintReport('leave')}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+            >
+              🖨️ Print Report
+            </button>
             <DownloadExcelButton
               onClick={() =>
                 downloadReport(safeCompanyFile, 'Leave', leaveYearList, [
@@ -1207,7 +1471,14 @@ export default function Reports() {
               {consumableRows.length === 0 && <p className="text-gray-400 text-sm">No consumable assets</p>}
             </div>
           </ChartCard>
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => handlePrintReport('asset')}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+            >
+              🖨️ Print Report
+            </button>
             <DownloadExcelButton
               onClick={() =>
                 downloadReport(safeCompanyFile, 'Assets', assets, [
@@ -1282,7 +1553,14 @@ export default function Reports() {
               </table>
             </div>
           </ChartCard>
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => handlePrintReport('document')}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+            >
+              🖨️ Print Report
+            </button>
             <DownloadExcelButton
               onClick={() =>
                 downloadReport(
@@ -1390,7 +1668,14 @@ export default function Reports() {
               </tbody>
             </table>
           </ChartCard>
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => handlePrintReport('onboarding')}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+            >
+              🖨️ Print Report
+            </button>
             <DownloadExcelButton
               onClick={() =>
                 downloadReport(safeCompanyFile, 'Onboarding', newJoinersTable, [
@@ -1501,7 +1786,14 @@ export default function Reports() {
               </table>
             </div>
           </ChartCard>
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => handlePrintReport('offboarding')}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+            >
+              🖨️ Print Report
+            </button>
             <DownloadExcelButton
               onClick={() =>
                 downloadReport(safeCompanyFile, 'Offboarding', completedOffboardingRows, [

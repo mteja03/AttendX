@@ -26,6 +26,7 @@ import {
 } from '../utils/documentTypes';
 import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDrive';
 import { toDisplayDate, toJSDate, toDateString } from '../utils';
+import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 
 const DEPT_COLOR = {
   Engineering: '#1B6B6B',
@@ -2080,272 +2081,125 @@ export default function EmployeeProfile() {
   };
 
   const handlePrintProfile = () => {
+    if (!employee) return;
+    const e = escapeHtml;
     const companyName = getCompanyName() || '';
-    const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Employee Profile - ${employee.fullName || ''}</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; padding: 40px; color: #1f2937; }
-        .header { display: flex; align-items: center; gap: 20px; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #e5e7eb; }
-        .avatar { width: 64px; height: 64px; border-radius: 50%; background: #3B82F6; display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; font-weight: bold; }
-        .name { font-size: 24px; font-weight: bold; }
-        .subtitle { color: #6B7280; font-size: 14px; margin-top: 4px; }
-        .company { font-size: 13px; color: #374151; margin-top: 2px; }
-        .section { margin-bottom: 24px; }
-        .section-title { font-size: 13px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        .field-label { font-size: 11px; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.05em; }
-        .field-value { font-size: 13px; color: #1f2937; margin-top: 2px; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
-        .badge-active { background: #D1FAE5; color: #065F46; }
-        .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9CA3AF; display: flex; justify-content: space-between; }
-        @media print { body { padding: 20px; } .no-print { display: none; } }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <div class="avatar">
-          ${(employee.fullName || 'E').charAt(0)}
+    const addrRaw =
+      [employee.streetAddress, employee.city, employee.state, employee.pincode, employee.country].filter(Boolean).join(', ') ||
+      employee.address ||
+      '';
+    const addr = addrRaw ? e(addrRaw) : '—';
+    const ctcVal =
+      employee.ctcPerAnnum != null || employee.ctc != null
+        ? `₹${(employee.ctcPerAnnum ?? employee.ctc).toLocaleString('en-IN')}`
+        : '—';
+    const basicVal =
+      employee.basicSalary != null ? `₹${employee.basicSalary.toLocaleString('en-IN')}/month` : '—';
+    const aadhaarDisp = employee.aadhaarNumber ? e(`XXXX XXXX ${String(employee.aadhaarNumber).slice(-4)}`) : '—';
+
+    const emergencyBlock = employee.emergencyContact?.name
+      ? `<div class="print-section">
+        <div class="print-section-title">Emergency contact</div>
+        <div class="print-grid-2">
+          <div><div class="print-field-label">Name</div><div class="print-field-value">${e(employee.emergencyContact.name)}</div></div>
+          <div><div class="print-field-label">Relationship</div><div class="print-field-value">${e(employee.emergencyContact.relationship || '—')}</div></div>
+          <div><div class="print-field-label">Phone</div><div class="print-field-value">${e(employee.emergencyContact.phone || '—')}</div></div>
+          <div><div class="print-field-label">Email</div><div class="print-field-value">${e(employee.emergencyContact.email || '—')}</div></div>
         </div>
+      </div>`
+      : '';
+
+    const assetsBlock =
+      employeeAssets.length > 0
+        ? `<div class="print-section">
+        <div class="print-section-title">Assigned assets (${employeeAssets.length})</div>
+        <table class="print-table">
+          <thead><tr><th>Asset ID</th><th>Name</th><th>Serial</th></tr></thead>
+          <tbody>
+            ${employeeAssets
+              .map(
+                (a) =>
+                  `<tr><td>${e(a.assetId || '—')}</td><td>${e(a.name || '—')}</td><td>${e(a.serialNumber || '—')}</td></tr>`,
+              )
+              .join('')}
+          </tbody>
+        </table>
+      </div>`
+        : '';
+
+    const status = employee.status || 'Active';
+    const statusClass =
+      status === 'Active' ? 'print-badge-green' : status === 'Inactive' ? 'print-badge-red' : 'print-badge-amber';
+
+    const content = `
+      <div class="print-highlight-card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
         <div>
-          <div class="name">
-            ${employee.fullName || ''}
-          </div>
-          <div class="subtitle">
-            ${employee.designation || ''} · ${employee.department || ''}
-          </div>
-          <div class="company">
-            ${companyName} · ${employee.empId || ''}
-          </div>
+          <div class="print-field-label">Employee</div>
+          <div class="print-field-value" style="font-size:18px">${e(employee.fullName || '—')}</div>
+          <p class="print-meta" style="margin-top:6px">${e(employee.designation || '—')} · ${e(employee.department || '—')}</p>
+          <p class="print-meta">${e(companyName)} · ${e(employee.empId || '—')}</p>
         </div>
-        <div style="margin-left: auto;">
-          <span class="badge badge-active">
-            ${employee.status || 'Active'}
-          </span>
+        <span class="print-badge ${statusClass}">${e(status)}</span>
+      </div>
+
+      <div class="print-section">
+        <div class="print-section-title">Personal information</div>
+        <div class="print-grid-2">
+          <div><div class="print-field-label">Full name</div><div class="print-field-value">${e(employee.fullName || '—')}</div></div>
+          <div><div class="print-field-label">Father's name</div><div class="print-field-value">${e(employee.fatherName || '—')}</div></div>
+          <div><div class="print-field-label">Email</div><div class="print-field-value">${e(employee.email || '—')}</div></div>
+          <div><div class="print-field-label">Phone</div><div class="print-field-value">${e(employee.phone || '—')}</div></div>
+          <div><div class="print-field-label">Date of birth</div><div class="print-field-value">${e(toDisplayDate(employee.dateOfBirth) || '—')}</div></div>
+          <div><div class="print-field-label">Gender</div><div class="print-field-value">${e(employee.gender || '—')}</div></div>
+          <div style="grid-column:1/-1"><div class="print-field-label">Address</div><div class="print-field-value">${addr}</div></div>
+          <div><div class="print-field-label">Qualification</div><div class="print-field-value">${e(employee.qualification || '—')}</div></div>
         </div>
       </div>
 
-      <div class="section">
-        <div class="section-title">Personal Information</div>
-        <div class="grid">
-          <div>
-            <div class="field-label">Full Name</div>
-            <div class="field-value">${employee.fullName || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Father's Name</div>
-            <div class="field-value">${employee.fatherName || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Email</div>
-            <div class="field-value">${employee.email || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Phone</div>
-            <div class="field-value">${employee.phone || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Date of Birth</div>
-            <div class="field-value">${toDisplayDate(employee.dateOfBirth) || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Gender</div>
-            <div class="field-value">${employee.gender || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Address</div>
-            <div class="field-value">
-              ${
-                [
-                  employee.streetAddress,
-                  employee.city,
-                  employee.state,
-                  employee.pincode,
-                  employee.country,
-                ]
-                  .filter(Boolean)
-                  .join(', ') || employee.address || '—'
-              }
-            </div>
-          </div>
-          <div>
-            <div class="field-label">Qualification</div>
-            <div class="field-value">${employee.qualification || '—'}</div>
-          </div>
+      <div class="print-section">
+        <div class="print-section-title">Employment details</div>
+        <div class="print-grid-2">
+          <div><div class="print-field-label">Employee ID</div><div class="print-field-value">${e(employee.empId || '—')}</div></div>
+          <div><div class="print-field-label">Department</div><div class="print-field-value">${e(employee.department || '—')}</div></div>
+          <div><div class="print-field-label">Designation</div><div class="print-field-value">${e(employee.designation || '—')}</div></div>
+          <div><div class="print-field-label">Branch</div><div class="print-field-value">${e(employee.branch || '—')}</div></div>
+          <div><div class="print-field-label">Employment type</div><div class="print-field-value">${e(employee.employmentType || '—')}</div></div>
+          <div><div class="print-field-label">Category</div><div class="print-field-value">${e(employee.category || '—')}</div></div>
+          <div><div class="print-field-label">Joining date</div><div class="print-field-value">${e(toDisplayDate(employee.joiningDate) || '—')}</div></div>
+          <div><div class="print-field-label">Reporting manager</div><div class="print-field-value">${e(employee.reportingManagerName || '—')}</div></div>
         </div>
       </div>
 
-      <div class="section">
-        <div class="section-title">Employment Details</div>
-        <div class="grid">
-          <div>
-            <div class="field-label">Emp ID</div>
-            <div class="field-value">${employee.empId || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Department</div>
-            <div class="field-value">${employee.department || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Designation</div>
-            <div class="field-value">${employee.designation || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Branch</div>
-            <div class="field-value">${employee.branch || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Employment Type</div>
-            <div class="field-value">${employee.employmentType || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Category</div>
-            <div class="field-value">${employee.category || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Joining Date</div>
-            <div class="field-value">${toDisplayDate(employee.joiningDate) || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Reporting Manager</div>
-            <div class="field-value">${employee.reportingManagerName || '—'}</div>
-          </div>
+      <div class="print-section">
+        <div class="print-section-title">Compensation</div>
+        <div class="print-grid-2">
+          <div><div class="print-field-label">CTC per annum</div><div class="print-field-value">${e(ctcVal)}</div></div>
+          <div><div class="print-field-label">Basic salary</div><div class="print-field-value">${e(basicVal)}</div></div>
         </div>
       </div>
 
-      <div class="section">
-        <div class="section-title">Compensation</div>
-        <div class="grid">
-          <div>
-            <div class="field-label">CTC per Annum</div>
-            <div class="field-value">
-              ${
-                employee.ctcPerAnnum != null || employee.ctc != null
-                  ? `₹${(employee.ctcPerAnnum ?? employee.ctc).toLocaleString('en-IN')}`
-                  : '—'
-              }
-            </div>
-          </div>
-          <div>
-            <div class="field-label">Basic Salary</div>
-            <div class="field-value">
-              ${
-                employee.basicSalary != null
-                  ? `₹${employee.basicSalary.toLocaleString('en-IN')}/month`
-                  : '—'
-              }
-            </div>
-          </div>
+      <div class="print-section">
+        <div class="print-section-title">Statutory</div>
+        <div class="print-grid-2">
+          <div><div class="print-field-label">PAN</div><div class="print-field-value">${e(employee.panNumber || '—')}</div></div>
+          <div><div class="print-field-label">PF number</div><div class="print-field-value">${e(employee.pfNumber || '—')}</div></div>
+          <div><div class="print-field-label">ESIC number</div><div class="print-field-value">${e(employee.esicNumber || '—')}</div></div>
+          <div><div class="print-field-label">Aadhaar</div><div class="print-field-value">${aadhaarDisp}</div></div>
+          <div><div class="print-field-label">Driving licence</div><div class="print-field-value">${e(employee.drivingLicenceNumber || '—')}</div></div>
         </div>
       </div>
-
-      <div class="section">
-        <div class="section-title">Statutory</div>
-        <div class="grid">
-          <div>
-            <div class="field-label">PAN Number</div>
-            <div class="field-value">${employee.panNumber || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">PF Number</div>
-            <div class="field-value">${employee.pfNumber || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">ESIC Number</div>
-            <div class="field-value">${employee.esicNumber || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Aadhaar</div>
-            <div class="field-value">
-              ${
-                employee.aadhaarNumber
-                  ? `XXXX XXXX ${employee.aadhaarNumber.slice(-4)}`
-                  : '—'
-              }
-            </div>
-          </div>
-          <div>
-            <div class="field-label">Driving Licence</div>
-            <div class="field-value">${employee.drivingLicenceNumber || '—'}</div>
-          </div>
-        </div>
-      </div>
-
-      ${
-        employee.emergencyContact?.name
-          ? `
-      <div class="section">
-        <div class="section-title">Emergency Contact</div>
-        <div class="grid">
-          <div>
-            <div class="field-label">Name</div>
-            <div class="field-value">${employee.emergencyContact.name}</div>
-          </div>
-          <div>
-            <div class="field-label">Relationship</div>
-            <div class="field-value">${employee.emergencyContact.relationship || '—'}</div>
-          </div>
-          <div>
-            <div class="field-label">Phone</div>
-            <div class="field-value">${employee.emergencyContact.phone}</div>
-          </div>
-          <div>
-            <div class="field-label">Email</div>
-            <div class="field-value">${employee.emergencyContact.email || '—'}</div>
-          </div>
-        </div>
-      </div>`
-          : ''
-      }
-
-      ${
-        employeeAssets.length > 0
-          ? `
-      <div class="section">
-        <div class="section-title">Assigned Assets (${employeeAssets.length})</div>
-        <div class="grid">
-          ${employeeAssets
-            .map(
-              (a) => `
-          <div>
-            <div class="field-label">${a.assetId || ''}</div>
-            <div class="field-value">
-              ${a.name || ''}
-              ${
-                a.serialNumber
-                  ? ` (SN: ${a.serialNumber})`
-                  : ''
-              }
-            </div>
-          </div>`,
-            )
-            .join('')}
-        </div>
-      </div>`
-          : ''
-      }
-
-      <div class="footer">
-        <span>Generated by AttendX HR Platform</span>
-        <span>${new Date().toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-        })}</span>
-      </div>
-    </body>
-    </html>
+      ${emergencyBlock}
+      ${assetsBlock}
     `;
 
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
-    if (!printWindow) return;
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    const html = createPrintDocument({
+      title: `${employee.fullName || 'Employee'} — Employee profile`,
+      subtitle: `${employee.designation || ''} · ${employee.department || ''}`,
+      companyName,
+      generatedBy: currentUser?.email || '',
+      content,
+    });
+    openPrintWindow(html);
   };
 
   const allTabs = useMemo(
