@@ -12,7 +12,7 @@ import TeamMembers from './pages/TeamMembers';
 import Settings from './pages/Settings';
 import Assets from './pages/Assets';
 import Reports from './pages/Reports';
-import Policies from './pages/Policies';
+import Library from './pages/Library';
 import OrgChart from './pages/OrgChart';
 import CompanyCalendar from './pages/Calendar';
 import Login from './pages/Login';
@@ -156,7 +156,7 @@ function AppRoutes() {
             path="policies"
             element={
               <RoleRoute allowedRoles={['admin', 'hrmanager']}>
-                <Policies />
+                <Library />
               </RoleRoute>
             }
           />

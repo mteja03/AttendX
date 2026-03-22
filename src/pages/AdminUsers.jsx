@@ -35,7 +35,7 @@ const PERMISSION_MODULES = [
   { key: 'documents', label: 'Documents', icon: '📄' },
   { key: 'assets', label: 'Assets', icon: '📦' },
   { key: 'reports', label: 'Reports', icon: '📊' },
-  { key: 'policies', label: 'Policies', icon: '📋' },
+  { key: 'policies', label: 'Library', icon: '📋' },
   { key: 'calendar', label: 'Calendar', icon: '🗓️' },
   { key: 'onboarding', label: 'Onboarding', icon: '🎯' },
   { key: 'offboarding', label: 'Offboarding', icon: '👋' },
