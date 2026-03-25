@@ -1,130 +1,94 @@
 import { test, expect } from '@playwright/test'
-
-async function getCompanyUrl(page) {
-  await page.goto('https://attendx-1cccb.web.app/companies')
-  await page.waitForLoadState('networkidle')
-  await page.waitForTimeout(2000)
-
-  const firstCompany = page.locator(
-    '[class*="company-card"], [class*="CompanyCard"], a[href*="/company/"]'
-  ).first()
-
-  if ((await firstCompany.count()) > 0) {
-    await firstCompany.click()
-    await page.waitForLoadState('networkidle')
-    return page.url().match(/\/company\/([^/]+)/)?.[1]
-  }
-  return null
-}
+import { URLS } from './helpers/constants.js'
 
 test.describe('Employees', () => {
   test('employees page loads', async ({ page }) => {
-    const companyId = await getCompanyUrl(page)
-    if (!companyId) {
-      test.skip(true, 'No company found')
-      return
-    }
-
-    await page.goto(
-      `https://attendx-1cccb.web.app/company/${companyId}/employees`
-    )
+    await page.goto(URLS.employees)
     await page.waitForLoadState('networkidle')
-
+    await page.waitForTimeout(2000)
     await expect(
-      page.locator('h1:has-text("Employees"), h2:has-text("Employees")').first()
+      page.locator('h1, h2').filter({ hasText: /employees/i }).first()
     ).toBeVisible({ timeout: 10000 })
   })
 
-  test('Add Employee button visible', async ({ page }) => {
-    const companyId = await getCompanyUrl(page)
-    if (!companyId) {
-      test.skip(true, 'No company found')
-      return
-    }
+  test('employee list shows records', async ({ page }) => {
+    await page.goto(URLS.employees)
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(3000)
+    const hasEmployees =
+      (await page
+        .locator('text=Rahul, text=Priya, text=Arjun, text=Sri')
+        .count()) > 0
+    const hasCount =
+      (await page.locator('text=/\\d+ employee/').count()) > 0
+    expect(hasEmployees || hasCount).toBeTruthy()
+  })
 
-    await page.goto(
-      `https://attendx-1cccb.web.app/company/${companyId}/employees`
-    )
+  test('Add Employee button visible', async ({ page }) => {
+    await page.goto(URLS.employees)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
-
     await expect(
-      page.locator('button:has-text("Add Employee")')
+      page.locator('button').filter({ hasText: /add.?employee/i }).first()
     ).toBeVisible({ timeout: 10000 })
   })
 
   test('Add Employee modal opens', async ({ page }) => {
-    const companyId = await getCompanyUrl(page)
-    if (!companyId) {
-      test.skip(true, 'No company found')
-      return
-    }
-
-    await page.goto(
-      `https://attendx-1cccb.web.app/company/${companyId}/employees`
-    )
+    await page.goto(URLS.employees)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
-
-    await page.locator('button:has-text("Add Employee")').click()
-    await page.waitForTimeout(1000)
-
-    await expect(
-      page
-        .locator('input[placeholder*="name"], input[placeholder*="Name"]')
-        .first()
-    ).toBeVisible({ timeout: 5000 })
-
+    await page
+      .locator('button')
+      .filter({ hasText: /add.?employee/i })
+      .first()
+      .click()
+    await page.waitForTimeout(1500)
+    await expect(page.locator('input[placeholder*="ame"]').first()).toBeVisible(
+      { timeout: 8000 }
+    )
     await page.keyboard.press('Escape')
   })
 
   test('employee search works', async ({ page }) => {
-    const companyId = await getCompanyUrl(page)
-    if (!companyId) {
-      test.skip(true, 'No company found')
-      return
-    }
-
-    await page.goto(
-      `https://attendx-1cccb.web.app/company/${companyId}/employees`
-    )
+    await page.goto(URLS.employees)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
-
     const search = page
-      .locator('input[placeholder*="Search"], input[placeholder*="search"]')
+      .locator(
+        'input[placeholder*="earch"], input[placeholder*="employee"]'
+      )
       .first()
-
-    await expect(search).toBeVisible()
-
+    await expect(search).toBeVisible({ timeout: 8000 })
     await search.fill('Rahul')
     await page.waitForTimeout(1500)
-
-    expect(page.url()).toContain('employees')
+    await expect(
+      page.locator('h1, h2').filter({ hasText: /employees/i }).first()
+    ).toBeVisible()
   })
 
-  test('employee status filters work', async ({ page }) => {
-    const companyId = await getCompanyUrl(page)
-    if (!companyId) {
-      test.skip(true, 'No company found')
-      return
-    }
-
-    await page.goto(
-      `https://attendx-1cccb.web.app/company/${companyId}/employees`
-    )
+  test('status filter tabs work', async ({ page }) => {
+    await page.goto(URLS.employees)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
-
-    const activeTab = page.locator('button:has-text("Active")').first()
-
+    const activeTab = page
+      .locator('button')
+      .filter({ hasText: /^active$/i })
+      .first()
     if (await activeTab.isVisible()) {
       await activeTab.click()
       await page.waitForTimeout(1000)
     }
-
     await expect(
-      page.locator('h1:has-text("Employees"), h2:has-text("Employees")').first()
+      page.locator('h1, h2').filter({ hasText: /employees/i }).first()
     ).toBeVisible()
+  })
+
+  test('download button visible', async ({ page }) => {
+    await page.goto(URLS.employees)
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
+    await expect(
+      page.locator('button').filter({ hasText: /download/i }).first()
+    ).toBeVisible({ timeout: 8000 })
   })
 })

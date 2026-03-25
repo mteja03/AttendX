@@ -1,68 +1,56 @@
 import { test, expect } from '@playwright/test'
-
-async function getFirstCompanyId(page) {
-  await page.goto('https://attendx-1cccb.web.app/companies')
-  await page.waitForLoadState('networkidle')
-  await page.waitForTimeout(2000)
-  const firstCompany = page.locator('a[href*="/company/"]').first()
-  if ((await firstCompany.count()) > 0) {
-    await firstCompany.click()
-    await page.waitForLoadState('networkidle')
-    return page.url().match(/\/company\/([^/]+)/)?.[1]
-  }
-  return null
-}
+import { URLS } from './helpers/constants.js'
 
 test.describe('Leave Management', () => {
   test('leave page loads', async ({ page }) => {
-    const id = await getFirstCompanyId(page)
-    if (!id) {
-      test.skip(true, 'No company found')
-      return
-    }
-
-    await page.goto(`https://attendx-1cccb.web.app/company/${id}/leave`)
+    await page.goto(URLS.leave)
     await page.waitForLoadState('networkidle')
-
+    await page.waitForTimeout(2000)
     await expect(
-      page.locator('h1:has-text("Leave"), h2:has-text("Leave")').first()
+      page.locator('h1, h2').filter({ hasText: /leave/i }).first()
     ).toBeVisible({ timeout: 10000 })
   })
 
-  test('add leave button visible', async ({ page }) => {
-    const id = await getFirstCompanyId(page)
-    if (!id) {
-      test.skip(true, 'No company found')
-      return
-    }
-
-    await page.goto(`https://attendx-1cccb.web.app/company/${id}/leave`)
+  test('leave stats visible', async ({ page }) => {
+    await page.goto(URLS.leave)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
+    const stats = page.locator(
+      '[class*="stat"], [class*="card"],[class*="count"]'
+    )
+    expect(await stats.count()).toBeGreaterThan(0)
+  })
 
+  test('Add Leave button visible', async ({ page }) => {
+    await page.goto(URLS.leave)
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
     await expect(
       page
-        .locator(
-          'button:has-text("Add Leave"), button:has-text("Apply Leave"), button:has-text("New Leave")'
-        )
+        .locator('button')
+        .filter({ hasText: /add.?leave|apply/i })
         .first()
     ).toBeVisible({ timeout: 10000 })
   })
 
-  test('leave filters visible', async ({ page }) => {
-    const id = await getFirstCompanyId(page)
-    if (!id) {
-      test.skip(true, 'No company found')
-      return
-    }
-
-    await page.goto(`https://attendx-1cccb.web.app/company/${id}/leave`)
+  test('leave filter tabs visible', async ({ page }) => {
+    await page.goto(URLS.leave)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
+    await expect(
+      page
+        .locator('button, [role="tab"]')
+        .filter({ hasText: /pending|all/i })
+        .first()
+    ).toBeVisible({ timeout: 8000 })
+  })
 
-    const pending = page
-      .locator('button:has-text("Pending"), text=Pending')
-      .first()
-    await expect(pending).toBeVisible({ timeout: 10000 })
+  test('download button visible', async ({ page }) => {
+    await page.goto(URLS.leave)
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
+    await expect(
+      page.locator('button').filter({ hasText: /download/i }).first()
+    ).toBeVisible({ timeout: 8000 })
   })
 })

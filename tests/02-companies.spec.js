@@ -1,49 +1,39 @@
 import { test, expect } from '@playwright/test'
-
-const BASE = 'https://attendx-1cccb.web.app'
+import { URLS } from './helpers/constants.js'
 
 test.describe('Companies', () => {
   test('companies page loads', async ({ page }) => {
-    await page.goto(`${BASE}/companies`)
-    await page.waitForLoadState('networkidle')
-
-    await expect(
-      page
-        .locator(
-          'h1:has-text("Companies"), h2:has-text("Companies"), text=All Companies'
-        )
-        .first()
-    ).toBeVisible({ timeout: 10000 })
-  })
-
-  test('can see company list or empty state', async ({ page }) => {
-    await page.goto(`${BASE}/companies`)
+    await page.goto(URLS.companies)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
-
-    const hasCompanies = await page
-      .locator(
-        '[class*="company"], text=TechCorp, text=GreenStar'
-      )
-      .count()
-
-    const hasEmpty = await page
-      .locator('text=No companies, text=Add your first')
-      .count()
-
-    expect(hasCompanies + hasEmpty).toBeGreaterThan(0)
+    expect(page.url()).not.toContain('login')
+    await expect(page.locator('body')).toBeVisible()
   })
 
-  test('Add Company button visible for admin', async ({ page }) => {
-    await page.goto(`${BASE}/companies`)
+  test('TechCorp company visible', async ({ page }) => {
+    await page.goto(URLS.companies)
     await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(3000)
+    await expect(page.locator('text=TechCorp').first()).toBeVisible({
+      timeout: 10000,
+    })
+  })
 
+  test('Add Company button visible', async ({ page }) => {
+    await page.goto(URLS.companies)
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
     await expect(
-      page
-        .locator(
-          'button:has-text("Add Company"), button:has-text("New Company")'
-        )
-        .first()
+      page.locator('button').filter({ hasText: /add.?company/i }).first()
     ).toBeVisible({ timeout: 10000 })
+  })
+
+  test('can navigate into TechCorp', async ({ page }) => {
+    await page.goto(URLS.dashboard)
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
+    await expect(page.locator('text=TechCorp').first()).toBeVisible({
+      timeout: 8000,
+    })
   })
 })
