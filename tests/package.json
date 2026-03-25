@@ -1,0 +1,9 @@
+{
+  "name": "attendx-tests",
+  "private": true,
+  "scripts": {
+    "test": "playwright test -c ../playwright.config.js",
+    "test:ui": "playwright test -c ../playwright.config.js --ui",
+    "test:report": "playwright show-report playwright-report"
+  }
+}

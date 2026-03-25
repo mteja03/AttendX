@@ -24,3 +24,12 @@ dist-ssr
 *.sw?
 .env
 functions/.env
+
+# Playwright
+/test-results/
+/playwright-report/
+tests/playwright-report/
+tests/test-results/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
