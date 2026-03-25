@@ -33,3 +33,6 @@ tests/test-results/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Local Playwright session (run tests/setup/save-auth.js); copy from auth.example.json
+tests/setup/auth.json
