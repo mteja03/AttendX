@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   collection,
-  collectionGroup,
   doc,
   getDocs,
   onSnapshot,
@@ -12,7 +11,6 @@ import {
   deleteDoc,
   query,
   orderBy,
-  where,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -64,11 +62,11 @@ function CardSkeleton() {
 }
 
 export default function Companies() {
+  const navigate = useNavigate();
   const { currentUser, getValidToken } = useAuth();
   const { success, error: showError } = useToast();
   const [companies, setCompanies] = useState([]);
   const [users, setUsers] = useState([]);
-  const [pendingLeavesCount, setPendingLeavesCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -127,19 +125,6 @@ export default function Companies() {
     return () => { cancelled = true; };
   }, []);
 
-  // Pending leaves: fetch once; if collectionGroup index not ready, show 0
-  useEffect(() => {
-    let cancelled = false;
-    getDocs(query(collectionGroup(db, 'leave'), where('status', '==', 'Pending')))
-      .then((snap) => {
-        if (!cancelled) setPendingLeavesCount(snap.size);
-      })
-      .catch(() => {
-        if (!cancelled) setPendingLeavesCount(0);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
   const filteredCompanies = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return companies;
@@ -152,10 +137,39 @@ export default function Companies() {
     );
   }, [companies, search]);
 
-  const totalCompanies = companies.length;
   const totalEmployees = useMemo(
     () => companies.reduce((sum, c) => sum + (c.employeeCount || 0), 0),
     [companies],
+  );
+
+  const platformUsersCount = users.length;
+
+  const adminStats = useMemo(
+    () => [
+      {
+        label: 'Total Companies',
+        value: companies.length,
+        icon: '🏢',
+      },
+      {
+        label: 'Total Employees',
+        value: totalEmployees,
+        sub: `${companies.reduce((sum, c) => sum + (c.activeEmployeeCount || 0), 0)} active`,
+        icon: '👥',
+      },
+      {
+        label: 'Platform Users',
+        value: platformUsersCount,
+        icon: '👤',
+      },
+      {
+        label: 'Active Companies',
+        value: companies.filter((c) => (c.employeeCount || 0) > 0).length,
+        sub: `${companies.filter((c) => (c.employeeCount || 0) === 0).length} empty`,
+        icon: '✅',
+      },
+    ],
+    [companies, totalEmployees, platformUsersCount],
   );
 
   const handleFormChange = (e) => {
@@ -387,22 +401,16 @@ export default function Companies() {
           [...Array(4)].map((_, i) => <StatSkeleton key={i} />)
         ) : (
           <>
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <p className="text-slate-500 text-sm">Total Companies</p>
-              <p className="text-xl font-semibold text-slate-800 mt-1">{totalCompanies}</p>
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <p className="text-slate-500 text-sm">Total Employees</p>
-              <p className="text-xl font-semibold text-slate-800 mt-1">{totalEmployees}</p>
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <p className="text-slate-500 text-sm">Platform Users</p>
-              <p className="text-xl font-semibold text-slate-800 mt-1">{users.length}</p>
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <p className="text-slate-500 text-sm">Pending Leaves</p>
-              <p className="text-xl font-semibold text-slate-800 mt-1">{pendingLeavesCount}</p>
-            </div>
+            {adminStats.map((stat) => (
+              <div key={stat.label} className="bg-white border border-gray-100 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-gray-500">{stat.label}</p>
+                  <span className="text-xl">{stat.icon}</span>
+                </div>
+                <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
+                {stat.sub && <p className="text-xs text-gray-400 mt-1">{stat.sub}</p>}
+              </div>
+            ))}
           </>
         )}
       </div>
@@ -514,19 +522,30 @@ export default function Companies() {
                   </button>
                 </div>
               </div>
-              <div className="mt-2 relative z-10">
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
-                  {c.employeeCount ?? 0} employee{(c.employeeCount ?? 0) !== 1 ? 's' : ''}
-                </span>
+              <div className="flex items-center gap-4 mt-3 relative z-10">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <span className="text-xs text-gray-500">{c.activeEmployeeCount || 0} active</span>
+                </div>
+                {(c.inactiveEmployeeCount || 0) > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-gray-300" />
+                    <span className="text-xs text-gray-400">{c.inactiveEmployeeCount} inactive</span>
+                  </div>
+                )}
               </div>
-              <div className="mt-4 flex gap-2 relative z-10">
-                <Link
-                  to={`/company/${c.id}/dashboard`}
-                  className="flex-1 inline-flex items-center justify-center rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium py-2"
-                >
-                  Manage →
-                </Link>
-              </div>
+              {c.lastActivityAt && (
+                <p className="text-xs text-gray-400 mt-2 relative z-10">
+                  Last active: {toDisplayDate(c.lastActivityAt)}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => navigate(`/company/${c.id}/dashboard`)}
+                className="w-full py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] transition-colors mt-3 relative z-10"
+              >
+                Manage Company →
+              </button>
             </div>
           ))}
         </div>
@@ -540,42 +559,69 @@ export default function Companies() {
             onClick={() => { setMenuCompanyId(null); setMenuCompany(null); setMenuPosition(null); }}
           />
           <div
-            className="fixed z-[100] py-1 bg-white border border-slate-200 rounded-lg shadow-xl min-w-[180px]"
+            className="fixed z-[100] py-1 bg-white border border-slate-200 rounded-lg shadow-xl min-w-[200px]"
             style={{ top: menuPosition.top, right: menuPosition.right }}
           >
-            <button
-              type="button"
-              className="block w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-t-lg"
-              onClick={() => { openEdit(menuCompany); setMenuCompanyId(null); setMenuCompany(null); setMenuPosition(null); }}
-            >
-              Edit Company
-            </button>
-            {menuCompany.isActive !== false ? (
+            {[
+              {
+                label: 'Edit Company Info',
+                icon: '✏️',
+                danger: false,
+                action: () => openEdit(menuCompany),
+              },
+              {
+                label: 'View Employees',
+                icon: '👥',
+                danger: false,
+                action: () => navigate(`/company/${menuCompany.id}/employees`),
+              },
+              {
+                label: 'View Dashboard',
+                icon: '📊',
+                danger: false,
+                action: () => navigate(`/company/${menuCompany.id}/dashboard`),
+              },
+              ...(menuCompany.isActive !== false
+                ? [
+                    {
+                      label: 'Deactivate Company',
+                      icon: '⏸️',
+                      danger: false,
+                      action: () => setDeactivateConfirm(menuCompany),
+                    },
+                  ]
+                : [
+                    {
+                      label: 'Activate Company',
+                      icon: '▶️',
+                      danger: false,
+                      action: () => handleActivate(menuCompany),
+                    },
+                  ]),
+              {
+                label: 'Delete Company',
+                icon: '🗑️',
+                danger: true,
+                action: () => setDeleteConfirm(menuCompany),
+              },
+            ].map((option) => (
               <button
+                key={option.label}
                 type="button"
-                className="block w-full text-left px-3 py-2 text-sm text-amber-600 hover:bg-slate-50"
-                onClick={() => { setMenuCompanyId(null); setMenuCompany(null); setMenuPosition(null); setDeactivateConfirm(menuCompany); }}
+                onClick={() => {
+                  setMenuCompanyId(null);
+                  setMenuCompany(null);
+                  setMenuPosition(null);
+                  option.action();
+                }}
+                className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 hover:bg-gray-50 transition-colors ${
+                  option.danger ? 'text-red-600 hover:bg-red-50' : 'text-gray-700'
+                }`}
               >
-                Deactivate Company
+                <span>{option.icon}</span>
+                {option.label}
               </button>
-            ) : (
-              <button
-                type="button"
-                className="block w-full text-left px-3 py-2 text-sm text-green-600 hover:bg-slate-50"
-                onClick={() => { handleActivate(menuCompany); setMenuCompanyId(null); setMenuCompany(null); setMenuPosition(null); }}
-              >
-                Activate Company
-              </button>
-            )}
-            <div className="border-t border-slate-200 mt-0.5 pt-0.5">
-              <button
-                type="button"
-                className="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-b-lg font-medium"
-                onClick={() => { setMenuCompanyId(null); setMenuCompany(null); setMenuPosition(null); setDeleteConfirm(menuCompany); }}
-              >
-                Delete Company
-              </button>
-            </div>
+            ))}
           </div>
         </>,
         document.body,

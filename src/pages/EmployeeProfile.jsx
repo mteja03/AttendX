@@ -6,6 +6,7 @@ import {
   getDoc,
   getDocs,
   updateDoc,
+  deleteDoc,
   query,
   where,
   Timestamp,
@@ -658,6 +659,7 @@ export default function EmployeeProfile() {
   const navigate = useNavigate();
   const { currentUser, getValidToken, isTokenValid, role: authRole } = useAuth();
   const userRole = authRole;
+  const canDeleteEmployee = userRole === 'admin';
   const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
   const canUploadPhoto = userRole === 'admin' || userRole === 'hrmanager';
   const hasDriveUploadRole = PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(userRole);
@@ -754,6 +756,9 @@ export default function EmployeeProfile() {
     newJoiningDate: '',
     notes: '',
   });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (showResignationModal) {
@@ -1319,6 +1324,60 @@ export default function EmployeeProfile() {
   };
 
   const getCompanyName = () => company?.name || 'Company';
+
+  const handleDeleteEmployee = async () => {
+    if (deleteConfirmName !== employee?.fullName) return;
+    if (!companyId || !empId || !employee || !empRef) return;
+
+    try {
+      setDeleting(true);
+
+      await deleteDoc(empRef);
+
+      try {
+        const token = await getValidToken();
+        if (token) {
+          const { findAndDeleteFolder } = await import('../utils/googleDrive');
+          await findAndDeleteFolder(
+            token,
+            `${employee.empId} - ${employee.fullName}`,
+            getCompanyName(),
+          );
+        }
+      } catch (driveErr) {
+        console.warn('Drive cleanup failed:', driveErr);
+      }
+
+      try {
+        const { deleteEmployeePhoto } = await import('../utils/photoUpload');
+        await deleteEmployeePhoto(companyId, empId);
+      } catch (storageErr) {
+        console.warn('Storage cleanup failed:', storageErr);
+      }
+
+      try {
+        const companyRef = doc(db, 'companies', companyId);
+        const companySnap = await getDoc(companyRef);
+        if (companySnap.exists()) {
+          const currentCount = companySnap.data().employeeCount || 0;
+          await updateDoc(companyRef, {
+            employeeCount: Math.max(0, currentCount - 1),
+          });
+        }
+      } catch (countErr) {
+        console.warn('Count update failed:', countErr);
+      }
+
+      success(`${employee.fullName} deleted permanently.`);
+      setShowDeleteModal(false);
+      setDeleteConfirmName('');
+      navigate(`/company/${companyId}/employees`);
+    } catch (error) {
+      showError(`Delete failed: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const driveAccessError = (err) => {
     const msg = err?.message || 'Upload failed';
@@ -5648,6 +5707,83 @@ export default function EmployeeProfile() {
                 )}
             </>
           )}
+        </div>
+      )}
+
+      {canDeleteEmployee && (
+        <div className="mt-8 pt-6 border-t border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Danger Zone</p>
+              <p className="text-xs text-gray-400">Permanently delete this employee and all their data</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteConfirmName('');
+                setShowDeleteModal(true);
+              }}
+              className="px-4 py-2 border border-red-200 text-red-500 rounded-xl text-sm hover:bg-red-50 transition-colors"
+            >
+              🗑️ Delete Employee
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+                <span className="text-2xl">🗑️</span>
+              </div>
+              <h3 className="text-base font-semibold text-gray-800 mb-1">Delete Employee Permanently?</h3>
+              <p className="text-sm text-gray-500">
+                This will permanently delete <strong>{employee.fullName}</strong> and ALL their data including documents,
+                leave history, assets, and onboarding records.
+              </p>
+            </div>
+
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl mb-4">
+              <p className="text-xs text-red-600 font-medium">
+                ⚠️ This action cannot be undone. Only delete test or duplicate records.
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-xs text-gray-500 block mb-1.5">
+                Type <strong>{employee.fullName}</strong> to confirm
+              </label>
+              <input
+                placeholder={employee.fullName}
+                value={deleteConfirmName}
+                onChange={(e) => setDeleteConfirmName(e.target.value)}
+                className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-400 border-red-200"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteConfirmName('');
+                }}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteConfirmName !== employee.fullName || deleting}
+                onClick={handleDeleteEmployee}
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {deleting ? 'Deleting...' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
