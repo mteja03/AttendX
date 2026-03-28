@@ -1471,30 +1471,9 @@ export default function Reports() {
 
   return (
     <div className="p-4 sm:p-8">
-      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
-          <p className="text-sm text-gray-500">
-            Analytics and insights for {companyDisplayName}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">
-            Last updated:{' '}
-            {new Date().toLocaleDateString('en-GB', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-            })}
-          </span>
-          <button
-            type="button"
-            onClick={fetchAllData}
-            className="flex items-center justify-center gap-2 min-h-[44px] px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 active:bg-gray-100"
-          >
-            ↻ Refresh
-          </button>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
+        <p className="text-sm text-gray-500 mt-1">Analytics and insights for {companyDisplayName}</p>
       </div>
 
       <div className="flex gap-1 overflow-x-auto scrollbar-none pb-2 mb-6 border-b border-gray-100 -mx-4 px-4 lg:mx-0 lg:px-0">
