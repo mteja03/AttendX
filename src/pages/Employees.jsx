@@ -132,8 +132,12 @@ const initialForm = {
   fullName: '',
   email: '',
   phone: '',
+  alternativeMobile: '',
   dateOfBirth: '',
   gender: '',
+  bloodGroup: '',
+  maritalStatus: '',
+  marriageDate: '',
   fatherName: '',
   streetAddress: '',
   city: '',
@@ -144,6 +148,7 @@ const initialForm = {
   empId: '',
   department: '',
   branch: '',
+  location: '',
   designation: '',
   designationRoleId: '',
   employmentType: 'Full-time',
@@ -152,9 +157,17 @@ const initialForm = {
   reportingManagerId: '',
   reportingManagerName: '',
   reportingManagerEmpId: '',
+  prevCompany: '',
+  prevDesignation: '',
+  prevManagerName: '',
+  prevManagerPhone: '',
+  prevManagerEmail: '',
   ctcPerAnnum: '',
+  incentive: '',
   basicSalary: '',
   hra: '',
+  pfApplicable: false,
+  esicApplicable: false,
   pfNumber: '',
   esicNumber: '',
   panNumber: '',
@@ -163,8 +176,6 @@ const initialForm = {
   emergencyContactName: '',
   emergencyRelationship: '',
   emergencyPhone: '',
-  emergencyEmail: '',
-  emergencyAddress: '',
 };
 
 export default function Employees() {
@@ -206,6 +217,9 @@ export default function Employees() {
   const [selectedRole, setSelectedRole] = useState(null);
   const [ctcValidation, setCtcValidation] = useState(null);
   const roleDropdownRef = useRef(null);
+  const locationDropdownRef = useRef(null);
+  const [locationSearch, setLocationSearch] = useState('');
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
 
   useEffect(() => {
     if (!companyId) return;
@@ -244,6 +258,18 @@ export default function Employees() {
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [showRoleDropdown]);
+
+  useEffect(() => {
+    if (!showLocationDropdown) return undefined;
+    const onDown = (e) => {
+      if (locationDropdownRef.current && !locationDropdownRef.current.contains(e.target)) {
+        setShowLocationDropdown(false);
+        setLocationSearch('');
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showLocationDropdown]);
 
   const [showDownload, setShowDownload] = useState(false);
 
@@ -559,6 +585,8 @@ export default function Employees() {
     setManagerSearch('');
     setShowManagerDropdown(false);
     setCtcValidation(null);
+    setLocationSearch('');
+    setShowLocationDropdown(false);
   };
 
   const handleFormChange = (e) => {
@@ -625,8 +653,15 @@ export default function Employees() {
         fullName: form.fullName?.trim() || null,
         email: form.email?.trim() || null,
         phone: form.phone?.trim() || null,
+        alternativeMobile: form.alternativeMobile?.trim() || null,
         dateOfBirth: form.dateOfBirth ? Timestamp.fromDate(new Date(form.dateOfBirth)) : null,
         gender: form.gender || null,
+        bloodGroup: form.bloodGroup || null,
+        maritalStatus: form.maritalStatus || null,
+        marriageDate:
+          form.maritalStatus === 'Married' && form.marriageDate
+            ? Timestamp.fromDate(new Date(form.marriageDate))
+            : null,
         fatherName: form.fatherName?.trim() || null,
         streetAddress: form.streetAddress?.trim() || null,
         city: form.city?.trim() || null,
@@ -636,6 +671,7 @@ export default function Employees() {
         empId: (form.empId || '').trim(),
         department: form.department || null,
         branch: form.branch || null,
+        location: form.location?.trim() || null,
         designation: form.designation || null,
         designationRoleId: form.designationRoleId || null,
         employmentType: form.employmentType || 'Full-time',
@@ -645,11 +681,19 @@ export default function Employees() {
         reportingManagerId: form.reportingManagerId || null,
         reportingManagerName: form.reportingManagerName || null,
         reportingManagerEmpId: form.reportingManagerEmpId || null,
+        prevCompany: form.prevCompany?.trim() || null,
+        prevDesignation: form.prevDesignation?.trim() || null,
+        prevManagerName: form.prevManagerName?.trim() || null,
+        prevManagerPhone: form.prevManagerPhone?.trim() || null,
+        prevManagerEmail: form.prevManagerEmail?.trim() || null,
         ctcPerAnnum: form.ctcPerAnnum ? Number(form.ctcPerAnnum) : null,
+        incentive: form.incentive !== '' && form.incentive != null ? Number(form.incentive) : null,
         basicSalary: form.basicSalary ? Number(form.basicSalary) : null,
         hra: form.hra ? Number(form.hra) : null,
-        pfNumber: form.pfNumber || null,
-        esicNumber: form.esicNumber || null,
+        pfApplicable: !!form.pfApplicable,
+        esicApplicable: !!form.esicApplicable,
+        pfNumber: form.pfApplicable ? form.pfNumber?.trim() || null : null,
+        esicNumber: form.esicApplicable ? form.esicNumber?.trim() || null : null,
         panNumber: form.panNumber?.trim() || null,
         aadhaarNumber: form.aadhaarNumber?.trim() || null,
         drivingLicenceNumber: form.drivingLicenceNumber?.trim() || null,
@@ -657,8 +701,6 @@ export default function Employees() {
           name: form.emergencyContactName?.trim() || '',
           relationship: form.emergencyRelationship || '',
           phone: form.emergencyPhone?.trim() || '',
-          email: form.emergencyEmail?.trim() || '',
-          address: form.emergencyAddress?.trim() || '',
         },
         status: 'Active',
         createdAt: serverTimestamp(),
@@ -1277,6 +1319,18 @@ export default function Employees() {
                     <input name="phone" value={form.phone} onChange={handleFormChange} placeholder="10-digit mobile number" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                   </div>
                   <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Alternative Mobile</label>
+                    <input
+                      type="tel"
+                      name="alternativeMobile"
+                      placeholder="Alternative 10-digit number"
+                      value={form.alternativeMobile}
+                      onChange={handleFormChange}
+                      maxLength={10}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Date of Birth</label>
                     <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                     {formErrors.dateOfBirth && <p className="text-red-500 text-xs mt-1">{formErrors.dateOfBirth}</p>}
@@ -1290,6 +1344,49 @@ export default function Employees() {
                       <option value="Other">Other</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Blood Group</label>
+                    <select
+                      name="bloodGroup"
+                      value={form.bloodGroup}
+                      onChange={handleFormChange}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                    >
+                      <option value="">Select blood group</option>
+                      {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map((bg) => (
+                        <option key={bg} value={bg}>
+                          {bg}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Marital Status</label>
+                    <select
+                      name="maritalStatus"
+                      value={form.maritalStatus}
+                      onChange={handleFormChange}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                    >
+                      <option value="">Select status</option>
+                      <option value="Single">Single</option>
+                      <option value="Married">Married</option>
+                      <option value="Divorced">Divorced</option>
+                      <option value="Widowed">Widowed</option>
+                    </select>
+                  </div>
+                  {form.maritalStatus === 'Married' && (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Marriage Date</label>
+                      <input
+                        type="date"
+                        name="marriageDate"
+                        value={form.marriageDate}
+                        onChange={handleFormChange}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1406,23 +1503,64 @@ export default function Employees() {
                     />
                     {formErrors.emergencyPhone && <p className="text-red-500 text-xs mt-1">{formErrors.emergencyPhone}</p>}
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Contact Email</label>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
+                  <span className="text-base">💼</span>
+                  Previous Experience
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Previous Company Name</label>
                     <input
-                      name="emergencyEmail"
-                      value={form.emergencyEmail}
+                      name="prevCompany"
+                      placeholder="e.g. Infosys Pvt Ltd"
+                      value={form.prevCompany}
                       onChange={handleFormChange}
-                      placeholder="Email address"
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Contact Address</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Previous Designation</label>
                     <input
-                      name="emergencyAddress"
-                      value={form.emergencyAddress}
+                      name="prevDesignation"
+                      placeholder="e.g. Software Engineer"
+                      value={form.prevDesignation}
                       onChange={handleFormChange}
-                      placeholder="Contact's address"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Previous Manager Name</label>
+                    <input
+                      name="prevManagerName"
+                      placeholder="Manager's full name"
+                      value={form.prevManagerName}
+                      onChange={handleFormChange}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Previous Manager Phone</label>
+                    <input
+                      type="tel"
+                      name="prevManagerPhone"
+                      placeholder="Manager's phone number"
+                      value={form.prevManagerPhone}
+                      onChange={handleFormChange}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Previous Manager Email</label>
+                    <input
+                      type="email"
+                      name="prevManagerEmail"
+                      placeholder="Manager's email address"
+                      value={form.prevManagerEmail}
+                      onChange={handleFormChange}
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                   </div>
@@ -1594,6 +1732,72 @@ export default function Employees() {
                       {branches.map((b) => <option key={b} value={b}>{b}</option>)}
                       {!branches.includes('Other') && <option value="Other">Other</option>}
                     </select>
+                  </div>
+                  <div className="sm:col-span-2 relative" ref={locationDropdownRef}>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Location</label>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setShowLocationDropdown(true)}
+                      onKeyDown={(ev) => {
+                        if (ev.key === 'Enter' || ev.key === ' ') setShowLocationDropdown(true);
+                      }}
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px]"
+                    >
+                      {form.location ? (
+                        <span>{form.location}</span>
+                      ) : (
+                        <span className="text-gray-400">Select location...</span>
+                      )}
+                      <span className="text-gray-400 text-xs">▾</span>
+                    </div>
+                    {showLocationDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-52 overflow-hidden">
+                        <div className="p-2 border-b border-gray-100">
+                          <input
+                            autoFocus
+                            placeholder="Search location..."
+                            value={locationSearch}
+                            onChange={(e) => setLocationSearch(e.target.value)}
+                            className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                        <div className="overflow-y-auto max-h-40">
+                          {(company?.locations || [])
+                            .filter((l) => !locationSearch || l.toLowerCase().includes(locationSearch.toLowerCase()))
+                            .map((loc) => (
+                              <div
+                                key={loc}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                  setForm((prev) => ({ ...prev, location: loc }));
+                                  setShowLocationDropdown(false);
+                                  setLocationSearch('');
+                                }}
+                                onKeyDown={(ev) => {
+                                  if (ev.key === 'Enter' || ev.key === ' ') {
+                                    setForm((prev) => ({ ...prev, location: loc }));
+                                    setShowLocationDropdown(false);
+                                    setLocationSearch('');
+                                  }
+                                }}
+                                className="px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                              >
+                                {loc}
+                              </div>
+                            ))}
+                          {(company?.locations || []).length === 0 && (
+                            <div className="px-3 py-4 text-center text-sm text-gray-400">
+                              No locations configured.
+                              <br />
+                              Add in Settings → Manage Lists
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Employment Type</label>
@@ -1769,7 +1973,7 @@ export default function Employees() {
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">CTC per annum</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Annual Gross Salary</label>
                     <input
                       type="number"
                       min="0"
@@ -1791,6 +1995,21 @@ export default function Employees() {
                       <p className="text-xs text-gray-400 mt-1.5">This is a guideline, not a restriction.</p>
                     )}
                   </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Incentive (per annum)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      name="incentive"
+                      placeholder="0"
+                      value={form.incentive}
+                      onChange={handleFormChange}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                    />
+                    {form.incentive !== '' && form.incentive != null && !Number.isNaN(Number(form.incentive)) && Number(form.incentive) !== 0 && (
+                      <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.incentive))} p.a.</p>
+                    )}
+                  </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Basic Salary / month</label>
                     <input type="number" min="0" name="basicSalary" value={form.basicSalary} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
@@ -1798,6 +2017,64 @@ export default function Employees() {
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">HRA / month</label>
                     <input type="number" min="0" name="hra" value={form.hra} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
+                  <span>🏥</span> Benefits
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-gray-500">PF Applicable</label>
+                      <button
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, pfApplicable: !prev.pfApplicable }))}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${form.pfApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
+                      >
+                        <div
+                          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                            form.pfApplicable ? 'translate-x-5' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    {form.pfApplicable && (
+                      <input
+                        name="pfNumber"
+                        placeholder="PF Number"
+                        value={form.pfNumber}
+                        onChange={handleFormChange}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-gray-500">ESIC Applicable</label>
+                      <button
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, esicApplicable: !prev.esicApplicable }))}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${form.esicApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
+                      >
+                        <div
+                          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                            form.esicApplicable ? 'translate-x-5' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    {form.esicApplicable && (
+                      <input
+                        name="esicNumber"
+                        placeholder="ESIC Number"
+                        value={form.esicNumber}
+                        onChange={handleFormChange}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -1818,14 +2095,6 @@ export default function Employees() {
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4] uppercase"
                       maxLength={20}
                     />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">PF Number</label>
-                    <input name="pfNumber" value={form.pfNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">ESIC Number</label>
-                    <input name="esicNumber" value={form.esicNumber} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Aadhaar Number</label>

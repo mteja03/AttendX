@@ -25,7 +25,7 @@ import {
   getDocById,
 } from '../utils/documentTypes';
 import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDrive';
-import { toDisplayDate, toJSDate, toDateString } from '../utils';
+import { toDisplayDate, toJSDate, toDateString, formatLakhs } from '../utils';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 
 const DEPT_COLOR = {
@@ -279,6 +279,9 @@ export default function EmployeeProfile() {
   const assetsFetchedRef = useRef(false);
   const [managerSearch, setManagerSearch] = useState('');
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
+  const [locationSearch, setLocationSearch] = useState('');
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const locationDropdownRef = useRef(null);
   const [assetList, setAssetList] = useState([]);
   const [showAssignAssetModal, setShowAssignAssetModal] = useState(false);
   const [showProfileAssignModal, setShowProfileAssignModal] = useState(null); // trackable assign or consumable issue
@@ -331,6 +334,18 @@ export default function EmployeeProfile() {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showManagerDropdown]);
+
+  useEffect(() => {
+    if (!showLocationDropdown) return undefined;
+    const onDown = (e) => {
+      if (locationDropdownRef.current && !locationDropdownRef.current.contains(e.target)) {
+        setShowLocationDropdown(false);
+        setLocationSearch('');
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showLocationDropdown]);
 
   const deptColor = employee ? (DEPT_COLOR[employee.department] || DEFAULT_DEPT_COLOR) : DEFAULT_DEPT_COLOR;
   const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
@@ -738,8 +753,12 @@ export default function EmployeeProfile() {
       fullName: employee.fullName || '',
       email: employee.email || '',
       phone: employee.phone || '',
+      alternativeMobile: employee.alternativeMobile || '',
       dateOfBirth: toDateString(employee.dateOfBirth),
       gender: employee.gender || '',
+      bloodGroup: employee.bloodGroup || '',
+      maritalStatus: employee.maritalStatus || '',
+      marriageDate: toDateString(employee.marriageDate),
       fatherName: employee.fatherName || '',
       streetAddress: employee.streetAddress || '',
       city: employee.city || '',
@@ -750,6 +769,7 @@ export default function EmployeeProfile() {
       empId: employee.empId || '',
       department: employee.department || '',
       branch: employee.branch || '',
+      location: employee.location || '',
       designation: employee.designation || '',
       employmentType: employee.employmentType || 'Full-time',
       category: employee.category || '',
@@ -757,9 +777,17 @@ export default function EmployeeProfile() {
       reportingManagerId: employee.reportingManagerId || '',
       reportingManagerName: employee.reportingManagerName || '',
       reportingManagerEmpId: employee.reportingManagerEmpId || '',
+      prevCompany: employee.prevCompany || '',
+      prevDesignation: employee.prevDesignation || '',
+      prevManagerName: employee.prevManagerName || '',
+      prevManagerPhone: employee.prevManagerPhone || '',
+      prevManagerEmail: employee.prevManagerEmail || '',
       ctcPerAnnum: employee.ctcPerAnnum ?? employee.ctc ?? '',
+      incentive: employee.incentive != null && employee.incentive !== '' ? String(employee.incentive) : '',
       basicSalary: employee.basicSalary ?? '',
       hra: employee.hra ?? '',
+      pfApplicable: employee.pfApplicable ?? !!String(employee.pfNumber || '').trim(),
+      esicApplicable: employee.esicApplicable ?? !!String(employee.esicNumber || '').trim(),
       pfNumber: employee.pfNumber || '',
       esicNumber: employee.esicNumber || '',
       panNumber: employee.panNumber || '',
@@ -768,9 +796,9 @@ export default function EmployeeProfile() {
       emergencyContactName: employee.emergencyContact?.name || '',
       emergencyRelationship: employee.emergencyContact?.relationship || '',
       emergencyPhone: employee.emergencyContact?.phone || '',
-      emergencyEmail: employee.emergencyContact?.email || '',
-      emergencyAddress: employee.emergencyContact?.address || '',
     });
+    setLocationSearch('');
+    setShowLocationDropdown(false);
     setShowEditModal(true);
   };
 
@@ -803,8 +831,12 @@ export default function EmployeeProfile() {
         fullName: form.fullName?.trim(),
         email: form.email?.trim(),
         phone: form.phone?.trim(),
+        alternativeMobile: form.alternativeMobile?.trim() || null,
         dateOfBirth: form.dateOfBirth || null,
         gender: form.gender || null,
+        bloodGroup: form.bloodGroup || null,
+        maritalStatus: form.maritalStatus || null,
+        marriageDate: form.maritalStatus === 'Married' && form.marriageDate ? form.marriageDate : null,
         fatherName: form.fatherName?.trim() || null,
         streetAddress: form.streetAddress?.trim() || null,
         city: form.city?.trim() || null,
@@ -814,6 +846,7 @@ export default function EmployeeProfile() {
         empId: form.empId || null,
         department: form.department || null,
         branch: form.branch || null,
+        location: form.location?.trim() || null,
         designation: form.designation || null,
         employmentType: form.employmentType || 'Full-time',
         category: form.category || null,
@@ -822,12 +855,20 @@ export default function EmployeeProfile() {
         reportingManagerId: form.reportingManagerId || null,
         reportingManagerName: form.reportingManagerName || null,
         reportingManagerEmpId: form.reportingManagerEmpId || null,
+        prevCompany: form.prevCompany?.trim() || null,
+        prevDesignation: form.prevDesignation?.trim() || null,
+        prevManagerName: form.prevManagerName?.trim() || null,
+        prevManagerPhone: form.prevManagerPhone?.trim() || null,
+        prevManagerEmail: form.prevManagerEmail?.trim() || null,
         ctcPerAnnum: form.ctcPerAnnum ? Number(form.ctcPerAnnum) : null,
         ctc: form.ctcPerAnnum ? Number(form.ctcPerAnnum) : null,
+        incentive: form.incentive !== '' && form.incentive != null ? Number(form.incentive) : null,
         basicSalary: form.basicSalary ? Number(form.basicSalary) : null,
         hra: form.hra ? Number(form.hra) : null,
-        pfNumber: form.pfNumber || null,
-        esicNumber: form.esicNumber || null,
+        pfApplicable: !!form.pfApplicable,
+        esicApplicable: !!form.esicApplicable,
+        pfNumber: form.pfApplicable ? form.pfNumber?.trim() || null : null,
+        esicNumber: form.esicApplicable ? form.esicNumber?.trim() || null : null,
         panNumber: form.panNumber?.replace(/\s/g, '') || null,
         aadhaarNumber: form.aadhaarNumber?.replace(/\s/g, '') || null,
         drivingLicenceNumber: form.drivingLicenceNumber?.trim() || null,
@@ -835,8 +876,6 @@ export default function EmployeeProfile() {
           name: form.emergencyContactName?.trim() || '',
           relationship: form.emergencyRelationship || '',
           phone: form.emergencyPhone?.trim() || '',
-          email: form.emergencyEmail?.trim() || '',
-          address: form.emergencyAddress?.trim() || '',
         },
         updatedAt: serverTimestamp(),
       };
@@ -845,6 +884,8 @@ export default function EmployeeProfile() {
       setShowEditModal(false);
       setShowManagerDropdown(false);
       setManagerSearch('');
+      setShowLocationDropdown(false);
+      setLocationSearch('');
       success('Employee updated');
     } catch {
       showError('Failed to update');
@@ -2189,7 +2230,46 @@ export default function EmployeeProfile() {
         : '—';
     const basicVal =
       employee.basicSalary != null ? `₹${employee.basicSalary.toLocaleString('en-IN')}/month` : '—';
+    const hraVal =
+      employee.hra != null ? `₹${employee.hra.toLocaleString('en-IN')}/month` : '—';
+    const incentiveVal =
+      employee.incentive != null && employee.incentive !== ''
+        ? `₹${Number(employee.incentive).toLocaleString('en-IN')}`
+        : '—';
     const aadhaarDisp = employee.aadhaarNumber ? e(`XXXX XXXX ${String(employee.aadhaarNumber).slice(-4)}`) : '—';
+    const pfOn = employee.pfApplicable ?? !!String(employee.pfNumber || '').trim();
+    const esicOn = employee.esicApplicable ?? !!String(employee.esicNumber || '').trim();
+    const pfPrint = pfOn ? e(employee.pfNumber || 'Applicable') : 'Not applicable';
+    const esicPrint = esicOn ? e(employee.esicNumber || 'Applicable') : 'Not applicable';
+    const maritalPrint =
+      employee.maritalStatus === 'Married' && employee.marriageDate
+        ? `${e(employee.maritalStatus)} · ${e(toDisplayDate(employee.marriageDate) || '—')}`
+        : e(employee.maritalStatus || '—');
+
+    const prevExpBlock =
+      employee.prevCompany || employee.prevDesignation || employee.prevManagerName
+        ? `<div class="print-section">
+        <div class="print-section-title">Previous experience</div>
+        <div class="print-grid-2">
+          <div><div class="print-field-label">Previous company</div><div class="print-field-value">${e(employee.prevCompany || '—')}</div></div>
+          <div><div class="print-field-label">Previous designation</div><div class="print-field-value">${e(employee.prevDesignation || '—')}</div></div>
+          <div><div class="print-field-label">Previous manager</div><div class="print-field-value">${e(employee.prevManagerName || '—')}</div></div>
+          <div><div class="print-field-label">Manager phone</div><div class="print-field-value">${e(employee.prevManagerPhone || '—')}</div></div>
+          <div style="grid-column:1/-1"><div class="print-field-label">Manager email</div><div class="print-field-value">${e(employee.prevManagerEmail || '—')}</div></div>
+        </div>
+      </div>`
+        : '';
+
+    const benefitsBlock =
+      pfOn || esicOn
+        ? `<div class="print-section">
+        <div class="print-section-title">Benefits</div>
+        <div class="print-grid-2">
+          <div><div class="print-field-label">PF</div><div class="print-field-value">${pfPrint}</div></div>
+          <div><div class="print-field-label">ESIC</div><div class="print-field-value">${esicPrint}</div></div>
+        </div>
+      </div>`
+        : '';
 
     const emergencyBlock = employee.emergencyContact?.name
       ? `<div class="print-section">
@@ -2198,7 +2278,6 @@ export default function EmployeeProfile() {
           <div><div class="print-field-label">Name</div><div class="print-field-value">${e(employee.emergencyContact.name)}</div></div>
           <div><div class="print-field-label">Relationship</div><div class="print-field-value">${e(employee.emergencyContact.relationship || '—')}</div></div>
           <div><div class="print-field-label">Phone</div><div class="print-field-value">${e(employee.emergencyContact.phone || '—')}</div></div>
-          <div><div class="print-field-label">Email</div><div class="print-field-value">${e(employee.emergencyContact.email || '—')}</div></div>
         </div>
       </div>`
       : '';
@@ -2243,12 +2322,17 @@ export default function EmployeeProfile() {
           <div><div class="print-field-label">Father's name</div><div class="print-field-value">${e(employee.fatherName || '—')}</div></div>
           <div><div class="print-field-label">Email</div><div class="print-field-value">${e(employee.email || '—')}</div></div>
           <div><div class="print-field-label">Phone</div><div class="print-field-value">${e(employee.phone || '—')}</div></div>
+          <div><div class="print-field-label">Alternative mobile</div><div class="print-field-value">${e(employee.alternativeMobile || '—')}</div></div>
           <div><div class="print-field-label">Date of birth</div><div class="print-field-value">${e(toDisplayDate(employee.dateOfBirth) || '—')}</div></div>
           <div><div class="print-field-label">Gender</div><div class="print-field-value">${e(employee.gender || '—')}</div></div>
+          <div><div class="print-field-label">Blood group</div><div class="print-field-value">${e(employee.bloodGroup || '—')}</div></div>
+          <div><div class="print-field-label">Marital status</div><div class="print-field-value">${maritalPrint}</div></div>
           <div style="grid-column:1/-1"><div class="print-field-label">Address</div><div class="print-field-value">${addr}</div></div>
           <div><div class="print-field-label">Qualification</div><div class="print-field-value">${e(employee.qualification || '—')}</div></div>
         </div>
       </div>
+
+      ${prevExpBlock}
 
       <div class="print-section">
         <div class="print-section-title">Employment details</div>
@@ -2257,6 +2341,7 @@ export default function EmployeeProfile() {
           <div><div class="print-field-label">Department</div><div class="print-field-value">${e(employee.department || '—')}</div></div>
           <div><div class="print-field-label">Designation</div><div class="print-field-value">${e(employee.designation || '—')}</div></div>
           <div><div class="print-field-label">Branch</div><div class="print-field-value">${e(employee.branch || '—')}</div></div>
+          <div><div class="print-field-label">Location</div><div class="print-field-value">${e(employee.location || '—')}</div></div>
           <div><div class="print-field-label">Employment type</div><div class="print-field-value">${e(employee.employmentType || '—')}</div></div>
           <div><div class="print-field-label">Category</div><div class="print-field-value">${e(employee.category || '—')}</div></div>
           <div><div class="print-field-label">Joining date</div><div class="print-field-value">${e(toDisplayDate(employee.joiningDate) || '—')}</div></div>
@@ -2267,17 +2352,19 @@ export default function EmployeeProfile() {
       <div class="print-section">
         <div class="print-section-title">Compensation</div>
         <div class="print-grid-2">
-          <div><div class="print-field-label">CTC per annum</div><div class="print-field-value">${e(ctcVal)}</div></div>
+          <div><div class="print-field-label">Annual gross salary</div><div class="print-field-value">${e(ctcVal)}</div></div>
+          <div><div class="print-field-label">Incentive (per annum)</div><div class="print-field-value">${e(incentiveVal)}</div></div>
           <div><div class="print-field-label">Basic salary</div><div class="print-field-value">${e(basicVal)}</div></div>
+          <div><div class="print-field-label">HRA</div><div class="print-field-value">${e(hraVal)}</div></div>
         </div>
       </div>
+
+      ${benefitsBlock}
 
       <div class="print-section">
         <div class="print-section-title">Statutory</div>
         <div class="print-grid-2">
           <div><div class="print-field-label">PAN</div><div class="print-field-value">${e(employee.panNumber || '—')}</div></div>
-          <div><div class="print-field-label">PF number</div><div class="print-field-value">${e(employee.pfNumber || '—')}</div></div>
-          <div><div class="print-field-label">ESIC number</div><div class="print-field-value">${e(employee.esicNumber || '—')}</div></div>
           <div><div class="print-field-label">Aadhaar</div><div class="print-field-value">${aadhaarDisp}</div></div>
           <div><div class="print-field-label">Driving licence</div><div class="print-field-value">${e(employee.drivingLicenceNumber || '—')}</div></div>
         </div>
@@ -2443,8 +2530,29 @@ export default function EmployeeProfile() {
               <p><span className="text-slate-500 text-sm">Father&apos;s Name</span><br />{employee.fatherName || '—'}</p>
               <p><span className="text-slate-500 text-sm">Email</span><br />{employee.email || '—'}</p>
               <p><span className="text-slate-500 text-sm">Phone</span><br />{employee.phone || '—'}</p>
+              {employee.alternativeMobile && (
+                <div>
+                  <p className="text-xs text-gray-400">Alternative Mobile</p>
+                  <p className="text-sm font-medium">{employee.alternativeMobile}</p>
+                </div>
+              )}
               <p><span className="text-slate-500 text-sm">Date of Birth</span><br />{employee.dateOfBirth ? `${toDisplayDate(employee.dateOfBirth)}${getAge(employee.dateOfBirth) != null ? ` (${getAge(employee.dateOfBirth)} years old)` : ''}` : '—'}</p>
               <p><span className="text-slate-500 text-sm">Gender</span><br />{employee.gender || '—'}</p>
+              {employee.bloodGroup && (
+                <div>
+                  <p className="text-xs text-gray-400">Blood Group</p>
+                  <p className="text-sm font-medium">{employee.bloodGroup}</p>
+                </div>
+              )}
+              {employee.maritalStatus && (
+                <div>
+                  <p className="text-xs text-gray-400">Marital Status</p>
+                  <p className="text-sm font-medium">
+                    {employee.maritalStatus}
+                    {employee.marriageDate && employee.maritalStatus === 'Married' && ` · ${toDisplayDate(employee.marriageDate)}`}
+                  </p>
+                </div>
+              )}
               <p><span className="text-slate-500 text-sm">Highest Qualification</span><br />{employee.qualification || '—'}</p>
               <div>
                 <span className="text-slate-500 text-sm">Address</span>
@@ -2466,11 +2574,45 @@ export default function EmployeeProfile() {
                   </p>
                 )}
               </div>
+              {(employee.prevCompany || employee.prevDesignation) && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Previous Experience</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {employee.prevCompany && (
+                      <div>
+                        <p className="text-xs text-gray-400">Previous Company</p>
+                        <p className="text-sm font-medium">{employee.prevCompany}</p>
+                      </div>
+                    )}
+                    {employee.prevDesignation && (
+                      <div>
+                        <p className="text-xs text-gray-400">Previous Designation</p>
+                        <p className="text-sm font-medium">{employee.prevDesignation}</p>
+                      </div>
+                    )}
+                    {employee.prevManagerName && (
+                      <div className="sm:col-span-2">
+                        <p className="text-xs text-gray-400">Previous Manager</p>
+                        <p className="text-sm font-medium">{employee.prevManagerName}</p>
+                        {employee.prevManagerPhone && <p className="text-xs text-gray-400">{employee.prevManagerPhone}</p>}
+                        {employee.prevManagerEmail && <p className="text-xs text-gray-400">{employee.prevManagerEmail}</p>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-3">
               <p><span className="text-slate-500 text-sm">Emp ID</span><br />{employee.empId || '—'}</p>
               <p><span className="text-slate-500 text-sm">Department</span><br />{employee.department || '—'}</p>
               <p><span className="text-slate-500 text-sm">Branch</span><br />{employee.branch || '—'}</p>
+              {employee.location && (
+                <p>
+                  <span className="text-slate-500 text-sm">Location</span>
+                  <br />
+                  {employee.location}
+                </p>
+              )}
               <p><span className="text-slate-500 text-sm">Designation</span><br />{employee.designation || '—'}</p>
               <p><span className="text-slate-500 text-sm">Employment Type</span><br />{employee.employmentType || '—'}</p>
               <p><span className="text-slate-500 text-sm">Category</span><br />{employee.category || '—'}</p>
@@ -2513,18 +2655,45 @@ export default function EmployeeProfile() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <p>CTC per annum: ₹{(employee.ctcPerAnnum ?? employee.ctc ?? 0).toLocaleString('en-IN')}</p>
+                <p>Annual Gross Salary: ₹{(employee.ctcPerAnnum ?? employee.ctc ?? 0).toLocaleString('en-IN')}</p>
+                {employee.incentive != null && employee.incentive !== '' && (
+                  <p>Incentive (p.a.): ₹{Number(employee.incentive).toLocaleString('en-IN')}</p>
+                )}
                 <p>Basic Salary: ₹{(employee.basicSalary ?? 0).toLocaleString('en-IN')}/month</p>
                 <p>HRA: ₹{(employee.hra ?? 0).toLocaleString('en-IN')}/month</p>
               </div>
             )}
           </div>
+          {(employee.pfApplicable ||
+            employee.esicApplicable ||
+            employee.pfNumber ||
+            employee.esicNumber) && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <h3 className="font-medium text-slate-800 mb-3">Benefits</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-gray-400">PF</p>
+                  <p className="text-sm font-medium">
+                    {(employee.pfApplicable ?? !!String(employee.pfNumber || '').trim())
+                      ? employee.pfNumber || 'Applicable'
+                      : 'Not applicable'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">ESIC</p>
+                  <p className="text-sm font-medium">
+                    {(employee.esicApplicable ?? !!String(employee.esicNumber || '').trim())
+                      ? employee.esicNumber || 'Applicable'
+                      : 'Not applicable'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="bg-white rounded-xl border border-slate-200 p-4">
             <h3 className="font-medium text-slate-800 mb-3">Statutory</h3>
             <p className="text-sm">PAN: {employee.panNumber || '—'}</p>
             <p className="text-sm">Aadhaar: {employee.aadhaarNumber ? `XXXX XXXX ${employee.aadhaarNumber.slice(-4)}` : '—'}</p>
-            <p className="text-sm">PF Number: {employee.pfNumber || '—'}</p>
-            <p className="text-sm">ESIC Number: {employee.esicNumber || '—'}</p>
             <div className="mt-3">
               <p className="text-xs text-gray-400">
                 Driving Licence No.
@@ -2556,20 +2725,6 @@ export default function EmployeeProfile() {
                     {employee.emergencyContact.phone}
                   </p>
                 </div>
-                <div>
-                  <p className="text-xs text-gray-400">Email</p>
-                  <p className="text-sm text-gray-800">
-                    {employee.emergencyContact.email || '—'}
-                  </p>
-                </div>
-                {employee.emergencyContact.address && (
-                  <div className="md:col-span-2">
-                    <p className="text-xs text-gray-400">Address</p>
-                    <p className="text-sm text-gray-800">
-                      {employee.emergencyContact.address}
-                    </p>
-                  </div>
-                )}
               </div>
             ) : (
               <p className="text-sm text-gray-400">No emergency contact added</p>
@@ -2981,8 +3136,57 @@ export default function EmployeeProfile() {
                         <div><label className="block text-xs text-slate-600 mb-1">Email</label><input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" required /></div>
                         <div className="col-span-2"><label className="block text-xs text-slate-600 mb-1">Father&apos;s Name</label><input value={form.fatherName} onChange={(e) => setForm((p) => ({ ...p, fatherName: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Father's full name" /></div>
                         <div><label className="block text-xs text-slate-600 mb-1">Phone</label><input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
+                        <div>
+                          <label className="block text-xs text-slate-600 mb-1">Alternative Mobile</label>
+                          <input
+                            type="tel"
+                            maxLength={10}
+                            placeholder="Alternative 10-digit number"
+                            value={form.alternativeMobile}
+                            onChange={(e) => setForm((p) => ({ ...p, alternativeMobile: e.target.value }))}
+                            className="w-full rounded-lg border px-3 py-2 text-sm"
+                          />
+                        </div>
                         <div><label className="block text-xs text-slate-600 mb-1">DOB</label><input type="date" value={form.dateOfBirth} onChange={(e) => setForm((p) => ({ ...p, dateOfBirth: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Gender</label><select value={form.gender} onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></div>
+                        <div>
+                          <label className="block text-xs text-slate-600 mb-1">Blood Group</label>
+                          <select
+                            value={form.bloodGroup}
+                            onChange={(e) => setForm((p) => ({ ...p, bloodGroup: e.target.value }))}
+                            className="w-full rounded-lg border px-3 py-2 text-sm"
+                          >
+                            <option value="">Select blood group</option>
+                            {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map((bg) => (
+                              <option key={bg} value={bg}>{bg}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-600 mb-1">Marital Status</label>
+                          <select
+                            value={form.maritalStatus}
+                            onChange={(e) => setForm((p) => ({ ...p, maritalStatus: e.target.value }))}
+                            className="w-full rounded-lg border px-3 py-2 text-sm"
+                          >
+                            <option value="">Select status</option>
+                            <option value="Single">Single</option>
+                            <option value="Married">Married</option>
+                            <option value="Divorced">Divorced</option>
+                            <option value="Widowed">Widowed</option>
+                          </select>
+                        </div>
+                        {form.maritalStatus === 'Married' && (
+                          <div>
+                            <label className="block text-xs text-slate-600 mb-1">Marriage Date</label>
+                            <input
+                              type="date"
+                              value={form.marriageDate}
+                              onChange={(e) => setForm((p) => ({ ...p, marriageDate: e.target.value }))}
+                              className="w-full rounded-lg border px-3 py-2 text-sm"
+                            />
+                          </div>
+                        )}
                         <div className="col-span-2"><label className="block text-xs text-slate-600 mb-1">Street Address</label><input value={form.streetAddress} onChange={(e) => setForm((p) => ({ ...p, streetAddress: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="House/Flat no, Street name" /></div>
                         <div><label className="block text-xs text-slate-600 mb-1">City</label><input value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="City" /></div>
                         <div>
@@ -3002,9 +3206,121 @@ export default function EmployeeProfile() {
                         </div>
                         <div><label className="block text-xs text-slate-600 mb-1">Pincode</label><input value={form.pincode} onChange={(e) => setForm((p) => ({ ...p, pincode: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" maxLength={6} placeholder="6-digit pincode" /></div>
                         <div><label className="block text-xs text-slate-600 mb-1">Country</label><input value={form.country} onChange={(e) => setForm((p) => ({ ...p, country: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Country" /></div>
+                        <div className="col-span-2">
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 border-b border-gray-100 pb-2">Previous Experience</h4>
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-slate-600 mb-1">Previous Company Name</label>
+                          <input
+                            placeholder="e.g. Infosys Pvt Ltd"
+                            value={form.prevCompany}
+                            onChange={(e) => setForm((p) => ({ ...p, prevCompany: e.target.value }))}
+                            className="w-full rounded-lg border px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-slate-600 mb-1">Previous Designation</label>
+                          <input
+                            placeholder="e.g. Software Engineer"
+                            value={form.prevDesignation}
+                            onChange={(e) => setForm((p) => ({ ...p, prevDesignation: e.target.value }))}
+                            className="w-full rounded-lg border px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-600 mb-1">Previous Manager Name</label>
+                          <input
+                            placeholder="Manager's full name"
+                            value={form.prevManagerName}
+                            onChange={(e) => setForm((p) => ({ ...p, prevManagerName: e.target.value }))}
+                            className="w-full rounded-lg border px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-600 mb-1">Previous Manager Phone</label>
+                          <input
+                            type="tel"
+                            placeholder="Manager's phone number"
+                            value={form.prevManagerPhone}
+                            onChange={(e) => setForm((p) => ({ ...p, prevManagerPhone: e.target.value }))}
+                            className="w-full rounded-lg border px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-slate-600 mb-1">Previous Manager Email</label>
+                          <input
+                            type="email"
+                            placeholder="Manager's email address"
+                            value={form.prevManagerEmail}
+                            onChange={(e) => setForm((p) => ({ ...p, prevManagerEmail: e.target.value }))}
+                            className="w-full rounded-lg border px-3 py-2 text-sm"
+                          />
+                        </div>
                 <div><label className="block text-xs text-slate-600 mb-1">Emp ID</label><input value={form.empId} onChange={(e) => setForm((p) => ({ ...p, empId: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Department</label><select value={form.department} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{departments.map((d) => <option key={d} value={d}>{d}</option>)}{!departments.includes('Other') && <option value="Other">Other</option>}</select></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Branch</label><select value={form.branch} onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{branches.map((b) => <option key={b} value={b}>{b}</option>)}{!branches.includes('Other') && <option value="Other">Other</option>}</select></div>
+                <div className="col-span-2 relative" ref={locationDropdownRef}>
+                  <label className="block text-xs text-slate-600 mb-1">Location</label>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setShowLocationDropdown(true)}
+                    onKeyDown={(ev) => {
+                      if (ev.key === 'Enter' || ev.key === ' ') setShowLocationDropdown(true);
+                    }}
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px]"
+                  >
+                    {form.location ? <span>{form.location}</span> : <span className="text-gray-400">Select location...</span>}
+                    <span className="text-gray-400 text-xs">▾</span>
+                  </div>
+                  {showLocationDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-[60] max-h-52 overflow-hidden">
+                      <div className="p-2 border-b border-gray-100">
+                        <input
+                          autoFocus
+                          placeholder="Search location..."
+                          value={locationSearch}
+                          onChange={(e) => setLocationSearch(e.target.value)}
+                          className="w-full text-sm border rounded-lg px-2 py-1.5"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <div className="overflow-y-auto max-h-40">
+                        {(company?.locations || [])
+                          .filter((l) => !locationSearch || l.toLowerCase().includes(locationSearch.toLowerCase()))
+                          .map((loc) => (
+                            <div
+                              key={loc}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                setForm((prev) => ({ ...prev, location: loc }));
+                                setShowLocationDropdown(false);
+                                setLocationSearch('');
+                              }}
+                              onKeyDown={(ev) => {
+                                if (ev.key === 'Enter' || ev.key === ' ') {
+                                  setForm((prev) => ({ ...prev, location: loc }));
+                                  setShowLocationDropdown(false);
+                                  setLocationSearch('');
+                                }
+                              }}
+                              className="px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer text-sm border-b last:border-0"
+                            >
+                              {loc}
+                            </div>
+                          ))}
+                        {(company?.locations || []).length === 0 && (
+                          <div className="px-3 py-4 text-center text-sm text-gray-400">
+                            No locations configured.
+                            <br />
+                            Add in Settings → Manage Lists
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div><label className="block text-xs text-slate-600 mb-1">Designation</label><select value={form.designation} onChange={(e) => setForm((p) => ({ ...p, designation: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{designations.map((d) => <option key={d} value={d}>{d}</option>)}{!designations.includes('Other') && <option value="Other">Other</option>}</select></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Employment Type</label><select value={form.employmentType} onChange={(e) => setForm((p) => ({ ...p, employmentType: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}{!employmentTypes.includes('Other') && <option value="Other">Other</option>}</select></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Category</label><select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}{!categories.includes('Other') && <option value="Other">Other</option>}</select></div>
@@ -3134,14 +3450,83 @@ export default function EmployeeProfile() {
                     )}
                   </div>
                 </div>
-                <div><label className="block text-xs text-slate-600 mb-1">CTC</label><input type="number" value={form.ctcPerAnnum} onChange={(e) => setForm((p) => ({ ...p, ctcPerAnnum: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
+                <div className="col-span-2">
+                  <label className="block text-xs text-slate-600 mb-1">Annual Gross Salary</label>
+                  <input type="number" value={form.ctcPerAnnum} onChange={(e) => setForm((p) => ({ ...p, ctcPerAnnum: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs text-slate-600 mb-1">Incentive (per annum)</label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={form.incentive}
+                    onChange={(e) => setForm((p) => ({ ...p, incentive: e.target.value }))}
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                  />
+                  {form.incentive !== '' && form.incentive != null && !Number.isNaN(Number(form.incentive)) && Number(form.incentive) !== 0 && (
+                    <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.incentive))} p.a.</p>
+                  )}
+                </div>
                 <div><label className="block text-xs text-slate-600 mb-1">Basic Salary</label><input type="number" value={form.basicSalary} onChange={(e) => setForm((p) => ({ ...p, basicSalary: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
                 <div><label className="block text-xs text-slate-600 mb-1">HRA</label><input type="number" value={form.hra} onChange={(e) => setForm((p) => ({ ...p, hra: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
+                <div className="col-span-2">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-2 border-b border-gray-100 pb-2">
+                    <span>🏥</span> Benefits
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs text-gray-500">PF Applicable</label>
+                        <button
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, pfApplicable: !prev.pfApplicable }))}
+                          className={`relative w-10 h-5 rounded-full transition-colors ${form.pfApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
+                        >
+                          <div
+                            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                              form.pfApplicable ? 'translate-x-5' : 'translate-x-0.5'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                      {form.pfApplicable && (
+                        <input
+                          placeholder="PF Number"
+                          value={form.pfNumber}
+                          onChange={(e) => setForm((p) => ({ ...p, pfNumber: e.target.value }))}
+                          className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs text-gray-500">ESIC Applicable</label>
+                        <button
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, esicApplicable: !prev.esicApplicable }))}
+                          className={`relative w-10 h-5 rounded-full transition-colors ${form.esicApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
+                        >
+                          <div
+                            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                              form.esicApplicable ? 'translate-x-5' : 'translate-x-0.5'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                      {form.esicApplicable && (
+                        <input
+                          placeholder="ESIC Number"
+                          value={form.esicNumber}
+                          onChange={(e) => setForm((p) => ({ ...p, esicNumber: e.target.value }))}
+                          className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
                 <div><label className="block text-xs text-slate-600 mb-1">PAN</label><input value={form.panNumber} onChange={(e) => setForm((p) => ({ ...p, panNumber: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
                         <div><label className="block text-xs text-slate-600 mb-1">Aadhaar</label><input value={form.aadhaarNumber} onChange={(e) => setForm((p) => ({ ...p, aadhaarNumber: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="12-digit number" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Driving Licence No.</label><input value={form.drivingLicenceNumber} onChange={(e) => setForm((p) => ({ ...p, drivingLicenceNumber: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="e.g. MH0120210012345" /></div>
-                <div><label className="block text-xs text-slate-600 mb-1">PF Number</label><input value={form.pfNumber} onChange={(e) => setForm((p) => ({ ...p, pfNumber: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
-                <div><label className="block text-xs text-slate-600 mb-1">ESIC Number</label><input value={form.esicNumber} onChange={(e) => setForm((p) => ({ ...p, esicNumber: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
+                        <div className="col-span-2"><label className="block text-xs text-slate-600 mb-1">Driving Licence No.</label><input value={form.drivingLicenceNumber} onChange={(e) => setForm((p) => ({ ...p, drivingLicenceNumber: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="e.g. MH0120210012345" /></div>
                         <div className="col-span-2 mt-2">
                           <h4 className="text-xs font-semibold text-slate-700 mb-2">Emergency Contact</h4>
                         </div>
@@ -3163,11 +3548,19 @@ export default function EmployeeProfile() {
                           </select>
                         </div>
                         <div><label className="block text-xs text-slate-600 mb-1">Contact Phone</label><input value={form.emergencyPhone} onChange={(e) => setForm((p) => ({ ...p, emergencyPhone: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" maxLength={10} placeholder="10-digit mobile number" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Contact Email</label><input value={form.emergencyEmail} onChange={(e) => setForm((p) => ({ ...p, emergencyEmail: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Email address" /></div>
-                        <div className="col-span-2"><label className="block text-xs text-slate-600 mb-1">Contact Address</label><input value={form.emergencyAddress} onChange={(e) => setForm((p) => ({ ...p, emergencyAddress: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Contact's address" /></div>
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-500 text-sm">Cancel</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setShowLocationDropdown(false);
+                    setLocationSearch('');
+                  }}
+                  className="text-slate-500 text-sm"
+                >
+                  Cancel
+                </button>
                 <button type="submit" disabled={saving} className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
               </div>
             </form>

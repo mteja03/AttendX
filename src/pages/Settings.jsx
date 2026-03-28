@@ -115,9 +115,20 @@ function buildLeaveAllowancesFromData(data, normalizedTypes) {
   return out;
 }
 
+const DEFAULT_LOCATIONS = [];
 const SECTIONS = [
   { key: 'departments', label: 'Department', plural: 'Departments', field: 'department', defaults: DEFAULT_DEPARTMENTS },
   { key: 'branches', label: 'Branch', plural: 'Branches', field: 'branch', defaults: DEFAULT_BRANCHES },
+  {
+    key: 'locations',
+    label: 'Location',
+    plural: 'Locations',
+    field: 'location',
+    defaults: DEFAULT_LOCATIONS,
+    icon: '📍',
+    placeholder: 'e.g. Mumbai Office, Delhi Branch, Work From Home',
+    description: 'Office locations and work sites',
+  },
   { key: 'employmentTypes', label: 'Employment Type', plural: 'Employment Types', field: 'employmentType', defaults: DEFAULT_EMPLOYMENT_TYPES },
   { key: 'categories', label: 'Category', plural: 'Categories', field: 'category', defaults: DEFAULT_CATEGORIES },
   { key: 'qualifications', label: 'Qualification', plural: 'Qualifications', field: 'qualification', defaults: DEFAULT_QUALIFICATIONS },
@@ -789,7 +800,7 @@ export default function Settings() {
       return { section, items, countFn, newVal, setNewVal };
     });
 
-    const left = cards.filter((c) => ['departments', 'branches', 'employmentTypes'].includes(c.section.key));
+    const left = cards.filter((c) => ['departments', 'branches', 'locations', 'employmentTypes'].includes(c.section.key));
     const right = cards.filter((c) => ['categories', 'qualifications'].includes(c.section.key));
 
     const handleToggleAssetTypeMode = async (typeName) => {
@@ -926,7 +937,13 @@ export default function Settings() {
     const renderCard = ({ section, items, countFn }) => (
       <div key={section.key} className="bg-white border rounded-xl p-4">
         <div className="flex justify-between mb-3">
-          <h3 className="font-medium text-sm">{section.plural}</h3>
+          <div>
+            <h3 className="font-medium text-sm flex items-center gap-2">
+              {section.icon && <span aria-hidden>{section.icon}</span>}
+              {section.plural}
+            </h3>
+            {section.description && <p className="text-xs text-gray-400 mt-0.5">{section.description}</p>}
+          </div>
           <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
             {items.length} items
           </span>
@@ -969,7 +986,7 @@ export default function Settings() {
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleAdd(section.key, section.defaults);
             }}
-            placeholder="Add new..."
+            placeholder={section.placeholder || 'Add new...'}
             className="flex-1 text-sm border rounded px-2 py-1"
           />
           <button
