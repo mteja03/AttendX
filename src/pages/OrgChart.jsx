@@ -6,6 +6,7 @@ import { db } from '../firebase/config';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
 import { getDeptColor, buildOrgTree, treeDepth } from '../utils/orgChartHelpers';
+import EmployeeAvatar from '../components/EmployeeAvatar';
 
 function OrgNode({ node, search, companyId, navigate }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -26,12 +27,11 @@ function OrgNode({ node, search, companyId, navigate }) {
           ${isHighlighted ? 'border-[#4ECDC4] shadow-[0_0_0_3px_rgba(78,205,196,0.15)]' : 'border-gray-100 hover:border-[#1B6B6B]'}
         `}
       >
-        <div
-          className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white mx-auto mb-2"
-          style={{ background: getDeptColor(node.department) }}
-        >
-          {node.fullName?.charAt(0) || '?'}
-        </div>
+        <EmployeeAvatar
+          employee={node}
+          size="xl"
+          className="mx-auto mb-2 ring-2 ring-white shadow"
+        />
         <p className="text-xs font-semibold text-gray-900 leading-tight truncate">{node.fullName || '—'}</p>
         <p className="text-xs text-gray-400 truncate mt-0.5">{node.designation || '—'}</p>
         <span

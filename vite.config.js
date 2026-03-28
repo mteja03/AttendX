@@ -15,6 +15,7 @@ export default defineConfig({
           if (id.includes('jszip')) return 'zip';
           if (id.includes('html2canvas')) return 'html2canvas';
           if (id.includes('firebase')) {
+            if (id.includes('firebase/storage')) return 'firebase-storage';
             if (id.includes('firestore')) return 'firebase-db';
             if (id.includes('auth')) return 'firebase-auth';
             if (id.includes('app')) return 'firebase-app';

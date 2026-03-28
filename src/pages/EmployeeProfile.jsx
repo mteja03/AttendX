@@ -28,15 +28,8 @@ import {
 import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDrive';
 import { toDisplayDate, toJSDate, toDateString, formatLakhs } from '../utils';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
-
-const DEPT_COLOR = {
-  Engineering: '#1B6B6B',
-  HR: '#1D9E75',
-  Sales: '#D97706',
-  Finance: '#0D9488',
-  Operations: '#534AB7',
-};
-const DEFAULT_DEPT_COLOR = '#64748b';
+import { uploadEmployeePhoto, deleteEmployeePhoto } from '../utils/photoUpload';
+import EmployeeAvatar from '../components/EmployeeAvatar';
 
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
 const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
@@ -584,6 +577,7 @@ export default function EmployeeProfile() {
   const { currentUser, getValidToken, isTokenValid, role: authRole } = useAuth();
   const userRole = authRole;
   const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
+  const canUploadPhoto = userRole === 'admin' || userRole === 'hrmanager';
   const canUpload = PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(userRole);
   const needsDriveToken = canUpload;
   const { success, error: showError } = useToast();
@@ -652,6 +646,7 @@ export default function EmployeeProfile() {
   const [offTaskNotes, setOffTaskNotes] = useState('');
   const [showResignationModal, setShowResignationModal] = useState(false);
   const [showOnboardingWarningModal, setShowOnboardingWarningModal] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [resignForm, setResignForm] = useState({
     resignationDate: '',
     noticePeriodDays: 30,
@@ -710,7 +705,6 @@ export default function EmployeeProfile() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [showLocationDropdown]);
 
-  const deptColor = employee ? (DEPT_COLOR[employee.department] || DEFAULT_DEPT_COLOR) : DEFAULT_DEPT_COLOR;
   const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
   const designations = company?.designations?.length ? company.designations : DEFAULT_DESIGNATIONS;
   const employmentTypes = company?.employmentTypes?.length ? company.employmentTypes : DEFAULT_EMPLOYMENT_TYPES;
@@ -719,6 +713,18 @@ export default function EmployeeProfile() {
   const categories = company?.categories?.length ? company.categories : DEFAULT_CATEGORIES;
 
   const empRef = companyId && empId ? doc(db, 'companies', companyId, 'employees', empId) : null;
+
+  const fetchEmployee = useCallback(async () => {
+    if (!companyId || !empId) return;
+    try {
+      const empSnap = await getDoc(doc(db, 'companies', companyId, 'employees', empId));
+      if (empSnap.exists()) setEmployee({ id: empSnap.id, ...empSnap.data() });
+      else setEmployee(null);
+    } catch (err) {
+      console.error('EmployeeProfile refresh error:', err);
+      showError('Failed to refresh employee');
+    }
+  }, [companyId, empId, showError]);
 
   useEffect(() => {
     if (!companyId || !empId) return;
@@ -2952,8 +2958,87 @@ export default function EmployeeProfile() {
       <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 mb-6">
         <div className="flex flex-col sm:flex-row sm:items-start gap-4">
           <div className="flex items-center gap-4 min-w-0">
-            <div className="h-14 w-14 rounded-full flex items-center justify-center text-white text-xl font-bold shrink-0" style={{ backgroundColor: deptColor }}>
-              {(employee.fullName || '?').slice(0, 2).toUpperCase()}
+            <div className="relative group flex-shrink-0">
+              <EmployeeAvatar employee={employee} size="huge" className="ring-4 ring-white shadow-lg" />
+
+              {canUploadPhoto && !uploadingPhoto && (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => document.getElementById('emp-photo-input')?.click()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      document.getElementById('emp-photo-input')?.click();
+                    }
+                  }}
+                  className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/50 transition-all flex items-center justify-center cursor-pointer"
+                >
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity text-center pointer-events-none">
+                    <p className="text-white text-lg">📷</p>
+                    <p className="text-white text-xs font-medium mt-0.5">
+                      {employee.photoURL ? 'Change' : 'Add Photo'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {uploadingPhoto && (
+                <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+
+              {canUploadPhoto && employee.photoURL && !uploadingPhoto && (
+                <button
+                  type="button"
+                  title="Remove photo"
+                  onClick={async () => {
+                    if (!window.confirm('Remove this photo?')) return;
+                    try {
+                      setUploadingPhoto(true);
+                      await deleteEmployeePhoto(companyId, empId);
+                      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+                        photoURL: deleteField(),
+                      });
+                      success('Photo removed');
+                      await fetchEmployee();
+                    } catch (e) {
+                      showError('Failed to remove photo');
+                    } finally {
+                      setUploadingPhoto(false);
+                    }
+                  }}
+                  className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-red-500 text-white text-sm flex items-center justify-center shadow-md hover:bg-red-600 transition-colors border-2 border-white z-10"
+                >
+                  ✕
+                </button>
+              )}
+
+              {canUploadPhoto && (
+                <input
+                  id="emp-photo-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/jpg"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    e.target.value = '';
+                    try {
+                      setUploadingPhoto(true);
+                      const url = await uploadEmployeePhoto(companyId, empId, file);
+                      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { photoURL: url });
+                      success('✓ Photo updated!');
+                      await fetchEmployee();
+                    } catch (err) {
+                      showError(err?.message || 'Upload failed');
+                    } finally {
+                      setUploadingPhoto(false);
+                    }
+                  }}
+                />
+              )}
             </div>
             <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-slate-800">{employee.fullName || '—'}</h1>

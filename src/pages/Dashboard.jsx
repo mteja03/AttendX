@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import StatCard from '../components/StatCard';
+import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { toDateString, toDisplayDate, toJSDate } from '../utils';
@@ -105,8 +106,9 @@ const CELEBRATION_COLORS = {
   },
 };
 
-function CelebrationItem({ item, showDate, companyId }) {
+function CelebrationItem({ item, showDate, companyId, employees }) {
   const colors = CELEBRATION_COLORS[item.type];
+  const emp = employees?.find((e) => e.id === item.empId);
   return (
     <Link
       to={`/company/${companyId}/employees/${item.empId}`}
@@ -116,11 +118,7 @@ function CelebrationItem({ item, showDate, companyId }) {
         className={`flex items-center gap-3 p-3 rounded-xl border ${colors.bg} ${colors.border} transition-all hover:shadow-sm`}
       >
         <div className="relative flex-shrink-0">
-          <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${colors.avatar}`}
-          >
-            {item.name?.charAt(0)}
-          </div>
+          <EmployeeAvatar employee={emp || { fullName: item.name }} size="sm" />
           <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white flex items-center justify-center text-xs shadow-sm border border-gray-100">
             {item.icon}
           </div>
@@ -654,9 +652,7 @@ export default function Dashboard() {
                   key={emp.id}
                   className="flex items-center gap-1.5 bg-amber-50 border border-amber-100 rounded-full px-2.5 py-1"
                 >
-                  <div className="w-5 h-5 rounded-full bg-amber-200 flex items-center justify-center text-xs font-medium text-amber-800 flex-shrink-0">
-                    {emp.fullName?.charAt(0)}
-                  </div>
+                  <EmployeeAvatar employee={emp} size="xs" className="ring-2 ring-amber-100" />
                   <span className="text-xs text-amber-800 font-medium">{emp.fullName?.split(' ')[0]}</span>
                   {leave && leaveTypeLabel && <span className="text-xs text-amber-500">· {leaveTypeLabel}</span>}
                 </div>
@@ -731,9 +727,7 @@ export default function Dashboard() {
                     }}
                     className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-[#C5E8E8] hover:bg-[#E8F5F5] cursor-pointer transition-all"
                   >
-                    <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-700 text-xs font-medium">
-                      {(emp.fullName || '?').slice(0, 2).toUpperCase()}
-                    </div>
+                    <EmployeeAvatar employee={emp} size="md" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-800 truncate">{emp.fullName}</p>
                       <p className="text-xs text-slate-500 truncate">
@@ -793,9 +787,7 @@ export default function Dashboard() {
                       }}
                       className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-amber-200 hover:bg-amber-50 cursor-pointer transition-all"
                     >
-                      <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-xs font-medium">
-                        {(emp.fullName || '?').slice(0, 1).toUpperCase()}
-                      </div>
+                      <EmployeeAvatar employee={emp} size="md" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-800 truncate">{emp.fullName}</p>
                         <p className="text-xs text-slate-500 truncate">
@@ -940,6 +932,7 @@ export default function Dashboard() {
                       item={item}
                       showDate={celebTab !== 'today' && celebTab !== 'tomorrow'}
                       companyId={companyId}
+                      employees={employees}
                     />
                   ))}
                 </div>
@@ -1047,9 +1040,10 @@ export default function Dashboard() {
                 <div key={leave.id} className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-[#E8F5F5] flex items-center justify-center text-xs font-medium text-[#1B6B6B] flex-shrink-0">
-                        {leave.employeeName?.charAt(0) || '?'}
-                      </div>
+                      <EmployeeAvatar
+                        employee={employees.find((e) => e.id === leave.employeeId) || { fullName: leave.employeeName }}
+                        size="sm"
+                      />
                       <div className="min-w-0">
                         <button
                           type="button"

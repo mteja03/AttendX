@@ -22,6 +22,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { PLATFORM_CONFIG } from '../config/constants';
 import { SkeletonCard } from '../components/SkeletonRow';
+import EmployeeAvatar from '../components/EmployeeAvatar';
 import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -1130,12 +1131,7 @@ export default function Employees() {
                       <td className="px-4 py-3 font-mono text-slate-700">{emp.empId || '—'}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
-                            style={{ background: getDeptColor(emp.department) }}
-                          >
-                            {emp.fullName?.charAt(0) || '—'}
-                          </div>
+                          <EmployeeAvatar employee={emp} size="sm" />
                           <div>
                             <p className="text-sm font-medium text-slate-800">{emp.fullName || '—'}</p>
                             <p className="text-xs text-slate-500">{emp.email || '—'}</p>
@@ -1190,12 +1186,7 @@ export default function Employees() {
                     <td className="px-4 py-3 font-mono text-slate-700">{emp.empId || '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
-                          style={{ background: getDeptColor(emp.department) }}
-                        >
-                          {emp.fullName?.charAt(0) || '—'}
-                        </div>
+                        <EmployeeAvatar employee={emp} size="sm" />
                         <div>
                           <p className="text-sm font-medium text-slate-800">{emp.fullName || '—'}</p>
                           <p className="text-xs text-slate-500">{emp.email || '—'}</p>
@@ -1258,12 +1249,7 @@ export default function Employees() {
                 className="bg-white border border-gray-100 rounded-2xl p-4 cursor-pointer hover:border-gray-200 active:bg-gray-50"
               >
                 <div className="flex items-center gap-3 mb-3">
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white flex-shrink-0"
-                    style={{ background: getDeptColor(emp.department) }}
-                  >
-                    {emp.fullName?.charAt(0) || '—'}
-                  </div>
+                  <EmployeeAvatar employee={emp} size="md" />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 truncate">{emp.fullName || '—'}</p>
                     <p className="text-xs text-gray-400 truncate">
