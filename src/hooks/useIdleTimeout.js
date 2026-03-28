@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 
-const IDLE_TIMEOUT_MS = 8 * 60 * 60 * 1000;
+const IDLE_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const WARNING_BEFORE_MS = 5 * 60 * 1000;
 
 export function useIdleTimeout(onSignOut, onWarning, onActive) {

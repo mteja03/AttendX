@@ -752,13 +752,6 @@ export default function EmployeeProfile() {
   const [showRehireModal, setShowRehireModal] = useState(false);
   const [rehireForm, setRehireForm] = useState({
     newJoiningDate: '',
-    newDesignation: '',
-    newDepartment: '',
-    newBranch: '',
-    newLocation: '',
-    newCtc: '',
-    newEmpId: '',
-    keepSameEmpId: true,
     notes: '',
   });
 
@@ -2296,10 +2289,6 @@ export default function EmployeeProfile() {
       showError('Please enter new joining date');
       return;
     }
-    if (!rehireForm.keepSameEmpId && !String(rehireForm.newEmpId || '').trim()) {
-      showError('Please enter a new employee ID');
-      return;
-    }
     if (!companyId || !empId || !employee || !currentUser || !empRef) return;
 
     try {
@@ -2308,75 +2297,45 @@ export default function EmployeeProfile() {
       const exitDateRaw = employee.deactivatedAt || employee.offboarding?.completedAt || Timestamp.now();
 
       const previousEmployment = sanitizeForFirestore({
-        tenure: (Array.isArray(employee.employmentHistory) ? employee.employmentHistory.length : 0) + 1,
-        empId: employee.empId || '',
+        tenure: (employee.employmentHistory?.length || 0) + 1,
+        empId: employee.empId,
         joiningDate: employee.joiningDate ?? null,
         exitDate: exitDateRaw,
         designation: employee.designation || '',
         department: employee.department || '',
-        ctc: employee.ctcPerAnnum ?? employee.ctc ?? null,
-        exitReason: employee.offboarding?.reason || employee.offboarding?.exitReason || '',
-        offboardingNotes: employee.offboarding?.completionNotes || '',
+        ctc: employee.ctcPerAnnum || employee.ctc || '',
+        exitReason: employee.offboarding?.reason || '',
       });
 
-      const newDesignation = rehireForm.newDesignation.trim() || employee.designation || '';
-      const newDepartment = rehireForm.newDepartment.trim() || employee.department || '';
-      const newEmpIdStr = rehireForm.keepSameEmpId
-        ? employee.empId
-        : String(rehireForm.newEmpId || '').trim();
-      const ctcRaw = String(rehireForm.newCtc || '').trim();
-      const newCtcFinal =
-        ctcRaw === ''
-          ? (employee.ctcPerAnnum ?? employee.ctc ?? null)
-          : Number(ctcRaw);
-      const ctcToSave =
-        newCtcFinal != null && newCtcFinal !== '' && !Number.isNaN(Number(newCtcFinal))
-          ? Number(newCtcFinal)
-          : (employee.ctcPerAnnum ?? employee.ctc ?? null);
-
-      const notesText =
-        rehireForm.notes.trim() ||
-        `Rehired. New joining: ${toDisplayDate(newJoinTs)}`;
+      const timelineEntry = sanitizeForFirestore({
+        event: 'rehired',
+        date: Timestamp.now(),
+        timestamp: Timestamp.now(),
+        by: currentUser.email || '',
+        notes:
+          rehireForm.notes.trim() ||
+          `Rehired. New joining: ${toDisplayDate(newJoinTs)}`,
+      });
 
       await updateDoc(empRef, {
         status: 'Active',
         joiningDate: newJoinTs,
-        empId: newEmpIdStr,
-        designation: newDesignation,
-        department: newDepartment,
-        ctcPerAnnum: ctcToSave,
         employmentHistory: [...(employee.employmentHistory || []), previousEmployment],
-        deactivatedAt: deleteField(),
-        deactivatedBy: deleteField(),
-        deactivationReason: deleteField(),
-        offboarding: deleteField(),
-        onboarding: deleteField(),
-        editHistory: arrayUnion({
-          event: 'rehired',
-          date: Timestamp.now(),
-          timestamp: Timestamp.now(),
-          by: currentUser.email || '',
-          notes: notesText,
-        }),
+        deactivatedAt: null,
+        deactivatedBy: null,
+        deactivationReason: null,
+        offboarding: null,
+        onboarding: null,
+        editHistory: [...(employee.editHistory || []), timelineEntry],
         rehireCount: (employee.rehireCount || 0) + 1,
         rehiredAt: Timestamp.now(),
         rehiredBy: currentUser.email || '',
         updatedAt: serverTimestamp(),
       });
 
-      success(`✅ ${employee.fullName} rehired! New joining: ${toDisplayDate(newJoinTs)}`);
+      success(`✅ ${employee.fullName} rehired! Please update their profile details.`);
       setShowRehireModal(false);
-      setRehireForm({
-        newJoiningDate: '',
-        newDesignation: '',
-        newDepartment: '',
-        newBranch: '',
-        newLocation: '',
-        newCtc: '',
-        newEmpId: '',
-        keepSameEmpId: true,
-        notes: '',
-      });
+      setRehireForm({ newJoiningDate: '', notes: '' });
       await refreshEmployee();
     } catch (e) {
       showError(`Failed to rehire: ${e?.message || 'Unknown error'}`);
@@ -5772,83 +5731,11 @@ export default function EmployeeProfile() {
                 />
               </div>
 
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Employee ID</label>
-                <div className="flex flex-wrap items-center gap-3 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => setRehireForm((prev) => ({ ...prev, keepSameEmpId: true }))}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-colors ${
-                      rehireForm.keepSameEmpId
-                        ? 'bg-[#E8F5F5] border-[#1B6B6B] text-[#1B6B6B]'
-                        : 'border-gray-200 text-gray-500'
-                    }`}
-                  >
-                    Keep same ({employee.empId})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRehireForm((prev) => ({ ...prev, keepSameEmpId: false }))}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-colors ${
-                      !rehireForm.keepSameEmpId
-                        ? 'bg-[#E8F5F5] border-[#1B6B6B] text-[#1B6B6B]'
-                        : 'border-gray-200 text-gray-500'
-                    }`}
-                  >
-                    Assign new ID
-                  </button>
-                </div>
-                {!rehireForm.keepSameEmpId && (
-                  <input
-                    placeholder="New Emp ID"
-                    value={rehireForm.newEmpId}
-                    onChange={(e) => setRehireForm((prev) => ({ ...prev, newEmpId: e.target.value }))}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                  />
-                )}
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">New Designation</label>
-                <input
-                  placeholder={employee.designation || 'Same as before'}
-                  value={rehireForm.newDesignation}
-                  onChange={(e) => setRehireForm((prev) => ({ ...prev, newDesignation: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">New Department</label>
-                <select
-                  value={rehireForm.newDepartment}
-                  onChange={(e) => setRehireForm((prev) => ({ ...prev, newDepartment: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                >
-                  <option value="">
-                    Same as before ({employee.department || '—'})
-                  </option>
-                  {departments.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">New Annual Gross Salary (₹)</label>
-                <input
-                  type="number"
-                  placeholder={
-                    employee.ctcPerAnnum != null
-                      ? String(employee.ctcPerAnnum)
-                      : 'Enter new salary'
-                  }
-                  value={rehireForm.newCtc}
-                  onChange={(e) => setRehireForm((prev) => ({ ...prev, newCtc: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                />
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="text-xs text-blue-700">
+                  💡 All other details (designation, department, salary etc.) can be updated by editing the employee
+                  profile after rehiring.
+                </p>
               </div>
 
               <div>

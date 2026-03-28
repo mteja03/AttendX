@@ -35,11 +35,11 @@ export default function IdleWarningBanner({ onStaySignedIn, onSignOut, visible }
           <div className="flex-1">
             <p className="font-semibold text-sm mb-1">Session expiring soon</p>
             <p className="text-gray-400 text-xs mb-3">
-              You will be signed out in{' '}
+              After 4 hours of inactivity, you will be signed out in{' '}
               <span className="text-amber-400 font-bold text-sm">
                 {minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`}
-              </span>{' '}
-              due to inactivity.
+              </span>
+              .
             </p>
 
             <div className="flex gap-2">

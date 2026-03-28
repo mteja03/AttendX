@@ -168,7 +168,7 @@ export default function Login() {
         {idleSignOut && (
           <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4 text-sm text-amber-700">
             <span>⏰</span>
-            <span>You were signed out due to 8 hours of inactivity.</span>
+            <span>You were signed out due to 4 hours of inactivity.</span>
           </div>
         )}
 
