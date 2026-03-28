@@ -137,11 +137,11 @@ const INDIAN_STATES = [
 
 function employeeStatusBadgeClass(status) {
   const s = status || 'Active';
-  if (s === 'Active') return 'bg-green-100 text-green-800';
+  if (s === 'Active') return 'bg-green-100 text-green-700';
   if (s === 'Notice Period') return 'bg-amber-100 text-amber-700';
-  if (s === 'On Leave') return 'bg-blue-100 text-blue-800';
-  if (s === 'Offboarding') return 'bg-orange-100 text-orange-800';
-  if (s === 'Inactive') return 'bg-slate-100 text-slate-600';
+  if (s === 'On Leave') return 'bg-blue-100 text-blue-700';
+  if (s === 'Offboarding') return 'bg-orange-100 text-orange-700';
+  if (s === 'Inactive') return 'bg-gray-100 text-gray-500';
   return 'bg-slate-100 text-slate-600';
 }
 

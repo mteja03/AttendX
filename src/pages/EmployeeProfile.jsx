@@ -1717,6 +1717,16 @@ export default function EmployeeProfile() {
     return null;
   }, [employee?.offboarding]);
 
+  const offboardingPhase = employee?.offboarding?.phase;
+  const canRecordResignation =
+    employee?.status === 'Active' && (!offboardingPhase || offboardingPhase === 'withdrawn');
+  const offboardingAllowedStatuses = ['Active', 'Notice Period', 'Offboarding'];
+  const showOffboardingMainFlow = employee && offboardingAllowedStatuses.includes(employee.status || '');
+  const showOffboardingReadOnlyUi = employee?.status === 'Inactive' || offPhase === 'completed';
+  const showNoticePeriodSection = employee?.status === 'Notice Period' && offPhase === 'notice_period';
+  const showExitTasksSection = employee?.status === 'Offboarding' && offPhase === 'exit_tasks';
+  const showStarterSection = employee?.status === 'Active' && (!offPhase || offPhase === 'withdrawn');
+
   const buyoutDaysPreview = useMemo(() => {
     if (!buyoutForm.actualLastDay || !employee?.offboarding?.expectedLastDay) return null;
     const expectedEnd = toJSDate(employee.offboarding.expectedLastDay);
@@ -2045,6 +2055,80 @@ export default function EmployeeProfile() {
     setSaving(false);
   };
 
+  const returnAssetForCompletedOffTask = async (taskMetaParam) => {
+    let assetAutoReturned = false;
+    if (!taskMetaParam?.isAssetTask || !taskMetaParam?.assetId) return false;
+    try {
+      const assetRef = doc(db, 'companies', companyId, 'assets', taskMetaParam.assetId);
+      const assetSnap = await getDoc(assetRef);
+      if (assetSnap.exists()) {
+        const ad = assetSnap.data();
+        const mode = taskMetaParam.assetMode || ad.mode || 'trackable';
+        if (mode === 'trackable' && ad.assignedToId === empId && ad.status === 'Assigned') {
+          const returnTs = Timestamp.now();
+          const historyEntry = {
+            action: 'returned',
+            employeeId: empId,
+            employeeName: employee.fullName || '',
+            date: returnTs,
+            condition: ad.condition || 'Good',
+            notes: 'Returned during offboarding',
+            performedBy: currentUser.email || '',
+          };
+          await updateDoc(assetRef, {
+            status: 'Available',
+            assignedToId: null,
+            assignedToName: null,
+            assignedToEmpId: null,
+            returnDate: returnTs,
+            history: [...(Array.isArray(ad.history) ? ad.history : []), historyEntry],
+          });
+          assetAutoReturned = true;
+        } else if (mode === 'consumable' && taskMetaParam.consumableAssignmentIndex != null) {
+          const assignments = Array.isArray(ad.assignments) ? [...ad.assignments] : [];
+          const idx = taskMetaParam.consumableAssignmentIndex;
+          const asgn = assignments[idx];
+          if (asgn && asgn.employeeId === empId && !asgn.returned) {
+            const qty = Number(asgn.quantity) || 1;
+            const returnTs = Timestamp.now();
+            const nextAssignments = assignments.map((x, j) =>
+              j === idx ? { ...x, quantity: 0, returned: true, returnDate: returnTs } : x,
+            );
+            await updateDoc(assetRef, {
+              assignments: nextAssignments,
+              availableStock: (Number(ad.availableStock) || 0) + qty,
+              issuedCount: Math.max(0, (Number(ad.issuedCount) || 0) - qty),
+              history: [
+                ...(Array.isArray(ad.history) ? ad.history : []),
+                {
+                  action: 'returned',
+                  employeeId: empId,
+                  employeeName: employee.fullName || '',
+                  quantity: qty,
+                  date: returnTs,
+                  notes: 'Returned during offboarding',
+                  performedBy: currentUser.email || '',
+                },
+              ],
+            });
+            assetAutoReturned = true;
+          }
+        }
+      }
+    } catch {
+      /* ignore auto-return errors */
+    }
+    if (assetAutoReturned) {
+      try {
+        const snap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+        setAssetList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch {
+        /* ignore */
+      }
+    }
+    return assetAutoReturned;
+  };
+
   const markOffboardingTaskComplete = async (taskId, notes) => {
     if (!companyId || !empId || !employee || !currentUser || !offboarding) return;
     const taskMeta = offTasks.find((t) => t.id === taskId);
@@ -2056,118 +2140,65 @@ export default function EmployeeProfile() {
     );
     const done = nextTasks.filter((t) => t.completed).length;
     const total = nextTasks.length || 1;
+    const allRequiredDone = nextTasks.filter((t) => t.isRequired !== false).every((t) => t.completed);
+
+    if (allRequiredDone) {
+      const completedHistory = [
+        ...(offboarding.history || []),
+        {
+          event: 'employee_marked_inactive',
+          date: now,
+          by: currentUser.email || '',
+          notes: 'Offboarding completed — employee marked Inactive',
+        },
+      ];
+      await updateDoc(
+        doc(db, 'companies', companyId, 'employees', empId),
+        sanitizeForFirestore({
+          status: 'Inactive',
+          offboarding: {
+            ...(offboarding || {}),
+            phase: 'completed',
+            status: 'completed',
+            tasks: nextTasks,
+            completionPct: 100,
+            completedAt: now,
+            completedBy: currentUser.email || '',
+            history: completedHistory,
+          },
+          deactivatedAt: now,
+          deactivatedBy: currentUser.email || '',
+          deactivationReason: 'Offboarding completed',
+          updatedAt: serverTimestamp(),
+        }),
+      );
+      await returnAssetForCompletedOffTask(taskMeta);
+      await refreshEmployee();
+      success(`✅ Offboarding complete! ${employee.fullName} is now Inactive.`);
+      return;
+    }
+
     const pct = Math.round((done / total) * 100);
-    const requiredDone = nextTasks.filter((t) => t.isRequired).every((t) => t.completed);
-    const status = requiredDone && done === nextTasks.length ? 'completed' : 'in_progress';
-
-    const completedHistory =
-      status === 'completed'
-        ? [
-            ...(offboarding.history || []),
-            {
-              event: 'employee_marked_inactive',
-              date: now,
-              by: currentUser.email || '',
-              notes: 'Offboarding completed — employee marked Inactive',
-            },
-          ]
-        : offboarding.history;
-
     const offboardingPayload = {
       ...(offboarding || {}),
-      phase: status === 'completed' ? 'completed' : 'exit_tasks',
-      status,
+      phase: 'exit_tasks',
+      status: 'in_progress',
       completionPct: pct,
       tasks: nextTasks,
-      completedAt: status === 'completed' ? now : offboarding.completedAt || null,
-      completedBy: status === 'completed' ? currentUser.email || '' : offboarding.completedBy || null,
-      history: completedHistory,
+      completedAt: offboarding.completedAt || null,
+      completedBy: offboarding.completedBy || null,
+      history: offboarding.history || [],
     };
 
     const payload = {
       offboarding: sanitizeForFirestore(offboardingPayload),
-      status: status === 'completed' ? 'Inactive' : (employee.status || 'Offboarding'),
+      status: employee.status || 'Offboarding',
       updatedAt: serverTimestamp(),
     };
-    if (status === 'completed') {
-      payload.deactivatedAt = now;
-      payload.deactivatedBy = currentUser.email || '';
-      payload.deactivationReason = 'Offboarding completed';
-    }
 
     await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
 
-    let assetAutoReturned = false;
-    if (taskMeta?.isAssetTask && taskMeta?.assetId) {
-      try {
-        const assetRef = doc(db, 'companies', companyId, 'assets', taskMeta.assetId);
-        const assetSnap = await getDoc(assetRef);
-        if (assetSnap.exists()) {
-          const ad = assetSnap.data();
-          const mode = taskMeta.assetMode || ad.mode || 'trackable';
-          if (mode === 'trackable' && ad.assignedToId === empId && ad.status === 'Assigned') {
-            const returnTs = Timestamp.now();
-            const historyEntry = {
-              action: 'returned',
-              employeeId: empId,
-              employeeName: employee.fullName || '',
-              date: returnTs,
-              condition: ad.condition || 'Good',
-              notes: 'Returned during offboarding',
-              performedBy: currentUser.email || '',
-            };
-            await updateDoc(assetRef, {
-              status: 'Available',
-              assignedToId: null,
-              assignedToName: null,
-              assignedToEmpId: null,
-              returnDate: returnTs,
-              history: [...(Array.isArray(ad.history) ? ad.history : []), historyEntry],
-            });
-            assetAutoReturned = true;
-          } else if (mode === 'consumable' && taskMeta.consumableAssignmentIndex != null) {
-            const assignments = Array.isArray(ad.assignments) ? [...ad.assignments] : [];
-            const idx = taskMeta.consumableAssignmentIndex;
-            const asgn = assignments[idx];
-            if (asgn && asgn.employeeId === empId && !asgn.returned) {
-              const qty = Number(asgn.quantity) || 1;
-              const returnTs = Timestamp.now();
-              const nextAssignments = assignments.map((x, j) =>
-                j === idx ? { ...x, quantity: 0, returned: true, returnDate: returnTs } : x,
-              );
-              await updateDoc(assetRef, {
-                assignments: nextAssignments,
-                availableStock: (Number(ad.availableStock) || 0) + qty,
-                issuedCount: Math.max(0, (Number(ad.issuedCount) || 0) - qty),
-                history: [
-                  ...(Array.isArray(ad.history) ? ad.history : []),
-                  {
-                    action: 'returned',
-                    employeeId: empId,
-                    employeeName: employee.fullName || '',
-                    quantity: qty,
-                    date: returnTs,
-                    notes: 'Returned during offboarding',
-                    performedBy: currentUser.email || '',
-                  },
-                ],
-              });
-              assetAutoReturned = true;
-            }
-          }
-        }
-      } catch {
-        /* ignore auto-return errors */
-      }
-      if (assetAutoReturned) {
-        try {
-          const snap = await getDocs(collection(db, 'companies', companyId, 'assets'));
-          setAssetList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        } catch {
-          /* ignore */
-        }
-      }
-    }
+    const assetAutoReturned = await returnAssetForCompletedOffTask(taskMeta);
 
     setEmployee((prev) =>
       prev
@@ -2175,19 +2206,10 @@ export default function EmployeeProfile() {
             ...prev,
             offboarding: payload.offboarding,
             status: payload.status,
-            ...(status === 'completed'
-              ? {
-                  deactivatedAt: payload.deactivatedAt,
-                  deactivatedBy: payload.deactivatedBy,
-                  deactivationReason: payload.deactivationReason,
-                }
-              : {}),
           }
         : null,
     );
-    if (status === 'completed') {
-      success(`🎉 Offboarding complete! ${employee.fullName} is now Inactive.`);
-    } else if (assetAutoReturned) {
+    if (assetAutoReturned) {
       success(`✓ ${taskMeta?.title || 'Task'} marked complete and asset returned in inventory`);
     } else {
       success('Task marked complete');
@@ -2202,14 +2224,14 @@ export default function EmployeeProfile() {
     const done = nextTasks.filter((t) => t.completed).length;
     const total = nextTasks.length || 1;
     const pct = Math.round((done / total) * 100);
-    const requiredDone = nextTasks.filter((t) => t.isRequired).every((t) => t.completed);
-    const nextStatus = requiredDone && done === nextTasks.length ? 'completed' : 'in_progress';
+    const allRequiredComplete = nextTasks.filter((t) => t.isRequired !== false).every((t) => t.completed);
+    const nextStatus = allRequiredComplete ? 'completed' : 'in_progress';
     const payload = {
       offboarding: sanitizeForFirestore({
         ...(offboarding || {}),
         phase: nextStatus === 'completed' ? 'completed' : 'exit_tasks',
         status: nextStatus,
-        completionPct: pct,
+        completionPct: nextStatus === 'completed' ? 100 : pct,
         completedAt: nextStatus === 'completed' ? offboarding.completedAt : null,
         completedBy: nextStatus === 'completed' ? offboarding.completedBy : null,
         tasks: nextTasks,
@@ -3167,14 +3189,16 @@ export default function EmployeeProfile() {
               <span
                 className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                   employee.status === 'Active'
-                    ? 'bg-green-100 text-green-800'
+                    ? 'bg-green-100 text-green-700'
                     : employee.status === 'Notice Period'
                       ? 'bg-amber-100 text-amber-700'
                       : employee.status === 'On Leave'
-                        ? 'bg-blue-100 text-blue-800'
+                        ? 'bg-blue-100 text-blue-700'
                         : employee.status === 'Offboarding'
-                          ? 'bg-orange-100 text-orange-800'
-                          : 'bg-slate-100 text-slate-600'
+                          ? 'bg-orange-100 text-orange-700'
+                          : employee.status === 'Inactive'
+                            ? 'bg-gray-100 text-gray-500'
+                            : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 {employee.status || 'Active'}
@@ -3190,7 +3214,7 @@ export default function EmployeeProfile() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 sm:ml-auto">
-            {canEditEmployees && (
+            {canEditEmployees && employee.status !== 'Inactive' && (
               <button
                 type="button"
                 onClick={openEdit}
@@ -3198,6 +3222,11 @@ export default function EmployeeProfile() {
               >
                 Edit
               </button>
+            )}
+            {employee.status === 'Inactive' && (
+              <span className="inline-flex items-center justify-center min-h-[44px] px-4 bg-gray-100 text-gray-400 rounded-lg text-sm cursor-not-allowed">
+                🔒 Locked
+              </span>
             )}
             <button
               type="button"
@@ -3216,10 +3245,6 @@ export default function EmployeeProfile() {
             </button>
           </div>
         </div>
-        <p className="text-xs text-slate-500 mt-3 max-w-xl">
-          Employees can only become Inactive by completing the Offboarding process (exit tasks). There is no direct
-          deactivate action.
-        </p>
       </div>
 
       <div className="flex overflow-x-auto scrollbar-none border-b border-gray-100 mb-6 -mx-4 px-4 lg:mx-0 lg:px-0">
@@ -4980,379 +5005,428 @@ export default function EmployeeProfile() {
 
       {tab === 'offboarding' && (
         <div className="space-y-6">
-          {offPhase === 'notice_period' && noticePeriodMetrics && (
-            <div className="space-y-4">
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-lg">⏰</span>
-                      <h3 className="text-base font-semibold text-amber-800">Notice Period Running</h3>
-                    </div>
-                    <p className="text-sm text-amber-600">
-                      {noticePeriodMetrics.daysRemaining > 0
-                        ? `${noticePeriodMetrics.daysRemaining} days remaining`
-                        : 'Notice period completed'}
+          {showOffboardingReadOnlyUi ? (
+            <div className="text-center py-12">
+              <div className="text-5xl mb-4">{employee.status === 'Inactive' ? '🔴' : '✅'}</div>
+              <h3 className="text-base font-semibold text-gray-700 mb-2">
+                {employee.status === 'Inactive' ? 'Employee is Inactive' : 'Offboarding completed'}
+              </h3>
+              <p className="text-sm text-gray-400 max-w-xs mx-auto mb-6">
+                {employee.status === 'Inactive'
+                  ? 'This employee has completed offboarding. Profile is read-only.'
+                  : 'This employee has finished exit processing. Profile is read-only.'}
+              </p>
+
+              {employee.offboarding?.completedAt && (
+                <div className="inline-flex flex-col items-center gap-1 px-6 py-4 bg-gray-50 rounded-2xl border border-gray-100">
+                  <p className="text-xs text-gray-400">Offboarding completed on</p>
+                  <p className="text-sm font-semibold text-gray-700">
+                    {toDisplayDate(employee.offboarding.completedAt)}
+                  </p>
+                  {(employee.offboarding.reason || employee.offboarding.exitReason) && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Reason: {employee.offboarding.reason || employee.offboarding.exitReason}
                     </p>
-                  </div>
-                  <span className="text-2xl font-bold text-amber-600">{noticePeriodMetrics.progressPct}%</span>
+                  )}
                 </div>
-                <div className="w-full bg-amber-200 rounded-full h-2 mb-4">
-                  <div
-                    className="bg-amber-500 h-2 rounded-full transition-all"
-                    style={{ width: `${noticePeriodMetrics.progressPct}%` }}
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
-                  <div className="bg-white rounded-xl p-3 border border-amber-100">
-                    <p className="text-xs text-amber-500 mb-1">Resigned On</p>
-                    <p className="text-sm font-semibold text-gray-800">
-                      {toDisplayDate(offboarding.resignationDate)}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-xl p-3 border border-amber-100">
-                    <p className="text-xs text-amber-500 mb-1">Notice Period</p>
-                    <p className="text-sm font-semibold text-gray-800">{offboarding.noticePeriodDays} days</p>
-                  </div>
-                  <div className="bg-white rounded-xl p-3 border border-amber-100">
-                    <p className="text-xs text-amber-500 mb-1">Expected Last Day</p>
-                    <p className="text-sm font-semibold text-gray-800">
-                      {toDisplayDate(offboarding.expectedLastDay)}
-                    </p>
-                  </div>
-                </div>
-                {offboarding.reason && (
-                  <div className="mt-3 pt-3 border-t border-amber-200">
-                    <p className="text-xs text-amber-500">Reason</p>
-                    <p className="text-sm text-gray-700 mt-0.5">{offboarding.reason}</p>
-                  </div>
-                )}
-              </div>
-              {canEditEmployees && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowWithdrawModal(true)}
-                    className="flex flex-col items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-2xl hover:bg-green-100 transition-colors text-center"
-                  >
-                    <span className="text-2xl">🔄</span>
-                    <div>
-                      <p className="text-xs font-semibold text-green-700">Withdraw</p>
-                      <p className="text-xs font-semibold text-green-700">Resignation</p>
-                      <p className="text-xs text-green-500 mt-0.5">Employee stays</p>
+              )}
+
+              {(employee.offboarding?.history || []).length > 0 && (
+                <div className="mt-6 text-left max-w-sm mx-auto">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">History</p>
+                  {employee.offboarding.history.map((event, i) => (
+                    <div key={`${event.event || 'ev'}_${i}`} className="flex gap-3 text-sm mb-3">
+                      <div className="w-2 h-2 rounded-full bg-gray-300 mt-1.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm text-gray-600 capitalize">{(event.event || '').replace(/_/g, ' ')}</p>
+                        <p className="text-xs text-gray-400">{toDisplayDate(event.date)}</p>
+                      </div>
                     </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowBuyoutModal(true)}
-                    className="flex flex-col items-center gap-2 p-4 bg-blue-50 border border-blue-200 rounded-2xl hover:bg-blue-100 transition-colors text-center"
-                  >
-                    <span className="text-2xl">💰</span>
-                    <div>
-                      <p className="text-xs font-semibold text-blue-700">Notice</p>
-                      <p className="text-xs font-semibold text-blue-700">Buyout</p>
-                      <p className="text-xs text-blue-500 mt-0.5">Early exit</p>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowExitTasksModal(true)}
-                    className="flex flex-col items-center gap-2 p-4 bg-orange-50 border border-orange-200 rounded-2xl hover:bg-orange-100 transition-colors text-center"
-                  >
-                    <span className="text-2xl">✅</span>
-                    <div>
-                      <p className="text-xs font-semibold text-orange-700">Start Exit</p>
-                      <p className="text-xs font-semibold text-orange-700">Tasks</p>
-                      <p className="text-xs text-orange-500 mt-0.5">Begin F&amp;F</p>
-                    </div>
-                  </button>
+                  ))}
                 </div>
               )}
             </div>
-          )}
-
-          {(offPhase === 'exit_tasks' || offPhase === 'completed') && offboarding && (
-            <div>
-              {offPhase === 'exit_tasks' && (
-                <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-orange-800">Exit Processing</p>
-                      <p className="text-xs text-orange-600">
-                        Last day:{' '}
-                        {toDisplayDate(offboarding.actualLastDay || offboarding.expectedLastDay || offboarding.exitDate)}
-                      </p>
+          ) : !showOffboardingMainFlow ? (
+            <div className="text-center py-12 text-gray-400">
+              <p className="text-sm">
+                Offboarding not available for {employee.status || 'this'} employees.
+              </p>
+            </div>
+          ) : (
+            <>
+              {showNoticePeriodSection && noticePeriodMetrics && offboarding && (
+                <div className="space-y-4">
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">⏰</span>
+                          <h3 className="text-base font-semibold text-amber-800">Notice Period Running</h3>
+                        </div>
+                        <p className="text-sm text-amber-600">
+                          {noticePeriodMetrics.daysRemaining > 0
+                            ? `${noticePeriodMetrics.daysRemaining} days remaining`
+                            : 'Notice period completed'}
+                        </p>
+                      </div>
+                      <span className="text-2xl font-bold text-amber-600">{noticePeriodMetrics.progressPct}%</span>
                     </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-orange-600">{offboarding.completionPct ?? offPct}%</p>
-                      <p className="text-xs text-orange-500">complete</p>
+                    <div className="w-full bg-amber-200 rounded-full h-2 mb-4">
+                      <div
+                        className="bg-amber-500 h-2 rounded-full transition-all"
+                        style={{ width: `${noticePeriodMetrics.progressPct}%` }}
+                      />
                     </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
+                      <div className="bg-white rounded-xl p-3 border border-amber-100">
+                        <p className="text-xs text-amber-500 mb-1">Resigned On</p>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {toDisplayDate(offboarding.resignationDate)}
+                        </p>
+                      </div>
+                      <div className="bg-white rounded-xl p-3 border border-amber-100">
+                        <p className="text-xs text-amber-500 mb-1">Notice Period</p>
+                        <p className="text-sm font-semibold text-gray-800">{offboarding.noticePeriodDays} days</p>
+                      </div>
+                      <div className="bg-white rounded-xl p-3 border border-amber-100">
+                        <p className="text-xs text-amber-500 mb-1">Expected Last Day</p>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {toDisplayDate(offboarding.expectedLastDay)}
+                        </p>
+                      </div>
+                    </div>
+                    {offboarding.reason && (
+                      <div className="mt-3 pt-3 border-t border-amber-200">
+                        <p className="text-xs text-amber-500">Reason</p>
+                        <p className="text-sm text-gray-700 mt-0.5">{offboarding.reason}</p>
+                      </div>
+                    )}
                   </div>
+                  {canEditEmployees && offPhase === 'notice_period' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowWithdrawModal(true)}
+                        className="flex flex-col items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-2xl hover:bg-green-100 transition-colors text-center"
+                      >
+                        <span className="text-2xl">🔄</span>
+                        <div>
+                          <p className="text-xs font-semibold text-green-700">Withdraw</p>
+                          <p className="text-xs font-semibold text-green-700">Resignation</p>
+                          <p className="text-xs text-green-500 mt-0.5">Employee stays</p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowBuyoutModal(true)}
+                        className="flex flex-col items-center gap-2 p-4 bg-blue-50 border border-blue-200 rounded-2xl hover:bg-blue-100 transition-colors text-center"
+                      >
+                        <span className="text-2xl">💰</span>
+                        <div>
+                          <p className="text-xs font-semibold text-blue-700">Notice</p>
+                          <p className="text-xs font-semibold text-blue-700">Buyout</p>
+                          <p className="text-xs text-blue-500 mt-0.5">Early exit</p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowExitTasksModal(true)}
+                        className="flex flex-col items-center gap-2 p-4 bg-orange-50 border border-orange-200 rounded-2xl hover:bg-orange-100 transition-colors text-center"
+                      >
+                        <span className="text-2xl">✅</span>
+                        <div>
+                          <p className="text-xs font-semibold text-orange-700">Start Exit</p>
+                          <p className="text-xs font-semibold text-orange-700">Tasks</p>
+                          <p className="text-xs text-orange-500 mt-0.5">Begin F&amp;F</p>
+                        </div>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
-              {offPhase === 'completed' && (
-                <div className="bg-green-50 border border-green-200 rounded-2xl p-4 mb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-green-800">Offboarding complete</p>
-                      <p className="text-xs text-green-600">
-                        Last day: {toDisplayDate(offExitRefForUi)}
-                      </p>
+
+              {showExitTasksSection && offboarding && (
+                <div>
+                  <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-orange-800">Exit Processing</p>
+                        <p className="text-xs text-orange-600">
+                          Last day:{' '}
+                          {toDisplayDate(offboarding.actualLastDay || offboarding.expectedLastDay || offboarding.exitDate)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-orange-600">{offboarding.completionPct ?? offPct}%</p>
+                        <p className="text-xs text-orange-500">complete</p>
+                      </div>
                     </div>
-                    <p className="text-lg font-bold text-green-700">100%</p>
                   </div>
-                </div>
-              )}
 
-              <div className="w-full bg-gray-100 rounded-full h-2 mb-6">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    offPct === 100 ? 'bg-green-500' : offPct > 50 ? 'bg-[#4ECDC4]' : 'bg-amber-500'
-                  }`}
-                  style={{ width: `${Math.min(offPct, 100)}%` }}
-                />
-              </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2 mb-6">
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        offPct === 100 ? 'bg-green-500' : offPct > 50 ? 'bg-[#4ECDC4]' : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${Math.min(offPct, 100)}%` }}
+                    />
+                  </div>
 
-              {offPhase === 'exit_tasks' &&
-                (() => {
-                  const exit = toJSDate(offExitRefForUi);
-                  const daysUntilExit = exit ? Math.ceil((exit - new Date()) / (1000 * 60 * 60 * 24)) : null;
-                  if (daysUntilExit == null) return null;
-                  if (daysUntilExit > 0) {
+                  {(() => {
+                    const exit = toJSDate(offExitRefForUi);
+                    const daysUntilExit = exit ? Math.ceil((exit - new Date()) / (1000 * 60 * 60 * 24)) : null;
+                    if (daysUntilExit == null) return null;
+                    if (daysUntilExit > 0) {
+                      return (
+                        <div className="text-center mb-4 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                          <p className="text-2xl font-bold text-amber-700">{daysUntilExit}</p>
+                          <p className="text-xs text-amber-600">days until exit</p>
+                        </div>
+                      );
+                    }
+                    if (daysUntilExit === 0) {
+                      return (
+                        <div className="text-center mb-4 p-3 bg-red-50 rounded-xl border border-red-100">
+                          <p className="text-sm font-bold text-red-700">🚨 Today is the last working day!</p>
+                        </div>
+                      );
+                    }
                     return (
-                      <div className="text-center mb-4 p-3 bg-amber-50 rounded-xl border border-amber-100">
-                        <p className="text-2xl font-bold text-amber-700">{daysUntilExit}</p>
-                        <p className="text-xs text-amber-600">days until exit</p>
+                      <div className="text-center mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                        <p className="text-sm text-gray-500">
+                          Employee has exited {Math.abs(daysUntilExit)} days ago
+                        </p>
                       </div>
                     );
-                  }
-                  if (daysUntilExit === 0) {
-                    return (
-                      <div className="text-center mb-4 p-3 bg-red-50 rounded-xl border border-red-100">
-                        <p className="text-sm font-bold text-red-700">🚨 Today is the last working day!</p>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="text-center mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                      <p className="text-sm text-gray-500">
-                        Employee has exited {Math.abs(daysUntilExit)} days ago
-                      </p>
-                    </div>
-                  );
-                })()}
+                  })()}
 
-              <div className="space-y-6">
-                {offByCategory.map((g) => {
-                  const totalInCategory = g.tasks.length;
-                  const completedInCategory = g.tasks.filter((t) => t.completed).length;
-                  return (
-                    <div key={g.category}>
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                          {getOffCategoryIcon(g.category)} {g.category}
-                        </h3>
-                        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                          {completedInCategory}/{totalInCategory}
-                        </span>
-                      </div>
-
-                      {g.tasks.map((task) => (
-                        <div
-                          key={task.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => {
-                            if (task.completed || offPhase === 'completed') return;
-                            setCompletingOffTask(task);
-                            setOffTaskNotes('');
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !task.completed && offPhase !== 'completed') {
-                              setCompletingOffTask(task);
-                              setOffTaskNotes('');
-                            }
-                          }}
-                          className={`flex items-start gap-3 p-3 rounded-xl border mb-2 transition-all ${
-                            offPhase === 'completed' ? 'cursor-default' : 'cursor-pointer'
-                          } ${
-                            task.completed
-                              ? 'bg-green-50 border-green-100'
-                              : isOverdue(task.dueDate)
-                                ? 'bg-red-50 border-red-100'
-                                : 'bg-white border-gray-200 hover:border-amber-200 hover:bg-amber-50'
-                          }`}
-                        >
-                          <div
-                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${
-                              task.completed ? 'bg-green-500 border-green-500' : 'border-gray-300'
-                            }`}
-                          >
-                            {task.completed && (
-                              <svg width="10" height="10" viewBox="0 0 10 10">
-                                <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-                              </svg>
-                            )}
+                  <div className="space-y-6">
+                    {offByCategory.map((g) => {
+                      const totalInCategory = g.tasks.length;
+                      const completedInCategory = g.tasks.filter((t) => t.completed).length;
+                      return (
+                        <div key={g.category}>
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                              {getOffCategoryIcon(g.category)} {g.category}
+                            </h3>
+                            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                              {completedInCategory}/{totalInCategory}
+                            </span>
                           </div>
 
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className={`text-sm font-medium ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                                {task.title}
-                              </p>
-                              {task.isRequired && !task.completed && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">Required</span>
-                              )}
-                              {isOverdue(task.dueDate) && !task.completed && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">Overdue</span>
-                              )}
-                            </div>
-                            {task.description && <p className="text-xs text-gray-400 mt-0.5">{task.description}</p>}
-                            {task.isAssetTask && (
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">📦 Asset Return</span>
+                          {g.tasks.map((task) => (
+                            <div
+                              key={task.id}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                if (task.completed) return;
+                                setCompletingOffTask(task);
+                                setOffTaskNotes('');
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !task.completed) {
+                                  setCompletingOffTask(task);
+                                  setOffTaskNotes('');
+                                }
+                              }}
+                              className={`flex items-start gap-3 p-3 rounded-xl border mb-2 transition-all cursor-pointer ${
+                                task.completed
+                                  ? 'bg-green-50 border-green-100'
+                                  : isOverdue(task.dueDate)
+                                    ? 'bg-red-50 border-red-100'
+                                    : 'bg-white border-gray-200 hover:border-amber-200 hover:bg-amber-50'
+                              }`}
+                            >
+                              <div
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${
+                                  task.completed ? 'bg-green-500 border-green-500' : 'border-gray-300'
+                                }`}
+                              >
+                                {task.completed && (
+                                  <svg width="10" height="10" viewBox="0 0 10 10">
+                                    <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+                                  </svg>
+                                )}
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className={`text-sm font-medium ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                                    {task.title}
+                                  </p>
+                                  {task.isRequired !== false && !task.completed && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">Required</span>
+                                  )}
+                                  {isOverdue(task.dueDate) && !task.completed && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">Overdue</span>
+                                  )}
+                                </div>
+                                {task.description && <p className="text-xs text-gray-400 mt-0.5">{task.description}</p>}
+                                {task.isAssetTask && (
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">📦 Asset Return</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate(`/company/${companyId}/assets`);
+                                      }}
+                                      className="text-xs text-[#1B6B6B] hover:underline"
+                                    >
+                                      View in Assets →
+                                    </button>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                                  <span className="text-xs text-gray-400">Due: {task.dueDate ? toDisplayDate(task.dueDate) : '—'}</span>
+                                  <span className="text-xs text-gray-400">· {getAssignedLabel(task.assignedTo)}</span>
+                                  {task.completed && (
+                                    <span className="text-xs text-green-600">
+                                      ✓ Done by {task.completedBy} on {toDisplayDate(task.completedAt)}
+                                    </span>
+                                  )}
+                                </div>
+                                {task.completed && task.notes && (
+                                  <p className="text-xs text-gray-500 mt-1 italic">&quot;{task.notes}&quot;</p>
+                                )}
+                              </div>
+
+                              {task.completed && (
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    navigate(`/company/${companyId}/assets`);
+                                    unmarkOffboardingTask(task.id);
                                   }}
-                                  className="text-xs text-[#1B6B6B] hover:underline"
+                                  className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100 flex-shrink-0"
                                 >
-                                  View in Assets →
+                                  Undo
                                 </button>
-                              </div>
-                            )}
-                            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                              <span className="text-xs text-gray-400">Due: {task.dueDate ? toDisplayDate(task.dueDate) : '—'}</span>
-                              <span className="text-xs text-gray-400">· {getAssignedLabel(task.assignedTo)}</span>
-                              {task.completed && (
-                                <span className="text-xs text-green-600">
-                                  ✓ Done by {task.completedBy} on {toDisplayDate(task.completedAt)}
-                                </span>
                               )}
                             </div>
-                            {task.completed && task.notes && (
-                              <p className="text-xs text-gray-500 mt-1 italic">&quot;{task.notes}&quot;</p>
-                            )}
-                          </div>
-
-                          {task.completed && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                unmarkOffboardingTask(task.id);
-                              }}
-                              className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100 flex-shrink-0"
-                            >
-                              Undo
-                            </button>
-                          )}
+                          ))}
                         </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {showStarterSection && (
+                <div className="text-center py-12">
+                  <div className="text-5xl mb-4">📋</div>
+                  <h3 className="text-base font-semibold text-gray-700 mb-2">No resignation recorded</h3>
+                  <p className="text-sm text-gray-400 mb-6 max-w-xs mx-auto">
+                    When an employee resigns, record it here to start tracking their notice period.
+                  </p>
+                  {offPhase === 'withdrawn' && employee.offboarding?.withdrawnOn && (
+                    <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl max-w-lg mx-auto">
+                      <p className="text-xs text-green-700">
+                        ✓ Previous resignation was withdrawn on {toDisplayDate(employee.offboarding.withdrawnOn)}. Employee is
+                        Active again.
+                      </p>
+                    </div>
+                  )}
+                  {!onboardingCompleteForOff && (
+                    <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl max-w-lg mx-auto text-left">
+                      <div className="flex items-start gap-3">
+                        <span className="text-xl flex-shrink-0">⚠️</span>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-amber-800">Onboarding incomplete</p>
+                          <p className="text-xs text-amber-600 mt-0.5">
+                            {!onboardingStartedForOff
+                              ? 'Onboarding has not been started yet.'
+                              : `Onboarding is ${onboardingPctForOff}% complete.`}{' '}
+                            HR can still proceed with offboarding if required.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setTab('onboarding')}
+                            className="text-xs text-amber-700 font-medium underline mt-1.5"
+                          >
+                            Go to Onboarding tab →
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {canEditEmployees && canRecordResignation && (
+                    <button
+                      type="button"
+                      onClick={handleRecordResignationClick}
+                      className="px-6 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600"
+                    >
+                      {offPhase === 'withdrawn' ? '📝 Record New Resignation' : '📝 Record Resignation'}
+                    </button>
+                  )}
+                  {(assignedAssetsForWarning.trackables.length > 0 || assignedAssetsForWarning.consumables.length > 0) && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-8 max-w-lg mx-auto text-left">
+                      <p className="text-sm font-medium text-amber-800 mb-2">⚠️ Assets to be returned</p>
+                      {assignedAssetsForWarning.trackables.map((a) => (
+                        <p key={a.id} className="text-xs text-amber-700">
+                          • {a.name} ({a.assetId})
+                        </p>
+                      ))}
+                      {assignedAssetsForWarning.consumables.map((a) => (
+                        <p key={`${a.id}_${a.assetId}`} className="text-xs text-amber-700">
+                          • {a.name} ({a.assetId}) · Qty: {a._qty}
+                        </p>
                       ))}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {(!offPhase || offPhase === 'withdrawn') && (
-            <div className="text-center py-12">
-              <div className="text-5xl mb-4">📋</div>
-              <h3 className="text-base font-semibold text-gray-700 mb-2">No resignation recorded</h3>
-              <p className="text-sm text-gray-400 mb-6 max-w-xs mx-auto">
-                When an employee resigns, record it here to start tracking their notice period.
-              </p>
-              {offPhase === 'withdrawn' && (
-                <p className="text-xs text-gray-500 mb-4 max-w-sm mx-auto">
-                  A previous resignation was withdrawn. You can record a new resignation when needed.
-                </p>
+                  )}
+                </div>
               )}
-              {!onboardingCompleteForOff && (
-                <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl max-w-lg mx-auto text-left">
-                  <div className="flex items-start gap-3">
-                    <span className="text-xl flex-shrink-0">⚠️</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-amber-800">Onboarding incomplete</p>
-                      <p className="text-xs text-amber-600 mt-0.5">
-                        {!onboardingStartedForOff
-                          ? 'Onboarding has not been started yet.'
-                          : `Onboarding is ${onboardingPctForOff}% complete.`}{' '}
-                        HR can still proceed with offboarding if required.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setTab('onboarding')}
-                        className="text-xs text-amber-700 font-medium underline mt-1.5"
-                      >
-                        Go to Onboarding tab →
-                      </button>
-                    </div>
+
+              {showOffboardingMainFlow &&
+                !showOffboardingReadOnlyUi &&
+                !showNoticePeriodSection &&
+                !showExitTasksSection &&
+                !showStarterSection && (
+                  <div className="text-center py-12 text-gray-400">
+                    <p className="text-sm">
+                      Offboarding state could not be displayed. Status: {employee.status || '—'} · Phase:{' '}
+                      {offboardingPhase || '—'}
+                    </p>
+                  </div>
+                )}
+
+              {(offboarding?.history || []).length > 0 && !showOffboardingReadOnlyUi && (
+                <div className="mt-4">
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Timeline</h4>
+                  <div className="space-y-2">
+                    {[...(offboarding.history || [])].reverse().map((event, i, arr) => (
+                      <div key={i} className="flex gap-3 text-sm">
+                        <div className="flex flex-col items-center">
+                          <div
+                            className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                              event.event === 'resignation_withdrawn'
+                                ? 'bg-green-500'
+                                : event.event === 'notice_buyout'
+                                  ? 'bg-blue-500'
+                                  : event.event === 'exit_tasks_started'
+                                    ? 'bg-orange-500'
+                                    : 'bg-amber-500'
+                            }`}
+                          />
+                          {i < arr.length - 1 && <div className="w-0.5 flex-1 min-h-[1rem] bg-gray-100 mt-1" />}
+                        </div>
+                        <div className="pb-3 flex-1">
+                          <p className="font-medium text-gray-700 capitalize">
+                            {(event.event || '').replace(/_/g, ' ')}
+                          </p>
+                          {event.notes && <p className="text-xs text-gray-400 mt-0.5">{event.notes}</p>}
+                          <p className="text-xs text-gray-300 mt-0.5">
+                            {toDisplayDate(event.date)} · {event.by || '—'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
-              {canEditEmployees && (
-                <button
-                  type="button"
-                  onClick={handleRecordResignationClick}
-                  className="px-6 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600"
-                >
-                  📝 Record Resignation
-                </button>
-              )}
-              {(assignedAssetsForWarning.trackables.length > 0 || assignedAssetsForWarning.consumables.length > 0) && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-8 max-w-lg mx-auto text-left">
-                  <p className="text-sm font-medium text-amber-800 mb-2">⚠️ Assets to be returned</p>
-                  {assignedAssetsForWarning.trackables.map((a) => (
-                    <p key={a.id} className="text-xs text-amber-700">
-                      • {a.name} ({a.assetId})
-                    </p>
-                  ))}
-                  {assignedAssetsForWarning.consumables.map((a) => (
-                    <p key={`${a.id}_${a.assetId}`} className="text-xs text-amber-700">
-                      • {a.name} ({a.assetId}) · Qty: {a._qty}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {(offboarding?.history || []).length > 0 && (
-            <div className="mt-4">
-              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Timeline</h4>
-              <div className="space-y-2">
-                {[...(offboarding.history || [])].reverse().map((event, i, arr) => (
-                  <div key={i} className="flex gap-3 text-sm">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                          event.event === 'resignation_withdrawn'
-                            ? 'bg-green-500'
-                            : event.event === 'notice_buyout'
-                              ? 'bg-blue-500'
-                              : event.event === 'exit_tasks_started'
-                                ? 'bg-orange-500'
-                                : 'bg-amber-500'
-                        }`}
-                      />
-                      {i < arr.length - 1 && <div className="w-0.5 flex-1 min-h-[1rem] bg-gray-100 mt-1" />}
-                    </div>
-                    <div className="pb-3 flex-1">
-                      <p className="font-medium text-gray-700 capitalize">
-                        {(event.event || '').replace(/_/g, ' ')}
-                      </p>
-                      {event.notes && <p className="text-xs text-gray-400 mt-0.5">{event.notes}</p>}
-                      <p className="text-xs text-gray-300 mt-0.5">
-                        {toDisplayDate(event.date)} · {event.by || '—'}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            </>
           )}
         </div>
       )}
