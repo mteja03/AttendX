@@ -188,7 +188,7 @@ const DEFAULT_ROLE_SEEDS = [
     title: 'General Manager',
     reportsTo: '',
     reportsToRoleId: null,
-    salaryBand: { min: 1500000, max: 3000000, currency: 'INR' },
+    salaryBand: { min: 125000, max: 250000, currency: 'INR' },
     responsibilities: [
       'Oversee all company operations',
       'Set strategic goals and objectives',
@@ -213,7 +213,7 @@ const DEFAULT_ROLE_SEEDS = [
     key: 'hr',
     title: 'HR Manager',
     reportsTo: 'General Manager',
-    salaryBand: { min: 600000, max: 1200000, currency: 'INR' },
+    salaryBand: { min: 50000, max: 100000, currency: 'INR' },
     responsibilities: [
       'Manage end-to-end recruitment',
       'Handle employee relations',
@@ -241,7 +241,7 @@ const DEFAULT_ROLE_SEEDS = [
     title: 'Sales Executive',
     reportsTo: 'Sales Manager',
     reportsToRoleId: null,
-    salaryBand: { min: 250000, max: 500000, currency: 'INR' },
+    salaryBand: { min: 21000, max: 42000, currency: 'INR' },
     responsibilities: [
       'Generate leads through cold calling',
       'Meet monthly sales targets',
@@ -339,7 +339,7 @@ function JobRoleNode({ node, employees, onView }) {
         {node.salaryBand?.min != null && (
           <div className="mt-2 px-2 py-1 bg-gray-50 rounded-lg">
             <p className="text-xs font-medium text-gray-600">
-              ₹{formatLakhs(node.salaryBand.min)} — ₹{formatLakhs(node.salaryBand.max)}
+              ₹{formatLakhs(node.salaryBand.min)} – ₹{formatLakhs(node.salaryBand.max)} /month
             </p>
           </div>
         )}
@@ -841,8 +841,8 @@ export default function Library() {
 
       const inner = `
       <div class="print-highlight-card">
-        <div class="print-field-label">Salary band (CTC per annum)</div>
-        <div class="print-field-value" style="font-size:20px;color:#1B6B6B;margin-top:4px">₹${formatLakhs(role.salaryBand?.min)} — ₹${formatLakhs(role.salaryBand?.max)}</div>
+        <div class="print-field-label">Salary band (per month)</div>
+        <div class="print-field-value" style="font-size:20px;color:#1B6B6B;margin-top:4px">₹${formatLakhs(role.salaryBand?.min)}/mo — ₹${formatLakhs(role.salaryBand?.max)}/mo (₹${formatLakhs(Number(role.salaryBand?.min || 0) * 12)} – ₹${formatLakhs(Number(role.salaryBand?.max || 0) * 12)} pa)</div>
         <p class="print-meta" style="margin-top:8px">${roleLineMeta} · ${matchingEmps.length} employee(s) in role</p>
       </div>
       <div class="print-section">
@@ -1231,11 +1231,14 @@ export default function Library() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 mb-3 p-2.5 bg-gray-50 rounded-xl">
-                      <span className="text-xs text-gray-400">Salary Band</span>
-                      <span className="text-sm font-semibold text-gray-800 ml-auto">
-                        ₹{formatLakhs(role.salaryBand?.min)} — ₹{formatLakhs(role.salaryBand?.max)}
-                      </span>
+                    <div className="flex flex-col gap-0.5 mb-3 p-2.5 bg-gray-50 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">Salary Band</span>
+                        <span className="text-sm font-semibold text-gray-800 ml-auto">
+                          ₹{formatLakhs(role.salaryBand?.min)} — ₹{formatLakhs(role.salaryBand?.max)}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 text-right">per month</p>
                     </div>
 
                     <div className="space-y-1 mb-3">
@@ -1324,8 +1327,12 @@ export default function Library() {
                             <span className="text-xs text-gray-400">Vacant</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                          ₹{formatLakhs(role.salaryBand?.min)} — ₹{formatLakhs(role.salaryBand?.max)}
+                        <td className="px-4 py-3 text-gray-700 whitespace-nowrap text-xs">
+                          ₹{formatLakhs(role.salaryBand?.min)}–{formatLakhs(role.salaryBand?.max)}/mo
+                          <span className="text-gray-400 block mt-0.5">
+                            (₹{formatLakhs(Number(role.salaryBand?.min || 0) * 12)}–
+                            {formatLakhs(Number(role.salaryBand?.max || 0) * 12)} pa)
+                          </span>
                         </td>
                         {canEdit && (
                           <td className="px-4 py-3 text-right" onClick={(ev) => ev.stopPropagation()}>
@@ -1704,7 +1711,7 @@ export default function Library() {
                                     {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level role'}
                                     {role.salaryBand?.min != null &&
                                       role.salaryBand?.min !== '' &&
-                                      ` · ₹${formatLakhs(role.salaryBand.min)}–${formatLakhs(role.salaryBand.max)}`}
+                                      ` · ₹${formatLakhs(role.salaryBand.min)}–${formatLakhs(role.salaryBand.max)}/mo (₹${formatLakhs(Number(role.salaryBand.min) * 12)}–${formatLakhs(Number(role.salaryBand.max) * 12)} pa)`}
                                   </p>
                                 </div>
                                 {selected && <span className="text-[#1B6B6B]">✓</span>}
@@ -1742,10 +1749,10 @@ export default function Library() {
               </div>
 
               <div className="bg-gray-50 rounded-xl p-4 mb-6">
-                <h4 className="text-sm font-medium mb-3">Salary Band (CTC per annum)</h4>
+                <h4 className="text-sm font-medium mb-3">Salary Band (Per Month)</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-gray-500">Minimum (₹)</label>
+                    <label className="text-xs text-gray-500">Minimum (₹/month)</label>
                     <input
                       type="number"
                       min={0}
@@ -1756,13 +1763,16 @@ export default function Library() {
                           salaryBand: { ...f.salaryBand, min: e.target.value },
                         }))
                       }
-                      placeholder="250000"
+                      placeholder="50000"
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-1"
                     />
-                    <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(roleForm.salaryBand.min)}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      = ₹{formatLakhs(Number(roleForm.salaryBand.min) || 0)} / month · ₹
+                      {formatLakhs((Number(roleForm.salaryBand.min) || 0) * 12)} per annum
+                    </p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-500">Maximum (₹)</label>
+                    <label className="text-xs text-gray-500">Maximum (₹/month)</label>
                     <input
                       type="number"
                       min={0}
@@ -1773,10 +1783,13 @@ export default function Library() {
                           salaryBand: { ...f.salaryBand, max: e.target.value },
                         }))
                       }
-                      placeholder="450000"
+                      placeholder="90000"
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-1"
                     />
-                    <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(roleForm.salaryBand.max)}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      = ₹{formatLakhs(Number(roleForm.salaryBand.max) || 0)} / month · ₹
+                      {formatLakhs((Number(roleForm.salaryBand.max) || 0) * 12)} per annum
+                    </p>
                   </div>
                 </div>
               </div>
@@ -2024,9 +2037,13 @@ export default function Library() {
 
             <div className="p-4 sm:p-6 flex-1 overflow-y-auto space-y-6">
               <div className="p-4 rounded-xl bg-[#E8F5F5] border border-[#4ECDC4] text-center">
-                <p className="text-xs text-[#1B6B6B] mb-1">Salary band (CTC per annum)</p>
+                <p className="text-xs text-[#1B6B6B] mb-1">Salary band (per month)</p>
                 <p className="text-xl font-bold text-[#1B6B6B]">
-                  ₹{formatLakhs(viewingRole.salaryBand?.min)} — ₹{formatLakhs(viewingRole.salaryBand?.max)}
+                  ₹{formatLakhs(viewingRole.salaryBand?.min)}/month — ₹{formatLakhs(viewingRole.salaryBand?.max)}/month
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  (₹{formatLakhs(Number(viewingRole.salaryBand?.min || 0) * 12)} – ₹
+                  {formatLakhs(Number(viewingRole.salaryBand?.max || 0) * 12)} annually)
                 </p>
               </div>
 

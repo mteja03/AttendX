@@ -56,13 +56,6 @@ const DEFAULT_ASSET_TYPES = [
   { name: 'Furniture', mode: 'trackable' },
   { name: 'Other', mode: 'trackable' },
 ];
-const INDUSTRIES = ['IT', 'Manufacturing', 'Automobile', 'Retail', 'Finance', 'Healthcare', 'Education', 'Media', 'Logistics', 'Real Estate', 'Other'];
-const COLOR_PRESETS = [
-  { value: '#1B6B6B' }, { value: '#1D9E75' }, { value: '#D85A30' },
-  { value: '#534AB7' }, { value: '#A32D2D' }, { value: '#BA7517' },
-  { value: '#0F6E56' }, { value: '#E91E8C' }, { value: '#455A64' },
-];
-
 const DEFAULT_LEAVE_TYPE_OBJECTS = [
   { name: 'Casual Leave', shortCode: 'CL', isPaid: true },
   { name: 'Sick Leave', shortCode: 'SL', isPaid: true },
@@ -144,13 +137,11 @@ const SECTIONS = [
 ];
 
 const TABS = [
-  { id: 'company', label: 'Company Info' },
-  { id: 'lists', label: 'Manage Lists' },
-  { id: 'leave', label: 'Leave' },
-  { id: 'documents', label: 'Document Types' },
-  { id: 'onboarding', label: 'Onboarding' },
-  { id: 'offboarding', label: 'Offboarding' },
-  { id: 'danger', label: 'Danger Zone' },
+  { id: 'lists', label: 'Manage Lists', icon: '📋' },
+  { id: 'leave', label: 'Leave', icon: '🏖️' },
+  { id: 'documents', label: 'Document Types', icon: '📄' },
+  { id: 'onboarding', label: 'Onboarding', icon: '🎯' },
+  { id: 'offboarding', label: 'Offboarding', icon: '👋' },
 ];
 
 const DEFAULT_ONBOARDING_TEMPLATE = {
@@ -226,10 +217,8 @@ export default function Settings() {
   const [employees, setEmployees] = useState([]);
   const [assets, setAssets] = useState([]);
   const [companyLeaves, setCompanyLeaves] = useState([]);
-  const [companyColor, setCompanyColor] = useState('#1B6B6B');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [companyForm, setCompanyForm] = useState({ name: '', industry: '', location: '', initials: '', color: '#1B6B6B' });
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [leaveAllowances, setLeaveAllowances] = useState({ CL: 12, SL: 12, EL: 15 });
   const [newLeaveTypeName, setNewLeaveTypeName] = useState('');
@@ -238,8 +227,7 @@ export default function Settings() {
   const [addingSection, setAddingSection] = useState(null);
   const [addValue, setAddValue] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [deactivateConfirm, setDeactivateConfirm] = useState(false);
-  const [tab, setTab] = useState('company');
+  const [tab, setTab] = useState('lists');
   const [newAssetType, setNewAssetType] = useState('');
   const [newAssetMode, setNewAssetMode] = useState('trackable');
   const [docTypes, setDocTypes] = useState(null);
@@ -256,10 +244,15 @@ export default function Settings() {
   const activeTab = tab;
 
   useEffect(() => {
-    if (companyId) {
-      const stored = localStorage.getItem(`settings_tab_${companyId}`);
-      if (stored && TABS.some((t) => t.id === stored)) setTab(stored);
+    if (!companyId) return;
+    const stored = localStorage.getItem(`settings_tab_${companyId}`);
+    if (!stored) return;
+    if (stored === 'company' || stored === 'danger') {
+      setTab('lists');
+      localStorage.setItem(`settings_tab_${companyId}`, 'lists');
+      return;
     }
+    if (TABS.some((t) => t.id === stored)) setTab(stored);
   }, [companyId]);
 
   useEffect(() => {
@@ -288,15 +281,6 @@ export default function Settings() {
         if (companySnap.exists()) {
           const data = companySnap.data();
           setCompany({ id: companySnap.id, ...data });
-          const col = data.color || '#1B6B6B';
-          setCompanyForm({
-            name: data.name || '',
-            industry: data.industry || '',
-            location: data.location || '',
-            initials: data.initials || '',
-            color: col,
-          });
-          setCompanyColor(col);
         }
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setAssets(assetSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -308,10 +292,6 @@ export default function Settings() {
     };
     load();
   }, [companyId, showError]);
-
-  useEffect(() => {
-    if (company?.color) setCompanyColor(company.color);
-  }, [company?.color]);
 
   // Load document types when Documents tab is active
   useEffect(() => {
@@ -575,36 +555,6 @@ export default function Settings() {
     }
   };
 
-  const handleSaveCompany = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await updateDoc(doc(db, 'companies', companyId), {
-        name: companyForm.name.trim(),
-        industry: companyForm.industry.trim(),
-        location: companyForm.location.trim(),
-        initials: (companyForm.initials || '').slice(0, 2).toUpperCase(),
-        color: companyColor,
-      });
-      setCompanyForm((p) => ({ ...p, color: companyColor }));
-      setCompany((prev) => (prev ? { ...prev, ...companyForm, color: companyColor } : null));
-      success('Company details saved');
-    } catch {
-      showError('Failed to save');
-    }
-    setSaving(false);
-  };
-
-  const handleDeactivateCompany = async () => {
-    try {
-      await updateDoc(doc(db, 'companies', companyId), { isActive: false });
-      setDeactivateConfirm(false);
-      success('Company deactivated');
-    } catch {
-      showError('Failed to deactivate company');
-    }
-  };
-
   const addDocType = (category) => {
     if (!docTypes) return;
     const name = (newDocNames[category] || '').trim();
@@ -711,90 +661,6 @@ export default function Settings() {
       </div>
     );
   }
-
-  const renderCompanyTab = () => (
-    <section className="bg-white rounded-xl border border-slate-200 p-6">
-      <h2 className="text-lg font-semibold text-slate-800 mb-4">Company Information</h2>
-      <form onSubmit={handleSaveCompany} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Company Name</label>
-            <input
-              value={companyForm.name}
-              onChange={(e) => setCompanyForm((p) => ({ ...p, name: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Industry</label>
-            <select
-              value={companyForm.industry}
-              onChange={(e) => setCompanyForm((p) => ({ ...p, industry: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="">Select industry</option>
-              {INDUSTRIES.map((i) => (
-                <option key={i} value={i}>{i}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Location</label>
-            <input
-              value={companyForm.location}
-              onChange={(e) => setCompanyForm((p) => ({ ...p, location: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Company Initials (2 chars)</label>
-            <input
-              value={companyForm.initials}
-              onChange={(e) => setCompanyForm((p) => ({ ...p, initials: e.target.value.slice(0, 2) }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase"
-              maxLength={2}
-            />
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Color</label>
-          <div className="flex items-center gap-3 mb-3">
-            <div
-              className="w-10 h-10 rounded-full border-2 border-gray-200 shrink-0"
-              style={{ backgroundColor: companyColor }}
-              aria-hidden
-            />
-            <span className="text-sm text-gray-600">Selected: {companyColor}</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {COLOR_PRESETS.map((c) => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => {
-                  setCompanyColor(c.value);
-                  setCompanyForm((p) => ({ ...p, color: c.value }));
-                }}
-                className="h-8 w-8 rounded-full border-2 transition-all hover:scale-110"
-                style={{
-                  backgroundColor: c.value,
-                  borderColor: companyColor === c.value ? '#1f2937' : 'transparent',
-                }}
-                title={c.value}
-              />
-            ))}
-          </div>
-        </div>
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
-        >
-          Save Changes
-        </button>
-      </form>
-    </section>
-  );
 
   const renderListsTab = () => {
     const getItems = (key, defaults) => getList(key, defaults);
@@ -1792,37 +1658,6 @@ export default function Settings() {
     );
   };
 
-  const renderDangerTab = () => (
-    <div className="space-y-4">
-      <div className="border border-amber-200 bg-amber-50 rounded-xl p-4">
-        <h3 className="font-medium text-amber-800 mb-1">Deactivate Company</h3>
-        <p className="text-sm text-amber-700 mb-3">
-          Team members will lose access. Data is preserved.
-        </p>
-        <button
-          type="button"
-          onClick={() => setDeactivateConfirm(true)}
-          className="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm"
-        >
-          Deactivate Company
-        </button>
-      </div>
-      <div className="border border-red-200 bg-red-50 rounded-xl p-4">
-        <h3 className="font-medium text-red-800 mb-1">Delete Company</h3>
-        <p className="text-sm text-red-700 mb-3">
-          Permanently deletes all employees, leave, documents and Drive files.
-        </p>
-        <button
-          type="button"
-          onClick={() => showError('Please delete the company from the Companies page.')}
-          className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm"
-        >
-          Delete Company
-        </button>
-      </div>
-    </div>
-  );
-
   return (
     <div className="p-4 sm:p-8 max-w-4xl">
       <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
@@ -1856,13 +1691,11 @@ export default function Settings() {
         ))}
       </div>
 
-      {tab === 'company' && renderCompanyTab()}
       {tab === 'lists' && renderListsTab()}
       {tab === 'leave' && renderLeaveTab()}
       {tab === 'documents' && renderDocumentsTab()}
       {tab === 'onboarding' && renderOnboardingTab()}
       {tab === 'offboarding' && renderOffboardingTab()}
-      {tab === 'danger' && renderDangerTab()}
 
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
@@ -1888,36 +1721,6 @@ export default function Settings() {
                 className="rounded-lg bg-red-600 text-white text-sm font-medium px-4 py-2"
               >
                 Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {deactivateConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-center mb-4 sm:hidden">
-              <div className="w-10 h-1 bg-gray-200 rounded-full" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-800 mb-2">Deactivate this company?</h3>
-            <p className="text-sm text-slate-600 mb-4">
-              Team members will lose access. You can reactivate from the Companies page.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setDeactivateConfirm(false)}
-                className="text-slate-500 text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeactivateCompany}
-                className="rounded-lg bg-red-600 text-white text-sm font-medium px-4 py-2"
-              >
-                Deactivate
               </button>
             </div>
           </div>

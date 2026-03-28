@@ -651,6 +651,7 @@ export default function EmployeeProfile() {
   const [completingOffTask, setCompletingOffTask] = useState(null);
   const [offTaskNotes, setOffTaskNotes] = useState('');
   const [showResignationModal, setShowResignationModal] = useState(false);
+  const [showOnboardingWarningModal, setShowOnboardingWarningModal] = useState(false);
   const [resignForm, setResignForm] = useState({
     resignationDate: '',
     noticePeriodDays: 30,
@@ -2177,6 +2178,34 @@ export default function EmployeeProfile() {
   const onboardingPct =
     onboardingTotal > 0 ? Math.round((onboardingCompleted / onboardingTotal) * 100) : 0;
 
+  const canStartOnboarding = employee?.status === 'Active';
+  const onboardingEverStarted = !!(
+    onboarding?.startedAt ||
+    onboarding?.status === 'in_progress' ||
+    onboarding?.status === 'completed'
+  );
+  const showOnboardingTaskList =
+    onboardingTasks.length > 0 ||
+    onboarding?.status === 'in_progress' ||
+    onboarding?.status === 'completed';
+
+  const onboardingStatusForOff = employee?.onboarding?.status;
+  const onboardingPctForOff =
+    employee?.onboarding?.completionPct != null && employee?.onboarding?.completionPct !== ''
+      ? Number(employee.onboarding.completionPct)
+      : onboardingPct;
+  const onboardingCompleteForOff =
+    onboardingStatusForOff === 'completed' || onboardingPctForOff === 100;
+  const onboardingStartedForOff = !!employee?.onboarding?.startedAt;
+
+  const handleRecordResignationClick = () => {
+    if (!onboardingCompleteForOff) {
+      setShowOnboardingWarningModal(true);
+    } else {
+      setShowResignationModal(true);
+    }
+  };
+
   const onboardingByCategory = useMemo(() => {
     const categories = ['Pre-joining', 'Day 1', 'Week 1', 'Month 1'];
     const tasks = onboardingTasks.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -2188,6 +2217,7 @@ export default function EmployeeProfile() {
 
   const handleStartOnboarding = async () => {
     if (!companyId || !empId || !employee || !currentUser) return;
+    if (employee.status !== 'Active') return;
     try {
       setSaving(true);
       let templateTasks = DEFAULT_ONBOARDING_TEMPLATE.tasks;
@@ -4567,7 +4597,7 @@ export default function EmployeeProfile() {
                 </div>
               </div>
 
-              {(!onboarding || onboarding.status === 'not_started') && (
+              {canStartOnboarding && (!onboarding || onboarding.status === 'not_started') && (
                 <button
                   type="button"
                   onClick={handleStartOnboarding}
@@ -4580,23 +4610,19 @@ export default function EmployeeProfile() {
             </div>
           </div>
 
-          {(!onboarding || onboarding.status === 'not_started' || onboardingTasks.length === 0) ? (
-            <div className="text-center py-12 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-              <p className="text-4xl mb-3">🎯</p>
-              <p className="text-base font-medium text-gray-700 mb-1">Onboarding not started</p>
-              <p className="text-sm text-gray-400 mb-4">
-                Start the onboarding process to track tasks for {employee.fullName}
-              </p>
-              <button
-                type="button"
-                onClick={handleStartOnboarding}
-                disabled={saving}
-                className="px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
-              >
-                {saving ? 'Starting…' : 'Start Onboarding'}
-              </button>
+          {!canStartOnboarding && !onboardingEverStarted && (
+            <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Onboarding not available</p>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  Onboarding can only be started for Active employees. Current status: {employee.status || '—'}
+                </p>
+              </div>
             </div>
-          ) : (
+          )}
+
+          {showOnboardingTaskList ? (
             <div className="space-y-6">
               {onboardingByCategory.map((g) => {
                 const totalInCategory = g.tasks.length;
@@ -4726,6 +4752,24 @@ export default function EmployeeProfile() {
                   </div>
                 );
               })}
+            </div>
+          ) : !canStartOnboarding && !onboardingEverStarted ? null : (
+            <div className="text-center py-12 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+              <p className="text-4xl mb-3">🎯</p>
+              <p className="text-base font-medium text-gray-700 mb-1">Onboarding not started</p>
+              <p className="text-sm text-gray-400 mb-4">
+                Start the onboarding process to track tasks for {employee.fullName}
+              </p>
+              {canStartOnboarding && (
+                <button
+                  type="button"
+                  onClick={handleStartOnboarding}
+                  disabled={saving}
+                  className="px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
+                >
+                  {saving ? 'Starting…' : 'Start Onboarding'}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -5023,10 +5067,33 @@ export default function EmployeeProfile() {
                   A previous resignation was withdrawn. You can record a new resignation when needed.
                 </p>
               )}
+              {!onboardingCompleteForOff && (
+                <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl max-w-lg mx-auto text-left">
+                  <div className="flex items-start gap-3">
+                    <span className="text-xl flex-shrink-0">⚠️</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-amber-800">Onboarding incomplete</p>
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        {!onboardingStartedForOff
+                          ? 'Onboarding has not been started yet.'
+                          : `Onboarding is ${onboardingPctForOff}% complete.`}{' '}
+                        HR can still proceed with offboarding if required.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setTab('onboarding')}
+                        className="text-xs text-amber-700 font-medium underline mt-1.5"
+                      >
+                        Go to Onboarding tab →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               {canEditEmployees && (
                 <button
                   type="button"
-                  onClick={() => setShowResignationModal(true)}
+                  onClick={handleRecordResignationClick}
                   className="px-6 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600"
                 >
                   📝 Record Resignation
@@ -5720,6 +5787,43 @@ export default function EmployeeProfile() {
                 className="flex-1 py-2 bg-green-600 text-white rounded-xl text-sm font-medium"
               >
                 Mark Complete ✓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showOnboardingWarningModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center shadow-xl">
+            <div className="text-5xl mb-4">⚠️</div>
+            <h3 className="text-base font-semibold text-gray-800 mb-2">Onboarding Not Complete</h3>
+            <p className="text-sm text-gray-500 mb-2">
+              {!onboardingStartedForOff
+                ? 'Onboarding has not been started for this employee.'
+                : `Onboarding is only ${onboardingPctForOff}% complete.`}
+            </p>
+            <p className="text-sm text-gray-500 mb-6">Are you sure you want to start the offboarding process?</p>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOnboardingWarningModal(false);
+                  setShowResignationModal(true);
+                }}
+                className="w-full py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600"
+              >
+                Yes, Continue with Offboarding
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOnboardingWarningModal(false);
+                  setTab('onboarding');
+                }}
+                className="w-full py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50"
+              >
+                Go to Onboarding First
               </button>
             </div>
           </div>

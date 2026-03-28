@@ -1414,8 +1414,9 @@ export default function Reports() {
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
                       {role.salaryBand?.min != null && role.salaryBand?.min !== '' && (
-                        <span className="text-xs text-[#1B6B6B] bg-[#E8F5F5] px-2 py-0.5 rounded-full whitespace-nowrap">
-                          ₹{formatLakhs(role.salaryBand.min)}–{formatLakhs(role.salaryBand.max)}
+                        <span className="text-[10px] sm:text-xs text-[#1B6B6B] bg-[#E8F5F5] px-2 py-0.5 rounded-full whitespace-normal text-right leading-tight max-w-[11rem] sm:max-w-none inline-block">
+                          ₹{formatLakhs(role.salaryBand.min)}/mo (₹{formatLakhs(Number(role.salaryBand.min) * 12)}pa) – ₹
+                          {formatLakhs(role.salaryBand.max)}/mo (₹{formatLakhs(Number(role.salaryBand.max) * 12)}pa)
                         </span>
                       )}
                       <div className="text-right">

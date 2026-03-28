@@ -138,35 +138,38 @@ function sanitizeCustomBenefitsForSave(raw) {
     .filter((b) => b.name || b.value || b.notes);
 }
 
-/** CTC vs role salary band — guideline only, not blocking save */
+/** Annual CTC vs role salary band (monthly min/max × 12) — guideline only, not blocking save */
 function validateCTC(ctcValue, role) {
   if (!role?.salaryBand || role.salaryBand.min === '' || role.salaryBand.min == null) return null;
   const str = ctcValue != null ? String(ctcValue).trim() : '';
   if (!str) return null;
-  const ctc = Number(str);
-  if (Number.isNaN(ctc)) return null;
-  const min = Number(role.salaryBand.min);
-  const max = Number(role.salaryBand.max);
+  const annualCTC = Number(str);
+  if (Number.isNaN(annualCTC)) return null;
+  const monthlyMin = Number(role.salaryBand.min);
+  const monthlyMax = Number(role.salaryBand.max);
   const title = role.title || 'this role';
-  if (Number.isNaN(min)) return null;
-  const maxOk = !Number.isNaN(max) && role.salaryBand.max !== '' && role.salaryBand.max != null;
-  const bandStr = `₹${formatLakhs(min)}–${maxOk ? formatLakhs(max) : '—'}`;
+  if (Number.isNaN(monthlyMin)) return null;
+  const annualMin = monthlyMin * 12;
+  const maxOk = !Number.isNaN(monthlyMax) && role.salaryBand.max !== '' && role.salaryBand.max != null;
+  const annualMax = maxOk ? monthlyMax * 12 : null;
 
-  if (ctc < min) {
+  if (annualCTC < annualMin) {
     return {
       type: 'warning',
-      message: `⚠️ CTC ₹${formatLakhs(ctc)} is below ${title} band (${bandStr})`,
+      message: `⚠️ Annual salary ₹${formatLakhs(annualCTC)} is below ${title} band (₹${formatLakhs(annualMin)} – ${
+        annualMax != null ? `₹${formatLakhs(annualMax)}` : '—'
+      } per annum)`,
     };
   }
-  if (maxOk && ctc > max) {
+  if (annualMax != null && annualCTC > annualMax) {
     return {
       type: 'warning',
-      message: `⚠️ CTC ₹${formatLakhs(ctc)} is above ${title} band (₹${formatLakhs(min)}–${formatLakhs(max)})`,
+      message: `⚠️ Annual salary ₹${formatLakhs(annualCTC)} is above ${title} band (₹${formatLakhs(annualMin)} – ₹${formatLakhs(annualMax)} per annum)`,
     };
   }
   return {
     type: 'success',
-    message: `✓ CTC is within ${title} band (${maxOk ? `₹${formatLakhs(min)}–${formatLakhs(max)}` : `≥ ₹${formatLakhs(min)}`})`,
+    message: `✓ Salary within ${title} band`,
   };
 }
 
@@ -1746,7 +1749,7 @@ export default function Employees() {
                                 : 'Top level role'}
                               {selectedRole.salaryBand?.min != null &&
                                 selectedRole.salaryBand?.min !== '' &&
-                                ` · ₹${formatLakhs(selectedRole.salaryBand.min)}–${formatLakhs(selectedRole.salaryBand.max)}`}
+                                ` · ₹${formatLakhs(selectedRole.salaryBand.min)}–${formatLakhs(selectedRole.salaryBand.max)}/mo`}
                             </p>
                           </div>
                         </div>
@@ -1772,8 +1775,10 @@ export default function Employees() {
                     </div>
                     {selectedRole?.salaryBand?.min != null && selectedRole?.salaryBand?.min !== '' && (
                       <div className="mt-1.5 text-xs text-[#1B6B6B] bg-[#E8F5F5] px-3 py-1.5 rounded-lg">
-                        💰 {selectedRole.title} salary band: ₹{formatLakhs(selectedRole.salaryBand.min)} – ₹
-                        {formatLakhs(selectedRole.salaryBand.max)} per annum
+                        💰 Salary band for this role: ₹{formatLakhs(selectedRole.salaryBand.min)} – ₹
+                        {formatLakhs(selectedRole.salaryBand.max)} per month (₹
+                        {formatLakhs(Number(selectedRole.salaryBand.min) * 12)} – ₹
+                        {formatLakhs(Number(selectedRole.salaryBand.max) * 12)} per annum)
                       </div>
                     )}
                     {showRoleDropdown && (
@@ -1843,7 +1848,7 @@ export default function Employees() {
                                       {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level role'}
                                       {role.salaryBand?.min != null &&
                                         role.salaryBand?.min !== '' &&
-                                        ` · ₹${formatLakhs(role.salaryBand.min)}–${formatLakhs(role.salaryBand.max)}`}
+                                        ` · ₹${formatLakhs(role.salaryBand.min)}–${formatLakhs(role.salaryBand.max)}/mo (₹${formatLakhs(Number(role.salaryBand.min) * 12)}–${formatLakhs(Number(role.salaryBand.max) * 12)} pa)`}
                                     </p>
                                   </div>
                                   {selectedRole?.id === role.id && (
