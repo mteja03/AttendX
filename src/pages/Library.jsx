@@ -4,6 +4,7 @@ import html2canvas from 'html2canvas';
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
@@ -429,6 +430,7 @@ export default function Library() {
   const { company } = useCompany();
   const { success, error: showError } = useToast();
   const canEdit = role === 'admin' || role === 'hrmanager';
+  const canDeletePolicy = role === 'admin' || role === 'hrmanager';
 
   const [libraryTab, setLibraryTab] = useState('policies');
   const [policies, setPolicies] = useState([]);
@@ -459,6 +461,11 @@ export default function Library() {
   const [techSkillDraft, setTechSkillDraft] = useState('');
   const [softSkillDraft, setSoftSkillDraft] = useState('');
   const [rolesView, setRolesView] = useState('grid');
+  const [deletingPolicy, setDeletingPolicy] = useState(null);
+  const [showDeletePolicyModal, setShowDeletePolicyModal] = useState(false);
+  const [deletingRole, setDeletingRole] = useState(null);
+  const [showDeleteRoleModal, setShowDeleteRoleModal] = useState(false);
+  const [deletingItem, setDeletingItem] = useState(false);
   const [archZoom, setArchZoom] = useState(0.9);
   const [archDownloading, setArchDownloading] = useState(false);
   const [reportsToSearch, setReportsToSearch] = useState('');
@@ -666,6 +673,14 @@ export default function Library() {
     () => employees.filter((e) => (e.status || 'Active') === 'Active').length,
     [employees],
   );
+
+  const getRoleEmployeeCount = (r) => {
+    if (!r) return 0;
+    const title = (r.title || '').trim();
+    return employees.filter(
+      (emp) => (emp.designation || '').trim() === title || emp.roleId === r.id,
+    ).length;
+  };
 
   const roleRoots = useMemo(() => buildRoleTree(roles), [roles]);
 
@@ -1033,6 +1048,38 @@ export default function Library() {
   const matchingEmployeesForRole = (role) =>
     employees.filter((e) => (e.designation || '').trim() === (role?.title || '').trim());
 
+  const handleDeletePolicy = async () => {
+    if (!deletingPolicy || !companyId) return;
+    try {
+      setDeletingItem(true);
+      await deleteDoc(doc(db, 'companies', companyId, 'policies', deletingPolicy.id));
+      success(`"${deletingPolicy.title}" deleted`);
+      setShowDeletePolicyModal(false);
+      if (viewingPolicy?.id === deletingPolicy.id) setViewingPolicy(null);
+      setDeletingPolicy(null);
+    } catch (e) {
+      showError(`Failed to delete: ${e?.message || 'Unknown error'}`);
+    } finally {
+      setDeletingItem(false);
+    }
+  };
+
+  const handleDeleteRole = async () => {
+    if (!deletingRole || !companyId) return;
+    try {
+      setDeletingItem(true);
+      await deleteDoc(doc(db, 'companies', companyId, 'roles', deletingRole.id));
+      success(`"${deletingRole.title}" deleted`);
+      setShowDeleteRoleModal(false);
+      if (viewingRole?.id === deletingRole.id) setViewingRole(null);
+      setDeletingRole(null);
+    } catch (e) {
+      showError(`Failed to delete: ${e?.message || 'Unknown error'}`);
+    } finally {
+      setDeletingItem(false);
+    }
+  };
+
   if (!companyId) return null;
 
   const reportsToOptions = roles.filter((r) => r.id !== editingRoleId);
@@ -1133,11 +1180,25 @@ export default function Library() {
                           setViewingPolicy(policy);
                           setTimeout(() => printPolicy(policy), 100);
                         }}
-                        className="text-xs text-gray-400 hover:text-gray-600"
+                        className="p-1.5 text-gray-300 hover:text-gray-500 rounded-lg transition-colors"
                         title="Print"
                       >
                         🖨️
                       </button>
+                      {canDeletePolicy && (
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            setDeletingPolicy(policy);
+                            setShowDeletePolicyModal(true);
+                          }}
+                          className="p-1.5 text-gray-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+                          title="Delete policy"
+                        >
+                          🗑️
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1201,7 +1262,8 @@ export default function Library() {
           {rolesView === 'grid' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredRoles.map((role) => {
-                const headcount = role.currentHeadcount ?? 0;
+                const roleEmpCount = getRoleEmployeeCount(role);
+                const canDeleteRole = roleEmpCount === 0;
                 return (
                   <div
                     key={role.id}
@@ -1221,9 +1283,9 @@ export default function Library() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {headcount > 0 ? (
+                        {roleEmpCount > 0 ? (
                           <span className="text-xs px-2 py-1 bg-[#E8F5F5] text-[#1B6B6B] rounded-full font-medium whitespace-nowrap">
-                            {headcount} employee{headcount !== 1 ? 's' : ''}
+                            {roleEmpCount} employee{roleEmpCount !== 1 ? 's' : ''}
                           </span>
                         ) : (
                           <span className="text-xs px-2 py-1 bg-gray-100 text-gray-400 rounded-full whitespace-nowrap">Vacant</span>
@@ -1261,30 +1323,60 @@ export default function Library() {
                       ))}
                     </div>
 
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
-                      <span className="text-xs text-gray-400">
-                        {(role.kpis || []).length} KPIs · {(role.responsibilities || []).length} responsibilities
-                      </span>
-                      <div className="flex gap-2" onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>
-                        {canEdit && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => openEditRole(role)}
-                              className="text-xs text-[#1B6B6B] hover:underline"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handlePrintRole(role)}
-                              className="text-xs text-gray-400 hover:text-gray-600"
-                            >
-                              🖨️
-                            </button>
-                          </>
-                        )}
+                    <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-gray-50">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-xs text-gray-400">
+                          {(role.kpis || []).length} KPIs · {(role.responsibilities || []).length} responsibilities
+                        </span>
+                        <div className="flex items-center gap-2" onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>
+                          {canEdit && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openEditRole(role)}
+                                className="text-sm text-[#1B6B6B] font-medium hover:underline"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handlePrintRole(role)}
+                                className="p-1.5 text-gray-300 hover:text-gray-500 rounded-lg"
+                                title="Print"
+                              >
+                                🖨️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!canDeleteRole) return;
+                                  setDeletingRole(role);
+                                  setShowDeleteRoleModal(true);
+                                }}
+                                disabled={!canDeleteRole}
+                                title={
+                                  canDeleteRole
+                                    ? 'Delete role'
+                                    : `Cannot delete — ${roleEmpCount} employee${roleEmpCount !== 1 ? 's' : ''} assigned`
+                                }
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  canDeleteRole
+                                    ? 'text-gray-300 hover:text-red-500 hover:bg-red-50 cursor-pointer'
+                                    : 'text-gray-200 cursor-not-allowed'
+                                }`}
+                              >
+                                🗑️
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
+                      {roleEmpCount > 0 && (
+                        <span className="text-xs text-gray-400">
+                          {roleEmpCount} employee{roleEmpCount !== 1 ? 's' : ''} assigned
+                        </span>
+                      )}
+                      {roleEmpCount === 0 && <span className="text-xs text-gray-300">Vacant</span>}
                     </div>
                   </div>
                 );
@@ -1306,7 +1398,8 @@ export default function Library() {
                 </thead>
                 <tbody>
                   {filteredRoles.map((role) => {
-                    const headcount = role.currentHeadcount ?? 0;
+                    const roleEmpCount = getRoleEmployeeCount(role);
+                    const canDeleteRole = roleEmpCount === 0;
                     return (
                       <tr
                         key={role.id}
@@ -1321,8 +1414,8 @@ export default function Library() {
                         <td className="px-4 py-3 font-medium text-gray-900">{role.title}</td>
                         <td className="px-4 py-3 text-gray-600">{role.reportsTo || '—'}</td>
                         <td className="px-4 py-3 text-right">
-                          {headcount > 0 ? (
-                            <span className="text-xs px-2 py-1 bg-[#E8F5F5] text-[#1B6B6B] rounded-full font-medium">{headcount}</span>
+                          {roleEmpCount > 0 ? (
+                            <span className="text-xs px-2 py-1 bg-[#E8F5F5] text-[#1B6B6B] rounded-full font-medium">{roleEmpCount}</span>
                           ) : (
                             <span className="text-xs text-gray-400">Vacant</span>
                           )}
@@ -1339,8 +1432,34 @@ export default function Library() {
                             <button type="button" onClick={() => openEditRole(role)} className="text-xs text-[#1B6B6B] hover:underline mr-2">
                               Edit
                             </button>
-                            <button type="button" onClick={() => handlePrintRole(role)} className="text-xs text-gray-400 hover:text-gray-600">
+                            <button
+                              type="button"
+                              onClick={() => handlePrintRole(role)}
+                              className="p-1.5 text-gray-300 hover:text-gray-500 rounded-lg mr-1 align-middle"
+                              title="Print"
+                            >
                               🖨️
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!canDeleteRole) return;
+                                setDeletingRole(role);
+                                setShowDeleteRoleModal(true);
+                              }}
+                              disabled={!canDeleteRole}
+                              title={
+                                canDeleteRole
+                                  ? 'Delete role'
+                                  : `Cannot delete — ${roleEmpCount} employee${roleEmpCount !== 1 ? 's' : ''} assigned`
+                              }
+                              className={`p-1.5 rounded-lg align-middle transition-colors ${
+                                canDeleteRole
+                                  ? 'text-gray-300 hover:text-red-500 hover:bg-red-50 cursor-pointer'
+                                  : 'text-gray-200 cursor-not-allowed'
+                              }`}
+                            >
+                              🗑️
                             </button>
                           </td>
                         )}
@@ -1565,6 +1684,86 @@ export default function Library() {
             <div className="p-4 sm:p-6 flex-1 overflow-y-auto">
               {viewingPolicy.description && <p className="text-sm text-gray-500 mb-4">{viewingPolicy.description}</p>}
               <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed max-w-none">{viewingPolicy.content || '—'}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeletePolicyModal && deletingPolicy && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <div className="text-center mb-5">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+                <span className="text-xl">🗑️</span>
+              </div>
+              <h3 className="text-base font-semibold text-gray-800 mb-1">Delete Policy?</h3>
+              <p className="text-sm text-gray-500">
+                Are you sure you want to delete<strong> {deletingPolicy.title}</strong>? This cannot be undone.
+              </p>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4">
+              <p className="text-xs text-amber-700">
+                ⚠️ If this policy is linked to onboarding tasks, those links will be broken.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeletePolicyModal(false);
+                  setDeletingPolicy(null);
+                }}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeletePolicy}
+                disabled={deletingItem}
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingItem ? 'Deleting...' : 'Delete Policy'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteRoleModal && deletingRole && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <div className="text-center mb-5">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+                <span className="text-xl">🗑️</span>
+              </div>
+              <h3 className="text-base font-semibold text-gray-800 mb-1">Delete Role?</h3>
+              <p className="text-sm text-gray-500">
+                Are you sure you want to delete<strong> {deletingRole.title}</strong>? This cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteRoleModal(false);
+                  setDeletingRole(null);
+                }}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteRole}
+                disabled={deletingItem}
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingItem ? 'Deleting...' : 'Delete Role'}
+              </button>
             </div>
           </div>
         </div>
