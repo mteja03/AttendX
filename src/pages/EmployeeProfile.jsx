@@ -12,6 +12,7 @@ import {
   serverTimestamp,
   arrayUnion,
   arrayRemove,
+  deleteField,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -260,6 +261,322 @@ function getTenure(joiningDate) {
   return `${days} day${days > 1 ? 's' : ''}`;
 }
 
+const TIMELINE_COLORS = {
+  green: {
+    dot: 'bg-green-500',
+    bg: 'bg-green-50',
+    border: 'border-green-100',
+    text: 'text-green-700',
+  },
+  blue: {
+    dot: 'bg-blue-500',
+    bg: 'bg-blue-50',
+    border: 'border-blue-100',
+    text: 'text-blue-700',
+  },
+  purple: {
+    dot: 'bg-purple-500',
+    bg: 'bg-purple-50',
+    border: 'border-purple-100',
+    text: 'text-purple-700',
+  },
+  amber: {
+    dot: 'bg-amber-500',
+    bg: 'bg-amber-50',
+    border: 'border-amber-100',
+    text: 'text-amber-700',
+  },
+  orange: {
+    dot: 'bg-orange-500',
+    bg: 'bg-orange-50',
+    border: 'border-orange-100',
+    text: 'text-orange-700',
+  },
+  teal: {
+    dot: 'bg-[#1B6B6B]',
+    bg: 'bg-[#E8F5F5]',
+    border: 'border-[#4ECDC4]/30',
+    text: 'text-[#1B6B6B]',
+  },
+  red: {
+    dot: 'bg-red-500',
+    bg: 'bg-red-50',
+    border: 'border-red-100',
+    text: 'text-red-700',
+  },
+  gray: {
+    dot: 'bg-gray-400',
+    bg: 'bg-gray-50',
+    border: 'border-gray-100',
+    text: 'text-gray-500',
+  },
+};
+
+function buildProfileTimeline(emp, leaveRows, assets, employeeDocId) {
+  const events = [];
+  if (!emp) return events;
+
+  if (emp.joiningDate) {
+    const jd = toJSDate(emp.joiningDate);
+    if (jd) {
+      events.push({
+        id: 'joined',
+        type: 'joined',
+        icon: '🎉',
+        color: 'green',
+        title: 'Joined Company',
+        description: [emp.designation, emp.department].filter(Boolean).join(' · '),
+        date: jd,
+        by: emp.createdBy || 'HR',
+      });
+    }
+  }
+
+  if (Array.isArray(emp.editHistory)) {
+    emp.editHistory.forEach((edit, idx) => {
+      const d = toJSDate(edit.timestamp);
+      if (!d) return;
+      const desc =
+        Array.isArray(edit.changes) && edit.changes.length > 0 ? edit.changes.join(', ') : 'Details updated';
+      events.push({
+        id: `edit_${edit.timestamp?.seconds ?? idx}_${idx}`,
+        type: 'edit',
+        icon: '✏️',
+        color: 'blue',
+        title: 'Profile Updated',
+        description: desc,
+        date: d,
+        by: edit.by || 'HR',
+      });
+    });
+  }
+
+  (leaveRows || []).forEach((leave) => {
+    if (leave.status !== 'Approved') return;
+    const d = toJSDate(leave.appliedAt) || toJSDate(leave.startDate);
+    if (!d) return;
+    const days = leave.days ?? '';
+    const dayWord = Number(leave.days) === 1 ? 'day' : 'days';
+    events.push({
+      id: `leave_${leave.id}`,
+      type: 'leave',
+      icon: '🏖️',
+      color: 'blue',
+      title: `${leave.leaveType || 'Leave'} — ${days} ${dayWord}`,
+      description: `${leave.startDate ? toDisplayDate(leave.startDate) : '—'} to ${leave.endDate ? toDisplayDate(leave.endDate) : '—'}${leave.reason ? ` · ${leave.reason}` : ''}`,
+      date: d,
+      by: leave.approvedBy || 'HR',
+    });
+  });
+
+  const docs = emp.documents;
+  if (Array.isArray(docs)) {
+    docs.forEach((docItem, idx) => {
+      if (!docItem?.uploadedAt) return;
+      const d = toJSDate(docItem.uploadedAt);
+      if (!d) return;
+      events.push({
+        id: `doc_${docItem.id || idx}`,
+        type: 'document',
+        icon: '📄',
+        color: 'gray',
+        title: 'Document Uploaded',
+        description: docItem.name || docItem.id || `Document ${idx + 1}`,
+        date: d,
+        by: docItem.uploadedBy || 'HR',
+      });
+    });
+  }
+
+  (assets || []).forEach((asset) => {
+    const hist = Array.isArray(asset.history) ? asset.history : [];
+    hist
+      .filter((h) => h.employeeId === employeeDocId)
+      .forEach((h, hi) => {
+        const d = toJSDate(h.date);
+        if (!d) return;
+        const isAssign = h.action === 'assigned';
+        events.push({
+          id: `asset_${asset.id}_${h.action}_${hi}`,
+          type: 'asset',
+          icon: isAssign ? '📦' : '📤',
+          color: isAssign ? 'teal' : 'gray',
+          title: isAssign ? `Asset Assigned: ${asset.name || 'Asset'}` : `Asset Returned: ${asset.name || 'Asset'}`,
+          description: [asset.assetId, h.notes].filter(Boolean).join(' · ') || '',
+          date: d,
+          by: h.performedBy || 'HR',
+        });
+      });
+    if ((asset.mode || 'trackable') === 'consumable') {
+      (asset.assignments || [])
+        .filter((as) => as.employeeId === employeeDocId && as.issueDate)
+        .forEach((as, ai) => {
+          const d = toJSDate(as.issueDate);
+          if (!d) return;
+          events.push({
+            id: `asset_issue_${asset.id}_${ai}`,
+            type: 'asset',
+            icon: '📦',
+            color: 'teal',
+            title: `Asset Issued: ${asset.name || 'Consumable'}`,
+            description: `${asset.assetId || ''} · Qty ${as.quantity || 1}`.trim(),
+            date: d,
+            by: 'HR',
+          });
+        });
+    }
+  });
+
+  const obOn = emp.onboarding;
+  if (obOn) {
+    if (obOn.startedAt) {
+      const d = toJSDate(obOn.startedAt);
+      if (d) {
+        events.push({
+          id: 'onboarding_started',
+          type: 'onboarding',
+          icon: '🎯',
+          color: 'purple',
+          title: 'Onboarding Started',
+          description: `${obOn.tasks?.length || 0} tasks assigned`,
+          date: d,
+          by: obOn.startedBy || 'HR',
+        });
+      }
+    }
+    (obOn.tasks || [])
+      .filter((t) => t.completed && t.completedAt)
+      .forEach((task) => {
+        const d = toJSDate(task.completedAt);
+        if (!d) return;
+        events.push({
+          id: `onboard_task_${task.id}`,
+          type: 'onboarding_task',
+          icon: '✅',
+          color: 'green',
+          title: `Onboarding: ${task.title || 'Task'}`,
+          description: task.notes || '',
+          date: d,
+          by: task.completedBy || 'HR',
+        });
+      });
+    if (obOn.completedAt) {
+      const d = toJSDate(obOn.completedAt);
+      if (d) {
+        events.push({
+          id: 'onboarding_completed',
+          type: 'onboarding',
+          icon: '🎊',
+          color: 'green',
+          title: 'Onboarding Completed',
+          description: '100% tasks done',
+          date: d,
+          by: obOn.completedBy || 'HR',
+        });
+      }
+    }
+  }
+
+  const offb = emp.offboarding;
+  if (offb) {
+    const hasRecordedAt = !!offb.recordedAt;
+    if (hasRecordedAt) {
+      const d = toJSDate(offb.recordedAt);
+      if (d) {
+        events.push({
+          id: 'resignation',
+          type: 'offboarding',
+          icon: '📝',
+          color: 'amber',
+          title: 'Resignation Recorded',
+          description: `Notice period: ${offb.noticePeriodDays ?? '—'} days · Last day: ${toDisplayDate(offb.expectedLastDay) || '—'}${offb.reason ? ` · ${offb.reason}` : ''}`,
+          date: d,
+          by: offb.recordedBy || 'HR',
+        });
+      }
+    }
+    const eventConfigMap = {
+      resignation_recorded: { icon: '📝', color: 'amber', title: 'Resignation Recorded' },
+      resignation_withdrawn: { icon: '🔄', color: 'green', title: 'Resignation Withdrawn' },
+      notice_buyout: { icon: '💰', color: 'blue', title: 'Notice Period Buyout' },
+      exit_tasks_started: { icon: '🚪', color: 'orange', title: 'Exit Processing Started' },
+      employee_marked_inactive: { icon: '🏁', color: 'gray', title: 'Exit Finalized' },
+    };
+    (offb.history || []).forEach((event, i) => {
+      if (hasRecordedAt && event.event === 'resignation_recorded') return;
+      const d = toJSDate(event.date);
+      if (!d) return;
+      const cfg =
+        eventConfigMap[event.event] || {
+          icon: '📋',
+          color: 'gray',
+          title: (event.event || 'event').replace(/_/g, ' '),
+        };
+      events.push({
+        id: `offboard_history_${i}_${event.event}`,
+        type: 'offboarding',
+        icon: cfg.icon,
+        color: cfg.color,
+        title: cfg.title,
+        description: event.notes || '',
+        date: d,
+        by: event.by || 'HR',
+      });
+    });
+    (offb.tasks || [])
+      .filter((t) => t.completed && t.completedAt)
+      .forEach((task) => {
+        const d = toJSDate(task.completedAt);
+        if (!d) return;
+        events.push({
+          id: `offboard_task_${task.id}`,
+          type: 'offboarding_task',
+          icon: '☑️',
+          color: 'orange',
+          title: `Exit Task: ${task.title || 'Task'}`,
+          description: task.notes || '',
+          date: d,
+          by: task.completedBy || 'HR',
+        });
+      });
+    if (offb.completedAt) {
+      const d = toJSDate(offb.completedAt);
+      if (d) {
+        events.push({
+          id: 'offboarding_done',
+          type: 'offboarding',
+          icon: '🏁',
+          color: 'gray',
+          title: 'Offboarding Completed',
+          description: 'Employee marked Inactive',
+          date: d,
+          by: offb.completedBy || 'HR',
+        });
+      }
+    }
+  }
+
+  if (emp.deactivatedAt) {
+    const d = toJSDate(emp.deactivatedAt);
+    if (d) {
+      events.push({
+        id: 'deactivated',
+        type: 'status',
+        icon: '🔴',
+        color: 'red',
+        title: 'Employee Inactive',
+        description: emp.deactivationReason || '',
+        date: d,
+        by: emp.deactivatedBy || 'HR',
+      });
+    }
+  }
+
+  return events
+    .filter((e) => e.date instanceof Date && !Number.isNaN(e.date.getTime()))
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
+}
+
 export default function EmployeeProfile() {
   const { companyId, empId } = useParams();
   const [searchParams] = useSearchParams();
@@ -279,7 +596,6 @@ export default function EmployeeProfile() {
   const [tab, setTab] = useState('personal');
   const [showSalary, setShowSalary] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [deactivateConfirm, setDeactivateConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(null);
   const [categoryOpen, setCategoryOpen] = useState({});
@@ -324,8 +640,6 @@ export default function EmployeeProfile() {
     condition: 'Good',
     notes: '',
   });
-  const [pendingReturnAssets, setPendingReturnAssets] = useState([]);
-  const [showAssetReturnWarning, setShowAssetReturnWarning] = useState(false);
   const [returnConsumableModal, setReturnConsumableModal] = useState(null); // { asset, assignment }
   const [returnQty, setReturnQty] = useState(1);
   const [returnCondition, setReturnCondition] = useState('Good');
@@ -336,7 +650,6 @@ export default function EmployeeProfile() {
   const [offboardingExitReason, setOffboardingExitReason] = useState('');
   const [completingOffTask, setCompletingOffTask] = useState(null);
   const [offTaskNotes, setOffTaskNotes] = useState('');
-  const [deactivateChoiceOpen, setDeactivateChoiceOpen] = useState(false);
   const [showResignationModal, setShowResignationModal] = useState(false);
   const [resignForm, setResignForm] = useState({
     resignationDate: '',
@@ -557,119 +870,10 @@ export default function EmployeeProfile() {
     [profileLeaveTypes],
   );
 
-  const timelineEvents = useMemo(() => {
-    if (!employee) return [];
-    const events = [];
-
-    if (employee.joiningDate) {
-      events.push({
-        type: 'joined',
-        date: toJSDate(employee.joiningDate),
-        title: 'Joined the company',
-        description: `${employee.department || '—'} · ${employee.designation || '—'}`,
-        icon: '🎉',
-        color: 'green',
-      });
-    }
-
-    leaveList.forEach((leave) => {
-      const d = toJSDate(leave.appliedAt) || toJSDate(leave.startDate);
-      events.push({
-        type: 'leave',
-        date: d,
-        title: `${leave.leaveType || 'Leave'} — ${leave.status || '—'}`,
-        description: `${leave.days || 0} day(s) · ${leave.startDate ? toDisplayDate(leave.startDate) : '—'} to ${leave.endDate ? toDisplayDate(leave.endDate) : '—'}${leave.reason ? ` · ${leave.reason}` : ''}`,
-        icon: leave.status === 'Approved' ? '✅' : leave.status === 'Rejected' ? '❌' : '⏳',
-        color: leave.status === 'Approved' ? 'green' : leave.status === 'Rejected' ? 'red' : 'amber',
-      });
-    });
-
-    assetList.forEach((asset) => {
-      const hist = Array.isArray(asset.history) ? asset.history : [];
-      hist
-        .filter((h) => h.employeeId === empId)
-        .forEach((h) => {
-          events.push({
-            type: 'asset',
-            date: toJSDate(h.date) || new Date(),
-            title:
-              h.action === 'assigned'
-                ? `${asset.name} assigned`
-                : h.action === 'returned'
-                  ? `${asset.name} returned`
-                  : `${asset.name} — ${h.action || 'update'}`,
-            description: `${asset.assetId || ''}${h.condition ? ` · Condition: ${h.condition}` : ''}${h.notes ? ` · ${h.notes}` : ''}`,
-            icon: h.action === 'assigned' ? '📦' : '↩️',
-            color: 'blue',
-          });
-        });
-      if ((asset.mode || 'trackable') === 'consumable') {
-        (asset.assignments || [])
-          .filter((as) => as.employeeId === empId)
-          .forEach((as) => {
-            events.push({
-              type: 'asset',
-              date: toJSDate(as.issueDate) || new Date(),
-              title: `${asset.name} issued (consumable)`,
-              description: `Qty ${as.quantity || 1} · ${asset.assetId || ''}`,
-              icon: '📦',
-              color: 'blue',
-            });
-          });
-      }
-    });
-
-    (employee.documents || []).forEach((docItem) => {
-      events.push({
-        type: 'document',
-        date: toJSDate(docItem.uploadedAt) || new Date(),
-        title: `${docItem.name || 'Document'} uploaded`,
-        description: `${docItem.category || '—'} · by ${docItem.uploadedBy || 'HR'}`,
-        icon: '📄',
-        color: 'purple',
-      });
-    });
-
-    const ob = employee.onboarding;
-    if (ob && (ob.status === 'in_progress' || ob.status === 'completed')) {
-      events.push({
-        type: 'onboarding',
-        date: toJSDate(ob.startedAt),
-        title: 'Onboarding started',
-        description: `${ob.completionPct || 0}% complete`,
-        icon: '🎯',
-        color: 'blue',
-      });
-      if (ob.status === 'completed') {
-        events.push({
-          type: 'onboarding',
-          date: toJSDate(ob.completedAt),
-          title: 'Onboarding completed',
-          description: 'All tasks finished',
-          icon: '🏆',
-          color: 'green',
-        });
-      }
-    }
-
-    const offb = employee.offboarding;
-    if (offb && (offb.status === 'in_progress' || offb.status === 'completed')) {
-      events.push({
-        type: 'offboarding',
-        date: toJSDate(offb.startedAt),
-        title: 'Offboarding initiated',
-        description: `Exit reason: ${offb.exitReason || '—'} · Exit date: ${offb.exitDate ? toDisplayDate(offb.exitDate) : '—'}`,
-        icon: '👋',
-        color: 'amber',
-      });
-    }
-
-    return events.sort((a, b) => {
-      const da = a.date instanceof Date && !Number.isNaN(a.date.getTime()) ? a.date : new Date(0);
-      const db2 = b.date instanceof Date && !Number.isNaN(b.date.getTime()) ? b.date : new Date(0);
-      return db2 - da;
-    });
-  }, [employee, leaveList, assetList, empId]);
+  const timelineEvents = useMemo(
+    () => buildProfileTimeline(employee, leaveList, assetList, empId),
+    [employee, leaveList, assetList, empId],
+  );
 
   const employeeAssets = useMemo(
     () =>
@@ -892,6 +1096,28 @@ export default function EmployeeProfile() {
           return;
         }
       }
+      const changes = [];
+      if ((form.fullName || '').trim() !== (employee.fullName || '').trim()) changes.push('Name updated');
+      if ((form.designation || '').trim() !== (employee.designation || '').trim()) {
+        changes.push(`Designation: ${(form.designation || '').trim()}`);
+      }
+      if ((form.department || '').trim() !== (employee.department || '').trim()) {
+        changes.push(`Department: ${(form.department || '').trim()}`);
+      }
+      const prevCtc = employee.ctcPerAnnum ?? employee.ctc ?? '';
+      const nextCtc = form.ctcPerAnnum === '' || form.ctcPerAnnum == null ? '' : Number(form.ctcPerAnnum);
+      if (String(prevCtc) !== String(nextCtc)) changes.push('Salary updated');
+      const prevInc = employee.incentive != null && employee.incentive !== '' ? Number(employee.incentive) : null;
+      const nextInc =
+        form.incentive === '' || form.incentive == null ? null : Number(form.incentive);
+      if (prevInc !== nextInc) changes.push('Incentive updated');
+      if ((form.branch || '').trim() !== (employee.branch || '').trim()) {
+        changes.push(`Branch: ${(form.branch || '').trim()}`);
+      }
+      if ((form.location || '').trim() !== (employee.location || '').trim()) {
+        changes.push(`Location: ${(form.location || '').trim()}`);
+      }
+
       const payload = {
         fullName: form.fullName?.trim(),
         email: form.email?.trim(),
@@ -948,8 +1174,16 @@ export default function EmployeeProfile() {
         },
         updatedAt: serverTimestamp(),
       };
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
-      setEmployee((prev) => (prev ? { ...prev, ...payload } : null));
+      const savePayload = { ...payload };
+      if (changes.length > 0) {
+        savePayload.editHistory = arrayUnion({
+          timestamp: Timestamp.now(),
+          by: currentUser?.email || '',
+          changes,
+        });
+      }
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), savePayload);
+      setEmployee((prev) => (prev ? { ...prev, ...savePayload } : null));
       setShowEditModal(false);
       setShowManagerDropdown(false);
       setManagerSearch('');
@@ -960,83 +1194,6 @@ export default function EmployeeProfile() {
       showError('Failed to update');
     }
     setSaving(false);
-  };
-
-  const proceedDeactivateDirectly = async () => {
-    if (!employee || !companyId || !empId) return;
-    if (employee.status === 'Notice Period' || employee.status === 'Offboarding') {
-      showError(
-        'This employee is in their notice period. Use the Offboarding tab to properly process their exit.',
-      );
-      return;
-    }
-    setSaving(true);
-    try {
-      // Trackables: assigned to this employee and still marked as Assigned
-      const assignedSnap = await getDocs(
-        query(
-          collection(db, 'companies', companyId, 'assets'),
-          where('assignedToId', '==', empId),
-          where('status', '==', 'Assigned'),
-        ),
-      );
-      const pendingTrackables = assignedSnap.docs.map((d) => ({
-        kind: 'trackable',
-        docId: d.id,
-        ...d.data(),
-      }));
-
-      // Consumables: any unreturned assignment for this employee
-      const consumableSnap = await getDocs(
-        query(collection(db, 'companies', companyId, 'assets'), where('mode', '==', 'consumable')),
-      );
-      const pendingConsumables = consumableSnap.docs.flatMap((d) => {
-        const asset = { id: d.id, ...d.data() };
-        const assignments = Array.isArray(asset.assignments) ? asset.assignments : [];
-        return assignments
-          .filter((as) => as.employeeId === empId && !as.returned)
-          .map((as) => ({
-            kind: 'consumable',
-            docId: asset.id,
-            type: asset.type,
-            name: asset.name,
-            assetId: asset.assetId,
-            assignment: as,
-            issueDate: as.issueDate,
-            quantity: as.quantity,
-            condition: as.condition,
-            employeeName: as.employeeName,
-            empId: as.empId,
-          }));
-      });
-
-      const pending = [...pendingTrackables, ...pendingConsumables];
-      if (pending.length > 0) {
-        setPendingReturnAssets(pending);
-        setShowAssetReturnWarning(true);
-      } else {
-        setDeactivateConfirm(true);
-      }
-    } catch {
-      showError('Could not check assigned assets');
-    }
-    setSaving(false);
-  };
-
-  const handleDeactivate = async () => {
-    if (!employee || !companyId || !empId) return;
-    if (employee.status === 'Notice Period' || employee.status === 'Offboarding') {
-      showError(
-        'This employee is in their notice period. Use the Offboarding tab to properly process their exit.',
-      );
-      return;
-    }
-    const ob = employee.offboarding;
-    if (!ob || ob.status === 'not_started' || ob.phase === 'withdrawn') {
-      setDeactivateChoiceOpen(true);
-      return;
-    }
-    await proceedDeactivateDirectly();
   };
 
   const getCompanyName = () => company?.name || 'Company';
@@ -1797,18 +1954,40 @@ export default function EmployeeProfile() {
     const requiredDone = nextTasks.filter((t) => t.isRequired).every((t) => t.completed);
     const status = requiredDone && done === nextTasks.length ? 'completed' : 'in_progress';
 
+    const completedHistory =
+      status === 'completed'
+        ? [
+            ...(offboarding.history || []),
+            {
+              event: 'employee_marked_inactive',
+              date: now,
+              by: currentUser.email || '',
+              notes: 'Offboarding completed — employee marked Inactive',
+            },
+          ]
+        : offboarding.history;
+
+    const offboardingPayload = {
+      ...(offboarding || {}),
+      phase: status === 'completed' ? 'completed' : 'exit_tasks',
+      status,
+      completionPct: pct,
+      tasks: nextTasks,
+      completedAt: status === 'completed' ? now : offboarding.completedAt || null,
+      completedBy: status === 'completed' ? currentUser.email || '' : offboarding.completedBy || null,
+      history: completedHistory,
+    };
+
     const payload = {
-      offboarding: {
-        ...(offboarding || {}),
-        phase: status === 'completed' ? 'completed' : 'exit_tasks',
-        status,
-        completionPct: pct,
-        tasks: nextTasks,
-        completedAt: status === 'completed' ? now : offboarding.completedAt || null,
-      },
+      offboarding: offboardingPayload,
       status: status === 'completed' ? 'Inactive' : (employee.status || 'Offboarding'),
       updatedAt: serverTimestamp(),
     };
+    if (status === 'completed') {
+      payload.deactivatedAt = now;
+      payload.deactivatedBy = currentUser.email || '';
+      payload.deactivationReason = 'Offboarding completed';
+    }
 
     await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
 
@@ -1884,9 +2063,24 @@ export default function EmployeeProfile() {
       }
     }
 
-    setEmployee((prev) => (prev ? { ...prev, offboarding: payload.offboarding, status: payload.status } : prev));
+    setEmployee((prev) =>
+      prev
+        ? {
+            ...prev,
+            offboarding: payload.offboarding,
+            status: payload.status,
+            ...(status === 'completed'
+              ? {
+                  deactivatedAt: payload.deactivatedAt,
+                  deactivatedBy: payload.deactivatedBy,
+                  deactivationReason: payload.deactivationReason,
+                }
+              : {}),
+          }
+        : null,
+    );
     if (status === 'completed') {
-      success(`✅ Offboarding completed for ${employee.fullName}! Employee has been deactivated.`);
+      success(`🎉 Offboarding complete! ${employee.fullName} is now Inactive.`);
     } else if (assetAutoReturned) {
       success(`✓ ${taskMeta?.title || 'Task'} marked complete and asset returned in inventory`);
     } else {
@@ -1910,14 +2104,31 @@ export default function EmployeeProfile() {
         phase: nextStatus === 'completed' ? 'completed' : 'exit_tasks',
         status: nextStatus,
         completionPct: pct,
-        completedAt: null,
+        completedAt: nextStatus === 'completed' ? offboarding.completedAt : null,
+        completedBy: nextStatus === 'completed' ? offboarding.completedBy : null,
         tasks: nextTasks,
       },
       status: nextStatus === 'completed' ? 'Inactive' : 'Offboarding',
       updatedAt: serverTimestamp(),
     };
+    if (nextStatus === 'in_progress') {
+      payload.deactivatedAt = deleteField();
+      payload.deactivatedBy = deleteField();
+      payload.deactivationReason = deleteField();
+    }
     await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
-    setEmployee((prev) => (prev ? { ...prev, offboarding: payload.offboarding, status: payload.status } : prev));
+    setEmployee((prev) =>
+      prev
+        ? {
+            ...prev,
+            offboarding: payload.offboarding,
+            status: payload.status,
+            ...(nextStatus === 'in_progress'
+              ? { deactivatedAt: null, deactivatedBy: null, deactivationReason: null }
+              : {}),
+          }
+        : null,
+    );
     success('Task updated');
   };
 
@@ -2416,113 +2627,6 @@ export default function EmployeeProfile() {
     }
   };
 
-  const handleReturnAllAndDeactivate = async () => {
-    if (!companyId || !empId || !employee || !currentUser || pendingReturnAssets.length === 0) {
-      setShowAssetReturnWarning(false);
-      return;
-    }
-    if (employee.status === 'Notice Period' || employee.status === 'Offboarding') {
-      showError(
-        'This employee is in their notice period. Use the Offboarding tab to properly process their exit.',
-      );
-      setShowAssetReturnWarning(false);
-      return;
-    }
-    setSaving(true);
-    try {
-      const now = new Date();
-      const tsNow = Timestamp.fromDate(now);
-      for (const asset of pendingReturnAssets) {
-        if (asset.kind === 'trackable') {
-          const assetRef = doc(db, 'companies', companyId, 'assets', asset.docId);
-          const assetSnap = await getDoc(assetRef);
-          if (!assetSnap.exists()) continue;
-          const currentAsset = { id: assetSnap.id, ...assetSnap.data() };
-          const existingHistory = Array.isArray(currentAsset.history) ? currentAsset.history : [];
-          const historyEntry = {
-            action: 'returned',
-            employeeId: empId,
-            employeeName: employee.fullName || '',
-            date: tsNow,
-            condition: currentAsset.condition || 'Good',
-            notes: 'Auto-returned on employee deactivation',
-            performedBy: currentUser.email || '',
-          };
-          await updateDoc(assetRef, {
-            status: 'Available',
-            assignedToId: null,
-            assignedToName: null,
-            assignedToEmpId: null,
-            returnDate: tsNow,
-            history: [...existingHistory, historyEntry],
-          });
-        } else if (asset.kind === 'consumable') {
-          const assetRef = doc(db, 'companies', companyId, 'assets', asset.docId);
-          const assetSnap = await getDoc(assetRef);
-          if (!assetSnap.exists()) continue;
-
-          const currentAsset = { id: assetSnap.id, ...assetSnap.data() };
-          const assignments = Array.isArray(currentAsset.assignments) ? currentAsset.assignments : [];
-          const existingHistory = Array.isArray(currentAsset.history) ? currentAsset.history : [];
-
-          const issueSeconds = asset.issueDate?.seconds || 0;
-          const assignmentIdx = assignments.findIndex(
-            (as) =>
-              as.employeeId === empId &&
-              !as.returned &&
-              (as.issueDate?.seconds || 0) === issueSeconds,
-          );
-
-          if (assignmentIdx === -1) continue;
-          const existingAssignment = assignments[assignmentIdx];
-          const qtyToReturn = Number(existingAssignment.quantity) || 0;
-
-          const nextAssignments = assignments.map((as, idx) => {
-            if (idx !== assignmentIdx) return as;
-            return {
-              ...as,
-              quantity: 0,
-              returned: true,
-              returnDate: tsNow,
-            };
-          });
-
-          await updateDoc(assetRef, {
-            assignments: nextAssignments,
-            availableStock: (Number(currentAsset.availableStock) || 0) + qtyToReturn,
-            issuedCount: (Number(currentAsset.issuedCount) || 0) - qtyToReturn,
-            history: [
-              ...existingHistory,
-              {
-                action: 'returned',
-                employeeId: empId,
-                employeeName: asset.employeeName || employee.fullName || '',
-                quantity: qtyToReturn,
-                date: tsNow,
-                condition: asset.condition || 'Good',
-                notes: 'Auto-returned on employee deactivation',
-                performedBy: currentUser.email || '',
-              },
-            ],
-          });
-        }
-      }
-
-      // Deactivate employee
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
-        status: 'Inactive',
-        updatedAt: serverTimestamp(),
-      });
-      setEmployee((prev) => (prev ? { ...prev, status: 'Inactive' } : null));
-      setShowAssetReturnWarning(false);
-      setPendingReturnAssets([]);
-      success(`${pendingReturnAssets.length} asset(s) returned and employee deactivated`);
-    } catch (err) {
-      showError(`Error returning assets: ${err?.message || 'Unknown error'}`);
-    }
-    setSaving(false);
-  };
-
   const handlePrintProfile = () => {
     if (!employee) return;
     const e = escapeHtml;
@@ -2551,8 +2655,8 @@ export default function EmployeeProfile() {
     const aadhaarDisp = employee.aadhaarNumber ? e(`XXXX XXXX ${String(employee.aadhaarNumber).slice(-4)}`) : '—';
     const pfOn = employee.pfApplicable ?? !!String(employee.pfNumber || '').trim();
     const esicOn = employee.esicApplicable ?? !!String(employee.esicNumber || '').trim();
-    const pfPrint = pfOn ? e(employee.pfNumber || 'Applicable') : 'Not applicable';
-    const esicPrint = esicOn ? e(employee.esicNumber || 'Applicable') : 'Not applicable';
+    const pfPrint = `${employee.pfApplicable ? 'Yes' : 'No'}${employee.pfNumber ? ` · ${e(employee.pfNumber)}` : ''}`;
+    const esicPrint = `${employee.esicApplicable ? 'Yes' : 'No'}${employee.esicNumber ? ` · ${e(employee.esicNumber)}` : ''}`;
     const maritalPrint = e(employee.maritalStatus || '—');
     const weddingDatePrint =
       employee.maritalStatus === 'Married' && employee.marriageDate
@@ -2652,6 +2756,19 @@ export default function EmployeeProfile() {
     const statusClass =
       status === 'Active' ? 'print-badge-green' : status === 'Inactive' ? 'print-badge-red' : 'print-badge-amber';
 
+    const noticePrint =
+      status === 'Notice Period' && employee.offboarding
+        ? `<div class="print-section">
+        <div class="print-section-title">Notice period</div>
+        <div class="print-grid-2">
+          <div><div class="print-field-label">Notice (days)</div><div class="print-field-value">${e(String(employee.offboarding.noticePeriodDays ?? '—'))}</div></div>
+          <div><div class="print-field-label">Expected last day</div><div class="print-field-value">${e(toDisplayDate(employee.offboarding.expectedLastDay) || '—')}</div></div>
+          <div><div class="print-field-label">Resignation date</div><div class="print-field-value">${e(toDisplayDate(employee.offboarding.resignationDate) || '—')}</div></div>
+          <div><div class="print-field-label">Reason</div><div class="print-field-value">${e(employee.offboarding.reason || '—')}</div></div>
+        </div>
+      </div>`
+        : '';
+
     const content = `
       <div class="print-highlight-card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
         <div>
@@ -2662,6 +2779,8 @@ export default function EmployeeProfile() {
         </div>
         <span class="print-badge ${statusClass}">${e(status)}</span>
       </div>
+
+      ${noticePrint}
 
       <div class="print-section">
         <div class="print-section-title">Personal information</div>
@@ -2677,7 +2796,7 @@ export default function EmployeeProfile() {
           <div><div class="print-field-label">Marital status</div><div class="print-field-value">${maritalPrint}</div></div>
           ${
             weddingDatePrint
-              ? `<div><div class="print-field-label">Wedding date</div><div class="print-field-value">${weddingDatePrint}</div></div>`
+              ? `<div><div class="print-field-label">Marriage date</div><div class="print-field-value">${weddingDatePrint}</div></div>`
               : ''
           }
           <div><div class="print-field-label">Disability</div><div class="print-field-value">${e(employee.disability || '—')}</div></div>
@@ -2850,17 +2969,12 @@ export default function EmployeeProfile() {
               </svg>
               Print
             </button>
-            {canEditEmployees && (employee.status || 'Active') === 'Active' && (
-              <button
-                type="button"
-                onClick={handleDeactivate}
-                className="rounded-lg min-h-[44px] px-4 inline-flex items-center justify-center border border-red-300 text-red-600 hover:bg-red-50 active:bg-red-100 text-sm font-medium"
-              >
-                Deactivate
-              </button>
-            )}
           </div>
         </div>
+        <p className="text-xs text-slate-500 mt-3 max-w-xl">
+          Employees can only become Inactive by completing the Offboarding process (exit tasks). There is no direct
+          deactivate action.
+        </p>
       </div>
 
       <div className="flex overflow-x-auto scrollbar-none border-b border-gray-100 mb-6 -mx-4 px-4 lg:mx-0 lg:px-0">
@@ -3506,40 +3620,52 @@ export default function EmployeeProfile() {
       )}
 
       {tab === 'timeline' && (
-        <div className="space-y-0">
-          {timelineEvents.map((event, index) => (
-            <div key={`${event.type}-${index}`} className="flex gap-4 pb-6 relative">
-              {index < timelineEvents.length - 1 && (
-                <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-gray-100" aria-hidden />
-              )}
-              <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center text-base flex-shrink-0 z-10 ${
-                  event.color === 'green'
-                    ? 'bg-green-100'
-                    : event.color === 'red'
-                      ? 'bg-red-100'
-                      : event.color === 'amber'
-                        ? 'bg-amber-100'
-                        : event.color === 'purple'
-                          ? 'bg-purple-100'
-                          : 'bg-[#C5E8E8]'
-                }`}
-              >
-                {event.icon}
-              </div>
-              <div className="flex-1 pt-1.5 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-gray-800">{event.title}</p>
-                  <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
-                    {event.date instanceof Date && !Number.isNaN(event.date.getTime()) ? toDisplayDate(event.date) : '—'}
-                  </span>
-                </div>
-                {event.description && <p className="text-xs text-gray-500 mt-0.5">{event.description}</p>}
+        <div>
+          {timelineEvents.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <p className="text-4xl mb-3">📋</p>
+              <p className="text-sm">No timeline events yet</p>
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-100" aria-hidden />
+              <div className="space-y-3">
+                {timelineEvents.map((event) => {
+                  const colors = TIMELINE_COLORS[event.color] || TIMELINE_COLORS.gray;
+                  return (
+                    <div key={event.id} className="relative flex gap-4">
+                      <div
+                        className={`relative z-10 w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-sm ${colors.bg} border-2 ${colors.border}`}
+                      >
+                        <span className="text-base leading-none">{event.icon}</span>
+                      </div>
+                      <div className={`flex-1 p-3 rounded-xl border mb-1 ${colors.bg} ${colors.border}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-800">{event.title}</p>
+                            {event.description ? (
+                              <p className="text-xs text-gray-500 mt-0.5 break-words">{event.description}</p>
+                            ) : null}
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-xs text-gray-400">
+                              {event.date instanceof Date && !Number.isNaN(event.date.getTime())
+                                ? toDisplayDate(event.date)
+                                : '—'}
+                            </p>
+                            {event.by ? (
+                              <p className="text-xs text-gray-300 mt-0.5">
+                                by {(event.by || '').split('@')[0]}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          ))}
-          {timelineEvents.length === 0 && (
-            <p className="text-center py-8 text-gray-400 text-sm">No activity recorded yet</p>
           )}
         </div>
       )}
@@ -4949,40 +5075,6 @@ export default function EmployeeProfile() {
         </div>
       )}
 
-      {deactivateConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6">
-            <h3 className="text-lg font-semibold text-slate-800 mb-2">Deactivate {employee?.fullName}?</h3>
-            <p className="text-sm text-slate-600 mb-4">They will be marked as Inactive.</p>
-            <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setDeactivateConfirm(false)} className="text-slate-500 text-sm">Cancel</button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setSaving(true);
-                  try {
-                    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
-                      status: 'Inactive',
-                      updatedAt: serverTimestamp(),
-                    });
-                    setEmployee((prev) => (prev ? { ...prev, status: 'Inactive' } : null));
-                    setDeactivateConfirm(false);
-                    success('Employee deactivated');
-                  } catch {
-                    showError('Failed to deactivate');
-                  }
-                  setSaving(false);
-                }}
-                disabled={saving}
-                className="rounded-lg bg-red-600 text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
-              >
-                Deactivate
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showAssignAssetModal && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
@@ -5622,46 +5714,6 @@ export default function EmployeeProfile() {
         </div>
       )}
 
-      {deactivateChoiceOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
-            <h3 className="font-semibold text-gray-900 mb-1">Use Offboarding instead?</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              This employee does not have an active exit on file. Open the Offboarding tab to record a resignation and run notice period / exit tasks, or deactivate directly if you must.
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setDeactivateChoiceOpen(false);
-                  setTab('offboarding');
-                }}
-                className="flex-1 py-2 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600"
-              >
-                Open Offboarding
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setDeactivateChoiceOpen(false);
-                  await proceedDeactivateDirectly();
-                }}
-                className="flex-1 py-2 border rounded-xl text-sm text-gray-700 hover:bg-gray-50"
-              >
-                Deactivate Directly
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => setDeactivateChoiceOpen(false)}
-              className="w-full mt-3 text-sm text-gray-500 hover:text-gray-700"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       {showResignationModal && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
@@ -5902,84 +5954,6 @@ export default function EmployeeProfile() {
         </div>
       )}
 
-      {showAssetReturnWarning && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-xl">
-                ⚠️
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Pending Asset Returns</h3>
-                <p className="text-sm text-gray-500">
-                  {employee.fullName} has {pendingReturnAssets.length} unreturned asset(s)
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-amber-50 rounded-xl p-3 mb-4 space-y-2">
-              {pendingReturnAssets.map((asset) => (
-                <div
-                  key={asset.kind === 'consumable' ? `${asset.docId}_${asset.employeeName}_${asset.issueDate?.seconds || 0}` : asset.docId}
-                  className="flex items-center gap-3 bg-white rounded-lg p-2.5 border border-amber-100"
-                >
-                  <span className="text-base">
-                    {getAssetIcon(asset.type)}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800">
-                      {asset.name}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {asset.assetId} ·{' '}
-                      {asset.kind === 'consumable' ? `Qty: ${asset.quantity} · ` : ''}
-                      Issued: {asset.issueDate ? toDisplayDate(asset.issueDate) : '—'}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <p className="text-xs text-gray-500 mb-4 bg-gray-50 rounded-lg p-3">
-              &quot;Return All &amp; Deactivate&quot; will mark all assets as returned today and deactivate the
-              employee.
-            </p>
-
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={handleReturnAllAndDeactivate}
-                className="w-full py-2.5 bg-amber-500 text-white rounded-xl font-medium text-sm hover:bg-amber-600"
-                disabled={saving}
-              >
-                Return All &amp; Deactivate
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAssetReturnWarning(false);
-                  setDeactivateConfirm(true);
-                }}
-                className="w-full py-2.5 border-2 border-red-200 text-red-600 rounded-xl font-medium text-sm hover:bg-red-50"
-                disabled={saving}
-              >
-                Deactivate Anyway
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAssetReturnWarning(false);
-                  setPendingReturnAssets([]);
-                }}
-                className="w-full py-2 text-gray-500 text-sm hover:text-gray-700"
-                disabled={saving}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

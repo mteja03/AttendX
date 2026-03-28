@@ -37,6 +37,22 @@ const PAGE_SIZE = PLATFORM_CONFIG.EMPLOYEES_PAGE_SIZE;
 const VISIBLE_ROWS = 20;
 const ROW_HEIGHT = 56;
 
+function noticePeriodDaysRemaining(emp) {
+  if ((emp.status || '') !== 'Notice Period') return '';
+  const end = toJSDate(emp.offboarding?.expectedLastDay);
+  if (!end || Number.isNaN(end.getTime())) return '';
+  const diff = Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  return String(Math.max(0, diff));
+}
+
+function customBenefitsExportText(emp) {
+  const list = Array.isArray(emp.customBenefits) ? emp.customBenefits : [];
+  return list
+    .map((b) => [b?.name, b?.value, b?.notes].filter(Boolean).join(' · '))
+    .filter(Boolean)
+    .join('; ');
+}
+
 // Add Employee form is intentionally flexible:
 // Only blocking validations:
 // - Emp ID cannot be empty and must not contain spaces
@@ -237,6 +253,7 @@ export default function Employees() {
   const [filterDept, setFilterDept] = useState('All Departments');
   const [filterDesignation, setFilterDesignation] = useState('All Designations');
   const [filterBranch, setFilterBranch] = useState('All Branches');
+  const [filterLocation, setFilterLocation] = useState('All Locations');
   const [filterEmploymentType, setFilterEmploymentType] = useState('All Types');
   const [filterCategory, setFilterCategory] = useState('All Categories');
   const [filterJoiningYear, setFilterJoiningYear] = useState('All Years');
@@ -388,6 +405,9 @@ export default function Employees() {
         if (filterBranch !== 'All Branches') {
           constraints.push(where('branch', '==', filterBranch.trim()));
         }
+        if (filterLocation !== 'All Locations') {
+          constraints.push(where('location', '==', filterLocation.trim()));
+        }
         constraints.push(orderBy('fullName', 'asc'));
         constraints.push(limit(PAGE_SIZE));
         if (!reset && lastDocRef.current) {
@@ -417,7 +437,7 @@ export default function Employees() {
         setLoadingMore(false);
       }
     },
-    [companyId, collRef, tab, filterDept, filterBranch, fetchAllEmployeesFallback, showError],
+    [companyId, collRef, tab, filterDept, filterBranch, filterLocation, fetchAllEmployeesFallback, showError],
   );
 
   const searchAllEmployees = useCallback(
@@ -486,7 +506,7 @@ export default function Employees() {
     fetchEmployees(true);
     fetchTotalCount();
     fetchStatsCounts();
-  }, [companyId, tab, filterDept, filterBranch, fetchEmployees, fetchTotalCount, fetchStatsCounts]);
+  }, [companyId, tab, filterDept, filterBranch, filterLocation, fetchEmployees, fetchTotalCount, fetchStatsCounts]);
 
   /** Suggested next Emp ID from currently loaded employees (server still validates uniqueness). */
   const nextEmpId = useMemo(() => {
@@ -522,32 +542,36 @@ export default function Employees() {
   const branches = company?.branches?.length ? company.branches : DEFAULT_BRANCHES;
   const qualifications = company?.qualifications?.length ? company.qualifications : DEFAULT_QUALIFICATIONS;
   const categories = company?.categories?.length ? company.categories : DEFAULT_CATEGORIES;
+  const locationFilterOptions = useMemo(() => company?.locations || [], [company?.locations]);
 
   const activeFilterCount = useMemo(() => {
     let n = 0;
     if (filterDept !== 'All Departments') n++;
     if (filterDesignation !== 'All Designations') n++;
     if (filterBranch !== 'All Branches') n++;
+    if (filterLocation !== 'All Locations') n++;
     if (filterEmploymentType !== 'All Types') n++;
     if (filterCategory !== 'All Categories') n++;
     if (filterJoiningYear !== 'All Years') n++;
     return n;
-  }, [filterDept, filterDesignation, filterBranch, filterEmploymentType, filterCategory, filterJoiningYear]);
+  }, [filterDept, filterDesignation, filterBranch, filterLocation, filterEmploymentType, filterCategory, filterJoiningYear]);
 
   const activeFilters = useMemo(() => {
     const list = [];
     if (filterDept !== 'All Departments') list.push({ key: 'department', label: 'Department', value: filterDept });
     if (filterBranch !== 'All Branches') list.push({ key: 'branch', label: 'Branch', value: filterBranch });
+    if (filterLocation !== 'All Locations') list.push({ key: 'location', label: 'Location', value: filterLocation });
     if (filterDesignation !== 'All Designations') list.push({ key: 'designation', label: 'Designation', value: filterDesignation });
     if (filterEmploymentType !== 'All Types') list.push({ key: 'employmentType', label: 'Type', value: filterEmploymentType });
     if (filterCategory !== 'All Categories') list.push({ key: 'category', label: 'Category', value: filterCategory });
     if (filterJoiningYear !== 'All Years') list.push({ key: 'joiningYear', label: 'Year', value: filterJoiningYear });
     return list;
-  }, [filterDept, filterBranch, filterDesignation, filterEmploymentType, filterCategory, filterJoiningYear]);
+  }, [filterDept, filterBranch, filterLocation, filterDesignation, filterEmploymentType, filterCategory, filterJoiningYear]);
 
   const clearFilter = (key) => {
     if (key === 'department') setFilterDept('All Departments');
     if (key === 'branch') setFilterBranch('All Branches');
+    if (key === 'location') setFilterLocation('All Locations');
     if (key === 'designation') setFilterDesignation('All Designations');
     if (key === 'employmentType') setFilterEmploymentType('All Types');
     if (key === 'category') setFilterCategory('All Categories');
@@ -558,6 +582,7 @@ export default function Employees() {
     setFilterDept('All Departments');
     setFilterDesignation('All Designations');
     setFilterBranch('All Branches');
+    setFilterLocation('All Locations');
     setFilterEmploymentType('All Types');
     setFilterCategory('All Categories');
     setFilterJoiningYear('All Years');
@@ -586,6 +611,7 @@ export default function Employees() {
     if (filterDept !== 'All Departments') list = list.filter((e) => (e.department || '').trim() === filterDept);
     if (filterDesignation !== 'All Designations') list = list.filter((e) => (e.designation || '').trim() === filterDesignation);
     if (filterBranch !== 'All Branches') list = list.filter((e) => (e.branch || '').trim() === filterBranch);
+    if (filterLocation !== 'All Locations') list = list.filter((e) => (e.location || '').trim() === filterLocation);
     if (filterEmploymentType !== 'All Types') list = list.filter((e) => (e.employmentType || '').trim() === filterEmploymentType);
     if (filterCategory !== 'All Categories') list = list.filter((e) => (e.category || '').trim() === filterCategory);
     if (filterJoiningYear !== 'All Years') {
@@ -605,6 +631,7 @@ export default function Employees() {
     filterDept,
     filterDesignation,
     filterBranch,
+    filterLocation,
     filterEmploymentType,
     filterCategory,
     filterJoiningYear,
@@ -771,17 +798,6 @@ export default function Employees() {
     setSaving(false);
   };
 
-  const handleDeactivate = async (emp) => {
-    try {
-      await updateDoc(doc(db, 'companies', companyId, 'employees', emp.id), { status: 'Inactive' });
-      setEmployees((prev) => prev.map((e) => (e.id === emp.id ? { ...e, status: 'Inactive' } : e)));
-      fetchStatsCounts();
-      success('Employee deactivated');
-    } catch {
-      showError('Failed to deactivate');
-    }
-  };
-
   const companyName = (company?.name || 'Company').replace(/\s+/g, '');
 
   const downloadRows = (emps) =>
@@ -790,16 +806,29 @@ export default function Employees() {
       'Full Name': emp.fullName || '',
       Email: emp.email || '',
       Phone: emp.phone || '',
+      'Alternative Mobile': emp.alternativeMobile || '',
+      'Blood Group': emp.bloodGroup || '',
+      'Marital Status': emp.maritalStatus || '',
+      'Marriage Date': toDisplayDate(emp.marriageDate),
+      Disability: emp.disability || '',
       Department: emp.department || '',
       Designation: emp.designation || '',
       Branch: emp.branch || '',
+      Location: emp.location || '',
       'Employment Type': emp.employmentType || '',
       Category: emp.category || '',
       'Joining Date': toDisplayDate(emp.joiningDate),
-      CTC: emp.ctcPerAnnum ?? emp.ctc ?? '',
+      'Annual Gross Salary': emp.ctcPerAnnum ?? emp.ctc ?? '',
+      'Incentive (Monthly)': emp.incentive ?? '',
       'Basic Salary': emp.basicSalary ?? '',
+      'PF Applicable': emp.pfApplicable ? 'Yes' : 'No',
       'PF Number': emp.pfNumber || '',
+      'ESIC Applicable': emp.esicApplicable ? 'Yes' : 'No',
       'ESIC Number': emp.esicNumber || '',
+      'Custom Benefits': customBenefitsExportText(emp),
+      'Previous Company': emp.prevCompany || '',
+      'Previous Designation': emp.prevDesignation || '',
+      'Notice Period Days': noticePeriodDaysRemaining(emp),
       'PAN Number': emp.panNumber || '',
       Status: emp.status || '',
     }));
@@ -988,6 +1017,17 @@ export default function Employees() {
                 </select>
               </div>
               <div>
+                <label className="block text-xs text-slate-500 mb-0.5">Location</label>
+                <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
+                  <option value="All Locations">All Locations</option>
+                  {locationFilterOptions.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="block text-xs text-slate-500 mb-0.5">Employment Type</label>
                 <select value={filterEmploymentType} onChange={(e) => setFilterEmploymentType(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
                   <option>All Types</option>
@@ -1063,6 +1103,8 @@ export default function Employees() {
                 <th className="px-4 py-3 text-left font-medium">Designation</th>
                 <th className="px-4 py-3 text-left font-medium">Phone</th>
                 <th className="px-4 py-3 text-left font-medium">Joining Date</th>
+                <th className="px-4 py-3 text-left font-medium">Branch</th>
+                <th className="px-4 py-3 text-left font-medium">Location</th>
                 <th className="px-4 py-3 text-left font-medium">Status</th>
                 <th className="px-4 py-3 text-left font-medium">Actions</th>
               </tr>
@@ -1072,7 +1114,7 @@ export default function Employees() {
                 <>
                   {visibleWindow.topSpacer > 0 && (
                     <tr aria-hidden className="pointer-events-none">
-                      <td colSpan={8} style={{ height: visibleWindow.topSpacer, padding: 0, border: 'none' }} />
+                      <td colSpan={10} style={{ height: visibleWindow.topSpacer, padding: 0, border: 'none' }} />
                     </tr>
                   )}
                   {visibleWindow.items.map((emp) => (
@@ -1101,6 +1143,8 @@ export default function Employees() {
                       <td className="px-4 py-3 text-slate-700">{emp.designation || '—'}</td>
                       <td className="px-4 py-3 text-slate-700">{emp.phone || '—'}</td>
                       <td className="px-4 py-3 text-slate-700">{toDisplayDate(emp.joiningDate)}</td>
+                      <td className="px-4 py-3 text-slate-700">{emp.branch || '—'}</td>
+                      <td className="px-4 py-3 text-slate-700">{emp.location || '—'}</td>
                       <td className="px-4 py-3">
                         <span
                           className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${employeeStatusBadgeClass(emp.status)}`}
@@ -1123,21 +1167,12 @@ export default function Employees() {
                         <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#1B6B6B] text-xs font-medium hover:underline">
                           {canEditEmployees ? 'View Profile' : 'View'}
                         </button>
-                        {canEditEmployees && (emp.status || 'Active') === 'Active' && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeactivate(emp)}
-                            className="text-amber-600 text-xs font-medium hover:underline"
-                          >
-                            Deactivate
-                          </button>
-                        )}
                       </td>
                     </tr>
                   ))}
                   {visibleWindow.bottomSpacer > 0 && (
                     <tr aria-hidden className="pointer-events-none">
-                      <td colSpan={8} style={{ height: visibleWindow.bottomSpacer, padding: 0, border: 'none' }} />
+                      <td colSpan={10} style={{ height: visibleWindow.bottomSpacer, padding: 0, border: 'none' }} />
                     </tr>
                   )}
                 </>
@@ -1168,6 +1203,8 @@ export default function Employees() {
                     <td className="px-4 py-3 text-slate-700">{emp.designation || '—'}</td>
                     <td className="px-4 py-3 text-slate-700">{emp.phone || '—'}</td>
                     <td className="px-4 py-3 text-slate-700">{toDisplayDate(emp.joiningDate)}</td>
+                    <td className="px-4 py-3 text-slate-700">{emp.branch || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{emp.location || '—'}</td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${employeeStatusBadgeClass(emp.status)}`}
@@ -1190,22 +1227,13 @@ export default function Employees() {
                       <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#1B6B6B] text-xs font-medium hover:underline">
                         {canEditEmployees ? 'View Profile' : 'View'}
                       </button>
-                      {canEditEmployees && (emp.status || 'Active') === 'Active' && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeactivate(emp)}
-                          className="text-amber-600 text-xs font-medium hover:underline"
-                        >
-                          Deactivate
-                        </button>
-                      )}
                     </td>
                   </tr>
                 ))
               )}
               {filtered.length === 0 && (
                 <tr>
-                  <td className="px-4 py-8 text-center text-slate-500" colSpan={8}>
+                  <td className="px-4 py-8 text-center text-slate-500" colSpan={10}>
                     No employees found.
                   </td>
                 </tr>
@@ -1263,6 +1291,10 @@ export default function Employees() {
                     <span className="text-gray-400">Branch</span>
                     <p className="text-gray-700 font-medium truncate">{emp.branch || '—'}</p>
                   </div>
+                  <div>
+                    <span className="text-gray-400">Location</span>
+                    <p className="text-gray-700 font-medium truncate">{emp.location || '—'}</p>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2 mt-3" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
@@ -1273,15 +1305,6 @@ export default function Employees() {
                   >
                     {canEditEmployees ? 'View Profile' : 'View'}
                   </button>
-                  {canEditEmployees && (emp.status || 'Active') === 'Active' && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeactivate(emp)}
-                      className="min-h-[44px] px-3 rounded-xl text-xs font-medium text-amber-700 border border-amber-200 hover:bg-amber-50 active:bg-amber-100"
-                    >
-                      Deactivate
-                    </button>
-                  )}
                 </div>
               </div>
             ))}

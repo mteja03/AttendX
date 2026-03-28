@@ -153,6 +153,13 @@ function tenureLabel(joiningDate) {
   return `${years.toFixed(1)} yr`;
 }
 
+function getDaysRemainingLastDay(lastDay) {
+  const end = toJSDate(lastDay);
+  if (!end || Number.isNaN(end.getTime())) return 0;
+  const diff = Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, diff);
+}
+
 function downloadReport(companyName, reportName, data, columns) {
   const rows = data.map((item) => {
     const row = {};
@@ -403,6 +410,34 @@ export default function Reports() {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
   }, [employees]);
+
+  const locationData = useMemo(() => {
+    const counts = {};
+    employees.forEach((emp) => {
+      if (emp.location) {
+        counts[emp.location] = (counts[emp.location] || 0) + 1;
+      }
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [employees]);
+
+  const inNoticePeriodByStatus = useMemo(
+    () =>
+      employees
+        .filter((e) => e.status === 'Notice Period')
+        .map((e) => ({
+          e,
+          daysRemaining: getDaysRemainingLastDay(e.offboarding?.expectedLastDay),
+        }))
+        .sort((a, b) => {
+          const ta = toJSDate(a.e.offboarding?.expectedLastDay)?.getTime() || 0;
+          const tb = toJSDate(b.e.offboarding?.expectedLastDay)?.getTime() || 0;
+          return ta - tb;
+        }),
+    [employees],
+  );
 
   const deptOptions = useMemo(() => {
     const s = new Set(employees.map((e) => e.department).filter(Boolean));
@@ -804,6 +839,7 @@ export default function Reports() {
       Department: emp.department || '',
       Designation: emp.designation || '',
       Branch: emp.branch || '',
+      Location: emp.location || '',
       'Employment Type': emp.employmentType || '',
       Category: emp.category || '',
       'Joining Date': toDisplayDate(emp.joiningDate),
@@ -826,6 +862,7 @@ export default function Reports() {
       Department: emp.department || '',
       Designation: emp.designation || '',
       Branch: emp.branch || '',
+      Location: emp.location || '',
       'Employment Type': emp.employmentType || '',
       Category: emp.category || '',
       'Joining Date': toDisplayDate(emp.joiningDate),
@@ -880,6 +917,21 @@ export default function Reports() {
                 .join('')}
               </tbody>
             </table>
+          </div>
+          <div class="print-section">
+            <div class="print-section-title">Location summary</div>
+            <table class="print-table">
+              <thead><tr><th>Location</th><th>Employees</th><th>% of total</th></tr></thead>
+              <tbody>
+              ${locationData
+                .map(
+                  (d) =>
+                    `<tr><td>${esc(d.name)}</td><td>${d.count}</td><td>${((d.count / total) * 100).toFixed(0)}%</td></tr>`,
+                )
+                .join('')}
+              ${locationData.length === 0 ? '<tr><td colspan="3">No location data</td></tr>' : ''}
+              </tbody>
+            </table>
           </div>`;
         break;
       case 'employee':
@@ -888,7 +940,7 @@ export default function Reports() {
             <div class="print-section-title">Employees (${filteredEmployeesForReport.length} shown)</div>
             <table class="print-table">
               <thead><tr>
-                <th>Emp ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Branch</th>
+                <th>Emp ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Branch</th><th>Location</th>
                 <th>Employment type</th><th>Category</th><th>Joining</th><th>Tenure</th><th>Status</th><th>Onboarding</th><th>Docs %</th>
               </tr></thead>
               <tbody>
@@ -901,6 +953,7 @@ export default function Reports() {
                         <td>${esc(emp.department || '—')}</td>
                         <td>${esc(emp.designation || '—')}</td>
                         <td>${esc(emp.branch || '—')}</td>
+                        <td>${esc(emp.location || '—')}</td>
                         <td>${esc(emp.employmentType || '—')}</td>
                         <td>${esc(emp.category || '—')}</td>
                         <td>${esc(toDisplayDate(emp.joiningDate) || '—')}</td>
@@ -1030,7 +1083,28 @@ export default function Reports() {
       case 'offboarding':
         content = `
           <div class="print-section">
-            <div class="print-section-title">Notice period</div>
+            <div class="print-section-title">Notice period (status: Notice Period)</div>
+            <table class="print-table">
+              <thead><tr><th>Employee</th><th>Resignation date</th><th>Last day</th><th>Days remaining</th><th>Reason</th></tr></thead>
+              <tbody>
+              ${inNoticePeriodByStatus
+                .map(
+                  ({ e, daysRemaining }) =>
+                    `<tr>
+                      <td>${esc(e.fullName || '—')}</td>
+                      <td>${esc(toDisplayDate(e.offboarding?.recordedAt) || toDisplayDate(e.offboarding?.resignationDate) || '—')}</td>
+                      <td>${esc(toDisplayDate(e.offboarding?.expectedLastDay) || '—')}</td>
+                      <td>${daysRemaining}</td>
+                      <td>${esc(e.offboarding?.reason || e.offboarding?.exitReason || '—')}</td>
+                    </tr>`,
+                )
+                .join('')}
+              ${inNoticePeriodByStatus.length === 0 ? '<tr><td colspan="5">No employees in notice period</td></tr>' : ''}
+              </tbody>
+            </table>
+          </div>
+          <div class="print-section">
+            <div class="print-section-title">Notice period (offboarding phase)</div>
             <table class="print-table">
               <thead><tr><th>Name</th><th>Department</th><th>Resigned</th><th>Expected last day</th><th>Reason</th></tr></thead>
               <tbody>
@@ -1285,6 +1359,21 @@ export default function Reports() {
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
+            <ChartCard title="Employees by Location">
+              {locationData.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-10">No employees have a location set.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={locationData} margin={{ top: 24, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-25} textAnchor="end" height={60} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#2BB8B0" radius={[4, 4, 0, 0]} label={{ position: 'top', fontSize: 11 }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </ChartCard>
           </div>
 
           <div className="bg-white border border-gray-100 rounded-2xl p-5 mt-4">
@@ -1426,7 +1515,7 @@ export default function Reports() {
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50 text-gray-600">
                 <tr>
-                  {['Emp ID', 'Name', 'Department', 'Designation', 'Branch', 'Employment Type', 'Category', 'Joining', 'Tenure', 'Status', 'Onboarding', 'Docs %'].map((h) => (
+                  {['Emp ID', 'Name', 'Department', 'Designation', 'Branch', 'Location', 'Employment Type', 'Category', 'Joining', 'Tenure', 'Status', 'Onboarding', 'Docs %'].map((h) => (
                     <th key={h} className="text-left px-3 py-2 font-medium whitespace-nowrap">
                       {h}
                     </th>
@@ -1445,6 +1534,7 @@ export default function Reports() {
                     <td className="px-3 py-2">{emp.department || '—'}</td>
                     <td className="px-3 py-2">{emp.designation || '—'}</td>
                     <td className="px-3 py-2">{emp.branch || '—'}</td>
+                    <td className="px-3 py-2">{emp.location || '—'}</td>
                     <td className="px-3 py-2">{emp.employmentType || '—'}</td>
                     <td className="px-3 py-2">{emp.category || '—'}</td>
                     <td className="px-3 py-2">{toDisplayDate(emp.joiningDate)}</td>
@@ -1924,7 +2014,42 @@ export default function Reports() {
               </ResponsiveContainer>
             </ChartCard>
           </div>
-          <ChartCard title="Notice period">
+          <ChartCard title="Notice period (employee status)">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-600 border-b">
+                    <th className="py-2">Employee</th>
+                    <th className="py-2">Resignation date</th>
+                    <th className="py-2">Last day</th>
+                    <th className="py-2">Days remaining</th>
+                    <th className="py-2">Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inNoticePeriodByStatus.map(({ e, daysRemaining }) => (
+                    <tr key={e.id} className="border-t border-gray-100">
+                      <td className="py-2">
+                        <Link to={`/company/${companyId}/employees/${e.id}?tab=offboarding`} className="text-[#1B6B6B] hover:underline">
+                          {e.fullName}
+                        </Link>
+                      </td>
+                      <td className="py-2">
+                        {toDisplayDate(e.offboarding?.recordedAt) || toDisplayDate(e.offboarding?.resignationDate) || '—'}
+                      </td>
+                      <td className="py-2">{toDisplayDate(e.offboarding?.expectedLastDay)}</td>
+                      <td className="py-2">{daysRemaining}</td>
+                      <td className="py-2">{e.offboarding?.reason || e.offboarding?.exitReason || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {inNoticePeriodByStatus.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-6">No employees with status &quot;Notice Period&quot;.</p>
+              )}
+            </div>
+          </ChartCard>
+          <ChartCard title="Notice period (offboarding phase)">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>

@@ -120,6 +120,7 @@ export default function Calendar() {
     });
 
     employees.forEach((emp) => {
+      if ((emp.status || '') === 'Inactive') return;
       if (!emp.dateOfBirth) return;
       const dob = toJSDate(emp.dateOfBirth);
       if (!dob) return;
@@ -135,6 +136,7 @@ export default function Calendar() {
     });
 
     employees.forEach((emp) => {
+      if ((emp.status || '') === 'Inactive') return;
       if (!emp.joiningDate) return;
       const joined = toJSDate(emp.joiningDate);
       if (!joined) return;
