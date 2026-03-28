@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { collection, onSnapshot } from 'firebase/firestore';
-import html2canvas from 'html2canvas';
 import { db } from '../firebase/config';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
@@ -121,8 +120,6 @@ export default function OrgChart() {
     };
   }, [activeEmployees, roots]);
 
-  const companyName = (company?.name || 'org-chart').replace(/\s+/g, '-');
-
   const handleDownloadPNG = useCallback(async () => {
     const chartElement = document.getElementById('org-chart-container');
     if (!chartElement) return;
@@ -130,36 +127,49 @@ export default function OrgChart() {
     try {
       setDownloading(true);
 
-      const originalTransform = chartElement.style.transform;
-      chartElement.style.transform = 'scale(1)';
+      const { default: html2canvas } = await import('html2canvas');
+
+      const scrollWidth = chartElement.scrollWidth;
+      const scrollHeight = chartElement.scrollHeight;
 
       const canvas = await html2canvas(chartElement, {
         backgroundColor: '#F8FAFC',
         scale: 2,
         useCORS: true,
         allowTaint: true,
+        width: scrollWidth,
+        height: scrollHeight,
+        windowWidth: scrollWidth,
+        windowHeight: scrollHeight,
         scrollX: 0,
         scrollY: 0,
-        width: chartElement.scrollWidth,
-        height: chartElement.scrollHeight,
-        windowWidth: chartElement.scrollWidth,
-        windowHeight: chartElement.scrollHeight,
+        x: 0,
+        y: 0,
         logging: false,
+        onclone: (clonedDoc) => {
+          const clonedEl = clonedDoc.getElementById('org-chart-container');
+          if (clonedEl) {
+            clonedEl.style.transform = 'scale(1)';
+            clonedEl.style.transformOrigin = 'top left';
+            clonedEl.style.overflow = 'visible';
+            clonedEl.style.width = `${scrollWidth}px`;
+            clonedEl.style.height = `${scrollHeight}px`;
+            clonedEl.style.padding = '60px 40px';
+          }
+        },
       });
 
-      chartElement.style.transform = originalTransform;
-
+      const fileStem = (company?.name || 'Company').replace(/\s+/g, '-');
       const link = document.createElement('a');
-      link.download = `${companyName}-org-chart.png`;
+      link.download = `${fileStem}-org-chart.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
     } catch (error) {
-      console.error('PNG download error:', error);
       showErrorToast(`Download failed: ${error?.message || 'Unknown error'}`);
     } finally {
       setDownloading(false);
     }
-  }, [companyName, showErrorToast]);
+  }, [company?.name, showErrorToast]);
 
   if (!companyId) return null;
 
@@ -229,25 +239,26 @@ export default function OrgChart() {
           </button>
         </div>
       ) : (
-        <div className="overflow-auto rounded-2xl border border-slate-100 min-h-[320px] bg-slate-50">
+        <div className="overflow-auto rounded-2xl border border-slate-100 min-h-96 bg-slate-50">
           <div
             id="org-chart-container"
+            className="overflow-auto bg-[#F8FAFC] min-h-96"
             style={{
+              padding: '60px 40px',
               transform: `scale(${zoom})`,
               transformOrigin: 'top center',
               transition: 'transform 0.2s',
-              padding: '40px',
               minWidth: '100%',
             }}
           >
             <div className="flex flex-wrap gap-12 justify-center items-start">
-            {roots.map((root) => (
-              <OrgNode key={root.id} node={root} search={search} companyId={companyId} navigate={navigate} />
-            ))}
-          </div>
-          {roots.length === 0 && (
-            <p className="text-center text-slate-500 text-sm py-8">No employees to display.</p>
-          )}
+              {roots.map((root) => (
+                <OrgNode key={root.id} node={root} search={search} companyId={companyId} navigate={navigate} />
+              ))}
+            </div>
+            {roots.length === 0 && (
+              <p className="text-center text-slate-500 text-sm py-8">No employees to display.</p>
+            )}
           </div>
         </div>
       )}

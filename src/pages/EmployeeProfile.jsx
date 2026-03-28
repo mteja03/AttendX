@@ -929,6 +929,13 @@ export default function EmployeeProfile() {
     if (mappedTab) setTab(mappedTab);
   }, [searchParams]);
 
+  useEffect(() => {
+    if (isInactive) {
+      setCompletingTask(null);
+      setTaskNotes('');
+    }
+  }, [isInactive]);
+
   const leavePolicy = company?.leavePolicy || { cl: 12, sl: 12, el: 15 };
   const profileLeaveTypes = useMemo(() => normalizeProfileLeaveTypeList(company?.leaveTypes), [company?.leaveTypes]);
   const profilePaidLeaveTypes = useMemo(() => profileLeaveTypes.filter((lt) => lt.isPaid), [profileLeaveTypes]);
@@ -4854,6 +4861,15 @@ export default function EmployeeProfile() {
 
       {tab === 'onboarding' && (
         <div className="space-y-6">
+          {isInactive && (
+            <div className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-100 rounded-xl mb-4">
+              <span className="text-xl shrink-0">🔒</span>
+              <div>
+                <p className="text-sm font-semibold text-gray-600">Read-only — Employee is Inactive</p>
+                <p className="text-xs text-gray-400 mt-0.5">Onboarding history is preserved for records.</p>
+              </div>
+            </div>
+          )}
           <div className="bg-white border border-slate-200 rounded-2xl p-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
@@ -4890,7 +4906,7 @@ export default function EmployeeProfile() {
                 </div>
               </div>
 
-              {canStartOnboarding && (!onboarding || onboarding.status === 'not_started') && (
+              {canStartOnboarding && !isInactive && (!onboarding || onboarding.status === 'not_started') && (
                 <button
                   type="button"
                   onClick={handleStartOnboarding}
@@ -4934,25 +4950,31 @@ export default function EmployeeProfile() {
                     {g.tasks.map((task) => (
                       <div
                         key={task.id}
-                        role="button"
-                        tabIndex={0}
+                        role={!task.completed && canEditEmployees && !isInactive ? 'button' : undefined}
+                        tabIndex={!task.completed && canEditEmployees && !isInactive ? 0 : undefined}
                         onClick={() => {
-                          if (task.completed) return;
+                          if (task.completed || isInactive || !canEditEmployees) return;
                           setCompletingTask(task);
                           setTaskNotes('');
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !task.completed) {
+                          if (e.key === 'Enter' && !task.completed && !isInactive && canEditEmployees) {
                             setCompletingTask(task);
                             setTaskNotes('');
                           }
                         }}
-                        className={`flex items-start gap-3 p-3 rounded-xl border mb-2 cursor-pointer transition-all ${
+                        className={`flex items-start gap-3 p-3 rounded-xl border mb-2 transition-all ${
+                          !task.completed && canEditEmployees && !isInactive ? 'cursor-pointer' : 'cursor-default'
+                        } ${
                           task.completed
                             ? 'bg-green-50 border-green-100'
                             : isOverdue(task.dueDate)
                             ? 'bg-red-50 border-red-100'
-                            : 'bg-white border-gray-200 hover:border-[#C5E8E8] hover:bg-[#E8F5F5]'
+                            : 'bg-white border-gray-200'
+                        } ${
+                          !task.completed && canEditEmployees && !isInactive
+                            ? 'hover:border-[#C5E8E8] hover:bg-[#E8F5F5]'
+                            : ''
                         }`}
                       >
                         <div
@@ -5028,7 +5050,7 @@ export default function EmployeeProfile() {
                           )}
                         </div>
 
-                        {task.completed && (
+                        {task.completed && !isInactive && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -5053,7 +5075,7 @@ export default function EmployeeProfile() {
               <p className="text-sm text-gray-400 mb-4">
                 Start the onboarding process to track tasks for {employee.fullName}
               </p>
-              {canStartOnboarding && (
+              {canStartOnboarding && !isInactive && (
                 <button
                   type="button"
                   onClick={handleStartOnboarding}
@@ -6099,7 +6121,7 @@ export default function EmployeeProfile() {
         </div>
       )}
 
-      {completingTask && (
+      {completingTask && !isInactive && canEditEmployees && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
             <h3 className="font-medium mb-3">
