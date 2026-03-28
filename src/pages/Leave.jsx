@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   collection,
@@ -148,6 +148,9 @@ export default function Leave() {
   const [showBalance, setShowBalance] = useState(false);
   const [form, setForm] = useState({
     employeeId: '',
+    employeeName: '',
+    empId: '',
+    department: '',
     leaveType: '',
     startDate: '',
     endDate: '',
@@ -169,8 +172,11 @@ export default function Leave() {
 
   const [showDownload, setShowDownload] = useState(false);
 
+  const empDropdownRef = useRef(null);
+
   useEffect(() => {
-    const handleClick = () => {
+    const handleClick = (ev) => {
+      if (empDropdownRef.current?.contains(ev.target)) return;
       setShowEmpDropdown(false);
       setEmpSearch('');
     };
@@ -245,6 +251,27 @@ export default function Leave() {
   }, [leaveList, activeStatus, filterEmployee, filterType, filterDept, filterFrom, filterTo, employees]);
 
   const employeeMap = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
+
+  const filteredEmployeesForLeaveModal = useMemo(() => {
+    const q = empSearch.trim().toLowerCase();
+    if (!q) return employees;
+    return employees.filter(
+      (e) => e.fullName?.toLowerCase().includes(q) || (e.empId || '').toLowerCase().includes(q),
+    );
+  }, [employees, empSearch]);
+
+  const handleSelectLeaveEmployee = (emp) => {
+    setForm((prev) => ({
+      ...prev,
+      employeeId: emp.id,
+      employeeName: emp.fullName || '',
+      empId: emp.empId || '',
+      department: emp.department || '',
+    }));
+    setSelectedEmployee(emp);
+    setEmpSearch('');
+    setShowEmpDropdown(false);
+  };
 
   const days = useMemo(() => {
     if (!form.startDate || !form.endDate) return 0;
@@ -383,7 +410,16 @@ export default function Leave() {
         ...prev,
       ]);
       setShowAddModal(false);
-      setForm({ employeeId: '', leaveType: '', startDate: '', endDate: '', reason: '' });
+      setForm({
+        employeeId: '',
+        employeeName: '',
+        empId: '',
+        department: '',
+        leaveType: '',
+        startDate: '',
+        endDate: '',
+        reason: '',
+      });
       setSelectedEmployee(null);
       setEmpSearch('');
       setShowEmpDropdown(false);
@@ -398,7 +434,16 @@ export default function Leave() {
     setSelectedEmployee(null);
     setEmpSearch('');
     setShowEmpDropdown(false);
-    setForm({ employeeId: '', leaveType: leaveTypes[0]?.name || '', startDate: '', endDate: '', reason: '' });
+    setForm({
+      employeeId: '',
+      employeeName: '',
+      empId: '',
+      department: '',
+      leaveType: leaveTypes[0]?.name || '',
+      startDate: '',
+      endDate: '',
+      reason: '',
+    });
     setShowAddModal(true);
   };
 
@@ -767,92 +812,91 @@ export default function Leave() {
             <form onSubmit={handleAddLeave} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Employee</label>
-                <div className="relative" onClick={(e) => e.stopPropagation()}>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setShowEmpDropdown(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') setShowEmpDropdown(true);
-                    }}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#4ECDC4] min-h-[38px]"
-                  >
-                    {selectedEmployee ? (
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-6 h-6 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B] shrink-0">
-                          {selectedEmployee.fullName?.charAt(0)}
-                        </div>
-                        <span className="text-gray-800 text-sm truncate">{selectedEmployee.fullName}</span>
-                        <span className="text-xs text-gray-400 shrink-0">{selectedEmployee.empId}</span>
+                <div ref={empDropdownRef} className="relative" onClick={(e) => e.stopPropagation()}>
+                  {selectedEmployee ? (
+                    <div className="flex items-center gap-3 p-3 bg-[#E8F5F5] rounded-xl border border-[#4ECDC4]">
+                      <EmployeeAvatar employee={selectedEmployee} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-[#1B6B6B] truncate">{selectedEmployee.fullName}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {selectedEmployee.empId} · {selectedEmployee.department || '—'}
+                        </p>
                       </div>
-                    ) : (
-                      <span className="text-gray-400">Select employee...</span>
-                    )}
-                    <span className="text-gray-400 text-xs shrink-0">▾</span>
-                  </div>
-                  {showEmpDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-56 overflow-hidden">
-                      <div className="p-2 border-b sticky top-0 bg-white">
-                        <input
-                          autoFocus
-                          type="text"
-                          placeholder="Search by name or ID..."
-                          value={empSearch}
-                          onChange={(e) => setEmpSearch(e.target.value)}
-                          className="w-full text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#4ECDC4]"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                      <div className="overflow-y-auto max-h-44">
-                        {employees
-                          .filter((e) => {
-                            if (!empSearch) return true;
-                            const q = empSearch.toLowerCase();
-                            return (
-                              e.fullName?.toLowerCase().includes(q) || (e.empId || '').toLowerCase().includes(q)
-                            );
-                          })
-                          .map((emp) => (
-                            <div
-                              key={emp.id}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => {
-                                setSelectedEmployee(emp);
-                                setForm((p) => ({ ...p, employeeId: emp.id }));
-                                setShowEmpDropdown(false);
-                                setEmpSearch('');
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  setSelectedEmployee(emp);
-                                  setForm((p) => ({ ...p, employeeId: emp.id }));
-                                  setShowEmpDropdown(false);
-                                  setEmpSearch('');
-                                }
-                              }}
-                              className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer border-b border-gray-100 last:border-0"
-                            >
-                              <div className="w-7 h-7 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B] shrink-0">
-                                {emp.fullName?.charAt(0)}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
-                                <p className="text-xs text-gray-400">
-                                  {emp.empId} · {emp.department}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        {employees.filter((e) => {
-                          if (!empSearch) return true;
-                          const q = empSearch.toLowerCase();
-                          return e.fullName?.toLowerCase().includes(q) || (e.empId || '').toLowerCase().includes(q);
-                        }).length === 0 && (
-                          <p className="text-center py-4 text-sm text-gray-400">No employees found</p>
-                        )}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedEmployee(null);
+                          setForm((prev) => ({
+                            ...prev,
+                            employeeId: '',
+                            employeeName: '',
+                            empId: '',
+                            department: '',
+                          }));
+                        }}
+                        className="text-gray-400 hover:text-gray-600 text-sm flex-shrink-0"
+                      >
+                        ✕
+                      </button>
                     </div>
+                  ) : (
+                    <>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setShowEmpDropdown(true)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') setShowEmpDropdown(true);
+                        }}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#4ECDC4] min-h-[38px]"
+                      >
+                        <span className="text-gray-400">Select employee...</span>
+                        <span className="text-gray-400 text-xs shrink-0">▾</span>
+                      </div>
+                      {showEmpDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-56 overflow-hidden">
+                          <div className="p-2 border-b sticky top-0 bg-white">
+                            <input
+                              autoFocus
+                              type="text"
+                              placeholder="Search by name or ID..."
+                              value={empSearch}
+                              onChange={(e) => setEmpSearch(e.target.value)}
+                              className="w-full text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#4ECDC4]"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <div className="overflow-y-auto max-h-44">
+                            {filteredEmployeesForLeaveModal.map((emp) => (
+                              <div
+                                key={emp.id}
+                                role="button"
+                                tabIndex={0}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleSelectLeaveEmployee(emp);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSelectLeaveEmployee(emp);
+                                }}
+                                className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer border-b border-gray-100 last:border-0"
+                              >
+                                <EmployeeAvatar employee={emp} size="sm" />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
+                                  <p className="text-xs text-gray-400">
+                                    {emp.empId} · {emp.department || '—'}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                            {filteredEmployeesForLeaveModal.length === 0 && (
+                              <p className="text-center py-4 text-sm text-gray-400">No employees found</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -916,6 +960,16 @@ export default function Leave() {
                     setSelectedEmployee(null);
                     setEmpSearch('');
                     setShowEmpDropdown(false);
+                    setForm({
+                      employeeId: '',
+                      employeeName: '',
+                      empId: '',
+                      department: '',
+                      leaveType: '',
+                      startDate: '',
+                      endDate: '',
+                      reason: '',
+                    });
                   }}
                   className="text-sm text-slate-500 hover:text-slate-700"
                   disabled={saving}

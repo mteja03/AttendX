@@ -73,16 +73,51 @@ async function getCroppedBlob(imageSrc, pixelCrop) {
 
 async function getBase64FromUrl(url) {
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      mode: 'cors',
+      cache: 'no-cache',
+    });
+    if (!response.ok) throw new Error('Fetch failed');
     const blob = await response.blob();
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => resolve(null);
       reader.readAsDataURL(blob);
     });
   } catch {
-    return null;
+    try {
+      return await new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          try {
+            resolve(canvas.toDataURL('image/jpeg', 0.9));
+          } catch {
+            resolve(null);
+          }
+        };
+        img.onerror = () => resolve(null);
+        const bust =
+          (() => {
+            try {
+              const parsed = new URL(url);
+              parsed.searchParams.set('t', String(Date.now()));
+              return parsed.toString();
+            } catch {
+              return `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+            }
+          })();
+        img.src = bust;
+      });
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -673,6 +708,7 @@ export default function EmployeeProfile() {
   const [showSalary, setShowSalary] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [form, setForm] = useState(null);
   const [categoryOpen, setCategoryOpen] = useState({});
   const [uploadingDocId, setUploadingDocId] = useState(null);
@@ -2793,10 +2829,12 @@ export default function EmployeeProfile() {
   const handlePrintProfile = async () => {
     if (!employee) return;
     const e = escapeHtml;
+    setPrinting(true);
     let photoBase64 = null;
-    if (employee.photoURL) {
-      photoBase64 = await getBase64FromUrl(employee.photoURL);
-    }
+    try {
+      if (employee.photoURL) {
+        photoBase64 = await getBase64FromUrl(employee.photoURL);
+      }
     const companyName = getCompanyName() || '';
     const addrRaw =
       [employee.streetAddress, employee.city, employee.state, employee.pincode, employee.country].filter(Boolean).join(', ') ||
@@ -2923,21 +2961,25 @@ export default function EmployeeProfile() {
     const statusClass =
       status === 'Active' ? 'print-badge-green' : status === 'Inactive' ? 'print-badge-red' : 'print-badge-amber';
 
-    const desigDept = [employee.designation || '', employee.department || ''].filter(Boolean).join(' · ');
-    const empIdStatus = [employee.empId || '', status].filter(Boolean).join(' · ');
+    const desigDeptLine = `${e(employee.designation || '')}${
+      employee.department ? ` &middot; ${e(employee.department)}` : ''
+    }`;
+    const empIdStatusLine = `${e(employee.empId || '')}${
+      status ? ` &middot; ${e(status)}` : ''
+    }`;
 
     const photoSection = photoBase64
-      ? `<div style="display:flex;align-items:center;gap:20px;margin-bottom:24px;padding-bottom:20px;border-bottom:2px solid #E8F5F5;">
-      <img src="${photoBase64}" alt="${e(employee.fullName || '')}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #4ECDC4;flex-shrink:0;" />
+      ? `<div style="display:flex;align-items:center;gap:24px;margin-bottom:28px;padding-bottom:24px;border-bottom:2px solid #E8F5F5;">
+      <img src="${photoBase64}" alt="${e(employee.fullName || '')}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid #4ECDC4;flex-shrink:0;display:block;" />
       <div>
-        <h2 style="font-size:22px;font-weight:700;color:#1B6B6B;margin:0 0 4px;">${e(employee.fullName || '—')}</h2>
-        <p style="font-size:14px;color:#6b7280;margin:0 0 2px;">${e(desigDept || '—')}</p>
-        <p style="font-size:13px;color:#9ca3af;margin:0;">${e(empIdStatus || '—')}</p>
+        <h2 style="font-size:24px;font-weight:700;color:#1B6B6B;margin:0 0 6px 0;line-height:1.2;">${e(employee.fullName || '—')}</h2>
+        <p style="font-size:14px;color:#6b7280;margin:0 0 4px 0;">${desigDeptLine}</p>
+        <p style="font-size:13px;color:#9ca3af;margin:0;">${empIdStatusLine}</p>
       </div>
     </div>`
-      : `<div style="margin-bottom:24px;padding-bottom:20px;border-bottom:2px solid #E8F5F5;">
-      <h2 style="font-size:22px;font-weight:700;color:#1B6B6B;margin:0 0 4px;">${e(employee.fullName || '—')}</h2>
-      <p style="font-size:14px;color:#6b7280;margin:0;">${e(desigDept || '—')}</p>
+      : `<div style="margin-bottom:28px;padding-bottom:24px;border-bottom:2px solid #E8F5F5;">
+      <h2 style="font-size:24px;font-weight:700;color:#1B6B6B;margin:0 0 6px 0;">${e(employee.fullName || '—')}</h2>
+      <p style="font-size:14px;color:#6b7280;margin:0;">${desigDeptLine}</p>
     </div>`;
 
     const noticePrint =
@@ -3040,6 +3082,9 @@ export default function EmployeeProfile() {
       content,
     });
     openPrintWindow(html);
+    } finally {
+      setPrinting(false);
+    }
   };
 
   const allTabs = useMemo(
@@ -3237,17 +3282,24 @@ export default function EmployeeProfile() {
             <button
               type="button"
               onClick={handlePrintProfile}
-              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+              disabled={printing}
+              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50"
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path
-                  d="M3 10H1.5A1.5 1.5 0 0 1 0 8.5v-3A1.5 1.5 0 0 1 1.5 4H3M11 10h1.5A1.5 1.5 0 0 0 14 8.5v-3A1.5 1.5 0 0 0 12.5 4H11M3 4V1.5A1.5 1.5 0 0 1 4.5 0h5A1.5 1.5 0 0 1 11 1.5V4M3 10v2.5A1.5 1.5 0 0 0 4.5 14h5a1.5 1.5 0 0 0 1.5-1.5V10M3 10h8"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                />
-              </svg>
-              Print
+              {printing ? (
+                '⏳ Preparing...'
+              ) : (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <path
+                      d="M3 10H1.5A1.5 1.5 0 0 1 0 8.5v-3A1.5 1.5 0 0 1 1.5 4H3M11 10h1.5A1.5 1.5 0 0 0 14 8.5v-3A1.5 1.5 0 0 0 12.5 4H11M3 4V1.5A1.5 1.5 0 0 1 4.5 0h5A1.5 1.5 0 0 1 11 1.5V4M3 10v2.5A1.5 1.5 0 0 0 4.5 14h5a1.5 1.5 0 0 0 1.5-1.5V10M3 10h8"
+                      stroke="currentColor"
+                      strokeWidth="1.2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  🖨️ Print
+                </>
+              )}
             </button>
           </div>
         </div>
