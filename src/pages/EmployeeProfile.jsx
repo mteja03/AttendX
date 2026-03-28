@@ -745,6 +745,8 @@ export default function EmployeeProfile() {
   const [showBuyoutModal, setShowBuyoutModal] = useState(false);
   const [buyoutForm, setBuyoutForm] = useState({ actualLastDay: '', buyoutDays: 0, notes: '' });
   const [showExitTasksModal, setShowExitTasksModal] = useState(false);
+  const [showCompleteOffboardingModal, setShowCompleteOffboardingModal] = useState(false);
+  const [completionNotes, setCompletionNotes] = useState('');
 
   useEffect(() => {
     if (showResignationModal) {
@@ -1690,6 +1692,14 @@ export default function EmployeeProfile() {
   const offTotal = offTasks.length;
   const offPct = offTotal ? Math.round((offCompleted / offTotal) * 100) : (offboarding?.completionPct || 0);
 
+  const allOffboardingTasksDone = useMemo(() => {
+    const tasks = employee?.offboarding?.tasks || [];
+    if (tasks.length === 0) return false;
+    const requiredTasks = tasks.filter((t) => t.isRequired !== false);
+    if (requiredTasks.length === 0) return false;
+    return requiredTasks.every((t) => t.completed);
+  }, [employee?.offboarding?.tasks]);
+
   const offByCategory = useMemo(() => {
     const categories = ['Resignation', 'Knowledge Transfer', 'Asset Return', 'IT & Access', 'Finance & Legal', 'Documents', 'Exit Interview'];
     const tasks = offTasks.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -2140,43 +2150,6 @@ export default function EmployeeProfile() {
     );
     const done = nextTasks.filter((t) => t.completed).length;
     const total = nextTasks.length || 1;
-    const allRequiredDone = nextTasks.filter((t) => t.isRequired !== false).every((t) => t.completed);
-
-    if (allRequiredDone) {
-      const completedHistory = [
-        ...(offboarding.history || []),
-        {
-          event: 'employee_marked_inactive',
-          date: now,
-          by: currentUser.email || '',
-          notes: 'Offboarding completed — employee marked Inactive',
-        },
-      ];
-      await updateDoc(
-        doc(db, 'companies', companyId, 'employees', empId),
-        sanitizeForFirestore({
-          status: 'Inactive',
-          offboarding: {
-            ...(offboarding || {}),
-            phase: 'completed',
-            status: 'completed',
-            tasks: nextTasks,
-            completionPct: 100,
-            completedAt: now,
-            completedBy: currentUser.email || '',
-            history: completedHistory,
-          },
-          deactivatedAt: now,
-          deactivatedBy: currentUser.email || '',
-          deactivationReason: 'Offboarding completed',
-          updatedAt: serverTimestamp(),
-        }),
-      );
-      await returnAssetForCompletedOffTask(taskMeta);
-      await refreshEmployee();
-      success(`✅ Offboarding complete! ${employee.fullName} is now Inactive.`);
-      return;
-    }
 
     const pct = Math.round((done / total) * 100);
     const offboardingPayload = {
@@ -2224,26 +2197,19 @@ export default function EmployeeProfile() {
     const done = nextTasks.filter((t) => t.completed).length;
     const total = nextTasks.length || 1;
     const pct = Math.round((done / total) * 100);
-    const allRequiredComplete = nextTasks.filter((t) => t.isRequired !== false).every((t) => t.completed);
-    const nextStatus = allRequiredComplete ? 'completed' : 'in_progress';
     const payload = {
       offboarding: sanitizeForFirestore({
         ...(offboarding || {}),
-        phase: nextStatus === 'completed' ? 'completed' : 'exit_tasks',
-        status: nextStatus,
-        completionPct: nextStatus === 'completed' ? 100 : pct,
-        completedAt: nextStatus === 'completed' ? offboarding.completedAt : null,
-        completedBy: nextStatus === 'completed' ? offboarding.completedBy : null,
+        phase: 'exit_tasks',
+        status: 'in_progress',
+        completionPct: pct,
         tasks: nextTasks,
+        completedAt: offboarding.completedAt || null,
+        completedBy: offboarding.completedBy || null,
       }),
-      status: nextStatus === 'completed' ? 'Inactive' : 'Offboarding',
+      status: 'Offboarding',
       updatedAt: serverTimestamp(),
     };
-    if (nextStatus === 'in_progress') {
-      payload.deactivatedAt = deleteField();
-      payload.deactivatedBy = deleteField();
-      payload.deactivationReason = deleteField();
-    }
     await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
     setEmployee((prev) =>
       prev
@@ -2251,13 +2217,53 @@ export default function EmployeeProfile() {
             ...prev,
             offboarding: payload.offboarding,
             status: payload.status,
-            ...(nextStatus === 'in_progress'
-              ? { deactivatedAt: null, deactivatedBy: null, deactivationReason: null }
-              : {}),
           }
         : null,
     );
     success('Task updated');
+  };
+
+  const handleCompleteOffboarding = async () => {
+    if (!companyId || !empId || !employee || !currentUser) return;
+    try {
+      setSaving(true);
+      const now = Timestamp.now();
+      const notesText = completionNotes.trim() || 'Offboarding completed by HR';
+      const historyEntry = {
+        event: 'offboarding_completed',
+        date: now,
+        by: currentUser.email || '',
+        notes: notesText,
+      };
+      await updateDoc(
+        doc(db, 'companies', companyId, 'employees', empId),
+        sanitizeForFirestore({
+          status: 'Inactive',
+          offboarding: {
+            ...(employee.offboarding || {}),
+            phase: 'completed',
+            status: 'completed',
+            completedAt: now,
+            completedBy: currentUser.email || '',
+            completionNotes: completionNotes.trim() || '',
+            completionPct: 100,
+            history: [...(employee.offboarding?.history || []), historyEntry],
+          },
+          deactivatedAt: now,
+          deactivatedBy: currentUser.email || '',
+          deactivationReason: 'Offboarding completed',
+          updatedAt: serverTimestamp(),
+        }),
+      );
+      setShowCompleteOffboardingModal(false);
+      setCompletionNotes('');
+      await refreshEmployee();
+      success(`✅ ${employee.fullName} offboarding complete. Marked as Inactive.`);
+    } catch (e) {
+      showError(`Failed to complete offboarding: ${e?.message || 'Unknown error'}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const calculateDueDate = (joiningDate, daysFromJoining) => {
@@ -5030,21 +5036,6 @@ export default function EmployeeProfile() {
                   )}
                 </div>
               )}
-
-              {(employee.offboarding?.history || []).length > 0 && (
-                <div className="mt-6 text-left max-w-sm mx-auto">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">History</p>
-                  {employee.offboarding.history.map((event, i) => (
-                    <div key={`${event.event || 'ev'}_${i}`} className="flex gap-3 text-sm mb-3">
-                      <div className="w-2 h-2 rounded-full bg-gray-300 mt-1.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-sm text-gray-600 capitalize">{(event.event || '').replace(/_/g, ' ')}</p>
-                        <p className="text-xs text-gray-400">{toDisplayDate(event.date)}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           ) : !showOffboardingMainFlow ? (
             <div className="text-center py-12 text-gray-400">
@@ -5311,6 +5302,58 @@ export default function EmployeeProfile() {
                       );
                     })}
                   </div>
+
+                  {canEditEmployees && allOffboardingTasksDone && (
+                    <div className="mt-6 p-5 bg-green-50 border-2 border-green-300 rounded-2xl text-center">
+                      <div className="text-4xl mb-3">🎉</div>
+                      <h3 className="text-base font-semibold text-green-800 mb-1">All Tasks Completed!</h3>
+                      <p className="text-sm text-green-600 mb-4">
+                        Review everything and click below to officially close this employee&apos;s offboarding.
+                      </p>
+                      <div className="text-left bg-white rounded-xl p-4 mb-4 border border-green-200">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Final Checklist</p>
+                        {[
+                          'All assets returned to inventory',
+                          'F&F settlement processed',
+                          'Experience & relieving letter issued',
+                          'PF & ESIC details settled',
+                          'Knowledge transfer completed',
+                          'Access revoked from all systems',
+                        ].map((item, i) => (
+                          <div
+                            key={item}
+                            className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0"
+                          >
+                            <span className="text-green-500 text-sm">✓</span>
+                            <span className="text-sm text-gray-600">{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowCompleteOffboardingModal(true)}
+                        className="w-full py-3 bg-green-600 text-white rounded-xl font-semibold text-sm hover:bg-green-700 transition-colors"
+                      >
+                        ✅ Complete Offboarding &amp; Mark as Inactive
+                      </button>
+                    </div>
+                  )}
+
+                  {canEditEmployees && !allOffboardingTasksDone && offPhase === 'exit_tasks' && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => setShowCompleteOffboardingModal(true)}
+                        className="w-full py-2.5 border-2 border-dashed border-gray-300 text-gray-400 rounded-xl text-sm hover:border-amber-400 hover:text-amber-600 transition-colors"
+                      >
+                        Complete Offboarding Early
+                      </button>
+                      <p className="text-xs text-center text-gray-400 mt-1.5">
+                        {employee.offboarding?.tasks?.filter((t) => t.isRequired !== false && !t.completed).length || 0}{' '}
+                        required tasks still pending
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -5391,43 +5434,52 @@ export default function EmployeeProfile() {
                     </p>
                   </div>
                 )}
-
-              {(offboarding?.history || []).length > 0 && !showOffboardingReadOnlyUi && (
-                <div className="mt-4">
-                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Timeline</h4>
-                  <div className="space-y-2">
-                    {[...(offboarding.history || [])].reverse().map((event, i, arr) => (
-                      <div key={i} className="flex gap-3 text-sm">
-                        <div className="flex flex-col items-center">
-                          <div
-                            className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                              event.event === 'resignation_withdrawn'
-                                ? 'bg-green-500'
-                                : event.event === 'notice_buyout'
-                                  ? 'bg-blue-500'
-                                  : event.event === 'exit_tasks_started'
-                                    ? 'bg-orange-500'
-                                    : 'bg-amber-500'
-                            }`}
-                          />
-                          {i < arr.length - 1 && <div className="w-0.5 flex-1 min-h-[1rem] bg-gray-100 mt-1" />}
-                        </div>
-                        <div className="pb-3 flex-1">
-                          <p className="font-medium text-gray-700 capitalize">
-                            {(event.event || '').replace(/_/g, ' ')}
-                          </p>
-                          {event.notes && <p className="text-xs text-gray-400 mt-0.5">{event.notes}</p>}
-                          <p className="text-xs text-gray-300 mt-0.5">
-                            {toDisplayDate(event.date)} · {event.by || '—'}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </>
           )}
+        </div>
+      )}
+
+      {showCompleteOffboardingModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <div className="text-center mb-5">
+              <div className="text-4xl mb-3">🏁</div>
+              <h3 className="text-base font-semibold text-gray-800 mb-1">Complete Offboarding?</h3>
+              <p className="text-sm text-gray-500">
+                {employee.fullName} will be marked as Inactive. This cannot be undone.
+              </p>
+            </div>
+            <div className="mb-4">
+              <label className="text-xs text-gray-500 block mb-1.5">Final Notes (optional)</label>
+              <textarea
+                placeholder="e.g. All clearances done, F&F paid on 30/03/2026..."
+                value={completionNotes}
+                onChange={(e) => setCompletionNotes(e.target.value)}
+                rows={3}
+                className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCompleteOffboardingModal(false);
+                  setCompletionNotes('');
+                }}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCompleteOffboarding}
+                disabled={saving}
+                className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Confirm & Close'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
