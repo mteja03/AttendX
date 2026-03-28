@@ -78,6 +78,70 @@ const STATUS_STYLE = {
   Rejected: 'bg-red-100 text-red-800',
 };
 
+const CELEBRATION_COLORS = {
+  birthday: {
+    bg: 'bg-pink-50',
+    border: 'border-pink-100',
+    text: 'text-pink-700',
+    avatar: 'bg-pink-100 text-pink-700',
+    badge: 'bg-pink-100 text-pink-700',
+    dot: 'bg-pink-400',
+  },
+  wedding: {
+    bg: 'bg-purple-50',
+    border: 'border-purple-100',
+    text: 'text-purple-700',
+    avatar: 'bg-purple-100 text-purple-700',
+    badge: 'bg-purple-100 text-purple-700',
+    dot: 'bg-purple-400',
+  },
+  work: {
+    bg: 'bg-[#E8F5F5]',
+    border: 'border-[#4ECDC4]/30',
+    text: 'text-[#1B6B6B]',
+    avatar: 'bg-[#E8F5F5] text-[#1B6B6B]',
+    badge: 'bg-[#E8F5F5] text-[#1B6B6B]',
+    dot: 'bg-[#4ECDC4]',
+  },
+};
+
+function CelebrationItem({ item, showDate, companyId }) {
+  const colors = CELEBRATION_COLORS[item.type];
+  return (
+    <Link
+      to={`/company/${companyId}/employees/${item.empId}`}
+      className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4ECDC4]"
+    >
+      <div
+        className={`flex items-center gap-3 p-3 rounded-xl border ${colors.bg} ${colors.border} transition-all hover:shadow-sm`}
+      >
+        <div className="relative flex-shrink-0">
+          <div
+            className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${colors.avatar}`}
+          >
+            {item.name?.charAt(0)}
+          </div>
+          <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white flex items-center justify-center text-xs shadow-sm border border-gray-100">
+            {item.icon}
+          </div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
+          <p className={`text-xs font-medium ${colors.text}`}>{item.subtext}</p>
+        </div>
+        <div className="flex-shrink-0 text-right">
+          <span className={`text-xs px-2 py-1 rounded-full font-medium ${colors.badge}`}>{item.label}</span>
+          {showDate && item.diff > 1 && (
+            <p className="text-xs text-gray-400 mt-0.5 text-right">
+              {item.diff === 1 ? 'Tomorrow' : `in ${item.diff} days`}
+            </p>
+          )}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 export default function Dashboard() {
   const { companyId } = useParams();
   const navigate = useNavigate();
@@ -91,8 +155,8 @@ export default function Dashboard() {
   const [employeesLoaded, setEmployeesLoaded] = useState(false);
   const [leaveLoaded, setLeaveLoaded] = useState(false);
   const [actioningId, setActioningId] = useState(null);
-  const [birthdayCardOpen, setBirthdayCardOpen] = useState(true);
-  const [showAnniversaries, setShowAnniversaries] = useState(true);
+  const [celebTab, setCelebTab] = useState('today');
+  const [showCelebrations, setShowCelebrations] = useState(true);
 
   const showAssetOverview = role === 'admin' || role === 'hrmanager' || role === 'itmanager';
 
@@ -306,96 +370,146 @@ export default function Dashboard() {
     return employees.filter((emp) => leaveList.some((l) => l.employeeId === emp.id && overlaps(l)));
   }, [employees, leaveList]);
 
-  const birthdayData = useMemo(() => {
-    const now = new Date();
-    const todayMonth = now.getMonth();
-    const isLeapYear = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
-
-    const withDob = employees
-      .map((e) => ({ ...e, _dob: toJSDate(e.dateOfBirth) }))
-      .filter((e) => e._dob && !Number.isNaN(e._dob.getTime()));
-
-    const norm = (dt) => {
-      const m = dt.getMonth();
-      const d = dt.getDate();
-      if (m === 1 && d === 29 && !isLeapYear(now.getFullYear())) return { month: 1, day: 28 };
-      return { month: m, day: d };
-    };
-
-    const todayList = [];
-    const upcomingList = [];
-
-    for (let i = 0; i < 8; i += 1) {
-      const d = new Date(now);
-      d.setDate(d.getDate() + i);
-      if (i === 0) {
-        withDob.forEach((emp) => {
-          const { month, day } = norm(emp._dob);
-          if (month === d.getMonth() && day === d.getDate()) {
-            todayList.push(emp);
-          }
-        });
-      } else {
-        withDob.forEach((emp) => {
-          const { month, day } = norm(emp._dob);
-          if (month === d.getMonth() && day === d.getDate()) {
-            upcomingList.push({ emp, daysAhead: i });
-          }
-        });
-      }
-    }
-
-    const thisMonthSample = withDob.filter((emp) => emp._dob.getMonth() === todayMonth).slice(0, 5);
-    const thisMonthTotal = withDob.filter((emp) => emp._dob.getMonth() === todayMonth).length;
-
-    return { todayList, upcomingList, thisMonthTotal, thisMonthSample };
-  }, [employees]);
-
-  const workAnniversaries = useMemo(() => {
+  const celebrations = useMemo(() => {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const todayMonth = today.getMonth();
     const todayDate = today.getDate();
     const currentYear = today.getFullYear();
 
-    const todayAnniversaries = [];
-    const upcomingAnniversaries = [];
-    const thisMonthAnniversaries = [];
+    const result = {
+      today: [],
+      tomorrow: [],
+      thisWeek: [],
+      thisMonth: [],
+    };
+
+    const getNextOccurrence = (month, date) => {
+      const next = new Date(currentYear, month, date);
+      next.setHours(0, 0, 0, 0);
+      if (next < today && !(next.getMonth() === todayMonth && next.getDate() === todayDate)) {
+        next.setFullYear(currentYear + 1);
+      }
+      return next;
+    };
+
+    const getDiffDays = (date) => {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      const diff = d - today;
+      return Math.round(diff / (1000 * 60 * 60 * 24));
+    };
 
     employees.forEach((emp) => {
-      if (!emp.joiningDate) return;
-      const joining = toJSDate(emp.joiningDate);
-      if (!joining || Number.isNaN(joining.getTime())) return;
+      if (emp.dateOfBirth) {
+        const dob = toJSDate(emp.dateOfBirth);
+        if (dob && !Number.isNaN(dob.getTime())) {
+          const next = getNextOccurrence(dob.getMonth(), dob.getDate());
+          const diff = getDiffDays(next);
+          const age = currentYear - dob.getFullYear();
 
-      const yearsOfService = currentYear - joining.getFullYear();
-      if (yearsOfService < 1) return;
+          const item = {
+            id: `${emp.id}_bday`,
+            empId: emp.id,
+            name: emp.fullName,
+            type: 'birthday',
+            label: 'Birthday',
+            icon: '🎂',
+            color: 'pink',
+            subtext: `Turning ${age}`,
+            diff,
+            next,
+          };
 
-      const annivMonth = joining.getMonth();
-      const annivDate = joining.getDate();
-
-      if (annivMonth === todayMonth && annivDate === todayDate) {
-        todayAnniversaries.push({ ...emp, yearsOfService });
+          if (diff === 0) result.today.push(item);
+          else if (diff === 1) result.tomorrow.push(item);
+          else if (diff <= 7) result.thisWeek.push(item);
+          else if (next.getMonth() === todayMonth && next.getFullYear() === currentYear) result.thisMonth.push(item);
+        }
       }
 
-      const nextAnniv = new Date(currentYear, annivMonth, annivDate);
-      if (nextAnniv < today) {
-        nextAnniv.setFullYear(currentYear + 1);
-      }
-      const diffDays = Math.ceil((nextAnniv - today) / (1000 * 60 * 60 * 24));
-      if (diffDays > 0 && diffDays <= 7) {
-        upcomingAnniversaries.push({ ...emp, yearsOfService, diffDays });
+      if (emp.maritalStatus === 'Married' && emp.marriageDate) {
+        const md = toJSDate(emp.marriageDate);
+        if (md && !Number.isNaN(md.getTime())) {
+          const years = currentYear - md.getFullYear();
+          if (years >= 1) {
+            const next = getNextOccurrence(md.getMonth(), md.getDate());
+            const diff = getDiffDays(next);
+
+            const item = {
+              id: `${emp.id}_wedding`,
+              empId: emp.id,
+              name: emp.fullName,
+              type: 'wedding',
+              label: 'Wedding Anniversary',
+              icon: '💍',
+              color: 'purple',
+              subtext: `${years} year${years !== 1 ? 's' : ''} together`,
+              diff,
+              next,
+            };
+
+            if (diff === 0) result.today.push(item);
+            else if (diff === 1) result.tomorrow.push(item);
+            else if (diff <= 7) result.thisWeek.push(item);
+            else if (next.getMonth() === todayMonth && next.getFullYear() === currentYear) result.thisMonth.push(item);
+          }
+        }
       }
 
-      if (annivMonth === todayMonth) {
-        thisMonthAnniversaries.push({ ...emp, yearsOfService });
+      if (emp.joiningDate && (emp.status || 'Active') === 'Active') {
+        const jd = toJSDate(emp.joiningDate);
+        if (jd && !Number.isNaN(jd.getTime())) {
+          const years = currentYear - jd.getFullYear();
+          if (years >= 1) {
+            const next = getNextOccurrence(jd.getMonth(), jd.getDate());
+            const diff = getDiffDays(next);
+
+            const item = {
+              id: `${emp.id}_work`,
+              empId: emp.id,
+              name: emp.fullName,
+              type: 'work',
+              label: 'Work Anniversary',
+              icon: '🏆',
+              color: 'teal',
+              subtext: `${years} year${years !== 1 ? 's' : ''} at company`,
+              diff,
+              next,
+            };
+
+            if (diff === 0) result.today.push(item);
+            else if (diff === 1) result.tomorrow.push(item);
+            else if (diff <= 7) result.thisWeek.push(item);
+            else if (next.getMonth() === todayMonth && next.getFullYear() === currentYear) result.thisMonth.push(item);
+          }
+        }
       }
     });
 
-    return {
-      today: todayAnniversaries,
-      upcoming: upcomingAnniversaries,
-      thisMonth: thisMonthAnniversaries,
-    };
+    const sortByDiff = (a, b) => a.diff - b.diff;
+    result.today.sort(sortByDiff);
+    result.tomorrow.sort(sortByDiff);
+    result.thisWeek.sort(sortByDiff);
+    result.thisMonth.sort(sortByDiff);
+
+    return result;
   }, [employees]);
+
+  const totalCelebrations =
+    celebrations.today.length +
+    celebrations.tomorrow.length +
+    celebrations.thisWeek.length +
+    celebrations.thisMonth.length;
+
+  const celebTabs = [
+    { id: 'today', label: 'Today', count: celebrations.today.length },
+    { id: 'tomorrow', label: 'Tomorrow', count: celebrations.tomorrow.length },
+    { id: 'thisWeek', label: 'This Week', count: celebrations.thisWeek.length },
+    { id: 'thisMonth', label: 'This Month', count: celebrations.thisMonth.length },
+  ];
+
+  const activeCelebrations = celebrations[celebTab] || [];
 
   const handleApprove = async (leaveDoc) => {
     setActioningId(leaveDoc.id);
@@ -722,200 +836,113 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6">
-        <button
-          type="button"
-          onClick={() => setBirthdayCardOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-6 py-4 border-b border-slate-100 hover:bg-slate-50/50 text-left"
-        >
-          <div>
-            <h2 className="text-lg font-semibold text-slate-800 inline-flex items-center gap-2">
-              <span role="img" aria-label="cake">🎂</span> Birthdays
-            </h2>
-            <p className="text-slate-500 text-sm mt-0.5">
-              {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-            </p>
-          </div>
-          <span className="text-slate-400 text-sm">{birthdayCardOpen ? '▼' : '▶'}</span>
-        </button>
-        {birthdayCardOpen && (
-          <div className="p-6 space-y-6">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-700 mb-2">Today&apos;s Birthdays</h3>
-              {birthdayData.todayList.length === 0 ? (
-                <p className="text-slate-500 text-sm">No birthdays today</p>
-              ) : (
-                <div className="flex flex-wrap gap-3">
-                  {birthdayData.todayList.map((emp) => (
-                    <Link
-                      key={emp.id}
-                      to={`/company/${companyId}/employees/${emp.id}`}
-                      className="flex items-center gap-3 rounded-lg border border-slate-200 bg-pink-50/50 p-3 min-w-[200px] hover:bg-pink-100/50 hover:border-[#4ECDC4]/30 transition-colors cursor-pointer"
-                    >
-                      <div className="h-10 w-10 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-sm font-bold shrink-0">
-                        {(emp.fullName || '?').slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-slate-800 truncate">{emp.fullName || '—'}</p>
-                        <p className="text-slate-500 text-xs truncate">{emp.designation || '—'} · {emp.department || '—'}</p>
-                        <span className="inline-flex mt-1 rounded-full bg-pink-200 text-pink-800 px-2 py-0.5 text-xs font-medium">🎂 Today!</span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-slate-700 mb-2">Upcoming (next 7 days)</h3>
-              {birthdayData.upcomingList.length === 0 ? (
-                <p className="text-slate-500 text-sm">No upcoming birthdays this week</p>
-              ) : (
-                <div className="flex flex-wrap gap-3">
-                  {birthdayData.upcomingList.map(({ emp, daysAhead }) => (
-                    <Link
-                      key={emp.id}
-                      to={`/company/${companyId}/employees/${emp.id}`}
-                      className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 min-w-[200px] hover:bg-slate-50 hover:border-[#4ECDC4]/30 transition-colors cursor-pointer"
-                    >
-                      <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-sm font-bold shrink-0">
-                        {(emp.fullName || '?').slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-slate-800 truncate">{emp.fullName || '—'}</p>
-                        <p className="text-slate-500 text-xs truncate">{emp.designation || '—'}</p>
-                        <span className="inline-flex mt-1 text-xs text-slate-600">in {daysAhead} day{daysAhead !== 1 ? 's' : ''}</span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-slate-700 mb-2">This month</h3>
-              <p className="text-slate-600 text-sm">{birthdayData.thisMonthTotal} birthday{birthdayData.thisMonthTotal !== 1 ? 's' : ''} this month</p>
-                {birthdayData.thisMonthSample.length > 0 && (
-                <div className="flex items-center gap-2 mt-2">
-                  {birthdayData.thisMonthSample.map((emp) => (
-                    <Link
-                      key={emp.id}
-                      to={`/company/${companyId}/employees/${emp.id}`}
-                      className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs font-medium hover:ring-2 hover:ring-[#4ECDC4]/50 transition-shadow cursor-pointer"
-                      title={emp.fullName}
-                    >
-                      {(emp.fullName || '?').slice(0, 2).toUpperCase()}
-                    </Link>
-                  ))}
-                  {birthdayData.thisMonthTotal > 5 && (
-                    <span className="text-slate-500 text-xs">+{birthdayData.thisMonthTotal - 5} more</span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
       <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden mb-6">
         <button
           type="button"
-          onClick={() => setShowAnniversaries((prev) => !prev)}
-          className="w-full flex items-center justify-between p-5 hover:bg-slate-50/50 text-left"
+          onClick={() => setShowCelebrations((prev) => !prev)}
+          className="w-full flex items-center justify-between p-5 hover:bg-gray-50/50 transition-colors text-left"
         >
-          <div className="flex items-center gap-2">
-            <span className="text-xl" aria-hidden>
-              🎉
-            </span>
-            <div className="text-left">
-              <h3 className="text-sm font-semibold text-gray-800">Work Anniversaries</h3>
-              <p className="text-xs text-gray-400">
-                {new Date().toLocaleDateString('en-GB', {
-                  weekday: 'short',
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                })}
-              </p>
+          <div className="flex items-center gap-3">
+            <div className="flex -space-x-1">
+              <span className="text-xl" aria-hidden>
+                🎂
+              </span>
+              <span className="text-xl" aria-hidden>
+                💍
+              </span>
+              <span className="text-xl" aria-hidden>
+                🏆
+              </span>
             </div>
+            <div className="text-left">
+              <h3 className="text-sm font-semibold text-gray-800">Celebrations</h3>
+              <p className="text-xs text-gray-400">Birthdays, Anniversaries &amp; Milestones</p>
+            </div>
+            {totalCelebrations > 0 && (
+              <span className="bg-[#1B6B6B] text-white text-xs font-bold px-2 py-0.5 rounded-full ml-1">
+                {totalCelebrations}
+              </span>
+            )}
           </div>
-          <span className="text-gray-400 text-xs">{showAnniversaries ? '▲' : '▼'}</span>
+          <span className="text-gray-400 text-xs">{showCelebrations ? '▲' : '▼'}</span>
         </button>
 
-        {showAnniversaries && (
-          <div className="px-5 pb-5 space-y-4">
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Today</p>
-              {workAnniversaries.today.length > 0 ? (
-                workAnniversaries.today.map((emp) => (
-                  <Link
-                    key={emp.id}
-                    to={`/company/${companyId}/employees/${emp.id}`}
-                    className="flex items-center gap-3 py-1.5 rounded-lg hover:bg-[#E8F5F5]/50 -mx-1 px-1"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-[#E8F5F5] flex items-center justify-center text-sm font-semibold text-[#1B6B6B] shrink-0">
-                      {emp.fullName?.charAt(0)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
-                      <p className="text-xs text-gray-400">
-                        🎊 {emp.yearsOfService} year{emp.yearsOfService !== 1 ? 's' : ''} today!
-                      </p>
-                    </div>
-                  </Link>
-                ))
+        {showCelebrations && (
+          <div>
+            <div className="flex border-t border-gray-100">
+              {celebTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setCelebTab(tab.id)}
+                  className={`flex-1 py-2.5 text-xs font-medium transition-colors relative ${
+                    celebTab === tab.id
+                      ? 'text-[#1B6B6B] bg-[#E8F5F5]'
+                      : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span
+                      className={`ml-1 text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                        celebTab === tab.id ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  )}
+                  {celebTab === tab.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1B6B6B]" />}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-4">
+              {activeCelebrations.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-2xl mb-2">
+                    {celebTab === 'today' ? '😊' : celebTab === 'tomorrow' ? '📅' : '🗓️'}
+                  </p>
+                  <p className="text-sm text-gray-400">
+                    No celebrations
+                    {celebTab === 'today'
+                      ? ' today'
+                      : celebTab === 'tomorrow'
+                        ? ' tomorrow'
+                        : celebTab === 'thisWeek'
+                          ? ' this week'
+                          : ' this month'}
+                  </p>
+                </div>
               ) : (
-                <p className="text-sm text-gray-400">No anniversaries today</p>
+                <div className="space-y-2">
+                  {activeCelebrations.map((item) => (
+                    <CelebrationItem
+                      key={item.id}
+                      item={item}
+                      showDate={celebTab !== 'today' && celebTab !== 'tomorrow'}
+                      companyId={companyId}
+                    />
+                  ))}
+                </div>
               )}
             </div>
 
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Upcoming (next 7 days)</p>
-              {workAnniversaries.upcoming.length > 0 ? (
-                workAnniversaries.upcoming.map((emp) => (
-                  <Link
-                    key={emp.id}
-                    to={`/company/${companyId}/employees/${emp.id}`}
-                    className="flex items-center gap-3 py-1.5 rounded-lg hover:bg-[#E8F5F5]/50 -mx-1 px-1"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-[#E8F5F5] flex items-center justify-center text-sm font-semibold text-[#1B6B6B] shrink-0">
-                      {emp.fullName?.charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
-                      <p className="text-xs text-gray-400">
-                        in {emp.diffDays} day{emp.diffDays !== 1 ? 's' : ''} · {emp.yearsOfService} year
-                        {emp.yearsOfService !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <p className="text-sm text-gray-400">No upcoming anniversaries</p>
-              )}
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">This month</p>
-              {workAnniversaries.thisMonth.length > 0 ? (
-                workAnniversaries.thisMonth.map((emp) => (
-                  <Link
-                    key={`${emp.id}-month`}
-                    to={`/company/${companyId}/employees/${emp.id}`}
-                    className="flex items-center gap-3 py-1.5 rounded-lg hover:bg-[#E8F5F5]/50 -mx-1 px-1"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-[#E8F5F5] flex items-center justify-center text-sm font-semibold text-[#1B6B6B] shrink-0">
-                      {emp.fullName?.charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
-                      <p className="text-xs text-gray-400">
-                        {emp.yearsOfService} year{emp.yearsOfService !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <p className="text-sm text-gray-400">No anniversaries this month</p>
-              )}
+            <div className="px-4 pb-4 pt-0">
+              <div className="flex items-center gap-4 pt-3 border-t border-gray-50 flex-wrap">
+                {[
+                  { icon: '🎂', label: 'Birthday', color: 'bg-pink-400' },
+                  { icon: '💍', label: 'Wedding', color: 'bg-purple-400' },
+                  { icon: '🏆', label: 'Work', color: 'bg-[#4ECDC4]' },
+                ].map((l) => (
+                  <div key={l.label} className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${l.color}`} aria-hidden />
+                    <span className="text-sm" aria-hidden>
+                      {l.icon}
+                    </span>
+                    <span className="text-xs text-gray-400">{l.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

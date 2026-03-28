@@ -297,7 +297,6 @@ export default function EmployeeProfile() {
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
-  const [benefitTemplates, setBenefitTemplates] = useState([]);
   const locationDropdownRef = useRef(null);
   const [assetList, setAssetList] = useState([]);
   const [showAssignAssetModal, setShowAssignAssetModal] = useState(false);
@@ -395,22 +394,10 @@ export default function EmployeeProfile() {
     load();
   }, [companyId, empId, showError]);
 
-  useEffect(() => {
-    if (!companyId) return;
-    const fetchBenefitTemplates = async () => {
-      try {
-        const snap = await getDoc(doc(db, 'companies', companyId, 'settings', 'benefitTemplates'));
-        if (snap.exists()) {
-          setBenefitTemplates(snap.data().benefits || []);
-        } else {
-          setBenefitTemplates([]);
-        }
-      } catch {
-        setBenefitTemplates([]);
-      }
-    };
-    fetchBenefitTemplates();
-  }, [companyId]);
+  const benefitTemplates = useMemo(
+    () => (company?.benefits || []).map((b) => ({ id: b, name: b })),
+    [company?.benefits],
+  );
 
   useEffect(() => {
     if (!companyId || !empId) return;
@@ -2831,23 +2818,17 @@ export default function EmployeeProfile() {
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Additional Benefits</p>
                   <div className="space-y-2">
-                    {employee.customBenefits.map((b) => {
-                      const benefitTpl = benefitTemplates.find((t) => t.name === b.name);
-                      return (
+                    {employee.customBenefits.map((b) => (
                       <div key={b.id} className="flex items-start justify-between p-2.5 bg-gray-50 rounded-lg gap-2">
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-gray-800">{b.name}</p>
-                          {benefitTpl?.description ? (
-                            <p className="text-xs text-gray-500 mt-0.5">{benefitTpl.description}</p>
-                          ) : null}
                           {b.notes && <p className="text-xs text-gray-400">{b.notes}</p>}
                         </div>
                         {b.value && (
                           <span className="text-sm font-medium text-[#1B6B6B] ml-3 flex-shrink-0">{b.value}</span>
                         )}
                       </div>
-                      );
-                    })}
+                    ))}
                   </div>
                 </div>
               )}

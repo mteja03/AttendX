@@ -132,13 +132,21 @@ const SECTIONS = [
   { key: 'employmentTypes', label: 'Employment Type', plural: 'Employment Types', field: 'employmentType', defaults: DEFAULT_EMPLOYMENT_TYPES },
   { key: 'categories', label: 'Category', plural: 'Categories', field: 'category', defaults: DEFAULT_CATEGORIES },
   { key: 'qualifications', label: 'Qualification', plural: 'Qualifications', field: 'qualification', defaults: DEFAULT_QUALIFICATIONS },
+  {
+    key: 'benefits',
+    label: 'Benefit',
+    plural: 'Benefits',
+    defaults: [],
+    icon: '🏥',
+    placeholder: 'e.g. Medical Insurance, Food Allowance, Gratuity, Mobile Allowance...',
+    description: 'Company benefit types',
+  },
 ];
 
 const TABS = [
   { id: 'company', label: 'Company Info' },
   { id: 'lists', label: 'Manage Lists' },
   { id: 'leave', label: 'Leave' },
-  { id: 'benefits', label: 'Benefits', icon: '🏥' },
   { id: 'documents', label: 'Document Types' },
   { id: 'onboarding', label: 'Onboarding' },
   { id: 'offboarding', label: 'Offboarding' },
@@ -245,9 +253,6 @@ export default function Settings() {
   const [savingOffTemplate, setSavingOffTemplate] = useState(false);
   const [showOffCategoryPicker, setShowOffCategoryPicker] = useState(false);
   const [policiesForOnboarding, setPoliciesForOnboarding] = useState([]);
-  const [benefitTemplates, setBenefitTemplates] = useState([]);
-  const [newBenefitName, setNewBenefitName] = useState('');
-  const [savingBenefits, setSavingBenefits] = useState(false);
   const activeTab = tab;
 
   useEffect(() => {
@@ -430,38 +435,6 @@ export default function Settings() {
     loadLeaveTypes();
   }, [activeTab, companyId, showError]);
 
-  useEffect(() => {
-    if (activeTab !== 'benefits' || !companyId) return;
-    const fetchBenefits = async () => {
-      try {
-        const snap = await getDoc(doc(db, 'companies', companyId, 'settings', 'benefitTemplates'));
-        if (snap.exists()) {
-          setBenefitTemplates(snap.data().benefits || []);
-        } else {
-          setBenefitTemplates([]);
-        }
-      } catch (e) {
-        console.error(e);
-        setBenefitTemplates([]);
-      }
-    };
-    fetchBenefits();
-  }, [activeTab, companyId]);
-
-  const saveBenefitTemplates = async () => {
-    if (!companyId) return;
-    setSavingBenefits(true);
-    try {
-      await setDoc(doc(db, 'companies', companyId, 'settings', 'benefitTemplates'), { benefits: benefitTemplates });
-      success('Benefits saved!');
-    } catch (e) {
-      console.error(e);
-      showError('Failed to save benefits');
-    } finally {
-      setSavingBenefits(false);
-    }
-  };
-
   const handleAddLeaveType = () => {
     if (!newLeaveTypeName.trim()) return;
     const shortCode =
@@ -585,7 +558,10 @@ export default function Settings() {
 
   const handleRemove = async (sectionKey, name, defaults) => {
     const section = SECTIONS.find((s) => s.key === sectionKey);
-    const count = getCount(section.field)(name);
+    const count =
+      sectionKey === 'benefits'
+        ? employees.filter((e) => (e.customBenefits || []).some((b) => (b?.name || '').trim() === name)).length
+        : getCount(section.field)(name);
     if (count > 0) return;
     try {
       const list = getList(sectionKey, defaults);
@@ -825,7 +801,11 @@ export default function Settings() {
 
     const cards = SECTIONS.map((section) => {
       const items = getItems(section.key, section.defaults);
-      const countFn = getCount(section.field);
+      const countFn =
+        section.key === 'benefits'
+          ? (value) =>
+              employees.filter((e) => (e.customBenefits || []).some((b) => (b?.name || '').trim() === value)).length
+          : getCount(section.field);
       const [newVal, setNewVal] = [
         addValue && addingSection === section.key ? addValue : '',
         (val) => {
@@ -836,7 +816,9 @@ export default function Settings() {
       return { section, items, countFn, newVal, setNewVal };
     });
 
-    const left = cards.filter((c) => ['departments', 'branches', 'locations', 'employmentTypes'].includes(c.section.key));
+    const left = cards.filter((c) =>
+      ['departments', 'branches', 'locations', 'employmentTypes', 'benefits'].includes(c.section.key),
+    );
     const right = cards.filter((c) => ['categories', 'qualifications'].includes(c.section.key));
 
     const handleToggleAssetTypeMode = async (typeName) => {
@@ -1181,88 +1163,6 @@ export default function Settings() {
         >
           Save Leave Policy
         </button>
-      </div>
-    </div>
-  );
-
-  const renderBenefitsTab = () => (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-gray-700">Benefit Templates</h3>
-          <p className="text-xs text-gray-400 mt-0.5">Define benefits once, apply to any employee</p>
-        </div>
-        <button
-          type="button"
-          onClick={saveBenefitTemplates}
-          disabled={savingBenefits}
-          className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium disabled:opacity-50 hover:bg-[#155858]"
-        >
-          {savingBenefits ? 'Saving...' : 'Save'}
-        </button>
-      </div>
-
-      <div className="flex gap-2">
-        <input
-          placeholder="e.g. Medical Insurance, Food Allowance, Gratuity..."
-          value={newBenefitName}
-          onChange={(e) => setNewBenefitName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && newBenefitName.trim()) {
-              setBenefitTemplates((prev) => [
-                ...prev,
-                { id: `bt_${Date.now()}`, name: newBenefitName.trim(), description: '' },
-              ]);
-              setNewBenefitName('');
-            }
-          }}
-          className="flex-1 border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#4ECDC4]"
-        />
-        <button
-          type="button"
-          onClick={() => {
-            if (!newBenefitName.trim()) return;
-            setBenefitTemplates((prev) => [
-              ...prev,
-              { id: `bt_${Date.now()}`, name: newBenefitName.trim(), description: '' },
-            ]);
-            setNewBenefitName('');
-          }}
-          className="px-4 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
-        >
-          + Add
-        </button>
-      </div>
-
-      <div className="space-y-2">
-        {benefitTemplates.map((bt, index) => (
-          <div
-            key={bt.id}
-            className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100"
-          >
-            <span className="text-base" aria-hidden>
-              🏥
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-800 truncate">{bt.name}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setBenefitTemplates((prev) => prev.filter((_, i) => i !== index));
-              }}
-              className="text-red-400 hover:text-red-600 text-xs px-2 py-1 shrink-0"
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-        {benefitTemplates.length === 0 && (
-          <div className="text-center py-8 text-gray-400">
-            <p className="text-sm">No benefit templates yet</p>
-            <p className="text-xs mt-1">Add Medical Insurance, Food Allowance, Gratuity etc.</p>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1959,7 +1859,6 @@ export default function Settings() {
       {tab === 'company' && renderCompanyTab()}
       {tab === 'lists' && renderListsTab()}
       {tab === 'leave' && renderLeaveTab()}
-      {tab === 'benefits' && renderBenefitsTab()}
       {tab === 'documents' && renderDocumentsTab()}
       {tab === 'onboarding' && renderOnboardingTab()}
       {tab === 'offboarding' && renderOffboardingTab()}

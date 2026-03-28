@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   addDoc,
   updateDoc,
@@ -241,25 +240,11 @@ export default function Employees() {
   const locationDropdownRef = useRef(null);
   const [locationSearch, setLocationSearch] = useState('');
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
-  const [benefitTemplates, setBenefitTemplates] = useState([]);
 
-  useEffect(() => {
-    if (!companyId) return undefined;
-    const fetchBenefitTemplates = async () => {
-      try {
-        const snap = await getDoc(doc(db, 'companies', companyId, 'settings', 'benefitTemplates'));
-        if (snap.exists()) {
-          setBenefitTemplates(snap.data().benefits || []);
-        } else {
-          setBenefitTemplates([]);
-        }
-      } catch {
-        setBenefitTemplates([]);
-      }
-    };
-    fetchBenefitTemplates();
-    return undefined;
-  }, [companyId]);
+  const benefitTemplates = useMemo(
+    () => (company?.benefits || []).map((b) => ({ id: b, name: b })),
+    [company?.benefits],
+  );
 
   useEffect(() => {
     if (!companyId) return;
