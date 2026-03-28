@@ -394,6 +394,21 @@ function buildProfileTimeline(emp, leaveRows, assets, employeeDocId) {
 
   if (Array.isArray(emp.editHistory)) {
     emp.editHistory.forEach((edit, idx) => {
+      if (edit.event === 'rehired') {
+        const d = toJSDate(edit.date) || toJSDate(edit.timestamp);
+        if (!d) return;
+        events.push({
+          id: `rehire_${edit.date?.seconds ?? edit.timestamp?.seconds ?? idx}_${idx}`,
+          type: 'rehire',
+          icon: '🔄',
+          color: 'green',
+          title: 'Rehired',
+          description: edit.notes || 'Employee reactivated',
+          date: d,
+          by: edit.by || 'HR',
+        });
+        return;
+      }
       const d = toJSDate(edit.timestamp);
       if (!d) return;
       const desc =
@@ -734,6 +749,18 @@ export default function EmployeeProfile() {
   const [showExitTasksModal, setShowExitTasksModal] = useState(false);
   const [showCompleteOffboardingModal, setShowCompleteOffboardingModal] = useState(false);
   const [completionNotes, setCompletionNotes] = useState('');
+  const [showRehireModal, setShowRehireModal] = useState(false);
+  const [rehireForm, setRehireForm] = useState({
+    newJoiningDate: '',
+    newDesignation: '',
+    newDepartment: '',
+    newBranch: '',
+    newLocation: '',
+    newCtc: '',
+    newEmpId: '',
+    keepSameEmpId: true,
+    notes: '',
+  });
 
   useEffect(() => {
     if (showResignationModal) {
@@ -2264,6 +2291,100 @@ export default function EmployeeProfile() {
     }
   };
 
+  const handleRehireEmployee = async () => {
+    if (!rehireForm.newJoiningDate) {
+      showError('Please enter new joining date');
+      return;
+    }
+    if (!rehireForm.keepSameEmpId && !String(rehireForm.newEmpId || '').trim()) {
+      showError('Please enter a new employee ID');
+      return;
+    }
+    if (!companyId || !empId || !employee || !currentUser || !empRef) return;
+
+    try {
+      setSaving(true);
+      const newJoinTs = Timestamp.fromDate(new Date(`${rehireForm.newJoiningDate}T12:00:00`));
+      const exitDateRaw = employee.deactivatedAt || employee.offboarding?.completedAt || Timestamp.now();
+
+      const previousEmployment = sanitizeForFirestore({
+        tenure: (Array.isArray(employee.employmentHistory) ? employee.employmentHistory.length : 0) + 1,
+        empId: employee.empId || '',
+        joiningDate: employee.joiningDate ?? null,
+        exitDate: exitDateRaw,
+        designation: employee.designation || '',
+        department: employee.department || '',
+        ctc: employee.ctcPerAnnum ?? employee.ctc ?? null,
+        exitReason: employee.offboarding?.reason || employee.offboarding?.exitReason || '',
+        offboardingNotes: employee.offboarding?.completionNotes || '',
+      });
+
+      const newDesignation = rehireForm.newDesignation.trim() || employee.designation || '';
+      const newDepartment = rehireForm.newDepartment.trim() || employee.department || '';
+      const newEmpIdStr = rehireForm.keepSameEmpId
+        ? employee.empId
+        : String(rehireForm.newEmpId || '').trim();
+      const ctcRaw = String(rehireForm.newCtc || '').trim();
+      const newCtcFinal =
+        ctcRaw === ''
+          ? (employee.ctcPerAnnum ?? employee.ctc ?? null)
+          : Number(ctcRaw);
+      const ctcToSave =
+        newCtcFinal != null && newCtcFinal !== '' && !Number.isNaN(Number(newCtcFinal))
+          ? Number(newCtcFinal)
+          : (employee.ctcPerAnnum ?? employee.ctc ?? null);
+
+      const notesText =
+        rehireForm.notes.trim() ||
+        `Rehired. New joining: ${toDisplayDate(newJoinTs)}`;
+
+      await updateDoc(empRef, {
+        status: 'Active',
+        joiningDate: newJoinTs,
+        empId: newEmpIdStr,
+        designation: newDesignation,
+        department: newDepartment,
+        ctcPerAnnum: ctcToSave,
+        employmentHistory: [...(employee.employmentHistory || []), previousEmployment],
+        deactivatedAt: deleteField(),
+        deactivatedBy: deleteField(),
+        deactivationReason: deleteField(),
+        offboarding: deleteField(),
+        onboarding: deleteField(),
+        editHistory: arrayUnion({
+          event: 'rehired',
+          date: Timestamp.now(),
+          timestamp: Timestamp.now(),
+          by: currentUser.email || '',
+          notes: notesText,
+        }),
+        rehireCount: (employee.rehireCount || 0) + 1,
+        rehiredAt: Timestamp.now(),
+        rehiredBy: currentUser.email || '',
+        updatedAt: serverTimestamp(),
+      });
+
+      success(`✅ ${employee.fullName} rehired! New joining: ${toDisplayDate(newJoinTs)}`);
+      setShowRehireModal(false);
+      setRehireForm({
+        newJoiningDate: '',
+        newDesignation: '',
+        newDepartment: '',
+        newBranch: '',
+        newLocation: '',
+        newCtc: '',
+        newEmpId: '',
+        keepSameEmpId: true,
+        notes: '',
+      });
+      await refreshEmployee();
+    } catch (e) {
+      showError(`Failed to rehire: ${e?.message || 'Unknown error'}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const calculateDueDate = (joiningDate, daysFromJoining) => {
     try {
       let joining;
@@ -3211,6 +3332,11 @@ export default function EmployeeProfile() {
               >
                 {employee.status || 'Active'}
               </span>
+              {employee.rehireCount > 0 && (
+                <span className="inline-flex rounded-full px-2.5 py-1 bg-green-100 text-green-700 text-xs font-medium">
+                  🔄 Rehired ({employee.rehireCount}x)
+                </span>
+              )}
             </div>
             <p className="text-sm text-gray-500 mt-1">
               Joined {toDisplayDate(employee.joiningDate)}
@@ -3235,6 +3361,15 @@ export default function EmployeeProfile() {
               <span className="inline-flex items-center justify-center min-h-[44px] px-4 bg-gray-100 text-gray-400 rounded-lg text-sm cursor-not-allowed">
                 🔒 Locked
               </span>
+            )}
+            {employee.status === 'Inactive' && canEditEmployees && (
+              <button
+                type="button"
+                onClick={() => setShowRehireModal(true)}
+                className="flex items-center gap-2 min-h-[44px] px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700"
+              >
+                🔄 Rehire Employee
+              </button>
             )}
             <button
               type="button"
@@ -3505,6 +3640,43 @@ export default function EmployeeProfile() {
               </p>
             </div>
           </div>
+
+          {(employee.employmentHistory || []).length > 0 && (
+            <div className="mt-6 pt-6 border-t border-gray-100">
+              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                Previous Employment at {company?.name || 'Company'}
+              </h4>
+              <div className="space-y-3">
+                {employee.employmentHistory.map((tenure, i) => (
+                  <div
+                    key={`${tenure.tenure ?? i}_${tenure.empId ?? ''}_${i}`}
+                    className="p-3 bg-gray-50 rounded-xl border border-gray-100"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Tenure {tenure.tenure ?? i + 1}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {tenure.designation || '—'}
+                          {tenure.department ? ` · ${tenure.department}` : ''}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xs text-gray-500">
+                          {toDisplayDate(tenure.joiningDate)}
+                          {' → '}
+                          {toDisplayDate(tenure.exitDate)}
+                        </p>
+                        {tenure.exitReason && (
+                          <p className="text-xs text-gray-400 mt-0.5">{tenure.exitReason}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white border rounded-xl p-4 mt-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Emergency Contact</h3>
             {employee.emergencyContact?.name ? (
@@ -5558,6 +5730,154 @@ export default function EmployeeProfile() {
                 className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
               >
                 {saving ? 'Saving…' : 'Confirm & Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRehireModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">Rehire Employee</h2>
+                <p className="text-sm text-gray-400 mt-0.5">{employee.fullName} will be reactivated</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRehireModal(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+                <p className="text-sm font-semibold text-green-800 mb-1">Previous employment preserved</p>
+                <p className="text-xs text-green-600">
+                  All documents, leave history, and records from previous employment will be kept. A new tenure will begin.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">New Joining Date *</label>
+                <input
+                  type="date"
+                  value={rehireForm.newJoiningDate}
+                  onChange={(e) => setRehireForm((prev) => ({ ...prev, newJoiningDate: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Employee ID</label>
+                <div className="flex flex-wrap items-center gap-3 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setRehireForm((prev) => ({ ...prev, keepSameEmpId: true }))}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-colors ${
+                      rehireForm.keepSameEmpId
+                        ? 'bg-[#E8F5F5] border-[#1B6B6B] text-[#1B6B6B]'
+                        : 'border-gray-200 text-gray-500'
+                    }`}
+                  >
+                    Keep same ({employee.empId})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRehireForm((prev) => ({ ...prev, keepSameEmpId: false }))}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-colors ${
+                      !rehireForm.keepSameEmpId
+                        ? 'bg-[#E8F5F5] border-[#1B6B6B] text-[#1B6B6B]'
+                        : 'border-gray-200 text-gray-500'
+                    }`}
+                  >
+                    Assign new ID
+                  </button>
+                </div>
+                {!rehireForm.keepSameEmpId && (
+                  <input
+                    placeholder="New Emp ID"
+                    value={rehireForm.newEmpId}
+                    onChange={(e) => setRehireForm((prev) => ({ ...prev, newEmpId: e.target.value }))}
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">New Designation</label>
+                <input
+                  placeholder={employee.designation || 'Same as before'}
+                  value={rehireForm.newDesignation}
+                  onChange={(e) => setRehireForm((prev) => ({ ...prev, newDesignation: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">New Department</label>
+                <select
+                  value={rehireForm.newDepartment}
+                  onChange={(e) => setRehireForm((prev) => ({ ...prev, newDepartment: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">
+                    Same as before ({employee.department || '—'})
+                  </option>
+                  {departments.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">New Annual Gross Salary (₹)</label>
+                <input
+                  type="number"
+                  placeholder={
+                    employee.ctcPerAnnum != null
+                      ? String(employee.ctcPerAnnum)
+                      : 'Enter new salary'
+                  }
+                  value={rehireForm.newCtc}
+                  onChange={(e) => setRehireForm((prev) => ({ ...prev, newCtc: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Notes (optional)</label>
+                <textarea
+                  placeholder="e.g. Rehired as Senior Developer after 6 months gap"
+                  value={rehireForm.notes}
+                  onChange={(e) => setRehireForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  rows={2}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t flex-shrink-0 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowRehireModal(false)}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRehireEmployee}
+                disabled={!rehireForm.newJoiningDate || saving}
+                className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
+              >
+                {saving ? 'Rehiring…' : '✓ Confirm Rehire'}
               </button>
             </div>
           </div>

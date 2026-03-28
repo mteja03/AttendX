@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
+  const [searchParams] = useSearchParams();
+  const idleSignOut = searchParams.get('reason') === 'idle';
   const { currentUser, loading, signInWithGoogle, authError } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
 
@@ -162,6 +164,13 @@ export default function Login() {
             HR Management Platform
           </p>
         </div>
+
+        {idleSignOut && (
+          <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4 text-sm text-amber-700">
+            <span>⏰</span>
+            <span>You were signed out due to 8 hours of inactivity.</span>
+          </div>
+        )}
 
         {/* Divider with text */}
         <div

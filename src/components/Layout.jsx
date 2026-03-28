@@ -1,12 +1,42 @@
-import { useState } from 'react';
-import { Outlet, useMatch } from 'react-router-dom';
+import { useState, useCallback } from 'react';
+import { Outlet, useMatch, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { CompanyProvider } from '../contexts/CompanyContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useIdleTimeout } from '../hooks/useIdleTimeout';
+import IdleWarningBanner from './IdleWarningBanner';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const companyMatch = useMatch('/company/:companyId/*');
   const companyIdFromRoute = companyMatch?.params?.companyId ?? null;
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+  const [showIdleWarning, setShowIdleWarning] = useState(false);
+
+  const handleIdleSignOut = useCallback(async () => {
+    setShowIdleWarning(false);
+    try {
+      await signOut();
+    } finally {
+      navigate('/login?reason=idle');
+    }
+  }, [signOut, navigate]);
+
+  const handleIdleWarningShow = useCallback(() => {
+    setShowIdleWarning(true);
+  }, []);
+
+  const handleIdleActive = useCallback(() => {
+    setShowIdleWarning(false);
+  }, []);
+
+  const resetIdleTimers = useIdleTimeout(handleIdleSignOut, handleIdleWarningShow, handleIdleActive);
+
+  const handleStaySignedIn = useCallback(() => {
+    setShowIdleWarning(false);
+    resetIdleTimers();
+  }, [resetIdleTimers]);
 
   return (
     <CompanyProvider companyIdFromRoute={companyIdFromRoute}>
@@ -41,6 +71,12 @@ export default function Layout() {
         <main className="lg:ml-56 min-h-screen overflow-y-auto pt-14 lg:pt-0 bg-[#f1f5f9]">
           <Outlet />
         </main>
+
+        <IdleWarningBanner
+          visible={showIdleWarning}
+          onStaySignedIn={handleStaySignedIn}
+          onSignOut={handleIdleSignOut}
+        />
       </div>
     </CompanyProvider>
   );
