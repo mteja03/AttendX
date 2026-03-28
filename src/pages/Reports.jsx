@@ -27,6 +27,17 @@ import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/print
 
 const CHART_COLORS = ['#1B6B6B', '#4ECDC4', '#2BB8B0', '#155858', '#7EDDD8', '#0F4444', '#A8EDEA', '#264653', '#2A9D8F'];
 
+function getEmployeeOffboardingPhase(e) {
+  const o = e?.offboarding;
+  if (!o) return null;
+  if (o.status === 'completed' || o.phase === 'completed') return 'completed';
+  if (o.phase === 'notice_period') return 'notice_period';
+  if (o.phase === 'exit_tasks') return 'exit_tasks';
+  if (o.phase === 'withdrawn') return 'withdrawn';
+  if (o.status === 'in_progress' && Array.isArray(o.tasks) && o.tasks.length > 0) return 'exit_tasks';
+  return null;
+}
+
 const REPORT_TABS = [
   { id: 'headcount', label: 'Headcount', icon: '👥' },
   { id: 'employee', label: 'Employees', icon: '👤' },
@@ -422,7 +433,13 @@ export default function Reports() {
     const total = employees.length;
     const active = employees.filter((e) => (e.status || 'Active') === 'Active').length;
     const inactive = employees.filter((e) => e.status === 'Inactive').length;
-    const offboarding = employees.filter((e) => e.status === 'Offboarding' || e.offboarding?.status === 'in_progress').length;
+    const offboarding = employees.filter(
+      (e) =>
+        e.status === 'Offboarding' ||
+        e.status === 'Notice Period' ||
+        e.offboarding?.status === 'in_progress' ||
+        getEmployeeOffboardingPhase(e) === 'notice_period',
+    ).length;
     return { total, active, inactive, offboarding };
   }, [employees]);
 
@@ -683,12 +700,23 @@ export default function Reports() {
 
   const offboardingEmployees = useMemo(() => employees.filter((e) => e.offboarding), [employees]);
 
-  const offboardingStats = useMemo(() => {
-    const total = offboardingEmployees.length;
-    const completed = offboardingEmployees.filter((e) => e.offboarding?.status === 'completed').length;
-    const inProgress = offboardingEmployees.filter((e) => e.offboarding?.status === 'in_progress').length;
-    return { total, completed, inProgress };
-  }, [offboardingEmployees]);
+  const offboardingReportStats = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const mo = now.getMonth();
+    const inNotice = employees.filter((e) => getEmployeeOffboardingPhase(e) === 'notice_period').length;
+    const exitTasks = employees.filter((e) => getEmployeeOffboardingPhase(e) === 'exit_tasks').length;
+    const exitsThisMonth = employees.filter((e) => {
+      if (getEmployeeOffboardingPhase(e) !== 'completed') return false;
+      const d = toJSDate(e.offboarding?.completedAt) || toJSDate(e.offboarding?.exitDate);
+      return d && d.getFullYear() === y && d.getMonth() === mo;
+    }).length;
+    const withdrawnThisMonth = employees.filter((e) => {
+      const w = toJSDate(e.offboarding?.withdrawnOn);
+      return w && w.getFullYear() === y && w.getMonth() === mo;
+    }).length;
+    return { inNotice, exitTasks, exitsThisMonth, withdrawnThisMonth };
+  }, [employees]);
 
   const exitReasons = useMemo(() => {
     const acc = {};
@@ -705,7 +733,7 @@ export default function Reports() {
         const month = new Date(currentYear, i, 1);
         const monthName = month.toLocaleDateString('en-GB', { month: 'short' });
         const count = offboardingEmployees.filter((e) => {
-          if (e.offboarding?.status !== 'completed') return false;
+          if (getEmployeeOffboardingPhase(e) !== 'completed') return false;
           const d = toJSDate(e.offboarding?.completedAt) || toJSDate(e.offboarding?.exitDate);
           return d && d.getFullYear() === currentYear && d.getMonth() === i;
         }).length;
@@ -714,11 +742,26 @@ export default function Reports() {
     [offboardingEmployees, currentYear],
   );
 
+  const noticePeriodReportRows = useMemo(
+    () =>
+      employees
+        .filter((e) => getEmployeeOffboardingPhase(e) === 'notice_period')
+        .map((e) => ({
+          e,
+          expected: toJSDate(e.offboarding?.expectedLastDay),
+        }))
+        .sort((a, b) => (a.expected?.getTime() || 0) - (b.expected?.getTime() || 0)),
+    [employees],
+  );
+
   const activeOffboardingRows = useMemo(() => {
     return employees
-      .filter((e) => e.offboarding?.status === 'in_progress' || (e.status === 'Offboarding' && e.offboarding))
+      .filter((e) => getEmployeeOffboardingPhase(e) === 'exit_tasks')
       .map((e) => {
-        const exitDate = toJSDate(e.offboarding?.exitDate);
+        const exitDate =
+          toJSDate(e.offboarding?.exitDate) ||
+          toJSDate(e.offboarding?.actualLastDay) ||
+          toJSDate(e.offboarding?.expectedLastDay);
         const daysLeft = exitDate ? Math.ceil((exitDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
         const tasks = Array.isArray(e.offboarding?.tasks) ? e.offboarding.tasks : [];
         const done = tasks.filter((t) => t.completed).length;
@@ -729,17 +772,29 @@ export default function Reports() {
       .sort((a, b) => (a.exitDate?.getTime() || 0) - (b.exitDate?.getTime() || 0));
   }, [employees]);
 
+  const withdrawnOffboardingRows = useMemo(
+    () =>
+      employees
+        .filter((e) => getEmployeeOffboardingPhase(e) === 'withdrawn')
+        .map((e) => ({
+          e,
+          withdrawnD: toJSDate(e.offboarding?.withdrawnOn),
+        }))
+        .sort((a, b) => (b.withdrawnD?.getTime() || 0) - (a.withdrawnD?.getTime() || 0)),
+    [employees],
+  );
+
   const completedOffboardingRows = useMemo(
     () =>
-      offboardingEmployees
-        .filter((e) => e.offboarding?.status === 'completed')
+      employees
+        .filter((e) => getEmployeeOffboardingPhase(e) === 'completed')
         .map((e) => ({
           e,
           exitD: toJSDate(e.offboarding?.exitDate),
           completedD: toJSDate(e.offboarding?.completedAt),
         }))
         .sort((a, b) => (b.completedD?.getTime() || 0) - (a.completedD?.getTime() || 0)),
-    [offboardingEmployees],
+    [employees],
   );
 
   const downloadEmployeeCSV = () => {
@@ -975,23 +1030,66 @@ export default function Reports() {
       case 'offboarding':
         content = `
           <div class="print-section">
-            <div class="print-section-title">Active offboarding</div>
+            <div class="print-section-title">Notice period</div>
+            <table class="print-table">
+              <thead><tr><th>Name</th><th>Department</th><th>Resigned</th><th>Expected last day</th><th>Reason</th></tr></thead>
+              <tbody>
+              ${noticePeriodReportRows
+                .map(
+                  ({ e }) =>
+                    `<tr>
+                      <td>${esc(e.fullName || '—')}</td>
+                      <td>${esc(e.department || '—')}</td>
+                      <td>${esc(toDisplayDate(e.offboarding?.resignationDate) || '—')}</td>
+                      <td>${esc(toDisplayDate(e.offboarding?.expectedLastDay) || '—')}</td>
+                      <td>${esc(e.offboarding?.reason || e.offboarding?.exitReason || '—')}</td>
+                    </tr>`,
+                )
+                .join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="print-section">
+            <div class="print-section-title">Exit tasks in progress</div>
             <table class="print-table">
               <thead><tr><th>Name</th><th>Department</th><th>Exit date</th><th>Days left</th><th>Reason</th><th>Completion</th><th>Pending tasks</th></tr></thead>
               <tbody>
               ${activeOffboardingRows
                 .map(({ e, daysLeft, pct, pending }) => {
                   const dl = daysLeft == null ? '—' : daysLeft < 0 ? 'Past' : String(daysLeft);
+                  const exitDisp =
+                    toDisplayDate(e.offboarding?.exitDate) ||
+                    toDisplayDate(e.offboarding?.actualLastDay) ||
+                    toDisplayDate(e.offboarding?.expectedLastDay) ||
+                    '—';
                   return `<tr>
                     <td>${esc(e.fullName || '—')}</td>
                     <td>${esc(e.department || '—')}</td>
-                    <td>${esc(toDisplayDate(e.offboarding?.exitDate) || '—')}</td>
+                    <td>${esc(exitDisp)}</td>
                     <td>${esc(dl)}</td>
-                    <td>${esc(e.offboarding?.exitReason || '—')}</td>
+                    <td>${esc(e.offboarding?.exitReason || e.offboarding?.reason || '—')}</td>
                     <td>${pct}%</td>
                     <td>${pending}</td>
                   </tr>`;
                 })
+                .join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="print-section">
+            <div class="print-section-title">Withdrawn</div>
+            <table class="print-table">
+              <thead><tr><th>Name</th><th>Department</th><th>Withdrawn on</th></tr></thead>
+              <tbody>
+              ${withdrawnOffboardingRows
+                .map(
+                  ({ e }) =>
+                    `<tr>
+                      <td>${esc(e.fullName || '—')}</td>
+                      <td>${esc(e.department || '—')}</td>
+                      <td>${esc(toDisplayDate(e.offboarding?.withdrawnOn) || '—')}</td>
+                    </tr>`,
+                )
                 .join('')}
               </tbody>
             </table>
@@ -1302,6 +1400,7 @@ export default function Reports() {
             <select value={empFilterStatus} onChange={(e) => setEmpFilterStatus(e.target.value)} className="border rounded-lg px-2 py-1.5 text-sm">
               <option value="All">Status: All</option>
               <option value="Active">Active</option>
+              <option value="Notice Period">Notice Period</option>
               <option value="Inactive">Inactive</option>
               <option value="On Leave">On Leave</option>
               <option value="Offboarding">Offboarding</option>
@@ -1795,10 +1894,10 @@ export default function Reports() {
       {activeTab === 'offboarding' && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <StatCard value={offboardingStats.total} label="Total offboarding records" />
-            <StatCard value={offboardingStats.completed} label="Completed (exited)" />
-            <StatCard value={offboardingStats.inProgress} label="In progress" />
-            <StatCard value={exitReasons.length} label="Exit reason categories" />
+            <StatCard value={offboardingReportStats.inNotice} label="Currently in notice period" />
+            <StatCard value={offboardingReportStats.exitTasks} label="Exit tasks in progress" />
+            <StatCard value={offboardingReportStats.exitsThisMonth} label="Exits this month" />
+            <StatCard value={offboardingReportStats.withdrawnThisMonth} label="Withdrawn this month" />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
             <ChartCard title="Exit reasons">
@@ -1825,7 +1924,37 @@ export default function Reports() {
               </ResponsiveContainer>
             </ChartCard>
           </div>
-          <ChartCard title="Active offboardings">
+          <ChartCard title="Notice period">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-600 border-b">
+                    <th className="py-2">Name</th>
+                    <th className="py-2">Department</th>
+                    <th className="py-2">Resigned</th>
+                    <th className="py-2">Expected last day</th>
+                    <th className="py-2">Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {noticePeriodReportRows.map(({ e }) => (
+                    <tr key={e.id} className="border-t border-gray-100">
+                      <td className="py-2">
+                        <Link to={`/company/${companyId}/employees/${e.id}?tab=offboarding`} className="text-[#1B6B6B] hover:underline">
+                          {e.fullName}
+                        </Link>
+                      </td>
+                      <td className="py-2">{e.department}</td>
+                      <td className="py-2">{toDisplayDate(e.offboarding?.resignationDate)}</td>
+                      <td className="py-2">{toDisplayDate(e.offboarding?.expectedLastDay)}</td>
+                      <td className="py-2">{e.offboarding?.reason || e.offboarding?.exitReason || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </ChartCard>
+          <ChartCard title="Exit tasks in progress">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
@@ -1848,11 +1977,39 @@ export default function Reports() {
                         </Link>
                       </td>
                       <td className="py-2">{e.department}</td>
-                      <td className="py-2">{toDisplayDate(e.offboarding?.exitDate)}</td>
+                      <td className="py-2">
+                        {toDisplayDate(e.offboarding?.exitDate || e.offboarding?.actualLastDay || e.offboarding?.expectedLastDay)}
+                      </td>
                       <td className="py-2">{daysLeft == null ? '—' : daysLeft < 0 ? 'Past' : daysLeft}</td>
-                      <td className="py-2">{e.offboarding?.exitReason || '—'}</td>
+                      <td className="py-2">{e.offboarding?.exitReason || e.offboarding?.reason || '—'}</td>
                       <td className="py-2">{pct}%</td>
                       <td className="py-2">{pending}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </ChartCard>
+          <ChartCard title="Withdrawn">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-600 border-b">
+                    <th className="py-2">Name</th>
+                    <th className="py-2">Department</th>
+                    <th className="py-2">Withdrawn on</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {withdrawnOffboardingRows.map(({ e }) => (
+                    <tr key={e.id} className="border-t border-gray-100">
+                      <td className="py-2">
+                        <Link to={`/company/${companyId}/employees/${e.id}?tab=offboarding`} className="text-[#1B6B6B] hover:underline">
+                          {e.fullName}
+                        </Link>
+                      </td>
+                      <td className="py-2">{e.department}</td>
+                      <td className="py-2">{toDisplayDate(e.offboarding?.withdrawnOn)}</td>
                     </tr>
                   ))}
                 </tbody>

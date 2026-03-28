@@ -337,6 +337,39 @@ export default function EmployeeProfile() {
   const [completingOffTask, setCompletingOffTask] = useState(null);
   const [offTaskNotes, setOffTaskNotes] = useState('');
   const [deactivateChoiceOpen, setDeactivateChoiceOpen] = useState(false);
+  const [showResignationModal, setShowResignationModal] = useState(false);
+  const [resignForm, setResignForm] = useState({
+    resignationDate: '',
+    noticePeriodDays: 30,
+    reason: '',
+    notes: '',
+  });
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawNotes, setWithdrawNotes] = useState('');
+  const [showBuyoutModal, setShowBuyoutModal] = useState(false);
+  const [buyoutForm, setBuyoutForm] = useState({ actualLastDay: '', buyoutDays: 0, notes: '' });
+  const [showExitTasksModal, setShowExitTasksModal] = useState(false);
+
+  useEffect(() => {
+    if (showResignationModal) {
+      setResignForm({ resignationDate: '', noticePeriodDays: 30, reason: '', notes: '' });
+    }
+  }, [showResignationModal]);
+
+  useEffect(() => {
+    if (showExitTasksModal && employee?.offboarding?.expectedLastDay) {
+      setOffboardingExitDate(toDateString(employee.offboarding.expectedLastDay));
+      setOffboardingExitReason(
+        (employee.offboarding.reason || employee.offboarding.exitReason || '').trim(),
+      );
+    }
+  }, [showExitTasksModal, employee?.offboarding]);
+
+  useEffect(() => {
+    if (showBuyoutModal) {
+      setBuyoutForm({ actualLastDay: '', buyoutDays: 0, notes: '' });
+    }
+  }, [showBuyoutModal]);
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -931,6 +964,12 @@ export default function EmployeeProfile() {
 
   const proceedDeactivateDirectly = async () => {
     if (!employee || !companyId || !empId) return;
+    if (employee.status === 'Notice Period' || employee.status === 'Offboarding') {
+      showError(
+        'This employee is in their notice period. Use the Offboarding tab to properly process their exit.',
+      );
+      return;
+    }
     setSaving(true);
     try {
       // Trackables: assigned to this employee and still marked as Assigned
@@ -986,7 +1025,14 @@ export default function EmployeeProfile() {
 
   const handleDeactivate = async () => {
     if (!employee || !companyId || !empId) return;
-    if (!employee.offboarding || employee.offboarding.status === 'not_started') {
+    if (employee.status === 'Notice Period' || employee.status === 'Offboarding') {
+      showError(
+        'This employee is in their notice period. Use the Offboarding tab to properly process their exit.',
+      );
+      return;
+    }
+    const ob = employee.offboarding;
+    if (!ob || ob.status === 'not_started' || ob.phase === 'withdrawn') {
       setDeactivateChoiceOpen(true);
       return;
     }
@@ -1390,6 +1436,58 @@ export default function EmployeeProfile() {
     }));
   }, [offTasks]);
 
+  const expectedResignationLastDay = useMemo(() => {
+    if (!resignForm.resignationDate || resignForm.noticePeriodDays == null) return '';
+    const date = new Date(`${resignForm.resignationDate}T12:00:00`);
+    date.setDate(date.getDate() + Number(resignForm.noticePeriodDays));
+    return date.toISOString().split('T')[0];
+  }, [resignForm.resignationDate, resignForm.noticePeriodDays]);
+
+  const offPhase = useMemo(() => {
+    const o = employee?.offboarding;
+    if (!o) return null;
+    if (o.status === 'completed' || o.phase === 'completed') return 'completed';
+    if (o.phase === 'notice_period') return 'notice_period';
+    if (o.phase === 'exit_tasks') return 'exit_tasks';
+    if (o.phase === 'withdrawn') return 'withdrawn';
+    if (o.status === 'in_progress' && Array.isArray(o.tasks) && o.tasks.length > 0) return 'exit_tasks';
+    return null;
+  }, [employee?.offboarding]);
+
+  const buyoutDaysPreview = useMemo(() => {
+    if (!buyoutForm.actualLastDay || !employee?.offboarding?.expectedLastDay) return null;
+    const expectedEnd = toJSDate(employee.offboarding.expectedLastDay);
+    const actualEnd = new Date(`${buyoutForm.actualLastDay}T12:00:00`);
+    if (!expectedEnd || Number.isNaN(expectedEnd.getTime())) return null;
+    return Math.max(0, Math.ceil((expectedEnd.getTime() - actualEnd.getTime()) / (1000 * 60 * 60 * 24)));
+  }, [buyoutForm.actualLastDay, employee?.offboarding?.expectedLastDay]);
+
+  const noticePeriodMetrics = useMemo(() => {
+    if (offPhase !== 'notice_period' || !employee?.offboarding) return null;
+    const resignationDate = toJSDate(employee.offboarding.resignationDate);
+    const lastDay = toJSDate(employee.offboarding.expectedLastDay);
+    const totalDays = Math.max(1, Number(employee.offboarding.noticePeriodDays) || 1);
+    if (!resignationDate || !lastDay) {
+      return { daysElapsed: 0, daysRemaining: 0, progressPct: 0 };
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const resD = new Date(resignationDate);
+    resD.setHours(0, 0, 0, 0);
+    const endD = new Date(lastDay);
+    endD.setHours(0, 0, 0, 0);
+    const daysElapsed = Math.max(0, Math.ceil((today - resD) / (1000 * 60 * 60 * 24)));
+    const daysRemaining = Math.max(0, Math.ceil((endD - today) / (1000 * 60 * 60 * 24)));
+    const progressPct = Math.min(100, Math.round((daysElapsed / totalDays) * 100));
+    return { daysElapsed, daysRemaining, progressPct };
+  }, [offPhase, employee?.offboarding]);
+
+  const offExitRefForUi = useMemo(() => {
+    const o = employee?.offboarding;
+    if (!o) return null;
+    return o.exitDate || o.actualLastDay || o.expectedLastDay;
+  }, [employee?.offboarding]);
+
   const assignedAssetsForWarning = useMemo(() => {
     const trackables = assetList.filter((a) => (a.mode || 'trackable') === 'trackable' && a.assignedToId === empId && a.status === 'Assigned');
     const consumables = assetList
@@ -1402,7 +1500,238 @@ export default function EmployeeProfile() {
     return { trackables, consumables };
   }, [assetList, empId]);
 
-  const handleStartOffboarding = async () => {
+  const buildExitOffboardingTasks = async (exitDateTs) => {
+    let templateTasks = DEFAULT_OFFBOARDING_TEMPLATE.tasks;
+    try {
+      const templateDoc = await getDoc(doc(db, 'companies', companyId, 'settings', 'offboardingTemplate'));
+      if (templateDoc.exists() && Array.isArray(templateDoc.data()?.tasks) && templateDoc.data().tasks.length > 0) {
+        templateTasks = templateDoc.data().tasks;
+      }
+    } catch {
+      /* default template */
+    }
+
+    const assetsSnap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+    const latestAssets = assetsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    setAssetList(latestAssets);
+
+    const sanitized = templateTasks
+      .slice()
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .map((t, idx) => ({
+        id: t.id || `off_${Date.now()}_${idx}`,
+        title: t.title || '',
+        description: t.description || '',
+        category: t.category || 'Resignation',
+        assignedTo: t.assignedTo || 'hr',
+        daysBefore: Number(t.daysBefore) || 0,
+        isRequired: Boolean(t.isRequired),
+        order: Number(t.order) || idx,
+        completed: false,
+        completedAt: null,
+        completedBy: null,
+        notes: '',
+        dueDate: calculateOffboardingDueDate(exitDateTs, t.daysBefore),
+      }))
+      .map((t) => Object.fromEntries(Object.entries(t).filter(([, v]) => v !== undefined)));
+
+    const modeOf = (a) => a.mode || 'trackable';
+    const assetRows = [];
+    latestAssets.forEach((a) => {
+      if (modeOf(a) === 'trackable' && a.assignedToId === empId && a.status === 'Assigned') {
+        assetRows.push({ asset: a, mode: 'trackable' });
+      }
+      if (modeOf(a) === 'consumable' && Array.isArray(a.assignments)) {
+        a.assignments.forEach((asgn, idx) => {
+          if (asgn.employeeId === empId && !asgn.returned) {
+            assetRows.push({ asset: a, mode: 'consumable', assignmentIndex: idx, asgn });
+          }
+        });
+      }
+    });
+
+    const maxOrder = sanitized.reduce((m, t) => Math.max(m, Number(t.order) || 0), 0);
+    const assetTasks = assetRows.map((row, i) => {
+      const a = row.asset;
+      const descParts = [`Asset ID: ${a.assetId || a.id}`];
+      if (a.serialNumber) descParts.push(`SN: ${a.serialNumber}`);
+      if (row.mode === 'consumable') {
+        descParts.push(`Quantity issued: ${row.asgn?.quantity ?? 1}`);
+      }
+      return {
+        id: `asset_return_${a.id}_${row.mode}_${row.assignmentIndex ?? 't'}_${i}`,
+        title: `Return ${a.name || a.assetId || 'asset'}`,
+        description: descParts.join(' · '),
+        category: 'Asset Return',
+        assignedTo: 'admin',
+        daysBefore: 0,
+        isRequired: a.isReturnable !== false,
+        order: maxOrder + 1 + i,
+        assetId: a.id,
+        assetMode: row.mode,
+        consumableAssignmentIndex: row.assignmentIndex,
+        consumableIssueSeconds: row.asgn?.issueDate?.seconds ?? row.asgn?.issueDate?._seconds ?? null,
+        isAssetTask: true,
+        completed: false,
+        completedAt: null,
+        completedBy: null,
+        notes: '',
+        dueDate: calculateOffboardingDueDate(exitDateTs, 0),
+      };
+    });
+
+    return [...sanitized, ...assetTasks];
+  };
+
+  const handleRecordResignation = async () => {
+    if (!companyId || !empId || !employee || !currentUser) return;
+    if (!resignForm.resignationDate) {
+      showError('Please enter resignation date');
+      return;
+    }
+    if (!expectedResignationLastDay) {
+      showError('Please set notice period');
+      return;
+    }
+    setSaving(true);
+    try {
+      const resignationTs = Timestamp.fromDate(new Date(`${resignForm.resignationDate}T12:00:00`));
+      const expectedTs = Timestamp.fromDate(new Date(`${expectedResignationLastDay}T12:00:00`));
+      const now = Timestamp.now();
+      const offboardingData = {
+        phase: 'notice_period',
+        resignationDate: resignationTs,
+        noticePeriodDays: Number(resignForm.noticePeriodDays),
+        expectedLastDay: expectedTs,
+        reason: resignForm.reason || '',
+        notes: resignForm.notes || '',
+        recordedAt: now,
+        recordedBy: currentUser.email || '',
+        history: [
+          {
+            event: 'resignation_recorded',
+            date: now,
+            by: currentUser.email || '',
+            notes: `Notice period: ${resignForm.noticePeriodDays} days. Expected last day: ${toDisplayDate(expectedTs)}`,
+          },
+        ],
+      };
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+        status: 'Notice Period',
+        offboarding: offboardingData,
+        updatedAt: serverTimestamp(),
+      });
+      await refreshEmployee();
+      success(`Resignation recorded. Last day: ${toDisplayDate(expectedTs)}`);
+      setShowResignationModal(false);
+    } catch (e) {
+      console.error(e);
+      showError('Failed to record resignation');
+    }
+    setSaving(false);
+  };
+
+  const handleWithdrawResignation = async () => {
+    if (!companyId || !empId || !employee || !currentUser) return;
+    setSaving(true);
+    try {
+      const now = Timestamp.now();
+      const updatedHistory = [
+        ...(employee.offboarding?.history || []),
+        {
+          event: 'resignation_withdrawn',
+          date: now,
+          by: currentUser.email || '',
+          notes: withdrawNotes.trim() || 'Resignation withdrawn',
+        },
+      ];
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+        status: 'Active',
+        offboarding: {
+          ...employee.offboarding,
+          phase: 'withdrawn',
+          withdrawnOn: now,
+          withdrawnBy: currentUser.email || '',
+          withdrawNotes: withdrawNotes.trim(),
+          history: updatedHistory,
+        },
+        updatedAt: serverTimestamp(),
+      });
+      await refreshEmployee();
+      success(`${employee.fullName} is back to Active!`);
+      setShowWithdrawModal(false);
+      setWithdrawNotes('');
+    } catch (e) {
+      console.error(e);
+      showError('Failed to withdraw resignation');
+    }
+    setSaving(false);
+  };
+
+  const handleNoticeBuyout = async () => {
+    if (!companyId || !empId || !employee || !currentUser) return;
+    if (!buyoutForm.actualLastDay) {
+      showError('Please enter actual last day');
+      return;
+    }
+    setSaving(true);
+    try {
+      const expectedEnd = toJSDate(employee.offboarding?.expectedLastDay);
+      const actualEnd = new Date(`${buyoutForm.actualLastDay}T12:00:00`);
+      if (!expectedEnd || Number.isNaN(expectedEnd.getTime())) {
+        showError('Missing expected last day on record');
+        setSaving(false);
+        return;
+      }
+      const buyoutDays = Math.max(
+        0,
+        Math.ceil((expectedEnd.getTime() - actualEnd.getTime()) / (1000 * 60 * 60 * 24)),
+      );
+      const exitDateTs = Timestamp.fromDate(actualEnd);
+      const now = Timestamp.now();
+      const allTasks = await buildExitOffboardingTasks(exitDateTs);
+      const updatedHistory = [
+        ...(employee.offboarding?.history || []),
+        {
+          event: 'notice_buyout',
+          date: now,
+          by: currentUser.email || '',
+          notes: `Buyout of ${buyoutDays} days. Actual last day: ${toDisplayDate(buyoutForm.actualLastDay)}`,
+        },
+      ];
+      const exitReason = employee.offboarding?.reason || employee.offboarding?.exitReason || 'Resignation';
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+        status: 'Offboarding',
+        offboarding: {
+          ...employee.offboarding,
+          phase: 'exit_tasks',
+          status: 'in_progress',
+          exitDate: exitDateTs,
+          actualLastDay: buyoutForm.actualLastDay,
+          exitReason,
+          buyoutDays,
+          buyoutNotes: buyoutForm.notes || '',
+          startedAt: now,
+          startedBy: currentUser.email || '',
+          completedAt: null,
+          completionPct: 0,
+          tasks: allTasks,
+          history: updatedHistory,
+        },
+        updatedAt: serverTimestamp(),
+      });
+      await refreshEmployee();
+      success(`Buyout confirmed. Last day: ${toDisplayDate(buyoutForm.actualLastDay)}`);
+      setShowBuyoutModal(false);
+      setBuyoutForm({ actualLastDay: '', buyoutDays: 0, notes: '' });
+    } catch (e) {
+      console.error(e);
+      showError('Failed to process buyout');
+    }
+    setSaving(false);
+  };
+
+  const handleStartExitTasks = async () => {
     if (!companyId || !empId || !employee || !currentUser) return;
     if (!offboardingExitDate) {
       showError('Please select last working day');
@@ -1414,109 +1743,41 @@ export default function EmployeeProfile() {
     }
     setSaving(true);
     try {
-      let templateTasks = DEFAULT_OFFBOARDING_TEMPLATE.tasks;
-      try {
-        const templateDoc = await getDoc(doc(db, 'companies', companyId, 'settings', 'offboardingTemplate'));
-        if (templateDoc.exists() && Array.isArray(templateDoc.data()?.tasks) && templateDoc.data().tasks.length > 0) {
-          templateTasks = templateDoc.data().tasks;
-        }
-      } catch {
-        /* use default template */
-      }
-
-      const assetsSnap = await getDocs(collection(db, 'companies', companyId, 'assets'));
-      const latestAssets = assetsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setAssetList(latestAssets);
-
-      const exitDateTs = Timestamp.fromDate(new Date(offboardingExitDate));
+      const exitDateTs = Timestamp.fromDate(new Date(`${offboardingExitDate}T12:00:00`));
       const now = Timestamp.now();
-
-      const sanitized = templateTasks
-        .slice()
-        .sort((a, b) => (a.order || 0) - (b.order || 0))
-        .map((t, idx) => ({
-          id: t.id || `off_${Date.now()}_${idx}`,
-          title: t.title || '',
-          description: t.description || '',
-          category: t.category || 'Resignation',
-          assignedTo: t.assignedTo || 'hr',
-          daysBefore: Number(t.daysBefore) || 0,
-          isRequired: Boolean(t.isRequired),
-          order: Number(t.order) || idx,
-          completed: false,
-          completedAt: null,
-          completedBy: null,
-          notes: '',
-          dueDate: calculateOffboardingDueDate(exitDateTs, t.daysBefore),
-        }))
-        .map((t) => Object.fromEntries(Object.entries(t).filter(([, v]) => v !== undefined)));
-
-      const modeOf = (a) => a.mode || 'trackable';
-      const assetRows = [];
-      latestAssets.forEach((a) => {
-        if (modeOf(a) === 'trackable' && a.assignedToId === empId && a.status === 'Assigned') {
-          assetRows.push({ asset: a, mode: 'trackable' });
-        }
-        if (modeOf(a) === 'consumable' && Array.isArray(a.assignments)) {
-          a.assignments.forEach((asgn, idx) => {
-            if (asgn.employeeId === empId && !asgn.returned) {
-              assetRows.push({ asset: a, mode: 'consumable', assignmentIndex: idx, asgn });
-            }
-          });
-        }
-      });
-
-      const maxOrder = sanitized.reduce((m, t) => Math.max(m, Number(t.order) || 0), 0);
-      const assetTasks = assetRows.map((row, i) => {
-        const a = row.asset;
-        const descParts = [`Asset ID: ${a.assetId || a.id}`];
-        if (a.serialNumber) descParts.push(`SN: ${a.serialNumber}`);
-        if (row.mode === 'consumable') {
-          descParts.push(`Quantity issued: ${row.asgn?.quantity ?? 1}`);
-        }
-        return {
-          id: `asset_return_${a.id}_${row.mode}_${row.assignmentIndex ?? 't'}_${i}`,
-          title: `Return ${a.name || a.assetId || 'asset'}`,
-          description: descParts.join(' · '),
-          category: 'Asset Return',
-          assignedTo: 'admin',
-          daysBefore: 0,
-          isRequired: a.isReturnable !== false,
-          order: maxOrder + 1 + i,
-          assetId: a.id,
-          assetMode: row.mode,
-          consumableAssignmentIndex: row.assignmentIndex,
-          consumableIssueSeconds: row.asgn?.issueDate?.seconds ?? row.asgn?.issueDate?._seconds ?? null,
-          isAssetTask: true,
-          completed: false,
-          completedAt: null,
-          completedBy: null,
-          notes: '',
-          dueDate: calculateOffboardingDueDate(exitDateTs, 0),
-        };
-      });
-
-      const allTasks = [...sanitized, ...assetTasks];
-
-      const payload = {
+      const allTasks = await buildExitOffboardingTasks(exitDateTs);
+      const updatedHistory = [
+        ...(employee.offboarding?.history || []),
+        {
+          event: 'exit_tasks_started',
+          date: now,
+          by: currentUser.email || '',
+          notes: `Exit date: ${toDisplayDate(exitDateTs)}`,
+        },
+      ];
+      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+        status: 'Offboarding',
         offboarding: {
+          ...employee.offboarding,
+          phase: 'exit_tasks',
           status: 'in_progress',
           exitDate: exitDateTs,
+          actualLastDay: offboardingExitDate,
           exitReason: offboardingExitReason,
           startedAt: now,
+          startedBy: currentUser.email || '',
           completedAt: null,
           completionPct: 0,
           tasks: allTasks,
+          history: updatedHistory,
         },
-        status: 'Offboarding',
         updatedAt: serverTimestamp(),
-      };
-
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
-      setEmployee((prev) => (prev ? { ...prev, ...payload } : prev));
-      success(`Offboarding started for ${employee.fullName}. Exit date: ${toDisplayDate(exitDateTs)}`);
+      });
+      await refreshEmployee();
+      success(`Exit tasks started for ${employee.fullName}. Last day: ${toDisplayDate(exitDateTs)}`);
+      setShowExitTasksModal(false);
     } catch (error) {
-      showError(`Failed to start offboarding: ${error?.message || 'Unknown error'}`);
+      showError(`Failed to start exit tasks: ${error?.message || 'Unknown error'}`);
     }
     setSaving(false);
   };
@@ -1539,6 +1800,7 @@ export default function EmployeeProfile() {
     const payload = {
       offboarding: {
         ...(offboarding || {}),
+        phase: status === 'completed' ? 'completed' : 'exit_tasks',
         status,
         completionPct: pct,
         tasks: nextTasks,
@@ -1640,15 +1902,18 @@ export default function EmployeeProfile() {
     const done = nextTasks.filter((t) => t.completed).length;
     const total = nextTasks.length || 1;
     const pct = Math.round((done / total) * 100);
+    const requiredDone = nextTasks.filter((t) => t.isRequired).every((t) => t.completed);
+    const nextStatus = requiredDone && done === nextTasks.length ? 'completed' : 'in_progress';
     const payload = {
       offboarding: {
         ...(offboarding || {}),
-        status: done === 0 ? 'not_started' : 'in_progress',
+        phase: nextStatus === 'completed' ? 'completed' : 'exit_tasks',
+        status: nextStatus,
         completionPct: pct,
         completedAt: null,
         tasks: nextTasks,
       },
-      status: 'Offboarding',
+      status: nextStatus === 'completed' ? 'Inactive' : 'Offboarding',
       updatedAt: serverTimestamp(),
     };
     await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
@@ -2156,6 +2421,13 @@ export default function EmployeeProfile() {
       setShowAssetReturnWarning(false);
       return;
     }
+    if (employee.status === 'Notice Period' || employee.status === 'Offboarding') {
+      showError(
+        'This employee is in their notice period. Use the Offboarding tab to properly process their exit.',
+      );
+      setShowAssetReturnWarning(false);
+      return;
+    }
     setSaving(true);
     try {
       const now = new Date();
@@ -2532,11 +2804,13 @@ export default function EmployeeProfile() {
                 className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                   employee.status === 'Active'
                     ? 'bg-green-100 text-green-800'
-                    : employee.status === 'On Leave'
-                    ? 'bg-amber-100 text-amber-800'
-                    : employee.status === 'Offboarding'
-                    ? 'bg-orange-100 text-orange-800'
-                    : 'bg-slate-100 text-slate-600'
+                    : employee.status === 'Notice Period'
+                      ? 'bg-amber-100 text-amber-700'
+                      : employee.status === 'On Leave'
+                        ? 'bg-blue-100 text-blue-800'
+                        : employee.status === 'Offboarding'
+                          ? 'bg-orange-100 text-orange-800'
+                          : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 {employee.status || 'Active'}
@@ -4321,89 +4595,129 @@ export default function EmployeeProfile() {
 
       {tab === 'offboarding' && (
         <div className="space-y-6">
-          {(!offboarding || offboarding.status === 'not_started') ? (
-            <div className="bg-white border rounded-2xl p-6 text-center">
-              <p className="text-4xl mb-3">👋</p>
-              <p className="text-base font-semibold text-gray-800 mb-1">Initiate Offboarding</p>
-              <p className="text-sm text-gray-400 mb-6">
-                Start the offboarding process for {employee.fullName}
-              </p>
-
-              <div className="max-w-md mx-auto text-left space-y-4">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Last Working Day</label>
-                  <input
-                    type="date"
-                    value={offboardingExitDate}
-                    onChange={(e) => setOffboardingExitDate(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
+          {offPhase === 'notice_period' && noticePeriodMetrics && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">⏰</span>
+                      <h3 className="text-base font-semibold text-amber-800">Notice Period Running</h3>
+                    </div>
+                    <p className="text-sm text-amber-600">
+                      {noticePeriodMetrics.daysRemaining > 0
+                        ? `${noticePeriodMetrics.daysRemaining} days remaining`
+                        : 'Notice period completed'}
+                    </p>
+                  </div>
+                  <span className="text-2xl font-bold text-amber-600">{noticePeriodMetrics.progressPct}%</span>
+                </div>
+                <div className="w-full bg-amber-200 rounded-full h-2 mb-4">
+                  <div
+                    className="bg-amber-500 h-2 rounded-full transition-all"
+                    style={{ width: `${noticePeriodMetrics.progressPct}%` }}
                   />
                 </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Exit Reason</label>
-                  <select
-                    value={offboardingExitReason}
-                    onChange={(e) => setOffboardingExitReason(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
-                  >
-                    <option value="">Select reason</option>
-                    <option value="Resignation">Resignation</option>
-                    <option value="Termination">Termination</option>
-                    <option value="Retirement">Retirement</option>
-                    <option value="Contract End">Contract End</option>
-                    <option value="Other">Other</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
+                  <div className="bg-white rounded-xl p-3 border border-amber-100">
+                    <p className="text-xs text-amber-500 mb-1">Resigned On</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {toDisplayDate(offboarding.resignationDate)}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-xl p-3 border border-amber-100">
+                    <p className="text-xs text-amber-500 mb-1">Notice Period</p>
+                    <p className="text-sm font-semibold text-gray-800">{offboarding.noticePeriodDays} days</p>
+                  </div>
+                  <div className="bg-white rounded-xl p-3 border border-amber-100">
+                    <p className="text-xs text-amber-500 mb-1">Expected Last Day</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {toDisplayDate(offboarding.expectedLastDay)}
+                    </p>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleStartOffboarding}
-                  disabled={saving}
-                  className="w-full px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
-                >
-                  {saving ? 'Starting…' : 'Start Offboarding'}
-                </button>
+                {offboarding.reason && (
+                  <div className="mt-3 pt-3 border-t border-amber-200">
+                    <p className="text-xs text-amber-500">Reason</p>
+                    <p className="text-sm text-gray-700 mt-0.5">{offboarding.reason}</p>
+                  </div>
+                )}
               </div>
-
-              {(assignedAssetsForWarning.trackables.length > 0 || assignedAssetsForWarning.consumables.length > 0) && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-4 text-left">
-                  <p className="text-sm font-medium text-amber-800 mb-2">⚠️ Assets to be returned</p>
-                  {assignedAssetsForWarning.trackables.map((a) => (
-                    <p key={a.id} className="text-xs text-amber-700">
-                      • {a.name} ({a.assetId})
-                    </p>
-                  ))}
-                  {assignedAssetsForWarning.consumables.map((a) => (
-                    <p key={`${a.id}_${a.assetId}`} className="text-xs text-amber-700">
-                      • {a.name} ({a.assetId}) · Qty: {a._qty}
-                    </p>
-                  ))}
+              {canEditEmployees && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowWithdrawModal(true)}
+                    className="flex flex-col items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-2xl hover:bg-green-100 transition-colors text-center"
+                  >
+                    <span className="text-2xl">🔄</span>
+                    <div>
+                      <p className="text-xs font-semibold text-green-700">Withdraw</p>
+                      <p className="text-xs font-semibold text-green-700">Resignation</p>
+                      <p className="text-xs text-green-500 mt-0.5">Employee stays</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBuyoutModal(true)}
+                    className="flex flex-col items-center gap-2 p-4 bg-blue-50 border border-blue-200 rounded-2xl hover:bg-blue-100 transition-colors text-center"
+                  >
+                    <span className="text-2xl">💰</span>
+                    <div>
+                      <p className="text-xs font-semibold text-blue-700">Notice</p>
+                      <p className="text-xs font-semibold text-blue-700">Buyout</p>
+                      <p className="text-xs text-blue-500 mt-0.5">Early exit</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowExitTasksModal(true)}
+                    className="flex flex-col items-center gap-2 p-4 bg-orange-50 border border-orange-200 rounded-2xl hover:bg-orange-100 transition-colors text-center"
+                  >
+                    <span className="text-2xl">✅</span>
+                    <div>
+                      <p className="text-xs font-semibold text-orange-700">Start Exit</p>
+                      <p className="text-xs font-semibold text-orange-700">Tasks</p>
+                      <p className="text-xs text-orange-500 mt-0.5">Begin F&amp;F</p>
+                    </div>
+                  </button>
                 </div>
               )}
             </div>
-          ) : (
+          )}
+
+          {(offPhase === 'exit_tasks' || offPhase === 'completed') && offboarding && (
             <div>
-              <div className="flex items-center justify-between p-4 bg-white border rounded-xl mb-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      offboarding.status === 'completed'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    {offboarding.status === 'completed' ? '✓ Offboarding Complete' : 'Offboarding In Progress'}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    Exit: {toDisplayDate(offboarding.exitDate)} · {offboarding.exitReason}
+              {offPhase === 'exit_tasks' && (
+                <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-orange-800">Exit Processing</p>
+                      <p className="text-xs text-orange-600">
+                        Last day:{' '}
+                        {toDisplayDate(offboarding.actualLastDay || offboarding.expectedLastDay || offboarding.exitDate)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-orange-600">{offboarding.completionPct ?? offPct}%</p>
+                      <p className="text-xs text-orange-500">complete</p>
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-gray-800">{offPct}%</p>
-                  <p className="text-xs text-gray-400">
-                    {offCompleted} of {offTotal} tasks
-                  </p>
+              )}
+              {offPhase === 'completed' && (
+                <div className="bg-green-50 border border-green-200 rounded-2xl p-4 mb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-green-800">Offboarding complete</p>
+                      <p className="text-xs text-green-600">
+                        Last day: {toDisplayDate(offExitRefForUi)}
+                      </p>
+                    </div>
+                    <p className="text-lg font-bold text-green-700">100%</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="w-full bg-gray-100 rounded-full h-2 mb-6">
                 <div
@@ -4414,35 +4728,34 @@ export default function EmployeeProfile() {
                 />
               </div>
 
-              {(() => {
-                const exit = toJSDate(offboarding.exitDate);
-                const daysUntilExit = exit
-                  ? Math.ceil((exit - new Date()) / (1000 * 60 * 60 * 24))
-                  : null;
-                if (daysUntilExit == null) return null;
-                if (daysUntilExit > 0) {
+              {offPhase === 'exit_tasks' &&
+                (() => {
+                  const exit = toJSDate(offExitRefForUi);
+                  const daysUntilExit = exit ? Math.ceil((exit - new Date()) / (1000 * 60 * 60 * 24)) : null;
+                  if (daysUntilExit == null) return null;
+                  if (daysUntilExit > 0) {
+                    return (
+                      <div className="text-center mb-4 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                        <p className="text-2xl font-bold text-amber-700">{daysUntilExit}</p>
+                        <p className="text-xs text-amber-600">days until exit</p>
+                      </div>
+                    );
+                  }
+                  if (daysUntilExit === 0) {
+                    return (
+                      <div className="text-center mb-4 p-3 bg-red-50 rounded-xl border border-red-100">
+                        <p className="text-sm font-bold text-red-700">🚨 Today is the last working day!</p>
+                      </div>
+                    );
+                  }
                   return (
-                    <div className="text-center mb-4 p-3 bg-amber-50 rounded-xl border border-amber-100">
-                      <p className="text-2xl font-bold text-amber-700">{daysUntilExit}</p>
-                      <p className="text-xs text-amber-600">days until exit</p>
+                    <div className="text-center mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                      <p className="text-sm text-gray-500">
+                        Employee has exited {Math.abs(daysUntilExit)} days ago
+                      </p>
                     </div>
                   );
-                }
-                if (daysUntilExit === 0) {
-                  return (
-                    <div className="text-center mb-4 p-3 bg-red-50 rounded-xl border border-red-100">
-                      <p className="text-sm font-bold text-red-700">🚨 Today is the last working day!</p>
-                    </div>
-                  );
-                }
-                return (
-                  <div className="text-center mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                    <p className="text-sm text-gray-500">
-                      Employee has exited {Math.abs(daysUntilExit)} days ago
-                    </p>
-                  </div>
-                );
-              })()}
+                })()}
 
               <div className="space-y-6">
                 {offByCategory.map((g) => {
@@ -4465,22 +4778,24 @@ export default function EmployeeProfile() {
                           role="button"
                           tabIndex={0}
                           onClick={() => {
-                            if (task.completed) return;
+                            if (task.completed || offPhase === 'completed') return;
                             setCompletingOffTask(task);
                             setOffTaskNotes('');
                           }}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !task.completed) {
+                            if (e.key === 'Enter' && !task.completed && offPhase !== 'completed') {
                               setCompletingOffTask(task);
                               setOffTaskNotes('');
                             }
                           }}
-                          className={`flex items-start gap-3 p-3 rounded-xl border mb-2 cursor-pointer transition-all ${
+                          className={`flex items-start gap-3 p-3 rounded-xl border mb-2 transition-all ${
+                            offPhase === 'completed' ? 'cursor-default' : 'cursor-pointer'
+                          } ${
                             task.completed
                               ? 'bg-green-50 border-green-100'
                               : isOverdue(task.dueDate)
-                              ? 'bg-red-50 border-red-100'
-                              : 'bg-white border-gray-200 hover:border-amber-200 hover:bg-amber-50'
+                                ? 'bg-red-50 border-red-100'
+                                : 'bg-white border-gray-200 hover:border-amber-200 hover:bg-amber-50'
                           }`}
                         >
                           <div
@@ -4533,7 +4848,7 @@ export default function EmployeeProfile() {
                               )}
                             </div>
                             {task.completed && task.notes && (
-                              <p className="text-xs text-gray-500 mt-1 italic">"{task.notes}"</p>
+                              <p className="text-xs text-gray-500 mt-1 italic">&quot;{task.notes}&quot;</p>
                             )}
                           </div>
 
@@ -4554,6 +4869,80 @@ export default function EmployeeProfile() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {(!offPhase || offPhase === 'withdrawn') && (
+            <div className="text-center py-12">
+              <div className="text-5xl mb-4">📋</div>
+              <h3 className="text-base font-semibold text-gray-700 mb-2">No resignation recorded</h3>
+              <p className="text-sm text-gray-400 mb-6 max-w-xs mx-auto">
+                When an employee resigns, record it here to start tracking their notice period.
+              </p>
+              {offPhase === 'withdrawn' && (
+                <p className="text-xs text-gray-500 mb-4 max-w-sm mx-auto">
+                  A previous resignation was withdrawn. You can record a new resignation when needed.
+                </p>
+              )}
+              {canEditEmployees && (
+                <button
+                  type="button"
+                  onClick={() => setShowResignationModal(true)}
+                  className="px-6 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600"
+                >
+                  📝 Record Resignation
+                </button>
+              )}
+              {(assignedAssetsForWarning.trackables.length > 0 || assignedAssetsForWarning.consumables.length > 0) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-8 max-w-lg mx-auto text-left">
+                  <p className="text-sm font-medium text-amber-800 mb-2">⚠️ Assets to be returned</p>
+                  {assignedAssetsForWarning.trackables.map((a) => (
+                    <p key={a.id} className="text-xs text-amber-700">
+                      • {a.name} ({a.assetId})
+                    </p>
+                  ))}
+                  {assignedAssetsForWarning.consumables.map((a) => (
+                    <p key={`${a.id}_${a.assetId}`} className="text-xs text-amber-700">
+                      • {a.name} ({a.assetId}) · Qty: {a._qty}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {(offboarding?.history || []).length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Timeline</h4>
+              <div className="space-y-2">
+                {[...(offboarding.history || [])].reverse().map((event, i, arr) => (
+                  <div key={i} className="flex gap-3 text-sm">
+                    <div className="flex flex-col items-center">
+                      <div
+                        className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                          event.event === 'resignation_withdrawn'
+                            ? 'bg-green-500'
+                            : event.event === 'notice_buyout'
+                              ? 'bg-blue-500'
+                              : event.event === 'exit_tasks_started'
+                                ? 'bg-orange-500'
+                                : 'bg-amber-500'
+                        }`}
+                      />
+                      {i < arr.length - 1 && <div className="w-0.5 flex-1 min-h-[1rem] bg-gray-100 mt-1" />}
+                    </div>
+                    <div className="pb-3 flex-1">
+                      <p className="font-medium text-gray-700 capitalize">
+                        {(event.event || '').replace(/_/g, ' ')}
+                      </p>
+                      {event.notes && <p className="text-xs text-gray-400 mt-0.5">{event.notes}</p>}
+                      <p className="text-xs text-gray-300 mt-0.5">
+                        {toDisplayDate(event.date)} · {event.by || '—'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -5236,9 +5625,9 @@ export default function EmployeeProfile() {
       {deactivateChoiceOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
-            <h3 className="font-semibold text-gray-900 mb-1">Start offboarding instead?</h3>
+            <h3 className="font-semibold text-gray-900 mb-1">Use Offboarding instead?</h3>
             <p className="text-sm text-gray-500 mb-4">
-              This employee does not have offboarding started. Would you like to start the offboarding process instead of directly deactivating?
+              This employee does not have an active exit on file. Open the Offboarding tab to record a resignation and run notice period / exit tasks, or deactivate directly if you must.
             </p>
             <div className="flex gap-2">
               <button
@@ -5249,7 +5638,7 @@ export default function EmployeeProfile() {
                 }}
                 className="flex-1 py-2 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600"
               >
-                Start Offboarding
+                Open Offboarding
               </button>
               <button
                 type="button"
@@ -5269,6 +5658,246 @@ export default function EmployeeProfile() {
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {showResignationModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Record Resignation</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Resignation Date</label>
+                <input
+                  type="date"
+                  value={resignForm.resignationDate}
+                  onChange={(e) => setResignForm((f) => ({ ...f, resignationDate: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Notice period</label>
+                <select
+                  value={resignForm.noticePeriodDays}
+                  onChange={(e) => setResignForm((f) => ({ ...f, noticePeriodDays: Number(e.target.value) }))}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                >
+                  <option value={15}>15 days</option>
+                  <option value={30}>30 days</option>
+                  <option value={45}>45 days</option>
+                  <option value={60}>60 days</option>
+                  <option value={90}>90 days</option>
+                </select>
+              </div>
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-xs text-amber-500">Expected Last Day (auto-calculated)</p>
+                <p className="text-base font-bold text-amber-800 mt-1">
+                  {expectedResignationLastDay ? toDisplayDate(expectedResignationLastDay) : '— select dates above'}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Reason</label>
+                <select
+                  value={resignForm.reason}
+                  onChange={(e) => setResignForm((f) => ({ ...f, reason: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                >
+                  <option value="">Select reason</option>
+                  <option value="Better Opportunity">Better Opportunity</option>
+                  <option value="Higher Studies">Higher Studies</option>
+                  <option value="Personal Reasons">Personal Reasons</option>
+                  <option value="Relocation">Relocation</option>
+                  <option value="Health Reasons">Health Reasons</option>
+                  <option value="Entrepreneurship">Entrepreneurship</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Notes (optional)</label>
+                <textarea
+                  value={resignForm.notes}
+                  onChange={(e) => setResignForm((f) => ({ ...f, notes: e.target.value }))}
+                  rows={3}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowResignationModal(false)}
+                className="flex-1 py-2.5 border rounded-xl text-sm text-gray-600"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRecordResignation}
+                disabled={saving}
+                className="flex-1 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Record Resignation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showWithdrawModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Withdraw Resignation</h2>
+            <div className="text-center py-4">
+              <div className="text-5xl mb-4">🔄</div>
+              <h3 className="text-base font-semibold text-gray-800 mb-2">
+                Withdraw {employee.fullName}&apos;s Resignation?
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Employee will return to Active status. All offboarding data will be preserved in history for audit
+                trail.
+              </p>
+              <textarea
+                placeholder="Notes (e.g. Employee retained with salary revision)"
+                value={withdrawNotes}
+                onChange={(e) => setWithdrawNotes(e.target.value)}
+                rows={3}
+                className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none text-left"
+              />
+            </div>
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowWithdrawModal(false);
+                  setWithdrawNotes('');
+                }}
+                className="flex-1 py-2.5 border rounded-xl text-sm text-gray-600"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleWithdrawResignation}
+                disabled={saving}
+                className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Yes, Withdraw Resignation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBuyoutModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Notice Period Buyout</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Company is buying out the remaining notice period. Employee will exit earlier than planned.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Actual Last Day</label>
+                <input
+                  type="date"
+                  value={buyoutForm.actualLastDay}
+                  onChange={(e) => setBuyoutForm((f) => ({ ...f, actualLastDay: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                />
+              </div>
+              {buyoutDaysPreview != null && (
+                <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
+                  <p className="text-xs text-blue-500">Days being bought out</p>
+                  <p className="text-lg font-bold text-blue-700 mt-1">{buyoutDaysPreview} days</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Notes (optional)</label>
+                <textarea
+                  value={buyoutForm.notes}
+                  onChange={(e) => setBuyoutForm((f) => ({ ...f, notes: e.target.value }))}
+                  rows={3}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowBuyoutModal(false)}
+                className="flex-1 py-2.5 border rounded-xl text-sm text-gray-600"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleNoticeBuyout}
+                disabled={saving}
+                className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Confirm Buyout'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showExitTasksModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Start Exit Tasks</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Confirm last working day and exit reason. Exit checklist tasks will be generated, including asset returns.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Last Working Day</label>
+                <input
+                  type="date"
+                  value={offboardingExitDate}
+                  onChange={(e) => setOffboardingExitDate(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Exit Reason</label>
+                <select
+                  value={offboardingExitReason}
+                  onChange={(e) => setOffboardingExitReason(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                >
+                  <option value="">Select reason</option>
+                  <option value="Resignation">Resignation</option>
+                  <option value="Termination">Termination</option>
+                  <option value="Retirement">Retirement</option>
+                  <option value="Contract End">Contract End</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowExitTasksModal(false)}
+                className="flex-1 py-2.5 border rounded-xl text-sm text-gray-600"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleStartExitTasks}
+                disabled={saving}
+                className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-medium hover:bg-orange-600 disabled:opacity-50"
+              >
+                {saving ? 'Starting…' : 'Start Exit Tasks'}
+              </button>
+            </div>
           </div>
         </div>
       )}

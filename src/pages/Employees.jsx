@@ -82,6 +82,16 @@ const INDIAN_STATES = [
   'Lakshadweep',
 ];
 
+function employeeStatusBadgeClass(status) {
+  const s = status || 'Active';
+  if (s === 'Active') return 'bg-green-100 text-green-800';
+  if (s === 'Notice Period') return 'bg-amber-100 text-amber-700';
+  if (s === 'On Leave') return 'bg-blue-100 text-blue-800';
+  if (s === 'Offboarding') return 'bg-orange-100 text-orange-800';
+  if (s === 'Inactive') return 'bg-slate-100 text-slate-600';
+  return 'bg-slate-100 text-slate-600';
+}
+
 const getDeptColor = (dept) => {
   const colors = {
     Engineering: '#3B82F6',
@@ -211,7 +221,13 @@ export default function Employees() {
   const lastDocRef = useRef(null);
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
-  const [statsCounts, setStatsCounts] = useState({ active: 0, onLeave: 0, inactive: 0 });
+  const [statsCounts, setStatsCounts] = useState({
+    active: 0,
+    onLeave: 0,
+    inactive: 0,
+    noticePeriod: 0,
+    offboarding: 0,
+  });
   const [searchAllMode, setSearchAllMode] = useState(false);
   const searchTimeoutRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -328,15 +344,19 @@ export default function Employees() {
   const fetchStatsCounts = useCallback(async () => {
     if (!collRef) return;
     try {
-      const [activeSnap, onLeaveSnap, inactiveSnap] = await Promise.all([
+      const [activeSnap, onLeaveSnap, inactiveSnap, noticeSnap, offSnap] = await Promise.all([
         getCountFromServer(query(collRef, where('status', '==', 'Active'))),
         getCountFromServer(query(collRef, where('status', '==', 'On Leave'))),
         getCountFromServer(query(collRef, where('status', '==', 'Inactive'))),
+        getCountFromServer(query(collRef, where('status', '==', 'Notice Period'))),
+        getCountFromServer(query(collRef, where('status', '==', 'Offboarding'))),
       ]);
       setStatsCounts({
         active: activeSnap.data().count,
         onLeave: onLeaveSnap.data().count,
         inactive: inactiveSnap.data().count,
+        noticePeriod: noticeSnap.data().count,
+        offboarding: offSnap.data().count,
       });
     } catch {
       /* ignore stats count errors */
@@ -358,7 +378,9 @@ export default function Employees() {
 
         const constraints = [];
         if (tab === 'active') constraints.push(where('status', '==', 'Active'));
+        else if (tab === 'noticeperiod') constraints.push(where('status', '==', 'Notice Period'));
         else if (tab === 'onleave') constraints.push(where('status', '==', 'On Leave'));
+        else if (tab === 'offboarding') constraints.push(where('status', '==', 'Offboarding'));
         else if (tab === 'inactive') constraints.push(where('status', '==', 'Inactive'));
         if (filterDept !== 'All Departments') {
           constraints.push(where('department', '==', filterDept.trim()));
@@ -545,7 +567,9 @@ export default function Employees() {
     let list = employees;
     if (searchAllMode) {
       if (tab === 'active') list = list.filter((e) => (e.status || 'Active') === 'Active');
+      if (tab === 'noticeperiod') list = list.filter((e) => (e.status || '') === 'Notice Period');
       if (tab === 'onleave') list = list.filter((e) => (e.status || '') === 'On Leave');
+      if (tab === 'offboarding') list = list.filter((e) => (e.status || '') === 'Offboarding');
       if (tab === 'inactive') list = list.filter((e) => (e.status || '') === 'Inactive');
     }
     const term = search.trim().toLowerCase();
@@ -857,7 +881,7 @@ export default function Employees() {
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center mb-4">
         <div className="flex flex-wrap gap-2 overflow-x-auto scrollbar-none -mx-1 px-1 sm:mx-0 sm:px-0 pb-1 sm:pb-0">
-          {['all', 'active', 'onleave', 'inactive'].map((t) => (
+          {['all', 'active', 'noticeperiod', 'onleave', 'offboarding', 'inactive'].map((t) => (
             <button
               key={t}
               type="button"
@@ -866,7 +890,17 @@ export default function Employees() {
                 tab === t ? 'bg-[#1B6B6B] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
               }`}
             >
-              {t === 'all' ? 'All' : t === 'active' ? 'Active' : t === 'onleave' ? 'On Leave' : 'Inactive'}
+              {t === 'all'
+                ? 'All'
+                : t === 'active'
+                  ? 'Active'
+                  : t === 'noticeperiod'
+                    ? 'Notice Period'
+                    : t === 'onleave'
+                      ? 'On Leave'
+                      : t === 'offboarding'
+                        ? 'Offboarding'
+                        : 'Inactive'}
             </button>
           ))}
         </div>
@@ -980,8 +1014,8 @@ export default function Employees() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          {[0, 1, 2, 3].map((i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
@@ -989,22 +1023,30 @@ export default function Employees() {
 
       {!loading && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-slate-800">{statsCounts.active}</p>
+              <p className="text-xl font-semibold text-slate-800">{totalCount}</p>
+              <p className="text-xs text-slate-500">All</p>
+            </div>
+            <div className="bg-white border rounded-lg p-3 text-center">
+              <p className="text-xl font-semibold text-green-700">{statsCounts.active}</p>
               <p className="text-xs text-slate-500">Active</p>
             </div>
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-amber-600">{statsCounts.onLeave}</p>
+              <p className="text-xl font-semibold text-amber-600">{statsCounts.noticePeriod}</p>
+              <p className="text-xs text-slate-500">Notice Period</p>
+            </div>
+            <div className="bg-white border rounded-lg p-3 text-center">
+              <p className="text-xl font-semibold text-blue-700">{statsCounts.onLeave}</p>
               <p className="text-xs text-slate-500">On Leave</p>
+            </div>
+            <div className="bg-white border rounded-lg p-3 text-center">
+              <p className="text-xl font-semibold text-orange-600">{statsCounts.offboarding}</p>
+              <p className="text-xs text-slate-500">Offboarding</p>
             </div>
             <div className="bg-white border rounded-lg p-3 text-center">
               <p className="text-xl font-semibold text-slate-400">{statsCounts.inactive}</p>
               <p className="text-xs text-slate-500">Inactive</p>
-            </div>
-            <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-[#1B6B6B]">{departments.length}</p>
-              <p className="text-xs text-slate-500">Dept types</p>
             </div>
           </div>
 
@@ -1061,27 +1103,19 @@ export default function Employees() {
                       <td className="px-4 py-3 text-slate-700">{toDisplayDate(emp.joiningDate)}</td>
                       <td className="px-4 py-3">
                         <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                            emp.status === 'Active'
-                              ? 'bg-green-100 text-green-800'
-                              : emp.status === 'On Leave'
-                                ? 'bg-[#C5E8E8] text-[#0F4444]'
-                                : emp.status === 'Offboarding'
-                                  ? 'bg-orange-100 text-orange-800'
-                                  : 'bg-slate-100 text-slate-600'
-                          }`}
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${employeeStatusBadgeClass(emp.status)}`}
                         >
                           {emp.status || 'Active'}
                         </span>
-                        {emp.offboarding?.status === 'in_progress' && (
+                        {(emp.offboarding?.phase === 'exit_tasks' || emp.offboarding?.status === 'in_progress') && (
                           <div className="flex items-center gap-1 mt-1">
                             <div className="w-16 bg-gray-100 rounded-full h-1">
                               <div
-                                className="bg-amber-500 h-1 rounded-full"
+                                className="bg-orange-400 h-1 rounded-full"
                                 style={{ width: `${emp.offboarding?.completionPct || 0}%` }}
                               />
                             </div>
-                            <span className="text-xs text-amber-600">Offboarding</span>
+                            <span className="text-xs text-orange-600">Exit tasks</span>
                           </div>
                         )}
                       </td>
@@ -1136,27 +1170,19 @@ export default function Employees() {
                     <td className="px-4 py-3 text-slate-700">{toDisplayDate(emp.joiningDate)}</td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          emp.status === 'Active'
-                            ? 'bg-green-100 text-green-800'
-                            : emp.status === 'On Leave'
-                              ? 'bg-[#C5E8E8] text-[#0F4444]'
-                              : emp.status === 'Offboarding'
-                                ? 'bg-orange-100 text-orange-800'
-                                : 'bg-slate-100 text-slate-600'
-                        }`}
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${employeeStatusBadgeClass(emp.status)}`}
                       >
                         {emp.status || 'Active'}
                       </span>
-                      {emp.offboarding?.status === 'in_progress' && (
+                      {(emp.offboarding?.phase === 'exit_tasks' || emp.offboarding?.status === 'in_progress') && (
                         <div className="flex items-center gap-1 mt-1">
                           <div className="w-16 bg-gray-100 rounded-full h-1">
                             <div
-                              className="bg-amber-500 h-1 rounded-full"
+                              className="bg-orange-400 h-1 rounded-full"
                               style={{ width: `${emp.offboarding?.completionPct || 0}%` }}
                             />
                           </div>
-                          <span className="text-xs text-amber-600">Offboarding</span>
+                          <span className="text-xs text-orange-600">Exit tasks</span>
                         </div>
                       )}
                     </td>
@@ -1214,15 +1240,7 @@ export default function Employees() {
                     </p>
                   </div>
                   <span
-                    className={`text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${
-                      emp.status === 'Active'
-                        ? 'bg-green-100 text-green-700'
-                        : emp.status === 'On Leave'
-                          ? 'bg-[#C5E8E8] text-[#0F4444]'
-                          : emp.status === 'Offboarding'
-                            ? 'bg-orange-100 text-orange-800'
-                            : 'bg-gray-100 text-gray-500'
-                    }`}
+                    className={`text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${employeeStatusBadgeClass(emp.status)}`}
                   >
                     {emp.status || 'Active'}
                   </span>
