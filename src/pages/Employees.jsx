@@ -306,6 +306,13 @@ export default function Employees() {
   const [newEmpZoom, setNewEmpZoom] = useState(1);
   const [newEmpCroppedPixels, setNewEmpCroppedPixels] = useState(null);
   const [form, setForm] = useState(initialForm);
+  const reportingManagerOptions = useMemo(
+    () =>
+      employees.filter(
+        (emp) => emp.status !== 'Inactive' && !(form.empId && emp.empId === form.empId),
+      ),
+    [employees, form.empId],
+  );
   const [formErrors, setFormErrors] = useState({});
   const [formWarnings, setFormWarnings] = useState({});
   const [saving, setSaving] = useState(false);
@@ -2173,9 +2180,8 @@ export default function Employees() {
                               <span className="text-sm text-slate-400">— None</span>
                             </div>
 
-                            {employees
+                            {reportingManagerOptions
                               .filter((emp) => {
-                                if (form.empId && emp.empId === form.empId) return false;
                                 if (!managerSearch) return true;
                                 const term = managerSearch.toLowerCase();
                                 return (
@@ -2216,8 +2222,7 @@ export default function Employees() {
                                 </div>
                               ))}
 
-                            {employees.filter((emp) => {
-                              if (form.empId && emp.empId === form.empId) return false;
+                            {reportingManagerOptions.filter((emp) => {
                               if (!managerSearch) return true;
                               return emp.fullName?.toLowerCase().includes(managerSearch.toLowerCase());
                             }).length === 0 && (

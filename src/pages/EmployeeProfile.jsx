@@ -71,56 +71,6 @@ async function getCroppedBlob(imageSrc, pixelCrop) {
   });
 }
 
-async function getBase64FromUrl(url) {
-  try {
-    const response = await fetch(url, {
-      mode: 'cors',
-      cache: 'no-cache',
-    });
-    if (!response.ok) throw new Error('Fetch failed');
-    const blob = await response.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    try {
-      return await new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0);
-          try {
-            resolve(canvas.toDataURL('image/jpeg', 0.9));
-          } catch {
-            resolve(null);
-          }
-        };
-        img.onerror = () => resolve(null);
-        const bust =
-          (() => {
-            try {
-              const parsed = new URL(url);
-              parsed.searchParams.set('t', String(Date.now()));
-              return parsed.toString();
-            } catch {
-              return `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
-            }
-          })();
-        img.src = bust;
-      });
-    } catch {
-      return null;
-    }
-  }
-}
-
 function isFirestoreFieldValue(val) {
   return val != null && typeof val === 'object' && typeof val._methodName === 'string';
 }
@@ -695,10 +645,12 @@ export default function EmployeeProfile() {
   const userRole = authRole;
   const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
   const canUploadPhoto = userRole === 'admin' || userRole === 'hrmanager';
-  const canUpload = PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(userRole);
-  const needsDriveToken = canUpload;
+  const hasDriveUploadRole = PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(userRole);
   const { success, error: showError } = useToast();
   const [employee, setEmployee] = useState(null);
+  const isInactive = employee?.status === 'Inactive';
+  const isDriveConnected = hasDriveUploadRole && isTokenValid();
+  const showDocManageUi = hasDriveUploadRole && !isInactive;
   const { company } = useCompany();
   const [allEmployees, setAllEmployees] = useState([]);
   const [leaveList, setLeaveList] = useState([]);
@@ -708,7 +660,6 @@ export default function EmployeeProfile() {
   const [showSalary, setShowSalary] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [printing, setPrinting] = useState(false);
   const [form, setForm] = useState(null);
   const [categoryOpen, setCategoryOpen] = useState({});
   const [uploadingDocId, setUploadingDocId] = useState(null);
@@ -1720,6 +1671,10 @@ export default function EmployeeProfile() {
   };
 
   const offboarding = employee?.offboarding || null;
+  const managerOptions = useMemo(
+    () => allEmployees.filter((emp) => emp.status !== 'Inactive' && emp.id !== empId),
+    [allEmployees, empId],
+  );
   const offTasks = useMemo(
     () => (Array.isArray(employee?.offboarding?.tasks) ? employee.offboarding.tasks : []),
     [employee?.offboarding],
@@ -2499,6 +2454,7 @@ export default function EmployeeProfile() {
   };
 
   const openProfileAssignModal = () => {
+    if (employee?.status === 'Inactive') return;
     const today = new Date().toISOString().slice(0, 10);
     setAssignAssetForm({
       assetId: '',
@@ -2826,15 +2782,9 @@ export default function EmployeeProfile() {
     }
   };
 
-  const handlePrintProfile = async () => {
+  const handlePrintProfile = () => {
     if (!employee) return;
     const e = escapeHtml;
-    setPrinting(true);
-    let photoBase64 = null;
-    try {
-      if (employee.photoURL) {
-        photoBase64 = await getBase64FromUrl(employee.photoURL);
-      }
     const companyName = getCompanyName() || '';
     const addrRaw =
       [employee.streetAddress, employee.city, employee.state, employee.pincode, employee.country].filter(Boolean).join(', ') ||
@@ -2961,26 +2911,29 @@ export default function EmployeeProfile() {
     const statusClass =
       status === 'Active' ? 'print-badge-green' : status === 'Inactive' ? 'print-badge-red' : 'print-badge-amber';
 
-    const desigDeptLine = `${e(employee.designation || '')}${
-      employee.department ? ` &middot; ${e(employee.department)}` : ''
-    }`;
-    const empIdStatusLine = `${e(employee.empId || '')}${
-      status ? ` &middot; ${e(status)}` : ''
-    }`;
+    const printInitials =
+      (employee.fullName || '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((n) => n[0])
+        .join('')
+        .substring(0, 2)
+        .toUpperCase() || '?';
 
-    const photoSection = photoBase64
-      ? `<div style="display:flex;align-items:center;gap:24px;margin-bottom:28px;padding-bottom:24px;border-bottom:2px solid #E8F5F5;">
-      <img src="${photoBase64}" alt="${e(employee.fullName || '')}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid #4ECDC4;flex-shrink:0;display:block;" />
-      <div>
-        <h2 style="font-size:24px;font-weight:700;color:#1B6B6B;margin:0 0 6px 0;line-height:1.2;">${e(employee.fullName || '—')}</h2>
-        <p style="font-size:14px;color:#6b7280;margin:0 0 4px 0;">${desigDeptLine}</p>
-        <p style="font-size:13px;color:#9ca3af;margin:0;">${empIdStatusLine}</p>
-      </div>
-    </div>`
-      : `<div style="margin-bottom:28px;padding-bottom:24px;border-bottom:2px solid #E8F5F5;">
+    const initialsSection = `<div style="display:flex;align-items:center;gap:20px;margin-bottom:28px;padding-bottom:24px;border-bottom:2px solid #E8F5F5;">
+    <div style="width:80px;height:80px;border-radius:50%;background:#1B6B6B;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:white;flex-shrink:0;">
+      ${e(printInitials)}
+    </div>
+    <div>
       <h2 style="font-size:24px;font-weight:700;color:#1B6B6B;margin:0 0 6px 0;">${e(employee.fullName || '—')}</h2>
-      <p style="font-size:14px;color:#6b7280;margin:0;">${desigDeptLine}</p>
-    </div>`;
+      <p style="font-size:14px;color:#6b7280;margin:0 0 4px 0;">${e(employee.designation || '')}${
+        employee.department ? ` · ${e(employee.department)}` : ''
+      }</p>
+      <p style="font-size:13px;color:#9ca3af;margin:0;">${e(employee.empId || '')}${
+        status ? ` · ${e(status)}` : ''
+      }</p>
+    </div>
+  </div>`;
 
     const noticePrint =
       status === 'Notice Period' && employee.offboarding
@@ -2996,7 +2949,7 @@ export default function EmployeeProfile() {
         : '';
 
     const content = `
-      ${photoSection}
+      ${initialsSection}
 
       <div class="print-highlight-card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
         <div>
@@ -3082,9 +3035,6 @@ export default function EmployeeProfile() {
       content,
     });
     openPrintWindow(html);
-    } finally {
-      setPrinting(false);
-    }
   };
 
   const allTabs = useMemo(
@@ -3282,24 +3232,9 @@ export default function EmployeeProfile() {
             <button
               type="button"
               onClick={handlePrintProfile}
-              disabled={printing}
-              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 min-h-[44px]"
             >
-              {printing ? (
-                '⏳ Preparing...'
-              ) : (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                    <path
-                      d="M3 10H1.5A1.5 1.5 0 0 1 0 8.5v-3A1.5 1.5 0 0 1 1.5 4H3M11 10h1.5A1.5 1.5 0 0 0 14 8.5v-3A1.5 1.5 0 0 0 12.5 4H11M3 4V1.5A1.5 1.5 0 0 1 4.5 0h5A1.5 1.5 0 0 1 11 1.5V4M3 10v2.5A1.5 1.5 0 0 0 4.5 14h5a1.5 1.5 0 0 0 1.5-1.5V10M3 10h8"
-                      stroke="currentColor"
-                      strokeWidth="1.2"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  🖨️ Print
-                </>
-              )}
+              🖨️ Print
             </button>
           </div>
         </div>
@@ -3595,7 +3530,7 @@ export default function EmployeeProfile() {
 
       {tab === 'documents' && (
         <div className="space-y-6">
-          {!canUpload && (
+          {!hasDriveUploadRole && (
             <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100 mb-4">
               <span className="text-2xl shrink-0">📂</span>
               <div>
@@ -3606,26 +3541,39 @@ export default function EmployeeProfile() {
               </div>
             </div>
           )}
-          {needsDriveToken && !isTokenValid() && (
-            <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4 gap-3 flex-wrap">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-amber-600 text-lg shrink-0">⏱️</span>
+          {isInactive && (
+            <div className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-100 rounded-xl mb-4">
+              <span className="text-xl shrink-0">🔒</span>
+              <div>
+                <p className="text-sm font-semibold text-gray-600">Read-only</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  This employee is inactive. Documents can be viewed but not modified.
+                </p>
+              </div>
+            </div>
+          )}
+          {hasDriveUploadRole && !isInactive && !isTokenValid() && (
+            <div className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl mb-4 gap-3 flex-wrap">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-xl shrink-0">⚠️</span>
                 <div>
-                  <p className="text-sm font-medium text-amber-800">Google Drive session expired</p>
-                  <p className="text-xs text-amber-600">Click refresh to continue uploading</p>
+                  <p className="text-sm font-semibold text-amber-800">Drive session expired</p>
+                  <p className="text-xs text-amber-600 mt-0.5">
+                    Upload buttons are disabled. Refresh to continue uploading.
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={async () => {
-                  const refreshed = await getValidToken();
-                  if (refreshed) {
-                    success('✓ Drive session refreshed!');
+                  const token = await getValidToken();
+                  if (token) {
+                    success('✓ Drive reconnected!');
                   } else {
-                    showError('Please sign out and sign back in');
+                    showError('Please sign out and sign in again');
                   }
                 }}
-                className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600 whitespace-nowrap"
+                className="px-4 py-2 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 whitespace-nowrap flex-shrink-0"
               >
                 🔄 Refresh Session
               </button>
@@ -3709,8 +3657,13 @@ export default function EmployeeProfile() {
                                     View
                                   </button>
                                 )}
-                                {canUpload && (
-                                  <label className={`${rowBusy ? 'pointer-events-none opacity-50' : ''}`}>
+                                {showDocManageUi && (
+                                  <label
+                                    title={
+                                      !isDriveConnected ? 'Refresh Drive session to upload' : 'Replace document'
+                                    }
+                                    className={`${rowBusy || !isDriveConnected ? 'pointer-events-none opacity-50' : ''}`}
+                                  >
                                     <span className="px-2.5 py-1 text-xs font-medium text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors inline-block cursor-pointer">
                                       Replace
                                     </span>
@@ -3718,7 +3671,7 @@ export default function EmployeeProfile() {
                                       type="file"
                                       className="hidden"
                                       accept={acceptAttr}
-                                      disabled={rowBusy}
+                                      disabled={rowBusy || !isDriveConnected}
                                       onChange={(e) => {
                                         const f = e.target.files?.[0];
                                         if (f) handleReplaceDoc(f, doc.id);
@@ -3727,12 +3680,19 @@ export default function EmployeeProfile() {
                                     />
                                   </label>
                                 )}
-                                {canUpload && (
+                                {showDocManageUi && (
                                   <button
                                     type="button"
                                     onClick={() => setDeleteConfirm({ type: 'checklist', doc: uploaded })}
-                                    disabled={rowBusy}
-                                    className="px-2.5 py-1 text-xs font-medium text-red-500 bg-red-50 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                                    disabled={rowBusy || !isDriveConnected}
+                                    title={
+                                      !isDriveConnected ? 'Refresh Drive session to upload' : 'Delete document'
+                                    }
+                                    className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 ${
+                                      isDriveConnected
+                                        ? 'text-red-500 bg-red-50 hover:bg-red-100'
+                                        : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                                    }`}
                                   >
                                     Delete
                                   </button>
@@ -3760,7 +3720,7 @@ export default function EmployeeProfile() {
                                 </div>
                               </div>
                               <div className="flex items-stretch sm:items-center gap-2 w-full sm:w-auto">
-                                {canUpload ? (
+                                {showDocManageUi ? (
                                   <>
                                     <button
                                       type="button"
@@ -3768,8 +3728,15 @@ export default function EmployeeProfile() {
                                         const input = document.getElementById(`doc-upload-${doc.id}`);
                                         if (input) input.click();
                                       }}
-                                      disabled={uploadingDocId === doc.id}
-                                      className="w-full sm:w-auto min-h-[44px] px-4 inline-flex items-center justify-center bg-[#1B6B6B] text-white text-sm rounded-lg hover:bg-[#155858] active:bg-[#0f4444] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                      disabled={uploadingDocId === doc.id || !isDriveConnected}
+                                      title={
+                                        !isDriveConnected ? 'Refresh Drive session to upload' : 'Upload document'
+                                      }
+                                      className={`w-full sm:w-auto min-h-[44px] px-4 inline-flex items-center justify-center text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+                                        isDriveConnected
+                                          ? 'bg-[#1B6B6B] text-white hover:bg-[#155858] active:bg-[#0f4444] disabled:opacity-50'
+                                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                      }`}
                                     >
                                       {uploadingDocId === doc.id ? 'Uploading...' : 'Upload'}
                                     </button>
@@ -3778,7 +3745,7 @@ export default function EmployeeProfile() {
                                       type="file"
                                       className="hidden"
                                       accept={acceptAttr}
-                                      disabled={!!uploadingDocId}
+                                      disabled={!!uploadingDocId || !isDriveConnected}
                                       onChange={(e) => {
                                         const f = e.target.files?.[0];
                                         if (f) handleUploadChecklistDoc(f, doc.id, doc.name);
@@ -3804,16 +3771,22 @@ export default function EmployeeProfile() {
           <div className="border border-slate-200 rounded-xl overflow-hidden">
             <h3 className="px-4 py-3 bg-slate-50 font-medium text-slate-800">Additional Documents</h3>
             <div className="p-4 space-y-3">
-              {canUpload && (
+              {showDocManageUi && (
                 <div className="flex flex-wrap items-end gap-3">
                   <input
                     type="text"
                     value={additionalDocName}
                     onChange={(e) => setAdditionalDocName(e.target.value)}
                     placeholder="Document name"
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-48"
+                    disabled={!isDriveConnected}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-48 disabled:opacity-50"
                   />
-                  <select value={additionalDocCategory} onChange={(e) => setAdditionalDocCategory(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                  <select
+                    value={additionalDocCategory}
+                    onChange={(e) => setAdditionalDocCategory(e.target.value)}
+                    disabled={!isDriveConnected}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
+                  >
                     {DOCUMENT_CATEGORIES.map((c) => (
                       <option key={c} value={c}>
                         {c}
@@ -3825,16 +3798,32 @@ export default function EmployeeProfile() {
                     type="file"
                     className="hidden"
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                    disabled={!isDriveConnected}
                     onChange={(e) => setAdditionalDocFile(e.target.files?.[0] || null)}
                   />
-                  <button type="button" onClick={() => additionalFileInputRef.current?.click()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => additionalFileInputRef.current?.click()}
+                    disabled={!isDriveConnected}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
                     {additionalDocFile ? additionalDocFile.name : 'Choose file'}
                   </button>
                   <button
                     type="button"
                     onClick={handleUploadAdditionalDoc}
-                    disabled={uploadingDocId === 'additional' || !additionalDocName.trim() || !additionalDocFile}
-                    className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                    disabled={
+                      uploadingDocId === 'additional' ||
+                      !additionalDocName.trim() ||
+                      !additionalDocFile ||
+                      !isDriveConnected
+                    }
+                    title={!isDriveConnected ? 'Refresh Drive session to upload' : undefined}
+                    className={`rounded-lg text-sm font-medium px-4 py-2 disabled:opacity-50 ${
+                      isDriveConnected
+                        ? 'bg-[#1B6B6B] text-white hover:bg-[#155858]'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }`}
                   >
                     {uploadingDocId === 'additional' ? 'Uploading…' : 'Upload Additional Document'}
                   </button>
@@ -3849,8 +3838,16 @@ export default function EmployeeProfile() {
                       <span className="text-sm">{doc.name} — {formatDocDate(doc.uploadedAt)}</span>
                       <div className="flex gap-2">
                         {doc.webViewLink && <a href={doc.webViewLink} target="_blank" rel="noopener noreferrer" className="text-[#1B6B6B] text-xs">View</a>}
-                        {canUpload && (
-                          <button type="button" onClick={() => setDeleteConfirm({ type: 'additional', index: i })} className="text-red-600 text-xs">
+                        {showDocManageUi && (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirm({ type: 'additional', index: i })}
+                            disabled={!isDriveConnected}
+                            title={!isDriveConnected ? 'Refresh Drive session to upload' : undefined}
+                            className={`text-xs font-medium ${
+                              isDriveConnected ? 'text-red-600 hover:underline' : 'text-gray-400 cursor-not-allowed'
+                            }`}
+                          >
                             Delete
                           </button>
                         )}
@@ -4336,9 +4333,8 @@ export default function EmployeeProfile() {
                             <span className="text-sm text-slate-400">— None</span>
                           </div>
 
-                          {allEmployees
+                          {managerOptions
                             .filter((emp) => {
-                              if (employee?.empId && emp.empId === employee.empId) return false;
                               if (!managerSearch) return true;
                               const term = managerSearch.toLowerCase();
                               return (
@@ -4677,26 +4673,37 @@ export default function EmployeeProfile() {
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-gray-700">Currently Assigned</h3>
-              <button
-                type="button"
-                onClick={openProfileAssignModal}
-                className="text-xs text-[#1B6B6B] hover:underline"
-              >
-                + Assign Asset
-              </button>
+              {!isInactive && (
+                <button
+                  type="button"
+                  onClick={openProfileAssignModal}
+                  className="text-xs text-[#1B6B6B] hover:underline"
+                >
+                  + Assign Asset
+                </button>
+              )}
             </div>
+
+            {isInactive && (
+              <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-100 rounded-xl mb-4">
+                <span className="text-gray-400">🔒</span>
+                <p className="text-sm text-gray-400">Cannot assign assets to inactive employees</p>
+              </div>
+            )}
 
             {employeeAssets.length === 0 && employeeConsumableCards.length === 0 ? (
               <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
                 <p className="text-2xl mb-2">📦</p>
                 <p className="text-sm text-gray-500">No assets currently assigned</p>
-                <button
-                  type="button"
+                {!isInactive && (
+                  <button
+                    type="button"
                     onClick={openProfileAssignModal}
-                  className="mt-3 text-sm text-[#1B6B6B] hover:underline"
-                >
-                  Assign an asset
-                </button>
+                    className="mt-3 text-sm text-[#1B6B6B] hover:underline"
+                  >
+                    Assign an asset
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-2">

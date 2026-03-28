@@ -252,13 +252,18 @@ export default function Leave() {
 
   const employeeMap = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
 
+  const leaveEligibleEmployees = useMemo(
+    () => employees.filter((emp) => emp.status !== 'Inactive'),
+    [employees],
+  );
+
   const filteredEmployeesForLeaveModal = useMemo(() => {
     const q = empSearch.trim().toLowerCase();
-    if (!q) return employees;
-    return employees.filter(
+    if (!q) return leaveEligibleEmployees;
+    return leaveEligibleEmployees.filter(
       (e) => e.fullName?.toLowerCase().includes(q) || (e.empId || '').toLowerCase().includes(q),
     );
-  }, [employees, empSearch]);
+  }, [leaveEligibleEmployees, empSearch]);
 
   const handleSelectLeaveEmployee = (emp) => {
     setForm((prev) => ({
