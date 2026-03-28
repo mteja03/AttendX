@@ -121,7 +121,7 @@ function CompanyMenu({ company, onEdit, onDelete, onDeactivate, onActivate }) {
   });
 
   return (
-    <div ref={menuRef} className="relative flex-shrink-0 z-20">
+    <div ref={menuRef} className="relative flex-shrink-0">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -132,7 +132,7 @@ function CompanyMenu({ company, onEdit, onDelete, onDeactivate, onActivate }) {
         ···
       </button>
       {open && (
-        <div className="absolute right-0 top-8 bg-white border border-gray-100 rounded-xl shadow-lg z-30 w-48 overflow-hidden">
+        <div className="absolute right-0 top-8 bg-white border border-gray-100 rounded-xl shadow-xl z-50 w-48 overflow-hidden">
           {items.map((item, i) =>
             item === null ? (
               <div key={`sep-${company.id}-${i}`} className="border-t border-gray-100" />
@@ -668,7 +668,7 @@ export default function Companies() {
           {filteredCompanies.map((c) => (
             <div
               key={c.id}
-              className={`bg-white border border-gray-100 rounded-2xl p-5 hover:border-[#4ECDC4] hover:shadow-sm transition-all flex flex-col relative overflow-visible ${
+              className={`bg-white border border-gray-100 rounded-2xl p-5 hover:border-[#4ECDC4] hover:shadow-sm transition-all flex flex-col relative ${
                 c.isActive === false ? 'opacity-60' : ''
               }`}
             >
@@ -680,7 +680,7 @@ export default function Companies() {
                   Inactive
                 </span>
               )}
-              <div className="flex items-start justify-between mb-3 relative z-10">
+              <div className="flex items-start justify-between mb-3 relative z-50">
                 <div className="flex items-center gap-3 min-w-0">
                   <div
                     className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
@@ -738,7 +738,7 @@ export default function Companies() {
               <button
                 type="button"
                 onClick={() => navigate(`/company/${c.id}/dashboard`)}
-                className="w-full py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] transition-colors relative z-10"
+                className="w-full py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] transition-colors"
               >
                 Manage Company →
               </button>
