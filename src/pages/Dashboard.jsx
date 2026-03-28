@@ -375,6 +375,11 @@ export default function Dashboard() {
     return employees.filter((emp) => leavesForActive.some((l) => l.employeeId === emp.id && overlaps(l)));
   }, [employees, leaveList, activeEmployeeIds]);
 
+  const celebratingEmployees = useMemo(
+    () => employees.filter((emp) => emp.status !== 'Inactive' && emp.status !== 'Offboarding'),
+    [employees],
+  );
+
   const celebrations = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -405,7 +410,7 @@ export default function Dashboard() {
       return Math.round(diff / (1000 * 60 * 60 * 24));
     };
 
-    employees.forEach((emp) => {
+    celebratingEmployees.forEach((emp) => {
       if (emp.dateOfBirth) {
         const dob = toJSDate(emp.dateOfBirth);
         if (dob && !Number.isNaN(dob.getTime())) {
@@ -499,7 +504,7 @@ export default function Dashboard() {
     result.thisMonth.sort(sortByDiff);
 
     return result;
-  }, [employees]);
+  }, [celebratingEmployees]);
 
   const totalCelebrations =
     celebrations.today.length +

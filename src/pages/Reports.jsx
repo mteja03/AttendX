@@ -23,6 +23,7 @@ import EmployeeAvatar from '../components/EmployeeAvatar';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
+import { calculateProRatedAllowance, isMidYearJoinerThisYear } from '../utils/leaveProration';
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 
@@ -219,6 +220,7 @@ export default function Reports() {
   const [company, setCompany] = useState(null);
   const [roles, setRoles] = useState([]);
   const [activeTab, setActiveTab] = useState('headcount');
+  const [tabLoading, setTabLoading] = useState(false);
   const [empFilterDept, setEmpFilterDept] = useState('All');
   const [empFilterBranch, setEmpFilterBranch] = useState('All');
   const [empFilterStatus, setEmpFilterStatus] = useState('All');
@@ -227,6 +229,12 @@ export default function Reports() {
 
   const companyDisplayName = company?.name || 'Company';
   const safeCompanyFile = companyDisplayName.replace(/\s+/g, '_');
+
+  const handleTabSwitch = (tabId) => {
+    setTabLoading(true);
+    setActiveTab(tabId);
+    setTimeout(() => setTabLoading(false), 150);
+  };
 
   const fetchAllData = useCallback(async () => {
     if (!companyId) return;
@@ -277,6 +285,7 @@ export default function Reports() {
   const employeeMap = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
 
   const leaveBalanceByEmp = useMemo(() => {
+    if (activeTab !== 'leave') return {};
     const approved = leaveList.filter((l) => l.status === 'Approved');
     const byEmployee = {};
     const ensureRow = (id, name) => {
@@ -298,13 +307,16 @@ export default function Reports() {
       });
     });
     return byEmployee;
-  }, [leaveList, employees, paidLeaveTypes]);
+  }, [activeTab, leaveList, employees, paidLeaveTypes]);
 
   const todayStr = toDateString(new Date());
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
 
   const headcountStats = useMemo(() => {
+    if (activeTab !== 'headcount') {
+      return { total: 0, active: 0, onLeaveToday: 0, newJoiners: 0 };
+    }
     const total = employees.length;
     const active = employees.filter((e) => (e.status || 'Active') === 'Active').length;
     const onLeaveToday = leaveList.filter((l) => {
@@ -320,9 +332,10 @@ export default function Reports() {
       return j && !Number.isNaN(j.getTime()) && j >= startOfMonth;
     }).length;
     return { total, active, onLeaveToday, newJoiners };
-  }, [employees, leaveList, todayStr, currentYear, currentMonth]);
+  }, [activeTab, employees, leaveList, todayStr, currentYear, currentMonth]);
 
   const deptData = useMemo(() => {
+    if (activeTab !== 'headcount') return [];
     const acc = {};
     employees.forEach((emp) => {
       const dept = emp.department || 'Other';
@@ -331,11 +344,12 @@ export default function Reports() {
     return Object.entries(acc)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const roleVacancyData = useMemo(
-    () =>
-      roles
+    () => {
+      if (activeTab !== 'headcount') return [];
+      return roles
         .filter((r) => r.isActive !== false)
         .map((role) => {
           const filled = employees.filter(
@@ -351,44 +365,50 @@ export default function Reports() {
             reportsTo: role.reportsTo,
           };
         })
-        .sort((a, b) => (a.title || '').localeCompare(b.title || '')),
-    [roles, employees],
+        .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    },
+    [activeTab, roles, employees],
   );
 
   const roleVacancySummary = useMemo(() => {
+    if (activeTab !== 'headcount') return { totalFilled: 0, totalVacant: 0 };
     const totalFilled = roleVacancyData.reduce((sum, r) => sum + r.filled, 0);
     const totalVacant = roleVacancyData.filter((r) => r.filled === 0).length;
     return { totalFilled, totalVacant };
-  }, [roleVacancyData]);
+  }, [activeTab, roleVacancyData]);
 
   const typeData = useMemo(() => {
+    if (activeTab !== 'headcount') return [];
     const acc = {};
     employees.forEach((emp) => {
       const t = emp.employmentType || 'Other';
       acc[t] = (acc[t] || 0) + 1;
     });
     return Object.entries(acc).map(([name, value]) => ({ name, value }));
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const categoryData = useMemo(() => {
+    if (activeTab !== 'headcount') return [];
     const acc = {};
     employees.forEach((emp) => {
       const c = emp.category || 'Other';
       acc[c] = (acc[c] || 0) + 1;
     });
     return Object.entries(acc).map(([name, value]) => ({ name, value }));
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const genderData = useMemo(() => {
+    if (activeTab !== 'headcount') return [];
     const acc = {};
     employees.forEach((emp) => {
       const g = emp.gender || 'Not specified';
       acc[g] = (acc[g] || 0) + 1;
     });
     return Object.entries(acc).map(([name, value]) => ({ name, value }));
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const tenureData = useMemo(() => {
+    if (activeTab !== 'headcount') return [];
     const buckets = { '< 1 year': 0, '1-2 years': 0, '2-5 years': 0, '5+ years': 0 };
     employees.forEach((emp) => {
       const joined = toJSDate(emp.joiningDate);
@@ -400,9 +420,10 @@ export default function Reports() {
       else buckets['5+ years'] += 1;
     });
     return Object.entries(buckets).map(([name, count]) => ({ name, count }));
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const branchData = useMemo(() => {
+    if (activeTab !== 'headcount') return [];
     const acc = {};
     employees.forEach((emp) => {
       const b = emp.branch || 'Other';
@@ -411,9 +432,10 @@ export default function Reports() {
     return Object.entries(acc)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const locationData = useMemo(() => {
+    if (activeTab !== 'headcount') return [];
     const counts = {};
     employees.forEach((emp) => {
       if (emp.location) {
@@ -423,11 +445,12 @@ export default function Reports() {
     return Object.entries(counts)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const inNoticePeriodByStatus = useMemo(
-    () =>
-      employees
+    () => {
+      if (activeTab !== 'offboarding') return [];
+      return employees
         .filter((e) => e.status === 'Notice Period')
         .map((e) => ({
           e,
@@ -437,20 +460,24 @@ export default function Reports() {
           const ta = toJSDate(a.e.offboarding?.expectedLastDay)?.getTime() || 0;
           const tb = toJSDate(b.e.offboarding?.expectedLastDay)?.getTime() || 0;
           return ta - tb;
-        }),
-    [employees],
+        });
+    },
+    [activeTab, employees],
   );
 
   const deptOptions = useMemo(() => {
+    if (activeTab !== 'employee') return ['All'];
     const s = new Set(employees.map((e) => e.department).filter(Boolean));
     return ['All', ...Array.from(s).sort()];
-  }, [employees]);
+  }, [activeTab, employees]);
   const branchOptions = useMemo(() => {
+    if (activeTab !== 'employee') return ['All'];
     const s = new Set(employees.map((e) => e.branch).filter(Boolean));
     return ['All', ...Array.from(s).sort()];
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const filteredEmployeesForReport = useMemo(() => {
+    if (activeTab !== 'employee') return [];
     let list = employees;
     if (empFilterDept !== 'All') list = list.filter((e) => (e.department || '') === empFilterDept);
     if (empFilterBranch !== 'All') list = list.filter((e) => (e.branch || '') === empFilterBranch);
@@ -464,9 +491,10 @@ export default function Reports() {
       });
     }
     return list;
-  }, [employees, empFilterDept, empFilterBranch, empFilterStatus, empFilterType, empFilterYear]);
+  }, [activeTab, employees, empFilterDept, empFilterBranch, empFilterStatus, empFilterType, empFilterYear]);
 
   const employeeSummary = useMemo(() => {
+    if (activeTab !== 'employee') return { total: 0, active: 0, inactive: 0, offboarding: 0 };
     const total = employees.length;
     const active = employees.filter((e) => (e.status || 'Active') === 'Active').length;
     const inactive = employees.filter((e) => e.status === 'Inactive').length;
@@ -478,36 +506,42 @@ export default function Reports() {
         getEmployeeOffboardingPhase(e) === 'notice_period',
     ).length;
     return { total, active, inactive, offboarding };
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const leaveYearList = useMemo(
-    () => leaveList.filter((l) => {
+    () => {
+      if (activeTab !== 'leave') return [];
+      return leaveList.filter((l) => {
       const d = toJSDate(l.appliedAt);
       return d && d.getFullYear() === currentYear;
-    }),
-    [leaveList, currentYear],
+    });
+    },
+    [activeTab, leaveList, currentYear],
   );
 
   const leaveStats = useMemo(() => ({
-    total: leaveYearList.length,
+   total: leaveYearList.length,
     approved: leaveYearList.filter((l) => l.status === 'Approved').length,
     pending: leaveYearList.filter((l) => l.status === 'Pending').length,
     rejected: leaveYearList.filter((l) => l.status === 'Rejected').length,
   }), [leaveYearList]);
 
   const leaveByType = useMemo(
-    () =>
-      leaveTypes.map((lt) => ({
+    () => {
+      if (activeTab !== 'leave') return [];
+      return leaveTypes.map((lt) => ({
         name: lt.shortCode || lt.name,
         total: leaveYearList.filter((l) => leaveRecordMatchesType(l, lt)).length,
         approved: leaveYearList.filter((l) => leaveRecordMatchesType(l, lt) && l.status === 'Approved').length,
-      })),
-    [leaveTypes, leaveYearList],
+      }));
+    },
+    [activeTab, leaveTypes, leaveYearList],
   );
 
   const monthlyLeave = useMemo(
-    () =>
-      Array.from({ length: 12 }, (_, i) => {
+    () => {
+      if (activeTab !== 'leave') return [];
+      return Array.from({ length: 12 }, (_, i) => {
         const month = new Date(currentYear, i, 1);
         const monthName = month.toLocaleDateString('en-GB', { month: 'short' });
         const count = leaveList.filter((l) => {
@@ -515,11 +549,13 @@ export default function Reports() {
           return d && d.getMonth() === i && d.getFullYear() === currentYear;
         }).length;
         return { month: monthName, count };
-      }),
-    [leaveList, currentYear],
+      });
+    },
+    [activeTab, leaveList, currentYear],
   );
 
   const leaveByDept = useMemo(() => {
+    if (activeTab !== 'leave') return [];
     const acc = {};
     leaveYearList.forEach((l) => {
       const dept = employeeMap[l.employeeId]?.department || 'Other';
@@ -528,9 +564,10 @@ export default function Reports() {
     return Object.entries(acc)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [leaveYearList, employeeMap]);
+  }, [activeTab, leaveYearList, employeeMap]);
 
   const topLeaveEmployees = useMemo(() => {
+    if (activeTab !== 'leave') return [];
     const empLeave = {};
     leaveYearList
       .filter((l) => l.status === 'Approved')
@@ -553,9 +590,12 @@ export default function Reports() {
     return Object.values(empLeave)
       .sort((a, b) => b.totalDays - a.totalDays)
       .slice(0, 10);
-  }, [leaveYearList, employeeMap]);
+  }, [activeTab, leaveYearList, employeeMap]);
 
   const assetStats = useMemo(() => {
+    if (activeTab !== 'asset') {
+      return { total: 0, trackable: 0, consumable: 0, assigned: 0, available: 0, totalStock: 0, issued: 0 };
+    }
     const trackable = assets.filter((a) => (a.mode || 'trackable') === 'trackable');
     const consumable = assets.filter((a) => (a.mode || 'trackable') === 'consumable');
     const assigned = trackable.filter((a) => a.status === 'Assigned').length;
@@ -571,9 +611,10 @@ export default function Reports() {
       totalStock,
       issued,
     };
-  }, [assets]);
+  }, [activeTab, assets]);
 
   const assetByType = useMemo(() => {
+    if (activeTab !== 'asset') return [];
     const acc = {};
     assets.forEach((a) => {
       const t = a.type || 'Other';
@@ -582,9 +623,10 @@ export default function Reports() {
     return Object.entries(acc)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [assets]);
+  }, [activeTab, assets]);
 
   const assetStatusData = useMemo(() => {
+    if (activeTab !== 'asset') return [];
     const trackable = assets.filter((a) => (a.mode || 'trackable') === 'trackable');
     const acc = { Available: 0, Assigned: 0, Damaged: 0, 'In Repair': 0, Lost: 0, Other: 0 };
     trackable.forEach((a) => {
@@ -595,9 +637,10 @@ export default function Reports() {
     return Object.entries(acc)
       .filter(([, v]) => v > 0)
       .map(([name, value]) => ({ name, value }));
-  }, [assets]);
+  }, [activeTab, assets]);
 
   const assetsPerEmployeeRows = useMemo(() => {
+    if (activeTab !== 'asset') return [];
     const rows = {};
     assets
       .filter((a) => (a.mode || 'trackable') === 'trackable' && a.status === 'Assigned' && a.assignedTo)
@@ -615,11 +658,12 @@ export default function Reports() {
         namesStr: r.names.join(', '),
       }))
       .sort((a, b) => b.count - a.count);
-  }, [assets, employeeMap]);
+  }, [activeTab, assets, employeeMap]);
 
   const consumableRows = useMemo(
-    () =>
-      assets
+    () => {
+      if (activeTab !== 'asset') return [];
+      return assets
         .filter((a) => (a.mode || 'trackable') === 'consumable')
         .map((a) => {
           const stock = Number(a.stockQuantity) || 0;
@@ -631,11 +675,15 @@ export default function Reports() {
             issued,
             available: Math.max(0, stock - issued),
           };
-        }),
-    [assets],
+        });
+    },
+    [activeTab, assets],
   );
 
   const docStats = useMemo(() => {
+    if (activeTab !== 'document') {
+      return { full: 0, missing: 0, totalDocs: 0, mostMissing: '—', enriched: [] };
+    }
     const enriched = employees.map((e) => ({
       ...e,
       pct: getOverallPct(e, activeChecklist, totalMandatory || defaultTotalMandatory),
@@ -658,9 +706,10 @@ export default function Reports() {
       }
     });
     return { full, missing, totalDocs, mostMissing, enriched };
-  }, [employees, activeChecklist, totalMandatory]);
+  }, [activeTab, employees, activeChecklist, totalMandatory]);
 
   const completionBuckets = useMemo(() => {
+    if (activeTab !== 'document') return [];
     const buckets = { '0%': 0, '1-25%': 0, '26-50%': 0, '51-75%': 0, '76-99%': 0, '100%': 0 };
     employees.forEach((emp) => {
       const pct = getOverallPct(emp, activeChecklist, totalMandatory || defaultTotalMandatory);
@@ -672,9 +721,10 @@ export default function Reports() {
       else buckets['100%'] += 1;
     });
     return Object.entries(buckets).map(([name, count]) => ({ name, count }));
-  }, [employees, activeChecklist, totalMandatory]);
+  }, [activeTab, employees, activeChecklist, totalMandatory]);
 
   const missingDocTableRows = useMemo(() => {
+    if (activeTab !== 'document') return [];
     return employees
       .map((emp) => {
         const pct = getOverallPct(emp, activeChecklist, totalMandatory || defaultTotalMandatory);
@@ -683,9 +733,10 @@ export default function Reports() {
       })
       .filter((r) => r.missing.length > 0)
       .sort((a, b) => a.pct - b.pct);
-  }, [employees, activeChecklist, totalMandatory]);
+  }, [activeTab, employees, activeChecklist, totalMandatory]);
 
   const onboardingStats = useMemo(() => {
+    if (activeTab !== 'onboarding') return { started: 0, completed: 0, inProgress: 0, notStarted: 0, total: 0 };
     let started = 0;
     let completed = 0;
     let inProgress = 0;
@@ -707,7 +758,7 @@ export default function Reports() {
       }
     });
     return { started, completed, inProgress, notStarted, total: employees.length };
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const onboardingDonutData = useMemo(
     () => [
@@ -715,10 +766,11 @@ export default function Reports() {
       { name: 'In Progress', value: onboardingStats.inProgress },
       { name: 'Completed', value: onboardingStats.completed },
     ],
-    [onboardingStats],
+    [activeTab, onboardingStats],
   );
 
   const deptOnboardingAvg = useMemo(() => {
+    if (activeTab !== 'onboarding') return [];
     const acc = {};
     employees.forEach((e) => {
       const d = e.department || 'Other';
@@ -758,11 +810,17 @@ export default function Reports() {
         return { e, pct, left, status, join: toJSDate(e.joiningDate) };
       })
       .sort((a, b) => (b.join?.getTime() || 0) - (a.join?.getTime() || 0));
-  }, [employees, ninetyDaysAgo]);
+  }, [activeTab, employees, ninetyDaysAgo]);
 
-  const offboardingEmployees = useMemo(() => employees.filter((e) => e.offboarding), [employees]);
+  const offboardingEmployees = useMemo(
+    () => (activeTab !== 'offboarding' ? [] : employees.filter((e) => e.offboarding)),
+    [activeTab, employees],
+  );
 
   const offboardingReportStats = useMemo(() => {
+    if (activeTab !== 'offboarding') {
+      return { inNotice: 0, exitTasks: 0, exitsThisMonth: 0, withdrawnThisMonth: 0 };
+    }
     const now = new Date();
     const y = now.getFullYear();
     const mo = now.getMonth();
@@ -778,20 +836,22 @@ export default function Reports() {
       return w && w.getFullYear() === y && w.getMonth() === mo;
     }).length;
     return { inNotice, exitTasks, exitsThisMonth, withdrawnThisMonth };
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const exitReasons = useMemo(() => {
+    if (activeTab !== 'offboarding') return [];
     const acc = {};
     offboardingEmployees.forEach((emp) => {
       const reason = emp.offboarding?.exitReason || 'Other';
       acc[reason] = (acc[reason] || 0) + 1;
     });
     return Object.entries(acc).map(([name, value]) => ({ name, value }));
-  }, [offboardingEmployees]);
+  }, [activeTab, offboardingEmployees]);
 
   const monthlyExits = useMemo(
-    () =>
-      Array.from({ length: 12 }, (_, i) => {
+    () => {
+      if (activeTab !== 'offboarding') return [];
+      return Array.from({ length: 12 }, (_, i) => {
         const month = new Date(currentYear, i, 1);
         const monthName = month.toLocaleDateString('en-GB', { month: 'short' });
         const count = offboardingEmployees.filter((e) => {
@@ -800,23 +860,27 @@ export default function Reports() {
           return d && d.getFullYear() === currentYear && d.getMonth() === i;
         }).length;
         return { month: monthName, count };
-      }),
-    [offboardingEmployees, currentYear],
+      });
+    },
+    [activeTab, offboardingEmployees, currentYear],
   );
 
   const noticePeriodReportRows = useMemo(
-    () =>
-      employees
+    () => {
+      if (activeTab !== 'offboarding') return [];
+      return employees
         .filter((e) => getEmployeeOffboardingPhase(e) === 'notice_period')
         .map((e) => ({
           e,
           expected: toJSDate(e.offboarding?.expectedLastDay),
         }))
-        .sort((a, b) => (a.expected?.getTime() || 0) - (b.expected?.getTime() || 0)),
-    [employees],
+        .sort((a, b) => (a.expected?.getTime() || 0) - (b.expected?.getTime() || 0));
+    },
+    [activeTab, employees],
   );
 
   const activeOffboardingRows = useMemo(() => {
+    if (activeTab !== 'offboarding') return [];
     return employees
       .filter((e) => getEmployeeOffboardingPhase(e) === 'exit_tasks')
       .map((e) => {
@@ -832,34 +896,51 @@ export default function Reports() {
         return { e, exitDate, daysLeft, pct, pending };
       })
       .sort((a, b) => (a.exitDate?.getTime() || 0) - (b.exitDate?.getTime() || 0));
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const withdrawnOffboardingRows = useMemo(
-    () =>
-      employees
+    () => {
+      if (activeTab !== 'offboarding') return [];
+      return employees
         .filter((e) => getEmployeeOffboardingPhase(e) === 'withdrawn')
         .map((e) => ({
           e,
           withdrawnD: toJSDate(e.offboarding?.withdrawnOn),
         }))
-        .sort((a, b) => (b.withdrawnD?.getTime() || 0) - (a.withdrawnD?.getTime() || 0)),
-    [employees],
+        .sort((a, b) => (b.withdrawnD?.getTime() || 0) - (a.withdrawnD?.getTime() || 0));
+    },
+    [activeTab, employees],
   );
 
   const completedOffboardingRows = useMemo(
-    () =>
-      employees
+    () => {
+      if (activeTab !== 'offboarding') return [];
+      return employees
         .filter((e) => getEmployeeOffboardingPhase(e) === 'completed')
         .map((e) => ({
           e,
           exitD: toJSDate(e.offboarding?.exitDate),
           completedD: toJSDate(e.offboarding?.completedAt),
         }))
-        .sort((a, b) => (b.completedD?.getTime() || 0) - (a.completedD?.getTime() || 0)),
-    [employees],
+        .sort((a, b) => (b.completedD?.getTime() || 0) - (a.completedD?.getTime() || 0));
+    },
+    [activeTab, employees],
   );
 
   const compensationData = useMemo(() => {
+    if (activeTab !== 'compensation') {
+      return {
+        totalPayroll: 0,
+        avgSalary: 0,
+        activeCount: 0,
+        deptSalaryData: [],
+        salaryDistribution: [],
+        pfCount: 0,
+        esicCount: 0,
+        topPaid: [],
+        allEmps: [],
+      };
+    }
     const activeEmps = employees.filter((e) => e.status !== 'Inactive' && e.ctcPerAnnum);
 
     const totalPayroll = activeEmps.reduce((sum, e) => sum + (Number(e.ctcPerAnnum) || 0), 0);
@@ -930,7 +1011,7 @@ export default function Reports() {
       topPaid,
       allEmps: activeEmps,
     };
-  }, [employees]);
+  }, [activeTab, employees]);
 
   const handleHeadcountExcel = () => {
     const rows = employees.map((emp) => ({
@@ -1260,7 +1341,8 @@ export default function Reports() {
                     return `<tr><td>${esc(emp.fullName || '—')}</td>${paidLeaveTypes
                       .map((lt) => {
                         const used = row[lt.shortCode] || 0;
-                        const allowed = getAllowanceForType(lt, leavePolicyMap);
+                        const base = getAllowanceForType(lt, leavePolicyMap);
+                        const allowed = calculateProRatedAllowance(base, emp.joiningDate);
                         return `<td>${used} / ${allowed}</td>`;
                       })
                       .join('')}</tr>`;
@@ -1481,7 +1563,7 @@ export default function Reports() {
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => handleTabSwitch(tab.id)}
             className={`flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg text-sm whitespace-nowrap font-medium flex-shrink-0 transition-all active:opacity-90 ${
               activeTab === tab.id ? 'bg-[#1B6B6B] text-white' : 'text-gray-500 hover:bg-gray-100 active:bg-gray-200'
             }`}
@@ -1492,6 +1574,12 @@ export default function Reports() {
         ))}
       </div>
 
+      {tabLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-2 border-[#1B6B6B] border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <>
       {/* HEADCOUNT */}
       {activeTab === 'headcount' && (
         <>
@@ -2045,12 +2133,21 @@ export default function Reports() {
                   {employees.map((emp) => {
                     const row = leaveBalanceByEmp[emp.id];
                     if (!row) return null;
+                    const joinStar = isMidYearJoinerThisYear(emp.joiningDate);
                     return (
                       <tr key={emp.id} className="border-t border-gray-100">
-                        <td className="px-2 py-1.5">{emp.fullName}</td>
+                        <td className="px-2 py-1.5">
+                          {emp.fullName}
+                          {joinStar && (
+                            <span className="text-xs text-amber-500 ml-1" title="Pro-rated for joining date">
+                              *
+                            </span>
+                          )}
+                        </td>
                         {paidLeaveTypes.map((lt) => {
                           const used = row[lt.shortCode] || 0;
-                          const allowed = getAllowanceForType(lt, leavePolicyMap);
+                          const base = getAllowanceForType(lt, leavePolicyMap);
+                          const allowed = calculateProRatedAllowance(base, emp.joiningDate);
                           const bad = allowed > 0 && used > allowed;
                           return (
                             <td key={lt.shortCode} className={`px-2 py-1.5 whitespace-nowrap ${bad ? 'text-red-600 font-semibold' : ''}`}>
@@ -2063,6 +2160,7 @@ export default function Reports() {
                   })}
                 </tbody>
               </table>
+              <p className="text-xs text-gray-400 mt-2 px-2">* Pro-rated based on joining date (calendar year).</p>
             </div>
           </ChartCard>
           <div className="bg-white border border-gray-100 rounded-2xl p-5">
@@ -2616,6 +2714,8 @@ export default function Reports() {
             </button>
             <DownloadExcelButton onClick={handleOffboardingExcel} label="Download offboarding report (Excel)" />
           </div>
+        </>
+      )}
         </>
       )}
     </div>

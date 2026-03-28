@@ -13,7 +13,6 @@ import {
   startAfter,
   getCountFromServer,
   serverTimestamp,
-  increment,
   Timestamp,
 } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -26,6 +25,7 @@ import { SkeletonCard } from '../components/SkeletonRow';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import Cropper from 'react-easy-crop';
 import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
+import { updateCompanyCounts } from '../utils/updateCompanyCounts';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -36,9 +36,8 @@ const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (
 const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 'Probationary', 'Seasonal', 'Other'];
 const JOINING_YEARS = ['All Years', 2020, 2021, 2022, 2023, 2024, 2025, 2026];
 
-const PAGE_SIZE = PLATFORM_CONFIG.EMPLOYEES_PAGE_SIZE;
-const VISIBLE_ROWS = 20;
-const ROW_HEIGHT = 56;
+const FETCH_PAGE_SIZE = PLATFORM_CONFIG.EMPLOYEES_PAGE_SIZE;
+const TABLE_PAGE_SIZE = 25;
 
 async function getCroppedBlob(imageSrc, pixelCrop) {
   const image = await new Promise((resolve, reject) => {
@@ -286,7 +285,7 @@ export default function Employees() {
   });
   const [searchAllMode, setSearchAllMode] = useState(false);
   const searchTimeoutRef = useRef(null);
-  const [scrollTop, setScrollTop] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -463,7 +462,7 @@ export default function Employees() {
           constraints.push(where('location', '==', filterLocation.trim()));
         }
         constraints.push(orderBy('fullName', 'asc'));
-        constraints.push(limit(PAGE_SIZE));
+        constraints.push(limit(FETCH_PAGE_SIZE));
         if (!reset && lastDocRef.current) {
           constraints.push(startAfter(lastDocRef.current));
         }
@@ -479,7 +478,7 @@ export default function Employees() {
         } else {
           setEmployees((prev) => [...prev, ...newEmployees]);
         }
-        setHasMore(snap.docs.length === PAGE_SIZE);
+        setHasMore(snap.docs.length === FETCH_PAGE_SIZE);
       } catch (error) {
         if (error?.code === 'failed-precondition') {
           await fetchAllEmployeesFallback();
@@ -691,18 +690,27 @@ export default function Employees() {
     filterJoiningYear,
   ]);
 
-  const useVirtualList = filtered.length > 30;
-  const visibleWindow = useMemo(() => {
-    const startIndex = Math.floor(scrollTop / ROW_HEIGHT);
-    const endIndex = Math.min(startIndex + VISIBLE_ROWS, filtered.length);
-    return {
-      items: filtered.slice(startIndex, endIndex),
-      startIndex,
-      endIndex,
-      bottomSpacer: Math.max(0, filtered.length - endIndex) * ROW_HEIGHT,
-      topSpacer: startIndex * ROW_HEIGHT,
-    };
-  }, [filtered, scrollTop]);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    tab,
+    search,
+    filterDept,
+    filterDesignation,
+    filterBranch,
+    filterLocation,
+    filterEmploymentType,
+    filterCategory,
+    filterJoiningYear,
+    searchAllMode,
+  ]);
+
+  const paginatedEmployees = useMemo(() => {
+    const start = (currentPage - 1) * TABLE_PAGE_SIZE;
+    return filtered.slice(start, start + TABLE_PAGE_SIZE);
+  }, [filtered, currentPage]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / TABLE_PAGE_SIZE));
 
   const handleCloseAddModal = () => {
     if (newEmpPhotoSrc) URL.revokeObjectURL(newEmpPhotoSrc);
@@ -869,7 +877,7 @@ export default function Employees() {
           console.error('Photo upload failed:', err);
         }
       }
-      await updateDoc(doc(db, 'companies', companyId), { employeeCount: increment(1) });
+      await updateCompanyCounts(companyId);
       setEmployees((prev) => [
         {
           id: newEmpId,
@@ -1181,10 +1189,7 @@ export default function Employees() {
             </div>
           </div>
 
-          <div
-            className="hidden lg:block overflow-x-auto overflow-y-auto max-h-[70vh] border border-slate-200 rounded-xl bg-white"
-            onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-          >
+          <div className="hidden lg:block overflow-x-auto overflow-y-auto max-h-[70vh] border border-slate-200 rounded-xl bg-white">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-500 sticky top-0 z-10">
               <tr>
@@ -1201,69 +1206,7 @@ export default function Employees() {
               </tr>
             </thead>
             <tbody>
-              {useVirtualList ? (
-                <>
-                  {visibleWindow.topSpacer > 0 && (
-                    <tr aria-hidden className="pointer-events-none">
-                      <td colSpan={10} style={{ height: visibleWindow.topSpacer, padding: 0, border: 'none' }} />
-                    </tr>
-                  )}
-                  {visibleWindow.items.map((emp) => (
-                    <tr
-                      key={emp.id}
-                      className="border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-all"
-                      style={{ height: ROW_HEIGHT, borderLeft: `3px solid ${getDeptColor(emp.department)}` }}
-                      onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
-                    >
-                      <td className="px-4 py-3 font-mono text-slate-700">{emp.empId || '—'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <EmployeeAvatar employee={emp} size="sm" />
-                          <div>
-                            <p className="text-sm font-medium text-slate-800">{emp.fullName || '—'}</p>
-                            <p className="text-xs text-slate-500">{emp.email || '—'}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">{emp.department || '—'}</td>
-                      <td className="px-4 py-3 text-slate-700">{emp.designation || '—'}</td>
-                      <td className="px-4 py-3 text-slate-700">{emp.phone || '—'}</td>
-                      <td className="px-4 py-3 text-slate-700">{toDisplayDate(emp.joiningDate)}</td>
-                      <td className="px-4 py-3 text-slate-700">{emp.branch || '—'}</td>
-                      <td className="px-4 py-3 text-slate-700">{emp.location || '—'}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${employeeStatusBadgeClass(emp.status)}`}
-                        >
-                          {emp.status || 'Active'}
-                        </span>
-                        {(emp.offboarding?.phase === 'exit_tasks' || emp.offboarding?.status === 'in_progress') && (
-                          <div className="flex items-center gap-1 mt-1">
-                            <div className="w-16 bg-gray-100 rounded-full h-1">
-                              <div
-                                className="bg-orange-400 h-1 rounded-full"
-                                style={{ width: `${emp.offboarding?.completionPct || 0}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-orange-600">Exit tasks</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
-                        <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#1B6B6B] text-xs font-medium hover:underline">
-                          {canEditEmployees ? 'View Profile' : 'View'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {visibleWindow.bottomSpacer > 0 && (
-                    <tr aria-hidden className="pointer-events-none">
-                      <td colSpan={10} style={{ height: visibleWindow.bottomSpacer, padding: 0, border: 'none' }} />
-                    </tr>
-                  )}
-                </>
-              ) : (
-                filtered.map((emp) => (
+              {paginatedEmployees.map((emp) => (
                   <tr
                     key={emp.id}
                     className="border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-all"
@@ -1310,8 +1253,7 @@ export default function Employees() {
                       </button>
                     </td>
                   </tr>
-                ))
-              )}
+                ))}
               {filtered.length === 0 && (
                 <tr>
                   <td className="px-4 py-8 text-center text-slate-500" colSpan={10}>
@@ -1321,10 +1263,78 @@ export default function Employees() {
               )}
             </tbody>
           </table>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+              <p className="text-sm text-gray-500">
+                Showing {(currentPage - 1) * TABLE_PAGE_SIZE + (filtered.length === 0 ? 0 : 1)}–
+                {Math.min(currentPage * TABLE_PAGE_SIZE, filtered.length)} of {filtered.length} employees
+              </p>
+              <div className="flex items-center gap-1 flex-wrap justify-end">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-2 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50"
+                >
+                  «
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50"
+                >
+                  ‹ Prev
+                </button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let page;
+                  if (totalPages <= 5) {
+                    page = i + 1;
+                  } else if (currentPage <= 3) {
+                    page = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    page = totalPages - 4 + i;
+                  } else {
+                    page = currentPage - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-8 h-8 text-xs rounded-lg border transition-colors ${
+                        currentPage === page
+                          ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]'
+                          : 'border-gray-200 hover:bg-gray-50 text-gray-600'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50"
+                >
+                  Next ›
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-2 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50"
+                >
+                  »
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
           <div className="lg:hidden space-y-3">
-            {filtered.map((emp) => (
+            {paginatedEmployees.map((emp) => (
               <div
                 key={emp.id}
                 role="button"
@@ -1386,6 +1396,74 @@ export default function Employees() {
             ))}
             {filtered.length === 0 && (
               <p className="text-center text-slate-500 py-8 text-sm">No employees found.</p>
+            )}
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-2 py-3 border-t border-gray-100 bg-white rounded-b-2xl">
+                <p className="text-sm text-gray-500 text-center sm:text-left">
+                  Showing {(currentPage - 1) * TABLE_PAGE_SIZE + (filtered.length === 0 ? 0 : 1)}–
+                  {Math.min(currentPage * TABLE_PAGE_SIZE, filtered.length)} of {filtered.length} employees
+                </p>
+                <div className="flex items-center justify-center gap-1 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50"
+                  >
+                    «
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50"
+                  >
+                    ‹ Prev
+                  </button>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let page;
+                    if (totalPages <= 5) {
+                      page = i + 1;
+                    } else if (currentPage <= 3) {
+                      page = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      page = totalPages - 4 + i;
+                    } else {
+                      page = currentPage - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => setCurrentPage(page)}
+                        className={`w-8 h-8 text-xs rounded-lg border transition-colors ${
+                          currentPage === page
+                            ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]'
+                            : 'border-gray-200 hover:bg-gray-50 text-gray-600'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50"
+                  >
+                    Next ›
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50"
+                  >
+                    »
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 

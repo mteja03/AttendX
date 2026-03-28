@@ -32,32 +32,14 @@ const INDUSTRIES = [
   'Media', 'Logistics', 'Real Estate', 'Other',
 ];
 
-async function fetchEmployeeCounts(companiesList) {
-  const counts = {};
-  await Promise.all(
-    companiesList.map(async (company) => {
-      try {
-        const snap = await getDocs(collection(db, 'companies', company.id, 'employees'));
-        const employees = snap.docs.map((d) => d.data());
-        counts[company.id] = {
-          total: employees.length,
-          active: employees.filter((e) => e.status === 'Active').length,
-          inactive: employees.filter((e) => e.status === 'Inactive').length,
-          noticePeriod: employees.filter((e) => e.status === 'Notice Period').length,
-          offboarding: employees.filter((e) => e.status === 'Offboarding').length,
-        };
-      } catch {
-        counts[company.id] = {
-          total: 0,
-          active: 0,
-          inactive: 0,
-          noticePeriod: 0,
-          offboarding: 0,
-        };
-      }
-    }),
-  );
-  return counts;
+function getCount(company) {
+  return {
+    total: company?.employeeCount || 0,
+    active: company?.activeEmployeeCount || 0,
+    inactive: company?.inactiveEmployeeCount || 0,
+    noticePeriod: company?.noticePeriodCount || 0,
+    offboarding: company?.offboardingCount || 0,
+  };
 }
 
 function CompanyMenu({ company, onEdit, onDelete, onDeactivate, onActivate }) {
@@ -197,8 +179,6 @@ export default function Companies() {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCompany, setEditingCompany] = useState(null);
-  const [employeeCounts, setEmployeeCounts] = useState({});
-  const [countsLoading, setCountsLoading] = useState(false);
   const [industryFilter, setIndustryFilter] = useState('');
   const [deactivateConfirm, setDeactivateConfirm] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -251,36 +231,6 @@ export default function Companies() {
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    if (companies.length === 0) {
-      setEmployeeCounts({});
-      return;
-    }
-    let cancelled = false;
-    const loadCounts = async () => {
-      setCountsLoading(true);
-      try {
-        const counts = await fetchEmployeeCounts(companies);
-        if (!cancelled) setEmployeeCounts(counts);
-      } finally {
-        if (!cancelled) setCountsLoading(false);
-      }
-    };
-    loadCounts();
-    return () => {
-      cancelled = true;
-    };
-  }, [companies]);
-
-  const getCount = (companyId) =>
-    employeeCounts[companyId] || {
-      total: 0,
-      active: 0,
-      inactive: 0,
-      noticePeriod: 0,
-      offboarding: 0,
-    };
-
   const uniqueIndustries = useMemo(
     () => [...new Set(companies.map((c) => c.industry).filter(Boolean))],
     [companies],
@@ -301,18 +251,18 @@ export default function Companies() {
   }, [companies, search, industryFilter]);
 
   const totalActive = useMemo(
-    () => Object.values(employeeCounts).reduce((sum, c) => sum + (c?.active || 0), 0),
-    [employeeCounts],
+    () => companies.reduce((sum, c) => sum + (c.activeEmployeeCount || 0), 0),
+    [companies],
   );
 
   const totalEmployeesAgg = useMemo(
-    () => Object.values(employeeCounts).reduce((sum, c) => sum + (c?.total || 0), 0),
-    [employeeCounts],
+    () => companies.reduce((sum, c) => sum + (c.employeeCount || 0), 0),
+    [companies],
   );
 
   const companiesWithEmployees = useMemo(
-    () => companies.filter((c) => getCount(c.id).total > 0).length,
-    [companies, employeeCounts],
+    () => companies.filter((c) => (c.employeeCount || 0) > 0).length,
+    [companies],
   );
 
   const platformUsersActive = useMemo(
@@ -330,9 +280,9 @@ export default function Companies() {
       },
       {
         label: 'Total Employees',
-        value: countsLoading ? '...' : totalEmployeesAgg,
+        value: totalEmployeesAgg,
         icon: '👥',
-        sub: countsLoading ? 'Loading...' : `${totalActive} active`,
+        sub: `${totalActive} active`,
       },
       {
         label: 'Platform Users',
@@ -342,7 +292,7 @@ export default function Companies() {
       },
       {
         label: 'Active Companies',
-        value: countsLoading ? '...' : companiesWithEmployees,
+        value: companiesWithEmployees,
         icon: '✅',
         sub: `${companies.length - companiesWithEmployees} empty`,
       },
@@ -350,7 +300,6 @@ export default function Companies() {
     [
       companies,
       companiesWithEmployees,
-      countsLoading,
       totalEmployeesAgg,
       totalActive,
       platformUsersActive,
@@ -706,33 +655,29 @@ export default function Companies() {
               </div>
 
               <div className="flex flex-wrap items-center gap-3 py-3 border-t border-b border-gray-50 mb-3 relative z-10">
-                {countsLoading ? (
-                  <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
-                ) : (
-                  <>
-                    {getCount(c.id).active > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-green-500" />
-                        <span className="text-xs text-gray-600 font-medium">{getCount(c.id).active} active</span>
-                      </div>
-                    )}
-                    {getCount(c.id).noticePeriod > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-amber-500" />
-                        <span className="text-xs text-gray-500">{getCount(c.id).noticePeriod} notice</span>
-                      </div>
-                    )}
-                    {getCount(c.id).offboarding > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-orange-500" />
-                        <span className="text-xs text-gray-500">{getCount(c.id).offboarding} offboarding</span>
-                      </div>
-                    )}
-                    {getCount(c.id).total === 0 && (
-                      <span className="text-xs text-gray-400">No employees yet</span>
-                    )}
-                  </>
-                )}
+                <>
+                  {getCount(c).active > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-xs text-gray-600 font-medium">{getCount(c).active} active</span>
+                    </div>
+                  )}
+                  {getCount(c).noticePeriod > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-amber-500" />
+                      <span className="text-xs text-gray-500">{getCount(c).noticePeriod} notice</span>
+                    </div>
+                  )}
+                  {getCount(c).offboarding > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-orange-500" />
+                      <span className="text-xs text-gray-500">{getCount(c).offboarding} offboarding</span>
+                    </div>
+                  )}
+                  {getCount(c).total === 0 && (
+                    <span className="text-xs text-gray-400">No employees yet</span>
+                  )}
+                </>
               </div>
 
               <button

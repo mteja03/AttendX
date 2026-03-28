@@ -9,6 +9,7 @@ import {
   updateDoc,
   query,
   orderBy,
+  where,
   increment,
   serverTimestamp,
   Timestamp,
@@ -20,6 +21,17 @@ import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import { toDisplayDate, toJSDate } from '../utils';
+import { calculateProRatedAllowance, isMidYearJoinerThisYear } from '../utils/leaveProration';
+
+function mergeLeaveListsById(a, b) {
+  const m = new Map();
+  [...a, ...b].forEach((x) => m.set(x.id, x));
+  return Array.from(m.values()).sort((x, y) => {
+    const ax = toJSDate(x.appliedAt)?.getTime() || 0;
+    const ay = toJSDate(y.appliedAt)?.getTime() || 0;
+    return ay - ax;
+  });
+}
 
 const DEFAULT_LEAVE_TYPE_OBJECTS = [
   { name: 'Casual Leave', shortCode: 'CL', isPaid: true },
@@ -171,6 +183,8 @@ export default function Leave() {
   const [filterStatusDropdown, setFilterStatusDropdown] = useState('');
 
   const [showDownload, setShowDownload] = useState(false);
+  const [loadedYears, setLoadedYears] = useState([]);
+  const [loadingOlderYear, setLoadingOlderYear] = useState(false);
 
   const empDropdownRef = useRef(null);
 
@@ -195,9 +209,18 @@ export default function Leave() {
     const load = async () => {
       setLoading(true);
       try {
+        const calendarYear = new Date().getFullYear();
+        const yearStart = Timestamp.fromDate(new Date(calendarYear, 0, 1));
+        const yearEnd = Timestamp.fromDate(new Date(calendarYear, 11, 31, 23, 59, 59, 999));
+        const leavesQuery = query(
+          collection(db, 'companies', companyId, 'leave'),
+          where('startDate', '>=', yearStart),
+          where('startDate', '<=', yearEnd),
+          orderBy('startDate', 'desc'),
+        );
         const [companySnap, leaveSnap, empSnap] = await Promise.all([
           getDoc(doc(db, 'companies', companyId)),
-          getDocs(query(collection(db, 'companies', companyId, 'leave'), orderBy('appliedAt', 'desc'))),
+          getDocs(leavesQuery),
           getDocs(collection(db, 'companies', companyId, 'employees')),
         ]);
         if (companySnap.exists()) {
@@ -207,6 +230,7 @@ export default function Leave() {
           setLeavePolicy(buildAllowancesMapFromCompany(data, types));
         }
         setLeaveList(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setLoadedYears([calendarYear]);
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => (e.status || 'Active') !== 'Inactive'));
       } catch {
         showError('Failed to load leave data');
@@ -319,6 +343,30 @@ export default function Leave() {
 
     return byEmployee;
   }, [filteredLeaves, employees, paidLeaveTypes]);
+
+  const loadPreviousCalendarYear = async () => {
+    if (!companyId || loadedYears.length === 0) return;
+    const y = Math.min(...loadedYears) - 1;
+    if (y < 2000) return;
+    setLoadingOlderYear(true);
+    try {
+      const yearStart = Timestamp.fromDate(new Date(y, 0, 1));
+      const yearEnd = Timestamp.fromDate(new Date(y, 11, 31, 23, 59, 59, 999));
+      const q = query(
+        collection(db, 'companies', companyId, 'leave'),
+        where('startDate', '>=', yearStart),
+        where('startDate', '<=', yearEnd),
+        orderBy('startDate', 'desc'),
+      );
+      const snap = await getDocs(q);
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setLeaveList((prev) => mergeLeaveListsById(prev, rows));
+      setLoadedYears((prev) => [...prev, y]);
+    } catch {
+      showError('Failed to load older leave records');
+    }
+    setLoadingOlderYear(false);
+  };
 
   const downloadLeaveReport = (format) => {
     const rows = filteredLeave.map((l) => ({
@@ -523,32 +571,44 @@ export default function Leave() {
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Employee</th>
                 {paidLeaveTypes.map((lt) => {
-                  const allowed = getAllowanceForType(lt, leavePolicy);
+                  const policyMax = getAllowanceForType(lt, leavePolicy);
                   return (
                     <th key={lt.shortCode} className="px-4 py-2 text-left font-medium text-slate-600 whitespace-nowrap">
                       {lt.shortCode}
-                      <span className="block text-xs font-normal text-gray-400">/{allowed}</span>
+                      <span className="block text-xs font-normal text-gray-400">max {policyMax}</span>
                     </th>
                   );
                 })}
               </tr>
             </thead>
             <tbody>
-              {Object.entries(leaveBalance).map(([empId, row]) => (
-                <tr key={empId} className="border-t border-slate-100">
-                  <td className="px-4 py-2 font-medium text-slate-800">{row.name}</td>
-                  {paidLeaveTypes.map((lt) => {
-                    const used = row[lt.shortCode] ?? 0;
-                    const allowed = getAllowanceForType(lt, leavePolicy);
-                    return (
-                      <td key={lt.shortCode} className="px-4 py-2 whitespace-nowrap">
-                        <span className={used > allowed ? 'text-red-600' : 'text-gray-800'}>{used}</span>
-                        <span className="text-gray-400">/{allowed}</span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+              {Object.entries(leaveBalance).map(([empId, row]) => {
+                const emp = employeeMap[empId];
+                const showJoinStar = emp && isMidYearJoinerThisYear(emp.joiningDate);
+                return (
+                  <tr key={empId} className="border-t border-slate-100">
+                    <td className="px-4 py-2 font-medium text-slate-800">
+                      {row.name}
+                      {showJoinStar && (
+                        <span className="text-xs text-amber-500 ml-1" title="Pro-rated for joining date">
+                          *
+                        </span>
+                      )}
+                    </td>
+                    {paidLeaveTypes.map((lt) => {
+                      const used = row[lt.shortCode] ?? 0;
+                      const base = getAllowanceForType(lt, leavePolicy);
+                      const allowed = calculateProRatedAllowance(base, emp?.joiningDate);
+                      return (
+                        <td key={lt.shortCode} className="px-4 py-2 whitespace-nowrap">
+                          <span className={used > allowed ? 'text-red-600' : 'text-gray-800'}>{used}</span>
+                          <span className="text-gray-400">/{allowed}</span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
               {Object.keys(leaveBalance).length === 0 && (
                 <tr>
                   <td className="px-4 py-4 text-slate-500" colSpan={paidLeaveTypes.length + 1}>
@@ -558,6 +618,7 @@ export default function Leave() {
               )}
             </tbody>
           </table>
+          <p className="text-xs text-gray-400 px-4 py-2 border-t border-slate-100">* Pro-rated based on joining date (calendar year).</p>
         </div>
       )}
 
@@ -810,6 +871,16 @@ export default function Leave() {
               </div>
             ))}
             {filteredLeave.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No leave requests.</p>}
+            {loadedYears.length > 0 && Math.min(...loadedYears) > 2000 && (
+              <button
+                type="button"
+                onClick={loadPreviousCalendarYear}
+                disabled={loadingOlderYear}
+                className="w-full py-3 text-sm text-gray-400 hover:text-[#1B6B6B] border-t border-gray-100 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {loadingOlderYear ? 'Loading…' : `Load ${Math.min(...loadedYears) - 1} records →`}
+              </button>
+            )}
           </div>
         </>
       )}

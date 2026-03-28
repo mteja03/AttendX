@@ -32,6 +32,7 @@ import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDriv
 import { toDisplayDate, toJSDate, toDateString, formatLakhs } from '../utils';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 import { deleteEmployeePhoto } from '../utils/photoUpload';
+import { updateCompanyCounts } from '../utils/updateCompanyCounts';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 
 async function getCroppedBlob(imageSrc, pixelCrop) {
@@ -1386,14 +1387,7 @@ export default function EmployeeProfile() {
       }
 
       try {
-        const companyRef = doc(db, 'companies', companyId);
-        const companySnap = await getDoc(companyRef);
-        if (companySnap.exists()) {
-          const currentCount = companySnap.data().employeeCount || 0;
-          await updateDoc(companyRef, {
-            employeeCount: Math.max(0, currentCount - 1),
-          });
-        }
+        await updateCompanyCounts(companyId);
       } catch (countErr) {
         console.warn('Count update failed:', countErr);
       }
@@ -2048,6 +2042,11 @@ export default function EmployeeProfile() {
         updatedAt: serverTimestamp(),
       });
       await refreshEmployee();
+      try {
+        await updateCompanyCounts(companyId);
+      } catch (countErr) {
+        console.warn('Count update failed:', countErr);
+      }
       success(`${employee.fullName} is back to Active!`);
       setShowWithdrawModal(false);
       setWithdrawNotes('');
@@ -2365,6 +2364,11 @@ export default function EmployeeProfile() {
       setShowCompleteOffboardingModal(false);
       setCompletionNotes('');
       await refreshEmployee();
+      try {
+        await updateCompanyCounts(companyId);
+      } catch (countErr) {
+        console.warn('Count update failed:', countErr);
+      }
       success(`✅ ${employee.fullName} offboarding complete. Marked as Inactive.`);
     } catch (e) {
       showError(`Failed to complete offboarding: ${e?.message || 'Unknown error'}`);
@@ -2426,6 +2430,11 @@ export default function EmployeeProfile() {
       setShowRehireModal(false);
       setRehireForm({ newJoiningDate: '', notes: '' });
       await refreshEmployee();
+      try {
+        await updateCompanyCounts(companyId);
+      } catch (countErr) {
+        console.warn('Count update failed:', countErr);
+      }
     } catch (e) {
       showError(`Failed to rehire: ${e?.message || 'Unknown error'}`);
     } finally {
