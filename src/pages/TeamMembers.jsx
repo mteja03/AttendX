@@ -15,6 +15,7 @@ import {
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
+import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { toDisplayDate } from '../utils';
 import { ROLE_LABELS, ROLE_COLORS } from '../utils/roles';
@@ -329,9 +330,13 @@ export default function TeamMembers() {
                   <tr key={m.id} className="border-t border-slate-100">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-[#C5E8E8] flex items-center justify-center text-sm font-medium text-[#1B6B6B]">
-                          {(m.name || emp?.fullName || m.email || '?').charAt(0).toUpperCase()}
-                        </div>
+                        <EmployeeAvatar
+                          employee={{
+                            fullName: m.name || emp?.fullName || m.email,
+                            photoURL: m.photoURL || emp?.photoURL,
+                          }}
+                          size="md"
+                        />
                         <div>
                           <p className="font-medium text-slate-800">{m.name || emp?.fullName || '—'}</p>
                           <p className="text-xs text-gray-400">

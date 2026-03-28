@@ -14,7 +14,9 @@ import {
   arrayRemove,
   deleteField,
 } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import Cropper from 'react-easy-crop';
+import { db, app } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { PLATFORM_CONFIG } from '../config/constants';
 import PageLoader from '../components/PageLoader';
@@ -28,8 +30,46 @@ import {
 import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDrive';
 import { toDisplayDate, toJSDate, toDateString, formatLakhs } from '../utils';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
-import { uploadEmployeePhoto, deleteEmployeePhoto } from '../utils/photoUpload';
+import { deleteEmployeePhoto } from '../utils/photoUpload';
 import EmployeeAvatar from '../components/EmployeeAvatar';
+
+async function getCroppedBlob(imageSrc, pixelCrop) {
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = imageSrc;
+  });
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  canvas.width = pixelCrop.width;
+  canvas.height = pixelCrop.height;
+
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    pixelCrop.width,
+    pixelCrop.height,
+  );
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error('Crop failed'));
+      },
+      'image/jpeg',
+      0.9,
+    );
+  });
+}
 
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
 const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
@@ -647,6 +687,11 @@ export default function EmployeeProfile() {
   const [showResignationModal, setShowResignationModal] = useState(false);
   const [showOnboardingWarningModal, setShowOnboardingWarningModal] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [rawImageSrc, setRawImageSrc] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [resignForm, setResignForm] = useState({
     resignationDate: '',
     noticePeriodDays: 30,
@@ -2804,6 +2849,23 @@ export default function EmployeeProfile() {
     const statusClass =
       status === 'Active' ? 'print-badge-green' : status === 'Inactive' ? 'print-badge-red' : 'print-badge-amber';
 
+    const desigDept = [employee.designation || '', employee.department || ''].filter(Boolean).join(' · ');
+    const empIdStatus = [employee.empId || '', status].filter(Boolean).join(' · ');
+
+    const photoSection = employee.photoURL
+      ? `<div style="display:flex;align-items:center;gap:20px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid #E8F5F5;">
+      <img src="${employee.photoURL}" alt="${e(employee.fullName || '')}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #4ECDC4;flex-shrink:0;" crossorigin="anonymous" />
+      <div>
+        <h2 style="font-size:22px;font-weight:700;color:#1B6B6B;margin:0 0 4px;">${e(employee.fullName || '—')}</h2>
+        <p style="font-size:14px;color:#6b7280;margin:0 0 2px;">${e(desigDept || '—')}</p>
+        <p style="font-size:13px;color:#9ca3af;margin:0;">${e(empIdStatus || '—')}</p>
+      </div>
+    </div>`
+      : `<div style="margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid #E8F5F5;">
+      <h2 style="font-size:22px;font-weight:700;color:#1B6B6B;margin:0 0 4px;">${e(employee.fullName || '—')}</h2>
+      <p style="font-size:14px;color:#6b7280;margin:0;">${e(desigDept || '—')}</p>
+    </div>`;
+
     const noticePrint =
       status === 'Notice Period' && employee.offboarding
         ? `<div class="print-section">
@@ -2818,6 +2880,8 @@ export default function EmployeeProfile() {
         : '';
 
     const content = `
+      ${photoSection}
+
       <div class="print-highlight-card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
         <div>
           <div class="print-field-label">Employee</div>
@@ -3021,21 +3085,29 @@ export default function EmployeeProfile() {
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/jpg"
                   className="hidden"
-                  onChange={async (e) => {
+                  onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
                     e.target.value = '';
-                    try {
-                      setUploadingPhoto(true);
-                      const url = await uploadEmployeePhoto(companyId, empId, file);
-                      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { photoURL: url });
-                      success('✓ Photo updated!');
-                      await fetchEmployee();
-                    } catch (err) {
-                      showError(err?.message || 'Upload failed');
-                    } finally {
-                      setUploadingPhoto(false);
+
+                    if (!file.type.startsWith('image/')) {
+                      showError('Please select an image file');
+                      return;
                     }
+                    if (file.size > 10 * 1024 * 1024) {
+                      showError('Image must be under 10MB');
+                      return;
+                    }
+
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      setRawImageSrc(ev.target?.result || null);
+                      setCrop({ x: 0, y: 0 });
+                      setZoom(1);
+                      setCroppedAreaPixels(null);
+                      setCropModalOpen(true);
+                    };
+                    reader.readAsDataURL(file);
                   }}
                 />
               )}
@@ -6094,6 +6166,122 @@ export default function EmployeeProfile() {
                 className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
               >
                 {saving ? 'Saving…' : 'Confirm Buyout'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cropModalOpen && rawImageSrc && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-semibold text-gray-800">Adjust Photo</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Pinch or scroll to zoom · Drag to reposition</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCropModalOpen(false);
+                  setRawImageSrc(null);
+                }}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="relative bg-gray-900" style={{ height: '320px' }}>
+              <Cropper
+                image={rawImageSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={(_, pixels) => setCroppedAreaPixels(pixels)}
+                style={{
+                  containerStyle: { borderRadius: '0' },
+                  cropAreaStyle: {
+                    border: '3px solid #4ECDC4',
+                    boxShadow: '0 0 0 9999px rgba(0,0,0,0.6)',
+                  },
+                }}
+              />
+            </div>
+
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400 w-4">🔍</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.05}
+                  value={zoom}
+                  onChange={(ev) => setZoom(Number(ev.target.value))}
+                  className="flex-1 accent-[#1B6B6B]"
+                />
+                <span className="text-xs text-gray-400 w-4">🔎</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setCropModalOpen(false);
+                  setRawImageSrc(null);
+                }}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={uploadingPhoto}
+                onClick={async () => {
+                  if (!croppedAreaPixels) {
+                    showError('Please adjust the crop area');
+                    return;
+                  }
+                  try {
+                    setUploadingPhoto(true);
+                    setCropModalOpen(false);
+
+                    const blob = await getCroppedBlob(rawImageSrc, croppedAreaPixels);
+
+                    const storage = getStorage(app);
+                    const photoRef = ref(storage, `companies/${companyId}/employees/${empId}/profile.jpg`);
+
+                    const snapshot = await uploadBytes(photoRef, blob, {
+                      contentType: 'image/jpeg',
+                      customMetadata: {
+                        empId: String(empId),
+                        companyId: String(companyId),
+                        uploadedAt: new Date().toISOString(),
+                      },
+                    });
+
+                    const url = await getDownloadURL(snapshot.ref);
+
+                    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { photoURL: url });
+
+                    setRawImageSrc(null);
+                    success('✓ Photo updated!');
+                    await fetchEmployee();
+                  } catch (err) {
+                    showError(`Upload failed: ${err?.message || 'Unknown error'}`);
+                  } finally {
+                    setUploadingPhoto(false);
+                  }
+                }}
+                className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
+              >
+                {uploadingPhoto ? 'Uploading...' : '✓ Save Photo'}
               </button>
             </div>
           </div>

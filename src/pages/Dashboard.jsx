@@ -984,15 +984,25 @@ export default function Dashboard() {
                 <tbody>
                   {recentLeave.map((l) => (
                     <tr key={l.id} className="border-t border-slate-100">
-                      <td className="px-4 py-3 font-medium text-slate-800">
-                        <button
-                          type="button"
-                          onClick={() => handleEmployeeClick(l.employeeId)}
-                          className="cursor-pointer hover:text-teal-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={!l.employeeId}
-                        >
-                          {l.employeeName || '—'}
-                        </button>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <EmployeeAvatar
+                            employee={{
+                              fullName: l.employeeName,
+                              photoURL:
+                                l.employeePhotoURL ?? employees.find((e) => e.id === l.employeeId)?.photoURL,
+                            }}
+                            size="sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleEmployeeClick(l.employeeId)}
+                            className="text-left text-sm font-medium text-slate-800 cursor-pointer hover:text-teal-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={!l.employeeId}
+                          >
+                            {l.employeeName || '—'}
+                          </button>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${LEAVE_TYPE_STYLE[l.leaveType] || 'bg-[#E8F5F5] text-[#1B6B6B]'}`}>
@@ -1041,7 +1051,11 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <EmployeeAvatar
-                        employee={employees.find((e) => e.id === leave.employeeId) || { fullName: leave.employeeName }}
+                        employee={{
+                          fullName: leave.employeeName,
+                          photoURL:
+                            leave.employeePhotoURL ?? employees.find((e) => e.id === leave.employeeId)?.photoURL,
+                        }}
                         size="sm"
                       />
                       <div className="min-w-0">

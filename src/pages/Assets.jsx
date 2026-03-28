@@ -18,6 +18,7 @@ import { saveAs } from 'file-saver';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
+import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { toDisplayDate } from '../utils';
 
@@ -1148,11 +1149,15 @@ export default function Assets() {
                   <td className="px-4 py-3">
                     {a.assignedToId ? (
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B]">
-                          {(a.assignedToName || '?').charAt(0)}
-                        </div>
+                        <EmployeeAvatar
+                          employee={{
+                            fullName: a.assignedToName,
+                            photoURL: employees.find((e) => e.id === a.assignedToId)?.photoURL,
+                          }}
+                          size="xs"
+                        />
                         <div>
-                          <p className="text-xs text-slate-800">{a.assignedToName}</p>
+                          <p className="text-sm text-gray-700">{a.assignedToName}</p>
                           <p className="text-[10px] text-slate-400">{a.assignedToEmpId}</p>
                         </div>
                       </div>
@@ -2056,9 +2061,13 @@ export default function Assets() {
                   .filter((a) => !a.returned)
                   .map((assignment, idx) => (
                     <div key={idx} className="flex items-center gap-3 py-3 px-4">
-                      <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center text-xs font-medium text-green-700">
-                        {(assignment.employeeName || '?').charAt(0)}
-                      </div>
+                      <EmployeeAvatar
+                        employee={{
+                          fullName: assignment.employeeName,
+                          photoURL: employees.find((e) => e.id === assignment.employeeId)?.photoURL,
+                        }}
+                        size="xs"
+                      />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-800 truncate">
                           {assignment.employeeName}

@@ -18,6 +18,7 @@ import { saveAs } from 'file-saver';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
+import EmployeeAvatar from '../components/EmployeeAvatar';
 import { toDisplayDate, toJSDate } from '../utils';
 
 const DEFAULT_LEAVE_TYPE_OBJECTS = [
@@ -353,6 +354,8 @@ export default function Leave() {
       await addDoc(collection(db, 'companies', companyId, 'leave'), {
         employeeId: form.employeeId,
         employeeName: emp.fullName,
+        empId: emp.empId || '',
+        employeePhotoURL: emp.photoURL || null,
         leaveType: form.leaveType,
         startDate: startTs,
         endDate: endTs,
@@ -367,6 +370,8 @@ export default function Leave() {
           id: `leave_${Date.now()}`,
           employeeId: form.employeeId,
           employeeName: emp.fullName,
+          empId: emp.empId || '',
+          employeePhotoURL: emp.photoURL || null,
           leaveType: form.leaveType,
           startDate: startTs,
           endDate: endTs,
@@ -616,11 +621,21 @@ export default function Leave() {
                 {filteredLeave.map((l) => (
                   <tr key={l.id} className="border-t border-slate-100">
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
-                          {(l.employeeName || '?').slice(0, 2).toUpperCase()}
+                      <div className="flex items-center gap-2.5">
+                        <EmployeeAvatar
+                          employee={{
+                            fullName: l.employeeName,
+                            photoURL:
+                              l.employeePhotoURL ?? employees.find((e) => e.id === l.employeeId)?.photoURL,
+                          }}
+                          size="sm"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">{l.employeeName || '—'}</p>
+                          <p className="text-xs text-gray-400">
+                            {l.empId || employees.find((e) => e.id === l.employeeId)?.empId || '—'}
+                          </p>
                         </div>
-                        <span className="font-medium text-slate-800">{l.employeeName || '—'}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -678,13 +693,19 @@ export default function Leave() {
             {filteredLeave.map((leave) => (
               <div key={leave.id} className="bg-white border border-gray-100 rounded-2xl p-4 mb-3 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-[#E8F5F5] flex items-center justify-center text-xs font-medium text-[#1B6B6B] flex-shrink-0">
-                      {leave.employeeName?.charAt(0) || '?'}
-                    </div>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <EmployeeAvatar
+                      employee={{
+                        fullName: leave.employeeName,
+                        photoURL:
+                          leave.employeePhotoURL ?? employees.find((e) => e.id === leave.employeeId)?.photoURL,
+                      }}
+                      size="sm"
+                    />
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-800 truncate">{leave.employeeName || '—'}</p>
+                      <p className="text-sm font-medium text-gray-800 truncate">{leave.employeeName || '—'}</p>
                       <p className="text-xs text-gray-400 truncate">
+                        {leave.empId || employees.find((e) => e.id === leave.employeeId)?.empId || '—'} ·{' '}
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${leaveTypeBadgeClass(leave.leaveType, leaveTypes)}`}>
                           {leave.leaveType || '—'}
                         </span>
