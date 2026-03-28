@@ -86,6 +86,33 @@ async function getBase64FromUrl(url) {
   }
 }
 
+function isFirestoreFieldValue(val) {
+  return val != null && typeof val === 'object' && typeof val._methodName === 'string';
+}
+
+/** Recursively replace undefined with null and strip undefined keys — Firestore rejects undefined. Preserves Timestamp and FieldValue sentinels. */
+function sanitizeForFirestore(obj) {
+  if (obj === undefined) return null;
+  if (obj === null) return null;
+  if (isFirestoreFieldValue(obj)) return obj;
+  if (obj instanceof Timestamp) return obj;
+  if (obj instanceof Date) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map((item) => sanitizeForFirestore(item));
+  }
+  if (typeof obj === 'object') {
+    const cleaned = {};
+    Object.keys(obj).forEach((key) => {
+      const val = sanitizeForFirestore(obj[key]);
+      if (val !== undefined) {
+        cleaned[key] = val;
+      }
+    });
+    return cleaned;
+  }
+  return obj;
+}
+
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
 const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
 const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
@@ -1805,7 +1832,7 @@ export default function EmployeeProfile() {
         order: maxOrder + 1 + i,
         assetId: a.id,
         assetMode: row.mode,
-        consumableAssignmentIndex: row.assignmentIndex,
+        consumableAssignmentIndex: row.mode === 'consumable' ? row.assignmentIndex ?? null : null,
         consumableIssueSeconds: row.asgn?.issueDate?.seconds ?? row.asgn?.issueDate?._seconds ?? null,
         isAssetTask: true,
         completed: false,
@@ -1816,7 +1843,7 @@ export default function EmployeeProfile() {
       };
     });
 
-    return [...sanitized, ...assetTasks];
+    return sanitizeForFirestore([...sanitized, ...assetTasks]);
   };
 
   const handleRecordResignation = async () => {
@@ -1854,7 +1881,7 @@ export default function EmployeeProfile() {
       };
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
         status: 'Notice Period',
-        offboarding: offboardingData,
+        offboarding: sanitizeForFirestore(offboardingData),
         updatedAt: serverTimestamp(),
       });
       await refreshEmployee();
@@ -1883,14 +1910,14 @@ export default function EmployeeProfile() {
       ];
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
         status: 'Active',
-        offboarding: {
+        offboarding: sanitizeForFirestore({
           ...employee.offboarding,
           phase: 'withdrawn',
           withdrawnOn: now,
           withdrawnBy: currentUser.email || '',
-          withdrawNotes: withdrawNotes.trim(),
+          withdrawNotes: withdrawNotes.trim() || null,
           history: updatedHistory,
-        },
+        }),
         updatedAt: serverTimestamp(),
       });
       await refreshEmployee();
@@ -1938,7 +1965,7 @@ export default function EmployeeProfile() {
       const exitReason = employee.offboarding?.reason || employee.offboarding?.exitReason || 'Resignation';
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
         status: 'Offboarding',
-        offboarding: {
+        offboarding: sanitizeForFirestore({
           ...employee.offboarding,
           phase: 'exit_tasks',
           status: 'in_progress',
@@ -1953,7 +1980,7 @@ export default function EmployeeProfile() {
           completionPct: 0,
           tasks: allTasks,
           history: updatedHistory,
-        },
+        }),
         updatedAt: serverTimestamp(),
       });
       await refreshEmployee();
@@ -1993,7 +2020,7 @@ export default function EmployeeProfile() {
       ];
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
         status: 'Offboarding',
-        offboarding: {
+        offboarding: sanitizeForFirestore({
           ...employee.offboarding,
           phase: 'exit_tasks',
           status: 'in_progress',
@@ -2006,7 +2033,7 @@ export default function EmployeeProfile() {
           completionPct: 0,
           tasks: allTasks,
           history: updatedHistory,
-        },
+        }),
         updatedAt: serverTimestamp(),
       });
       await refreshEmployee();
@@ -2058,7 +2085,7 @@ export default function EmployeeProfile() {
     };
 
     const payload = {
-      offboarding: offboardingPayload,
+      offboarding: sanitizeForFirestore(offboardingPayload),
       status: status === 'completed' ? 'Inactive' : (employee.status || 'Offboarding'),
       updatedAt: serverTimestamp(),
     };
@@ -2178,7 +2205,7 @@ export default function EmployeeProfile() {
     const requiredDone = nextTasks.filter((t) => t.isRequired).every((t) => t.completed);
     const nextStatus = requiredDone && done === nextTasks.length ? 'completed' : 'in_progress';
     const payload = {
-      offboarding: {
+      offboarding: sanitizeForFirestore({
         ...(offboarding || {}),
         phase: nextStatus === 'completed' ? 'completed' : 'exit_tasks',
         status: nextStatus,
@@ -2186,7 +2213,7 @@ export default function EmployeeProfile() {
         completedAt: nextStatus === 'completed' ? offboarding.completedAt : null,
         completedBy: nextStatus === 'completed' ? offboarding.completedBy : null,
         tasks: nextTasks,
-      },
+      }),
       status: nextStatus === 'completed' ? 'Inactive' : 'Offboarding',
       updatedAt: serverTimestamp(),
     };
@@ -2319,13 +2346,13 @@ export default function EmployeeProfile() {
         .map((t) => Object.fromEntries(Object.entries(t).filter(([, v]) => v !== undefined)));
 
       const payload = {
-        onboarding: {
+        onboarding: sanitizeForFirestore({
           status: 'in_progress',
           startedAt: now,
           completedAt: null,
           completionPct: 0,
           tasks: sanitizedTasks,
-        },
+        }),
         updatedAt: serverTimestamp(),
       };
 
@@ -2359,13 +2386,13 @@ export default function EmployeeProfile() {
     const status = requiredDone && done === nextTasks.length ? 'completed' : 'in_progress';
 
     const payload = {
-      onboarding: {
+      onboarding: sanitizeForFirestore({
         ...(onboarding || {}),
         status,
         completionPct: pct,
         tasks: nextTasks,
         completedAt: status === 'completed' ? now : onboarding.completedAt || null,
-      },
+      }),
       updatedAt: serverTimestamp(),
     };
 
@@ -2387,13 +2414,13 @@ export default function EmployeeProfile() {
     const pct = Math.round((done / total) * 100);
 
     const payload = {
-      onboarding: {
+      onboarding: sanitizeForFirestore({
         ...(onboarding || {}),
         status: done === 0 ? 'not_started' : 'in_progress',
         completionPct: pct,
         completedAt: null,
         tasks: nextTasks,
-      },
+      }),
       updatedAt: serverTimestamp(),
     };
 
