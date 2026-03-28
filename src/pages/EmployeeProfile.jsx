@@ -831,7 +831,19 @@ export default function EmployeeProfile() {
   }, [showEditModal, companyId]);
 
   useEffect(() => {
-    if (searchParams.get('tab') === 'documents') setTab('documents');
+    const tabFromUrl = searchParams.get('tab');
+    if (!tabFromUrl) return;
+    const tabMap = {
+      personal: 'personal',
+      documents: 'documents',
+      leave: 'leave',
+      assets: 'assets',
+      onboarding: 'onboarding',
+      offboarding: 'offboarding',
+      timeline: 'timeline',
+    };
+    const mappedTab = tabMap[tabFromUrl];
+    if (mappedTab) setTab(mappedTab);
   }, [searchParams]);
 
   const leavePolicy = company?.leavePolicy || { cl: 12, sl: 12, el: 15 };

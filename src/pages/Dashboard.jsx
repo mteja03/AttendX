@@ -724,7 +724,10 @@ export default function Dashboard() {
                     tabIndex={0}
                     onClick={() => navigate(`/company/${companyId}/employees/${emp.id}?tab=onboarding`)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') navigate(`/company/${companyId}/employees/${emp.id}?tab=onboarding`);
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        navigate(`/company/${companyId}/employees/${emp.id}?tab=onboarding`);
+                      }
                     }}
                     className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-[#C5E8E8] hover:bg-[#E8F5F5] cursor-pointer transition-all"
                   >
@@ -746,7 +749,13 @@ export default function Dashboard() {
                         style={{ width: `${Math.min(emp._onboardingPct || 0, 100)}%` }}
                       />
                     </div>
-                    <span className="text-xs text-[#1B6B6B]">View →</span>
+                    <Link
+                      to={`/company/${companyId}/employees/${emp.id}?tab=onboarding`}
+                      className="text-xs text-[#1B6B6B] shrink-0 hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      View →
+                    </Link>
                   </div>
                 ))}
               </div>
@@ -777,7 +786,10 @@ export default function Dashboard() {
                       tabIndex={0}
                       onClick={() => navigate(`/company/${companyId}/employees/${emp.id}?tab=offboarding`)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') navigate(`/company/${companyId}/employees/${emp.id}?tab=offboarding`);
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigate(`/company/${companyId}/employees/${emp.id}?tab=offboarding`);
+                        }
                       }}
                       className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-amber-200 hover:bg-amber-50 cursor-pointer transition-all"
                     >
@@ -799,7 +811,7 @@ export default function Dashboard() {
                           <span className="text-xs text-gray-400">{emp._offPct || 0}%</span>
                         </div>
                       </div>
-                      <div className="text-right flex-shrink-0">
+                      <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
                         <p className="text-xs text-gray-400">Exit: {toDisplayDate(emp.offboarding?.exitDate)}</p>
                         {daysLeft !== null && (
                           <p
@@ -810,6 +822,13 @@ export default function Dashboard() {
                             {daysLeft < 0 ? 'Exited' : daysLeft === 0 ? 'Today!' : `${daysLeft} days left`}
                           </p>
                         )}
+                        <Link
+                          to={`/company/${companyId}/employees/${emp.id}?tab=offboarding`}
+                          className="text-xs text-[#1B6B6B] hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          View →
+                        </Link>
                       </div>
                     </div>
                   );
