@@ -111,6 +111,11 @@ export default function Calendar() {
     return unsub;
   }, [companyId]);
 
+  const validLeaves = useMemo(
+    () => leaveList.filter((leave) => employees.some((e) => e.id === leave.employeeId)),
+    [leaveList, employees],
+  );
+
   const combinedEvents = useMemo(() => {
     const list = [];
     const y = viewYear;
@@ -153,7 +158,7 @@ export default function Calendar() {
       });
     });
 
-    leaveList.forEach((leave) => {
+    validLeaves.forEach((leave) => {
       const start = toJSDate(leave.startDate);
       const end = toJSDate(leave.endDate);
       if (!start || !end) return;
@@ -177,7 +182,7 @@ export default function Calendar() {
     });
 
     return list;
-  }, [fsEvents, employees, leaveList, viewYear]);
+  }, [fsEvents, employees, validLeaves, viewYear]);
 
   const eventsByDay = useMemo(() => {
     const map = {};

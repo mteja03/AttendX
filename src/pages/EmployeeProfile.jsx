@@ -1335,6 +1335,36 @@ export default function EmployeeProfile() {
       await deleteDoc(empRef);
 
       try {
+        const leavesRef = collection(db, 'companies', companyId, 'leave');
+        const leavesQuery = query(leavesRef, where('employeeId', '==', empId));
+        const leavesSnap = await getDocs(leavesQuery);
+        await Promise.all(leavesSnap.docs.map((d) => deleteDoc(d.ref)));
+        console.log(`Deleted ${leavesSnap.docs.length} leave records`);
+      } catch (leaveErr) {
+        console.warn('Leave cleanup failed:', leaveErr);
+      }
+
+      try {
+        const assetsRef = collection(db, 'companies', companyId, 'assets');
+        const assetsQuery = query(assetsRef, where('assignedToId', '==', empId));
+        const assetsSnap = await getDocs(assetsQuery);
+        await Promise.all(
+          assetsSnap.docs.map((d) =>
+            updateDoc(d.ref, {
+              assignedToId: null,
+              assignedToName: null,
+              assignedToEmpId: null,
+              status: 'Available',
+              unassignedAt: serverTimestamp(),
+              unassignedReason: 'Employee deleted',
+            }),
+          ),
+        );
+      } catch (assetErr) {
+        console.warn('Asset cleanup failed:', assetErr);
+      }
+
+      try {
         const token = await getValidToken();
         if (token) {
           const { findAndDeleteFolder } = await import('../utils/googleDrive');

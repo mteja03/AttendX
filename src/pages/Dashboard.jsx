@@ -315,6 +315,8 @@ export default function Dashboard() {
     fetchOffboarding();
   }, [companyId, fetchEmployees, fetchLeave, fetchAssets, fetchOnboarding, fetchOffboarding]);
 
+  const activeEmployeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
+
   const stats = useMemo(() => {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -325,9 +327,10 @@ export default function Dashboard() {
       if (!d || Number.isNaN(d.getTime())) return false;
       return d >= thirtyDaysAgo;
     }).length;
-    const pendingLeaves = leaveList.filter((l) => l.status === 'Pending').length;
+    const leavesForActive = leaveList.filter((l) => activeEmployeeIds.has(l.employeeId));
+    const pendingLeaves = leavesForActive.filter((l) => l.status === 'Pending').length;
     const today = toDateString(new Date());
-    const onLeaveToday = leaveList.filter((l) => {
+    const onLeaveToday = leavesForActive.filter((l) => {
       if (l.status !== 'Approved') return false;
       const start = toDateString(l.startDate);
       const end = toDateString(l.endDate);
@@ -341,9 +344,12 @@ export default function Dashboard() {
       onLeaveToday,
       pendingLeaves,
     };
-  }, [employees, leaveList]);
+  }, [employees, leaveList, activeEmployeeIds]);
 
-  const recentLeave = useMemo(() => leaveList.slice(0, 5), [leaveList]);
+  const recentLeave = useMemo(
+    () => leaveList.filter((l) => activeEmployeeIds.has(l.employeeId)).slice(0, 5),
+    [leaveList, activeEmployeeIds],
+  );
 
   const onLeaveThisWeek = useMemo(() => {
     const today = new Date();
@@ -365,8 +371,9 @@ export default function Dashboard() {
       return s.getTime() <= weekEndTime && e.getTime() >= todayTime;
     };
 
-    return employees.filter((emp) => leaveList.some((l) => l.employeeId === emp.id && overlaps(l)));
-  }, [employees, leaveList]);
+    const leavesForActive = leaveList.filter((l) => activeEmployeeIds.has(l.employeeId));
+    return employees.filter((emp) => leavesForActive.some((l) => l.employeeId === emp.id && overlaps(l)));
+  }, [employees, leaveList, activeEmployeeIds]);
 
   const celebrations = useMemo(() => {
     const today = new Date();

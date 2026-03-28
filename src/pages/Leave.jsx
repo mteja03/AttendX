@@ -224,10 +224,17 @@ export default function Leave() {
     return [...s].sort();
   }, [employees]);
 
+  const activeEmployeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
+
+  const filteredLeaves = useMemo(
+    () => leaveList.filter((leave) => activeEmployeeIds.has(leave.employeeId)),
+    [leaveList, activeEmployeeIds],
+  );
+
   const activeStatus = filterStatusDropdown || tab;
 
   const filteredLeave = useMemo(() => {
-    return leaveList.filter((l) => {
+    return filteredLeaves.filter((l) => {
       if (activeStatus !== 'All' && (l.status || '') !== activeStatus) return false;
       if (filterEmployee && !(`${l.employeeName || ''}`.toLowerCase().includes(filterEmployee.toLowerCase()))) return false;
       if (filterType && (l.leaveType || '') !== filterType) return false;
@@ -248,7 +255,7 @@ export default function Leave() {
       }
       return true;
     });
-  }, [leaveList, activeStatus, filterEmployee, filterType, filterDept, filterFrom, filterTo, employees]);
+  }, [filteredLeaves, activeStatus, filterEmployee, filterType, filterDept, filterFrom, filterTo, employees]);
 
   const employeeMap = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
 
@@ -286,7 +293,7 @@ export default function Leave() {
   const paidLeaveTypes = useMemo(() => leaveTypes.filter((lt) => lt.isPaid), [leaveTypes]);
 
   const leaveBalance = useMemo(() => {
-    const approved = leaveList.filter((l) => l.status === 'Approved');
+    const approved = filteredLeaves.filter((l) => l.status === 'Approved');
     const byEmployee = {};
 
     const ensureRow = (id, name) => {
@@ -311,7 +318,7 @@ export default function Leave() {
     });
 
     return byEmployee;
-  }, [leaveList, employees, paidLeaveTypes]);
+  }, [filteredLeaves, employees, paidLeaveTypes]);
 
   const downloadLeaveReport = (format) => {
     const rows = filteredLeave.map((l) => ({
