@@ -14,6 +14,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
 import { canAccessUserManagement, ROLE_LABELS } from '../utils/roles';
+import { toDisplayDate } from '../utils';
+
+const ROLE_BADGES = {
+  admin: 'bg-purple-100 text-purple-700',
+  hrmanager: 'bg-[#E8F5F5] text-[#1B6B6B]',
+  manager: 'bg-blue-100 text-blue-700',
+  itmanager: 'bg-orange-100 text-orange-700',
+};
 
 const DEFAULT_MODULE_PERMISSIONS = {
   employees: true,
@@ -137,11 +145,6 @@ export default function AdminUsers() {
     };
     load();
   }, [isAdmin, currentUser, showError]);
-
-  const companyMap = useMemo(
-    () => Object.fromEntries(companies.map((c) => [c.id, c.name])),
-    [companies],
-  );
 
   const stats = useMemo(() => {
     const active = users.filter((u) => u.isActive !== false).length;
@@ -297,21 +300,6 @@ export default function AdminUsers() {
     );
   }
 
-  const roleBadge = (r) => {
-    const styles = {
-      admin: 'bg-purple-100 text-purple-800',
-      hrmanager: 'bg-green-100 text-green-800',
-      manager: 'bg-amber-100 text-amber-800',
-      itmanager: 'bg-[#C5E8E8] text-[#0F4444]',
-    };
-    const label = { admin: 'Admin', hrmanager: 'HR Manager', manager: 'Manager', itmanager: 'IT Manager' }[r] || r;
-    return (
-      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${styles[r] || 'bg-slate-100 text-slate-700'}`}>
-        {label}
-      </span>
-    );
-  };
-
   return (
     <div className="p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -394,6 +382,7 @@ export default function AdminUsers() {
                 <th className="px-4 py-3 text-left font-medium">Email</th>
                 <th className="px-4 py-3 text-left font-medium">Role</th>
                 <th className="px-4 py-3 text-left font-medium">Company</th>
+                <th className="px-4 py-3 text-left font-medium">Last Login</th>
                 <th className="px-4 py-3 text-left font-medium">Status</th>
                 <th className="px-4 py-3 text-left font-medium">Added date</th>
                 <th className="px-4 py-3 text-left font-medium">Actions</th>
@@ -403,7 +392,7 @@ export default function AdminUsers() {
               {filtered.map((u) => (
                 <tr key={u.id} className="border-t border-slate-100 hover:bg-slate-50/50">
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <img
                         src={u.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || u.email || 'U')}`}
                         alt=""
@@ -415,11 +404,39 @@ export default function AdminUsers() {
                           You
                         </span>
                       )}
+                      {!u.lastLoginAt && !u.lastLogin && (
+                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Never logged in</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-slate-700">{u.email}</td>
-                  <td className="px-4 py-3">{roleBadge(u.role)}</td>
-                  <td className="px-4 py-3 text-slate-700">{companyMap[u.companyId] || '—'}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium inline-block ${
+                        ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {ROLE_LABELS[u.role] || u.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {u.companyId && (
+                        <div
+                          className="w-5 h-5 rounded text-white text-[10px] flex items-center justify-center font-bold shrink-0"
+                          style={{
+                            background: companies.find((c) => c.id === u.companyId)?.color || '#1B6B6B',
+                          }}
+                        >
+                          {(companies.find((c) => c.id === u.companyId)?.initials || '?').charAt(0)}
+                        </div>
+                      )}
+                      <span className="text-sm text-gray-600">{companies.find((c) => c.id === u.companyId)?.name || '—'}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-400">
+                    {u.lastLoginAt || u.lastLogin ? toDisplayDate(u.lastLoginAt || u.lastLogin) : 'Never'}
+                  </td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -476,7 +493,7 @@ export default function AdminUsers() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td className="px-4 py-8 text-center text-slate-500 text-sm" colSpan={7}>
+                  <td className="px-4 py-8 text-center text-slate-500 text-sm" colSpan={8}>
                     No users found.
                   </td>
                 </tr>

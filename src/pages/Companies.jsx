@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   collection,
@@ -32,6 +31,133 @@ const INDUSTRIES = [
   'IT', 'Manufacturing', 'Automobile', 'Retail', 'Finance', 'Healthcare', 'Education',
   'Media', 'Logistics', 'Real Estate', 'Other',
 ];
+
+async function fetchEmployeeCounts(companiesList) {
+  const counts = {};
+  await Promise.all(
+    companiesList.map(async (company) => {
+      try {
+        const snap = await getDocs(collection(db, 'companies', company.id, 'employees'));
+        const employees = snap.docs.map((d) => d.data());
+        counts[company.id] = {
+          total: employees.length,
+          active: employees.filter((e) => e.status === 'Active').length,
+          inactive: employees.filter((e) => e.status === 'Inactive').length,
+          noticePeriod: employees.filter((e) => e.status === 'Notice Period').length,
+          offboarding: employees.filter((e) => e.status === 'Offboarding').length,
+        };
+      } catch {
+        counts[company.id] = {
+          total: 0,
+          active: 0,
+          inactive: 0,
+          noticePeriod: 0,
+          offboarding: 0,
+        };
+      }
+    }),
+  );
+  return counts;
+}
+
+function CompanyMenu({ company, onEdit, onDelete, onDeactivate, onActivate }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const items = [
+    {
+      icon: '📊',
+      label: 'View Dashboard',
+      action: () => navigate(`/company/${company.id}/dashboard`),
+    },
+    {
+      icon: '👥',
+      label: 'View Employees',
+      action: () => navigate(`/company/${company.id}/employees`),
+    },
+    {
+      icon: '✏️',
+      label: 'Edit Company',
+      action: () => {
+        onEdit();
+      },
+    },
+    {
+      icon: '📋',
+      label: 'View Reports',
+      action: () => navigate(`/company/${company.id}/reports`),
+    },
+  ];
+  if (company.isActive !== false) {
+    items.push({
+      icon: '⏸️',
+      label: 'Deactivate Company',
+      action: () => onDeactivate(),
+    });
+  } else {
+    items.push({
+      icon: '▶️',
+      label: 'Activate Company',
+      action: () => onActivate(),
+    });
+  }
+  items.push(null);
+  items.push({
+    icon: '🗑️',
+    label: 'Delete Company',
+    action: () => onDelete(),
+    danger: true,
+  });
+
+  return (
+    <div ref={menuRef} className="relative flex-shrink-0 z-20">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400"
+        aria-label="Company menu"
+        aria-expanded={open}
+      >
+        ···
+      </button>
+      {open && (
+        <div className="absolute right-0 top-8 bg-white border border-gray-100 rounded-xl shadow-lg z-30 w-48 overflow-hidden">
+          {items.map((item, i) =>
+            item === null ? (
+              <div key={`sep-${company.id}-${i}`} className="border-t border-gray-100" />
+            ) : (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  item.action();
+                }}
+                className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors ${
+                  item.danger ? 'text-red-500 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <span>{item.icon}</span>
+                {item.label}
+              </button>
+            ),
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function StatSkeleton() {
   return (
@@ -71,9 +197,9 @@ export default function Companies() {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCompany, setEditingCompany] = useState(null);
-  const [menuCompanyId, setMenuCompanyId] = useState(null);
-  const [menuCompany, setMenuCompany] = useState(null);
-  const [menuPosition, setMenuPosition] = useState(null);
+  const [employeeCounts, setEmployeeCounts] = useState({});
+  const [countsLoading, setCountsLoading] = useState(false);
+  const [industryFilter, setIndustryFilter] = useState('');
   const [deactivateConfirm, setDeactivateConfirm] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -125,24 +251,74 @@ export default function Companies() {
     return () => { cancelled = true; };
   }, []);
 
-  const filteredCompanies = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return companies;
-    return companies.filter(
-      (c) =>
-        c.name?.toLowerCase().includes(term) ||
-        c.industry?.toLowerCase().includes(term) ||
-        c.location?.toLowerCase().includes(term) ||
-        c.initials?.toLowerCase().includes(term),
-    );
-  }, [companies, search]);
+  useEffect(() => {
+    if (companies.length === 0) {
+      setEmployeeCounts({});
+      return;
+    }
+    let cancelled = false;
+    const loadCounts = async () => {
+      setCountsLoading(true);
+      try {
+        const counts = await fetchEmployeeCounts(companies);
+        if (!cancelled) setEmployeeCounts(counts);
+      } finally {
+        if (!cancelled) setCountsLoading(false);
+      }
+    };
+    loadCounts();
+    return () => {
+      cancelled = true;
+    };
+  }, [companies]);
 
-  const totalEmployees = useMemo(
-    () => companies.reduce((sum, c) => sum + (c.employeeCount || 0), 0),
+  const getCount = (companyId) =>
+    employeeCounts[companyId] || {
+      total: 0,
+      active: 0,
+      inactive: 0,
+      noticePeriod: 0,
+      offboarding: 0,
+    };
+
+  const uniqueIndustries = useMemo(
+    () => [...new Set(companies.map((c) => c.industry).filter(Boolean))],
     [companies],
   );
 
-  const platformUsersCount = users.length;
+  const filteredCompanies = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return companies.filter((c) => {
+      const matchSearch =
+        !term ||
+        c.name?.toLowerCase().includes(term) ||
+        c.industry?.toLowerCase().includes(term) ||
+        c.location?.toLowerCase().includes(term) ||
+        c.initials?.toLowerCase().includes(term);
+      const matchIndustry = !industryFilter || c.industry === industryFilter;
+      return matchSearch && matchIndustry;
+    });
+  }, [companies, search, industryFilter]);
+
+  const totalActive = useMemo(
+    () => Object.values(employeeCounts).reduce((sum, c) => sum + (c?.active || 0), 0),
+    [employeeCounts],
+  );
+
+  const totalEmployeesAgg = useMemo(
+    () => Object.values(employeeCounts).reduce((sum, c) => sum + (c?.total || 0), 0),
+    [employeeCounts],
+  );
+
+  const companiesWithEmployees = useMemo(
+    () => companies.filter((c) => getCount(c.id).total > 0).length,
+    [companies, employeeCounts],
+  );
+
+  const platformUsersActive = useMemo(
+    () => users.filter((u) => u.isActive !== false).length,
+    [users],
+  );
 
   const adminStats = useMemo(
     () => [
@@ -150,26 +326,36 @@ export default function Companies() {
         label: 'Total Companies',
         value: companies.length,
         icon: '🏢',
+        sub: `${companiesWithEmployees} with employees`,
       },
       {
         label: 'Total Employees',
-        value: totalEmployees,
-        sub: `${companies.reduce((sum, c) => sum + (c.activeEmployeeCount || 0), 0)} active`,
+        value: countsLoading ? '...' : totalEmployeesAgg,
         icon: '👥',
+        sub: countsLoading ? 'Loading...' : `${totalActive} active`,
       },
       {
         label: 'Platform Users',
-        value: platformUsersCount,
+        value: users.length,
         icon: '👤',
+        sub: `${platformUsersActive} active`,
       },
       {
         label: 'Active Companies',
-        value: companies.filter((c) => (c.employeeCount || 0) > 0).length,
-        sub: `${companies.filter((c) => (c.employeeCount || 0) === 0).length} empty`,
+        value: countsLoading ? '...' : companiesWithEmployees,
         icon: '✅',
+        sub: `${companies.length - companiesWithEmployees} empty`,
       },
     ],
-    [companies, totalEmployees, platformUsersCount],
+    [
+      companies,
+      companiesWithEmployees,
+      countsLoading,
+      totalEmployeesAgg,
+      totalActive,
+      platformUsersActive,
+      users.length,
+    ],
   );
 
   const handleFormChange = (e) => {
@@ -192,7 +378,6 @@ export default function Companies() {
       industry: company.industry || '',
       location: company.location || '',
     });
-    setMenuCompanyId(null);
   };
 
   const closeModal = () => {
@@ -270,7 +455,6 @@ export default function Companies() {
     const company = deactivateConfirm;
     if (!company) return;
     setDeactivateConfirm(null);
-    setMenuCompanyId(null);
     try {
       await updateDoc(doc(db, 'companies', company.id), { isActive: false });
       success('Company deactivated');
@@ -280,7 +464,6 @@ export default function Companies() {
   };
 
   const handleActivate = async (company) => {
-    setMenuCompanyId(null);
     try {
       await updateDoc(doc(db, 'companies', company.id), { isActive: true });
       success('Company activated');
@@ -349,7 +532,6 @@ export default function Companies() {
       );
 
       setDeleteConfirm(null);
-      setMenuCompanyId(null);
 
       // Step 5 — Toast based on Drive cleanup status
       if (driveCleanupOk) {
@@ -415,14 +597,26 @@ export default function Companies() {
         )}
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap gap-3 items-center">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search companies..."
-          className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
+          className="w-full max-w-md rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
         />
+        <select
+          value={industryFilter}
+          onChange={(e) => setIndustryFilter(e.target.value)}
+          className="border rounded-xl px-3 py-2 text-sm text-gray-600 min-w-[10rem]"
+        >
+          <option value="">All Industries</option>
+          {uniqueIndustries.map((ind) => (
+            <option key={ind} value={ind}>
+              {ind}
+            </option>
+          ))}
+        </select>
       </div>
 
       {loading ? (
@@ -474,157 +668,83 @@ export default function Companies() {
           {filteredCompanies.map((c) => (
             <div
               key={c.id}
-              className={`bg-white rounded-xl border border-slate-200 p-5 flex flex-col relative overflow-visible transition-colors hover:border-[#4ECDC4] ${
+              className={`bg-white border border-gray-100 rounded-2xl p-5 hover:border-[#4ECDC4] hover:shadow-sm transition-all flex flex-col relative overflow-visible ${
                 c.isActive === false ? 'opacity-60' : ''
               }`}
             >
               {c.isActive === false && (
-                <div className="absolute inset-0 rounded-xl bg-slate-100/50 pointer-events-none" aria-hidden />
+                <div className="absolute inset-0 rounded-2xl bg-slate-100/50 pointer-events-none" aria-hidden />
               )}
               {c.isActive === false && (
                 <span className="absolute top-3 right-12 z-10 inline-flex items-center rounded-full bg-slate-500 px-2.5 py-0.5 text-xs font-medium text-white">
                   Inactive
                 </span>
               )}
-              <div className="flex items-start justify-between relative z-10">
-                <div className="flex items-center gap-3">
+              <div className="flex items-start justify-between mb-3 relative z-10">
+                <div className="flex items-center gap-3 min-w-0">
                   <div
-                    className="h-12 w-12 rounded-full flex items-center justify-center text-white font-semibold text-lg shrink-0"
-                    style={{ backgroundColor: c.color || '#1B6B6B' }}
+                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                    style={{ background: c.color || '#1B6B6B' }}
                   >
                     {c.initials || c.name?.slice(0, 2)?.toUpperCase() || '—'}
                   </div>
-                  <div>
-                    <h2 className="font-medium text-slate-800">{c.name || '—'}</h2>
-                    <p className="text-slate-500 text-sm">{c.industry || '—'}</p>
-                    <p className="text-slate-500 text-xs">{c.location || '—'}</p>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-gray-800 truncate">{c.name || '—'}</h3>
+                    <p className="text-xs text-gray-400">
+                      {c.industry || 'Company'}
+                      {c.location ? ` · ${c.location}` : ''}
+                    </p>
                   </div>
                 </div>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      if (menuCompanyId === c.id) {
-                        setMenuCompanyId(null);
-                        setMenuCompany(null);
-                        setMenuPosition(null);
-                      } else {
-                        setMenuCompany(c);
-                        setMenuCompanyId(c.id);
-                        setMenuPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                      }
-                    }}
-                    className="p-1 rounded text-slate-400 hover:bg-slate-100"
-                    aria-label="Menu"
-                  >
-                    <span className="text-lg leading-none">⋯</span>
-                  </button>
-                </div>
+                <CompanyMenu
+                  company={c}
+                  onEdit={() => openEdit(c)}
+                  onDelete={() => setDeleteConfirm(c)}
+                  onDeactivate={() => setDeactivateConfirm(c)}
+                  onActivate={() => handleActivate(c)}
+                />
               </div>
-              <div className="flex items-center gap-4 mt-3 relative z-10">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-xs text-gray-500">{c.activeEmployeeCount || 0} active</span>
-                </div>
-                {(c.inactiveEmployeeCount || 0) > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-gray-300" />
-                    <span className="text-xs text-gray-400">{c.inactiveEmployeeCount} inactive</span>
-                  </div>
+
+              <div className="flex flex-wrap items-center gap-3 py-3 border-t border-b border-gray-50 mb-3 relative z-10">
+                {countsLoading ? (
+                  <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
+                ) : (
+                  <>
+                    {getCount(c.id).active > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                        <span className="text-xs text-gray-600 font-medium">{getCount(c.id).active} active</span>
+                      </div>
+                    )}
+                    {getCount(c.id).noticePeriod > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-amber-500" />
+                        <span className="text-xs text-gray-500">{getCount(c.id).noticePeriod} notice</span>
+                      </div>
+                    )}
+                    {getCount(c.id).offboarding > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-orange-500" />
+                        <span className="text-xs text-gray-500">{getCount(c.id).offboarding} offboarding</span>
+                      </div>
+                    )}
+                    {getCount(c.id).total === 0 && (
+                      <span className="text-xs text-gray-400">No employees yet</span>
+                    )}
+                  </>
                 )}
               </div>
-              {c.lastActivityAt && (
-                <p className="text-xs text-gray-400 mt-2 relative z-10">
-                  Last active: {toDisplayDate(c.lastActivityAt)}
-                </p>
-              )}
+
               <button
                 type="button"
                 onClick={() => navigate(`/company/${c.id}/dashboard`)}
-                className="w-full py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] transition-colors mt-3 relative z-10"
+                className="w-full py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] transition-colors relative z-10"
               >
                 Manage Company →
               </button>
             </div>
           ))}
         </div>
-      )}
-
-      {menuCompany && menuPosition && createPortal(
-        <>
-          <div
-            className="fixed inset-0 z-[90]"
-            aria-hidden
-            onClick={() => { setMenuCompanyId(null); setMenuCompany(null); setMenuPosition(null); }}
-          />
-          <div
-            className="fixed z-[100] py-1 bg-white border border-slate-200 rounded-lg shadow-xl min-w-[200px]"
-            style={{ top: menuPosition.top, right: menuPosition.right }}
-          >
-            {[
-              {
-                label: 'Edit Company Info',
-                icon: '✏️',
-                danger: false,
-                action: () => openEdit(menuCompany),
-              },
-              {
-                label: 'View Employees',
-                icon: '👥',
-                danger: false,
-                action: () => navigate(`/company/${menuCompany.id}/employees`),
-              },
-              {
-                label: 'View Dashboard',
-                icon: '📊',
-                danger: false,
-                action: () => navigate(`/company/${menuCompany.id}/dashboard`),
-              },
-              ...(menuCompany.isActive !== false
-                ? [
-                    {
-                      label: 'Deactivate Company',
-                      icon: '⏸️',
-                      danger: false,
-                      action: () => setDeactivateConfirm(menuCompany),
-                    },
-                  ]
-                : [
-                    {
-                      label: 'Activate Company',
-                      icon: '▶️',
-                      danger: false,
-                      action: () => handleActivate(menuCompany),
-                    },
-                  ]),
-              {
-                label: 'Delete Company',
-                icon: '🗑️',
-                danger: true,
-                action: () => setDeleteConfirm(menuCompany),
-              },
-            ].map((option) => (
-              <button
-                key={option.label}
-                type="button"
-                onClick={() => {
-                  setMenuCompanyId(null);
-                  setMenuCompany(null);
-                  setMenuPosition(null);
-                  option.action();
-                }}
-                className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 hover:bg-gray-50 transition-colors ${
-                  option.danger ? 'text-red-600 hover:bg-red-50' : 'text-gray-700'
-                }`}
-              >
-                <span>{option.icon}</span>
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </>,
-        document.body,
       )}
 
       {(showAddModal || editingCompany) && (

@@ -92,7 +92,10 @@ export function AuthProvider({ children }) {
           setAuthError('');
           try {
             const refUsed = snap.ref;
-            await updateDoc(refUsed, { lastLogin: serverTimestamp() });
+            await updateDoc(refUsed, {
+              lastLogin: serverTimestamp(),
+              lastLoginAt: serverTimestamp(),
+            });
           } catch {
             // ignore lastLogin write failures (e.g. rules)
           }
