@@ -19,6 +19,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import PageLoader from '../components/PageLoader';
+import EmployeeAvatar from '../components/EmployeeAvatar';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
@@ -41,6 +42,7 @@ function getEmployeeOffboardingPhase(e) {
 const REPORT_TABS = [
   { id: 'headcount', label: 'Headcount', icon: '👥' },
   { id: 'employee', label: 'Employees', icon: '👤' },
+  { id: 'compensation', label: 'Compensation', icon: '💰' },
   { id: 'leave', label: 'Leave', icon: '📅' },
   { id: 'asset', label: 'Assets', icon: '📦' },
   { id: 'document', label: 'Documents', icon: '📄' },
@@ -528,6 +530,31 @@ export default function Reports() {
       .sort((a, b) => b.count - a.count);
   }, [leaveYearList, employeeMap]);
 
+  const topLeaveEmployees = useMemo(() => {
+    const empLeave = {};
+    leaveYearList
+      .filter((l) => l.status === 'Approved')
+      .forEach((l) => {
+        const key = l.employeeId;
+        if (!key) return;
+        if (!empLeave[key]) {
+          empLeave[key] = {
+            employeeId: key,
+            name: l.employeeName || employeeMap[key]?.fullName || '—',
+            empId: employeeMap[key]?.empId || l.empId || '',
+            department: employeeMap[key]?.department || l.department || '',
+            totalDays: 0,
+            count: 0,
+          };
+        }
+        empLeave[key].totalDays += Number(l.days) || 1;
+        empLeave[key].count += 1;
+      });
+    return Object.values(empLeave)
+      .sort((a, b) => b.totalDays - a.totalDays)
+      .slice(0, 10);
+  }, [leaveYearList, employeeMap]);
+
   const assetStats = useMemo(() => {
     const trackable = assets.filter((a) => (a.mode || 'trackable') === 'trackable');
     const consumable = assets.filter((a) => (a.mode || 'trackable') === 'consumable');
@@ -832,6 +859,186 @@ export default function Reports() {
     [employees],
   );
 
+  const compensationData = useMemo(() => {
+    const activeEmps = employees.filter((e) => e.status !== 'Inactive' && e.ctcPerAnnum);
+
+    const totalPayroll = activeEmps.reduce((sum, e) => sum + (Number(e.ctcPerAnnum) || 0), 0);
+
+    const avgSalary = activeEmps.length > 0 ? totalPayroll / activeEmps.length : 0;
+
+    const deptSalary = {};
+    activeEmps.forEach((emp) => {
+      const dept = emp.department || 'Unknown';
+      if (!deptSalary[dept]) {
+        deptSalary[dept] = {
+          total: 0,
+          count: 0,
+          min: Infinity,
+          max: 0,
+        };
+      }
+      const ctc = Number(emp.ctcPerAnnum) || 0;
+      deptSalary[dept].total += ctc;
+      deptSalary[dept].count += 1;
+      deptSalary[dept].min = Math.min(deptSalary[dept].min, ctc);
+      deptSalary[dept].max = Math.max(deptSalary[dept].max, ctc);
+    });
+
+    const deptSalaryData = Object.entries(deptSalary)
+      .map(([dept, data]) => ({
+        dept,
+        avg: Math.round(data.total / data.count),
+        min: data.min === Infinity ? 0 : data.min,
+        max: data.max,
+        count: data.count,
+        total: data.total,
+      }))
+      .sort((a, b) => b.avg - a.avg);
+
+    const ranges = [
+      { label: 'Below 3L', min: 0, max: 300000 },
+      { label: '3L - 6L', min: 300000, max: 600000 },
+      { label: '6L - 10L', min: 600000, max: 1000000 },
+      { label: '10L - 15L', min: 1000000, max: 1500000 },
+      { label: '15L - 25L', min: 1500000, max: 2500000 },
+      { label: 'Above 25L', min: 2500000, max: Infinity },
+    ];
+
+    const salaryDistribution = ranges.map((range) => ({
+      label: range.label,
+      count: activeEmps.filter((e) => {
+        const ctc = Number(e.ctcPerAnnum) || 0;
+        return ctc >= range.min && ctc < range.max;
+      }).length,
+    }));
+
+    const pfCount = activeEmps.filter((e) => e.pfApplicable).length;
+    const esicCount = activeEmps.filter((e) => e.esicApplicable).length;
+
+    const topPaid = [...activeEmps]
+      .sort((a, b) => (Number(b.ctcPerAnnum) || 0) - (Number(a.ctcPerAnnum) || 0))
+      .slice(0, 10);
+
+    return {
+      totalPayroll,
+      avgSalary,
+      activeCount: activeEmps.length,
+      deptSalaryData,
+      salaryDistribution,
+      pfCount,
+      esicCount,
+      topPaid,
+      allEmps: activeEmps,
+    };
+  }, [employees]);
+
+  const handleHeadcountExcel = () => {
+    const rows = employees.map((emp) => ({
+      'Emp ID': emp.empId || '',
+      Name: emp.fullName || '',
+      Department: emp.department || '',
+      Branch: emp.branch || '',
+      Location: emp.location || '',
+      Designation: emp.designation || '',
+      'Employment Type': emp.employmentType || '',
+      Category: emp.category || '',
+      Gender: emp.gender || '',
+      'Joining Date': toDisplayDate(emp.joiningDate),
+      Tenure: tenureLabel(emp.joiningDate),
+      Status: emp.status || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Headcount');
+    const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
+    XLSX.writeFile(wb, `${safeCompanyFile}_Headcount-Report_${today}.xlsx`);
+  };
+
+  const handleOffboardingExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    if (noticePeriodReportRows.length > 0) {
+      const noticeData = noticePeriodReportRows.map(({ e }) => ({
+        Name: e.fullName,
+        'Emp ID': e.empId,
+        Department: e.department || '',
+        'Resignation Date': toDisplayDate(e.offboarding?.resignationDate),
+        'Expected Last Day': toDisplayDate(e.offboarding?.expectedLastDay),
+        'Days Remaining': getDaysRemainingLastDay(e.offboarding?.expectedLastDay),
+        Reason: e.offboarding?.reason || e.offboarding?.exitReason || '',
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(noticeData), 'Notice Period');
+    }
+
+    if (activeOffboardingRows.length > 0) {
+      const exitData = activeOffboardingRows.map(({ e, pct }) => ({
+        Name: e.fullName,
+        'Emp ID': e.empId,
+        Department: e.department || '',
+        'Exit Date': toDisplayDate(
+          e.offboarding?.actualLastDay || e.offboarding?.exitDate || e.offboarding?.expectedLastDay,
+        ),
+        'Completion %': pct,
+        Reason: e.offboarding?.reason || e.offboarding?.exitReason || '',
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exitData), 'Exit In Progress');
+    }
+
+    if (withdrawnOffboardingRows.length > 0) {
+      const withdrawnData = withdrawnOffboardingRows.map(({ e }) => ({
+        Name: e.fullName,
+        'Emp ID': e.empId,
+        Department: e.department || '',
+        'Withdrawn On': toDisplayDate(e.offboarding?.withdrawnOn),
+        Notes: e.offboarding?.withdrawNotes || '',
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(withdrawnData), 'Withdrawn');
+    }
+
+    if (completedOffboardingRows.length > 0) {
+      const completedData = completedOffboardingRows.map(({ e }) => ({
+        Name: e.fullName,
+        'Emp ID': e.empId,
+        Department: e.department || '',
+        'Exit Date': toDisplayDate(e.offboarding?.actualLastDay || e.offboarding?.completedAt),
+        Reason: e.offboarding?.reason || e.offboarding?.exitReason || '',
+        Tenure: tenureLabel(e.joiningDate),
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(completedData), 'Completed Exits');
+    }
+
+    if (wb.SheetNames.length === 0) {
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet([{ Message: 'No offboarding rows in this report.' }]),
+        'Summary',
+      );
+    }
+
+    XLSX.writeFile(wb, `${safeCompanyFile}_Offboarding-Report_${new Date().toLocaleDateString('en-GB').split('/').join('-')}.xlsx`);
+  };
+
+  const handleCompensationExcel = () => {
+    const rows = compensationData.allEmps.map((emp) => ({
+      'Emp ID': emp.empId || '',
+      Name: emp.fullName || '',
+      Department: emp.department || '',
+      Designation: emp.designation || '',
+      'Annual Gross Salary': emp.ctcPerAnnum || '',
+      'Monthly Salary': emp.ctcPerAnnum ? Math.round(Number(emp.ctcPerAnnum) / 12) : '',
+      'Incentive (Monthly)': emp.incentive || '',
+      'PF Applicable': emp.pfApplicable ? 'Yes' : 'No',
+      'PF Number': emp.pfNumber || '',
+      'ESIC Applicable': emp.esicApplicable ? 'Yes' : 'No',
+      'ESIC Number': emp.esicNumber || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Compensation');
+    const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
+    XLSX.writeFile(wb, `${safeCompanyFile}_Compensation-Report_${today}.xlsx`);
+  };
+
   const downloadEmployeeCSV = () => {
     const rows = filteredEmployeesForReport.map((emp) => ({
       'Emp ID': emp.empId || '',
@@ -964,6 +1171,55 @@ export default function Reports() {
                       </tr>`,
                   )
                   .join('')}
+              </tbody>
+            </table>
+          </div>`;
+        break;
+      case 'compensation':
+        content = `
+          <div class="print-section">
+            <div class="print-section-title">Summary</div>
+            <div class="print-grid-2">
+              <div><div class="print-field-label">Total annual payroll</div><div class="print-field-value">₹${formatLakhs(compensationData.totalPayroll)}</div></div>
+              <div><div class="print-field-label">Average annual salary</div><div class="print-field-value">₹${formatLakhs(compensationData.avgSalary)}</div></div>
+              <div><div class="print-field-label">PF enrolled</div><div class="print-field-value">${compensationData.pfCount}</div></div>
+              <div><div class="print-field-label">ESIC enrolled</div><div class="print-field-value">${compensationData.esicCount}</div></div>
+            </div>
+          </div>
+          <div class="print-section">
+            <div class="print-section-title">Compensation by department</div>
+            <table class="print-table">
+              <thead><tr><th>Department</th><th>Employees</th><th>Min</th><th>Max</th><th>Average</th><th>Total cost</th></tr></thead>
+              <tbody>
+              ${compensationData.deptSalaryData
+                .map(
+                  (r) =>
+                    `<tr><td>${esc(r.dept)}</td><td>${r.count}</td><td>₹${formatLakhs(r.min)}</td><td>₹${formatLakhs(r.max)}</td><td>₹${formatLakhs(r.avg)}</td><td>₹${formatLakhs(r.total)}</td></tr>`,
+                )
+                .join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="print-section">
+            <div class="print-section-title">Employee compensation</div>
+            <table class="print-table">
+              <thead><tr><th>Emp ID</th><th>Name</th><th>Department</th><th>Annual salary</th><th>Monthly</th><th>PF</th><th>ESIC</th></tr></thead>
+              <tbody>
+              ${[...compensationData.allEmps]
+                .sort((a, b) => (Number(b.ctcPerAnnum) || 0) - (Number(a.ctcPerAnnum) || 0))
+                .map(
+                  (e) =>
+                    `<tr>
+                      <td>${esc(e.empId || '')}</td>
+                      <td>${esc(e.fullName || '')}</td>
+                      <td>${esc(e.department || '')}</td>
+                      <td>${e.ctcPerAnnum ? `₹${formatLakhs(Number(e.ctcPerAnnum))}` : '—'}</td>
+                      <td>${e.ctcPerAnnum ? `₹${formatLakhs(Number(e.ctcPerAnnum) / 12)}` : '—'}</td>
+                      <td>${e.pfApplicable ? 'Yes' : 'No'}</td>
+                      <td>${e.esicApplicable ? 'Yes' : 'No'}</td>
+                    </tr>`,
+                )
+                .join('')}
               </tbody>
             </table>
           </div>`;
@@ -1451,14 +1707,7 @@ export default function Reports() {
             >
               🖨️ Print Report
             </button>
-            <DownloadExcelButton
-              onClick={() =>
-                downloadReport(safeCompanyFile, 'Headcount', deptData, [
-                  { header: 'Department', accessor: (r) => r.name },
-                  { header: 'Count', accessor: (r) => r.count },
-                ])
-              }
-            />
+            <DownloadExcelButton onClick={handleHeadcountExcel} />
           </div>
         </>
       )}
@@ -1569,6 +1818,191 @@ export default function Reports() {
         </>
       )}
 
+      {/* COMPENSATION */}
+      {activeTab === 'compensation' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              {
+                label: 'Total Monthly Payroll',
+                value: `₹${formatLakhs(compensationData.totalPayroll / 12)}`,
+                sub: `₹${formatLakhs(compensationData.totalPayroll)} per annum`,
+                icon: '💰',
+              },
+              {
+                label: 'Average Salary',
+                value: `₹${formatLakhs(compensationData.avgSalary)}`,
+                sub: 'Annual gross per employee',
+                icon: '📊',
+              },
+              {
+                label: 'PF Enrolled',
+                value: compensationData.pfCount,
+                sub: `of ${compensationData.activeCount} employees`,
+                icon: '🏦',
+              },
+              {
+                label: 'ESIC Enrolled',
+                value: compensationData.esicCount,
+                sub: `of ${compensationData.activeCount} employees`,
+                icon: '🏥',
+              },
+            ].map((card) => (
+              <div key={card.label} className="bg-white border border-gray-100 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-gray-500">{card.label}</p>
+                  <span className="text-xl">{card.icon}</span>
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{card.value}</p>
+                <p className="text-xs text-gray-400 mt-1">{card.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white border border-gray-100 rounded-2xl p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Salary Distribution</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={compensationData.salaryDistribution}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#1B6B6B" radius={[4, 4, 0, 0]} name="Employees" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="bg-white border border-gray-100 rounded-2xl p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Average Salary by Department</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={compensationData.deptSalaryData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                  <XAxis type="number" tickFormatter={(v) => `₹${formatLakhs(v)}`} tick={{ fontSize: 10 }} />
+                  <YAxis type="category" dataKey="dept" tick={{ fontSize: 10 }} width={80} />
+                  <Tooltip formatter={(v) => `₹${formatLakhs(v)}`} />
+                  <Bar dataKey="avg" fill="#4ECDC4" radius={[0, 4, 4, 0]} name="Avg Salary" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-100 rounded-2xl p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Compensation by Department</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    {['Department', 'Employees', 'Min Salary', 'Max Salary', 'Avg Salary', 'Total Cost (Annual)'].map((h) => (
+                      <th key={h} className="text-left text-xs font-semibold text-gray-400 pb-3 pr-4">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {compensationData.deptSalaryData.map((row) => (
+                    <tr key={row.dept} className="border-b border-gray-50">
+                      <td className="py-3 pr-4 font-medium text-gray-800">{row.dept}</td>
+                      <td className="py-3 pr-4 text-gray-500">{row.count}</td>
+                      <td className="py-3 pr-4 text-gray-500">₹{formatLakhs(row.min)}</td>
+                      <td className="py-3 pr-4 text-gray-500">₹{formatLakhs(row.max)}</td>
+                      <td className="py-3 pr-4 font-medium text-gray-700">₹{formatLakhs(row.avg)}</td>
+                      <td className="py-3 pr-4 text-[#1B6B6B] font-medium">₹{formatLakhs(row.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-200">
+                    <td className="py-3 font-bold text-gray-800">Total</td>
+                    <td className="py-3 font-bold">{compensationData.activeCount}</td>
+                    <td colSpan={3} />
+                    <td className="py-3 font-bold text-[#1B6B6B]">₹{formatLakhs(compensationData.totalPayroll)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-100 rounded-2xl p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Employee Compensation Details</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    {['Employee', 'Department', 'Designation', 'Annual Gross Salary', 'Monthly', 'Incentive/mo', 'PF', 'ESIC'].map((h) => (
+                      <th key={h} className="text-left text-xs font-semibold text-gray-400 pb-3 pr-4">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...compensationData.allEmps]
+                    .sort((a, b) => (Number(b.ctcPerAnnum) || 0) - (Number(a.ctcPerAnnum) || 0))
+                    .map((emp) => (
+                      <tr
+                        key={emp.id}
+                        className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
+                        onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
+                      >
+                        <td className="py-3 pr-4">
+                          <div className="flex items-center gap-2">
+                            <EmployeeAvatar employee={emp} size="xs" />
+                            <span className="font-medium text-gray-800">{emp.fullName}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4 text-gray-500">{emp.department || '—'}</td>
+                        <td className="py-3 pr-4 text-gray-500">{emp.designation || '—'}</td>
+                        <td className="py-3 pr-4 font-medium text-gray-800">
+                          {emp.ctcPerAnnum ? `₹${formatLakhs(Number(emp.ctcPerAnnum))}` : '—'}
+                        </td>
+                        <td className="py-3 pr-4 text-gray-500">
+                          {emp.ctcPerAnnum ? `₹${formatLakhs(Number(emp.ctcPerAnnum) / 12)}` : '—'}
+                        </td>
+                        <td className="py-3 pr-4 text-gray-500">
+                          {emp.incentive ? `₹${formatLakhs(Number(emp.incentive))}` : '—'}
+                        </td>
+                        <td className="py-3 pr-4">
+                          {emp.pfApplicable ? (
+                            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Yes</span>
+                          ) : (
+                            <span className="text-xs text-gray-300">No</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4">
+                          {emp.esicApplicable ? (
+                            <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">Yes</span>
+                          ) : (
+                            <span className="text-xs text-gray-300">No</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => handlePrintReport('compensation')}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+            >
+              🖨️ Print Report
+            </button>
+            <button
+              type="button"
+              onClick={handleCompensationExcel}
+              className="flex items-center gap-2 px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
+            >
+              ⬇️ Download Excel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* LEAVE */}
       {activeTab === 'leave' && (
         <>
@@ -1652,6 +2086,31 @@ export default function Reports() {
               </table>
             </div>
           </ChartCard>
+          <div className="bg-white border border-gray-100 rounded-2xl p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Top 10 Leave Takers (This Year)</h3>
+            <div className="space-y-2">
+              {topLeaveEmployees.map((emp, i) => (
+                <div
+                  key={emp.employeeId || emp.empId || i}
+                  className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0"
+                >
+                  <span className="text-sm font-bold text-gray-300 w-6 text-center">{i + 1}</span>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-800">{emp.name}</p>
+                    <p className="text-xs text-gray-400">
+                      {emp.department} · {emp.count} request{emp.count !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-bold text-[#1B6B6B]">{emp.totalDays} days</span>
+                  </div>
+                </div>
+              ))}
+              {topLeaveEmployees.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-4">No approved leaves this year</p>
+              )}
+            </div>
+          </div>
           <div className="mt-4 flex flex-wrap gap-2 items-center">
             <button
               type="button"
@@ -2176,17 +2635,7 @@ export default function Reports() {
             >
               🖨️ Print Report
             </button>
-            <DownloadExcelButton
-              onClick={() =>
-                downloadReport(safeCompanyFile, 'Offboarding', completedOffboardingRows, [
-                  { header: 'Name', accessor: (r) => r.e.fullName || '' },
-                  { header: 'Department', accessor: (r) => r.e.department || '' },
-                  { header: 'Exit Date', accessor: (r) => toDisplayDate(r.e.offboarding?.exitDate) },
-                  { header: 'Reason', accessor: (r) => r.e.offboarding?.exitReason || '' },
-                  { header: 'Status', accessor: (r) => r.e.status || '' },
-                ])
-              }
-            />
+            <DownloadExcelButton onClick={handleOffboardingExcel} label="Download offboarding report (Excel)" />
           </div>
         </>
       )}
