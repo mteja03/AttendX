@@ -92,6 +92,7 @@ export default function Dashboard() {
   const [leaveLoaded, setLeaveLoaded] = useState(false);
   const [actioningId, setActioningId] = useState(null);
   const [birthdayCardOpen, setBirthdayCardOpen] = useState(true);
+  const [showAnniversaries, setShowAnniversaries] = useState(true);
 
   const showAssetOverview = role === 'admin' || role === 'hrmanager' || role === 'itmanager';
 
@@ -350,6 +351,52 @@ export default function Dashboard() {
     return { todayList, upcomingList, thisMonthTotal, thisMonthSample };
   }, [employees]);
 
+  const workAnniversaries = useMemo(() => {
+    const today = new Date();
+    const todayMonth = today.getMonth();
+    const todayDate = today.getDate();
+    const currentYear = today.getFullYear();
+
+    const todayAnniversaries = [];
+    const upcomingAnniversaries = [];
+    const thisMonthAnniversaries = [];
+
+    employees.forEach((emp) => {
+      if (!emp.joiningDate) return;
+      const joining = toJSDate(emp.joiningDate);
+      if (!joining || Number.isNaN(joining.getTime())) return;
+
+      const yearsOfService = currentYear - joining.getFullYear();
+      if (yearsOfService < 1) return;
+
+      const annivMonth = joining.getMonth();
+      const annivDate = joining.getDate();
+
+      if (annivMonth === todayMonth && annivDate === todayDate) {
+        todayAnniversaries.push({ ...emp, yearsOfService });
+      }
+
+      const nextAnniv = new Date(currentYear, annivMonth, annivDate);
+      if (nextAnniv < today) {
+        nextAnniv.setFullYear(currentYear + 1);
+      }
+      const diffDays = Math.ceil((nextAnniv - today) / (1000 * 60 * 60 * 24));
+      if (diffDays > 0 && diffDays <= 7) {
+        upcomingAnniversaries.push({ ...emp, yearsOfService, diffDays });
+      }
+
+      if (annivMonth === todayMonth) {
+        thisMonthAnniversaries.push({ ...emp, yearsOfService });
+      }
+    });
+
+    return {
+      today: todayAnniversaries,
+      upcoming: upcomingAnniversaries,
+      thisMonth: thisMonthAnniversaries,
+    };
+  }, [employees]);
+
   const handleApprove = async (leaveDoc) => {
     setActioningId(leaveDoc.id);
     try {
@@ -402,10 +449,11 @@ export default function Dashboard() {
   }
 
   const statCards = [
-    { title: 'Total Employees', value: String(stats.totalEmployees), icon: UsersIcon, subtitle: `${stats.activeEmployees} active` },
     { title: 'On Leave Today', value: String(stats.onLeaveToday), icon: CalendarIcon, subtitle: 'Approved leaves' },
     { title: 'New Joiners (30 days)', value: String(stats.newJoiners), icon: UserAddIcon, subtitle: 'Last 30 days' },
   ];
+
+  const activeEmployeeCount = employees.filter((e) => (e.status || 'Active') === 'Active').length;
 
   const statsLoading = !employeesLoaded || !leaveLoaded;
 
@@ -429,6 +477,16 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+          <div className="bg-white border border-gray-100 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm text-gray-500">Active Employees</p>
+              <div className="w-10 h-10 rounded-xl bg-[#E8F5F5] flex items-center justify-center">
+                <UsersIcon className="w-5 h-5 text-[#1B6B6B]" />
+              </div>
+            </div>
+            <p className="text-3xl font-bold text-gray-900">{activeEmployeeCount}</p>
+            <p className="text-xs text-gray-400 mt-1">{employees.length} total employees</p>
+          </div>
           {statCards.map((stat) => (
             <StatCard key={stat.title} {...stat} />
           ))}
@@ -751,6 +809,112 @@ export default function Dashboard() {
                     <span className="text-slate-500 text-xs">+{birthdayData.thisMonthTotal - 5} more</span>
                   )}
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden mb-6">
+        <button
+          type="button"
+          onClick={() => setShowAnniversaries((prev) => !prev)}
+          className="w-full flex items-center justify-between p-5 hover:bg-slate-50/50 text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xl" aria-hidden>
+              🎉
+            </span>
+            <div className="text-left">
+              <h3 className="text-sm font-semibold text-gray-800">Work Anniversaries</h3>
+              <p className="text-xs text-gray-400">
+                {new Date().toLocaleDateString('en-GB', {
+                  weekday: 'short',
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+              </p>
+            </div>
+          </div>
+          <span className="text-gray-400 text-xs">{showAnniversaries ? '▲' : '▼'}</span>
+        </button>
+
+        {showAnniversaries && (
+          <div className="px-5 pb-5 space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Today</p>
+              {workAnniversaries.today.length > 0 ? (
+                workAnniversaries.today.map((emp) => (
+                  <Link
+                    key={emp.id}
+                    to={`/company/${companyId}/employees/${emp.id}`}
+                    className="flex items-center gap-3 py-1.5 rounded-lg hover:bg-[#E8F5F5]/50 -mx-1 px-1"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-[#E8F5F5] flex items-center justify-center text-sm font-semibold text-[#1B6B6B] shrink-0">
+                      {emp.fullName?.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
+                      <p className="text-xs text-gray-400">
+                        🎊 {emp.yearsOfService} year{emp.yearsOfService !== 1 ? 's' : ''} today!
+                      </p>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <p className="text-sm text-gray-400">No anniversaries today</p>
+              )}
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Upcoming (next 7 days)</p>
+              {workAnniversaries.upcoming.length > 0 ? (
+                workAnniversaries.upcoming.map((emp) => (
+                  <Link
+                    key={emp.id}
+                    to={`/company/${companyId}/employees/${emp.id}`}
+                    className="flex items-center gap-3 py-1.5 rounded-lg hover:bg-[#E8F5F5]/50 -mx-1 px-1"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-[#E8F5F5] flex items-center justify-center text-sm font-semibold text-[#1B6B6B] shrink-0">
+                      {emp.fullName?.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
+                      <p className="text-xs text-gray-400">
+                        in {emp.diffDays} day{emp.diffDays !== 1 ? 's' : ''} · {emp.yearsOfService} year
+                        {emp.yearsOfService !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <p className="text-sm text-gray-400">No upcoming anniversaries</p>
+              )}
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">This month</p>
+              {workAnniversaries.thisMonth.length > 0 ? (
+                workAnniversaries.thisMonth.map((emp) => (
+                  <Link
+                    key={`${emp.id}-month`}
+                    to={`/company/${companyId}/employees/${emp.id}`}
+                    className="flex items-center gap-3 py-1.5 rounded-lg hover:bg-[#E8F5F5]/50 -mx-1 px-1"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-[#E8F5F5] flex items-center justify-center text-sm font-semibold text-[#1B6B6B] shrink-0">
+                      {emp.fullName?.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
+                      <p className="text-xs text-gray-400">
+                        {emp.yearsOfService} year{emp.yearsOfService !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <p className="text-sm text-gray-400">No anniversaries this month</p>
               )}
             </div>
           </div>

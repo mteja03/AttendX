@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   addDoc,
   updateDoc,
@@ -99,13 +100,17 @@ const getDeptColor = (dept) => {
 function sanitizeCustomBenefitsForSave(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
-    .filter((b) => (b?.name || '').trim() || (b?.value || '').trim() || (b?.notes || '').trim())
-    .map((b, i) => ({
-      id: (b?.id && String(b.id).trim()) || `benefit_${Date.now()}_${i}`,
-      name: (b.name || '').trim(),
-      value: (b.value || '').trim(),
-      notes: (b.notes || '').trim(),
-    }));
+    .map((b, i) => {
+      const nameResolved =
+        b?.name === '__custom__' ? (b.customName || '').trim() : (b?.name || '').trim();
+      return {
+        id: (b?.id && String(b.id).trim()) || `benefit_${Date.now()}_${i}`,
+        name: nameResolved,
+        value: (b.value || '').trim(),
+        notes: (b.notes || '').trim(),
+      };
+    })
+    .filter((b) => b.name || b.value || b.notes);
 }
 
 /** CTC vs role salary band — guideline only, not blocking save */
@@ -172,6 +177,8 @@ const initialForm = {
   reportingManagerEmpId: '',
   prevCompany: '',
   prevDesignation: '',
+  prevFromDate: '',
+  prevToDate: '',
   prevManagerName: '',
   prevManagerPhone: '',
   prevManagerEmail: '',
@@ -234,6 +241,25 @@ export default function Employees() {
   const locationDropdownRef = useRef(null);
   const [locationSearch, setLocationSearch] = useState('');
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [benefitTemplates, setBenefitTemplates] = useState([]);
+
+  useEffect(() => {
+    if (!companyId) return undefined;
+    const fetchBenefitTemplates = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'companies', companyId, 'settings', 'benefitTemplates'));
+        if (snap.exists()) {
+          setBenefitTemplates(snap.data().benefits || []);
+        } else {
+          setBenefitTemplates([]);
+        }
+      } catch {
+        setBenefitTemplates([]);
+      }
+    };
+    fetchBenefitTemplates();
+    return undefined;
+  }, [companyId]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -698,6 +724,8 @@ export default function Employees() {
         reportingManagerEmpId: form.reportingManagerEmpId || null,
         prevCompany: form.prevCompany?.trim() || null,
         prevDesignation: form.prevDesignation?.trim() || null,
+        prevFromDate: form.prevFromDate ? Timestamp.fromDate(new Date(form.prevFromDate)) : null,
+        prevToDate: form.prevToDate ? Timestamp.fromDate(new Date(form.prevToDate)) : null,
         prevManagerName: form.prevManagerName?.trim() || null,
         prevManagerPhone: form.prevManagerPhone?.trim() || null,
         prevManagerEmail: form.prevManagerEmail?.trim() || null,
@@ -1564,6 +1592,51 @@ export default function Employees() {
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                   </div>
+                  <div className="sm:col-span-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">From Date</label>
+                        <input
+                          type="date"
+                          name="prevFromDate"
+                          value={form.prevFromDate}
+                          onChange={handleFormChange}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] focus:ring-1 focus:ring-[#4ECDC4]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">To Date</label>
+                        <input
+                          type="date"
+                          name="prevToDate"
+                          value={form.prevToDate}
+                          onChange={handleFormChange}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm hover:border-[#1B6B6B] focus:ring-1 focus:ring-[#4ECDC4]"
+                        />
+                      </div>
+                    </div>
+                    {form.prevFromDate && form.prevToDate && (
+                      <div className="mt-1.5 px-3 py-1.5 bg-[#E8F5F5] rounded-lg">
+                        <p className="text-xs text-[#1B6B6B]">
+                          📅 Duration:{' '}
+                          {(() => {
+                            const from = new Date(form.prevFromDate);
+                            const to = new Date(form.prevToDate);
+                            const months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+                            const years = Math.floor(months / 12);
+                            const remainingMonths = months % 12;
+                            if (years === 0) {
+                              return `${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}`;
+                            }
+                            if (remainingMonths === 0) {
+                              return `${years} year${years !== 1 ? 's' : ''}`;
+                            }
+                            return `${years} year${years !== 1 ? 's' : ''} ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}`;
+                          })()}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Previous Manager Name</label>
                     <input
@@ -2164,18 +2237,37 @@ export default function Employees() {
                     {(form.customBenefits || []).map((benefit, index) => (
                       <div key={benefit.id} className="p-3 border border-gray-100 rounded-xl bg-gray-50">
                         <div className="flex gap-2 mb-2">
-                          <input
-                            placeholder="Benefit name (e.g. Medical Insurance)"
-                            value={benefit.name}
+                          <select
+                            value={
+                              !benefit.name
+                                ? ''
+                                : benefitTemplates.some((t) => t.name === benefit.name)
+                                  ? benefit.name
+                                  : '__custom__'
+                            }
                             onChange={(e) => {
+                              const v = e.target.value;
                               setForm((prev) => {
                                 const updated = [...(prev.customBenefits || [])];
-                                updated[index] = { ...updated[index], name: e.target.value };
+                                const cur = updated[index];
+                                updated[index] = {
+                                  ...cur,
+                                  name: v === '__custom__' ? '__custom__' : v,
+                                  customName: v === '__custom__' ? cur.customName || '' : '',
+                                };
                                 return { ...prev, customBenefits: updated };
                               });
                             }}
                             className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-                          />
+                          >
+                            <option value="">Select benefit...</option>
+                            {benefitTemplates.map((bt) => (
+                              <option key={bt.id} value={bt.name}>
+                                {bt.name}
+                              </option>
+                            ))}
+                            <option value="__custom__">Other (type below)</option>
+                          </select>
                           <button
                             type="button"
                             onClick={() => {
@@ -2189,6 +2281,29 @@ export default function Employees() {
                             ✕
                           </button>
                         </div>
+                        {(benefit.name === '__custom__' ||
+                          (benefit.name && !benefitTemplates.some((t) => t.name === benefit.name))) && (
+                          <input
+                            placeholder="Enter benefit name"
+                            value={
+                              benefit.name === '__custom__'
+                                ? benefit.customName || ''
+                                : benefit.name || ''
+                            }
+                            onChange={(e) => {
+                              setForm((prev) => {
+                                const updated = [...(prev.customBenefits || [])];
+                                updated[index] = {
+                                  ...updated[index],
+                                  name: '__custom__',
+                                  customName: e.target.value,
+                                };
+                                return { ...prev, customBenefits: updated };
+                              });
+                            }}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-2 bg-white"
+                          />
+                        )}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <input
                             placeholder="Value (e.g. ₹5,00,000 or 2,500/month)"

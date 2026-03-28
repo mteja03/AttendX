@@ -47,13 +47,17 @@ const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 
 function sanitizeCustomBenefitsForSave(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
-    .filter((b) => (b?.name || '').trim() || (b?.value || '').trim() || (b?.notes || '').trim())
-    .map((b, i) => ({
-      id: (b?.id && String(b.id).trim()) || `benefit_${Date.now()}_${i}`,
-      name: (b.name || '').trim(),
-      value: (b.value || '').trim(),
-      notes: (b.notes || '').trim(),
-    }));
+    .map((b, i) => {
+      const nameResolved =
+        b?.name === '__custom__' ? (b.customName || '').trim() : (b?.name || '').trim();
+      return {
+        id: (b?.id && String(b.id).trim()) || `benefit_${Date.now()}_${i}`,
+        name: nameResolved,
+        value: (b.value || '').trim(),
+        notes: (b.notes || '').trim(),
+      };
+    })
+    .filter((b) => b.name || b.value || b.notes);
 }
 
 const INDIAN_STATES = [
@@ -293,6 +297,7 @@ export default function EmployeeProfile() {
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [benefitTemplates, setBenefitTemplates] = useState([]);
   const locationDropdownRef = useRef(null);
   const [assetList, setAssetList] = useState([]);
   const [showAssignAssetModal, setShowAssignAssetModal] = useState(false);
@@ -389,6 +394,23 @@ export default function EmployeeProfile() {
     };
     load();
   }, [companyId, empId, showError]);
+
+  useEffect(() => {
+    if (!companyId) return;
+    const fetchBenefitTemplates = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'companies', companyId, 'settings', 'benefitTemplates'));
+        if (snap.exists()) {
+          setBenefitTemplates(snap.data().benefits || []);
+        } else {
+          setBenefitTemplates([]);
+        }
+      } catch {
+        setBenefitTemplates([]);
+      }
+    };
+    fetchBenefitTemplates();
+  }, [companyId]);
 
   useEffect(() => {
     if (!companyId || !empId) return;
@@ -792,6 +814,8 @@ export default function EmployeeProfile() {
       reportingManagerEmpId: employee.reportingManagerEmpId || '',
       prevCompany: employee.prevCompany || '',
       prevDesignation: employee.prevDesignation || '',
+      prevFromDate: toDateString(employee.prevFromDate),
+      prevToDate: toDateString(employee.prevToDate),
       prevManagerName: employee.prevManagerName || '',
       prevManagerPhone: employee.prevManagerPhone || '',
       prevManagerEmail: employee.prevManagerEmail || '',
@@ -879,6 +903,8 @@ export default function EmployeeProfile() {
         reportingManagerEmpId: form.reportingManagerEmpId || null,
         prevCompany: form.prevCompany?.trim() || null,
         prevDesignation: form.prevDesignation?.trim() || null,
+        prevFromDate: form.prevFromDate ? Timestamp.fromDate(new Date(form.prevFromDate)) : null,
+        prevToDate: form.prevToDate ? Timestamp.fromDate(new Date(form.prevToDate)) : null,
         prevManagerName: form.prevManagerName?.trim() || null,
         prevManagerPhone: form.prevManagerPhone?.trim() || null,
         prevManagerEmail: form.prevManagerEmail?.trim() || null,
@@ -2274,13 +2300,38 @@ export default function EmployeeProfile() {
         ? e(toDisplayDate(employee.marriageDate) || '—')
         : null;
 
+    const prevDurationPrint =
+      employee.prevFromDate && employee.prevToDate
+        ? (() => {
+            const from = new Date(toDateString(employee.prevFromDate));
+            const to = new Date(toDateString(employee.prevToDate));
+            if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return '';
+            const months =
+              (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+            const years = Math.floor(months / 12);
+            const rem = months % 12;
+            let dur = '';
+            if (years > 0) dur += `${years}y `;
+            if (rem > 0) dur += `${rem}m`;
+            return dur.trim();
+          })()
+        : '';
     const prevExpBlock =
-      employee.prevCompany || employee.prevDesignation || employee.prevManagerName
+      employee.prevCompany ||
+      employee.prevDesignation ||
+      employee.prevFromDate ||
+      employee.prevToDate ||
+      employee.prevManagerName
         ? `<div class="print-section">
         <div class="print-section-title">Previous experience</div>
         <div class="print-grid-2">
           <div><div class="print-field-label">Previous company</div><div class="print-field-value">${e(employee.prevCompany || '—')}</div></div>
           <div><div class="print-field-label">Previous designation</div><div class="print-field-value">${e(employee.prevDesignation || '—')}</div></div>
+          <div><div class="print-field-label">From / To</div><div class="print-field-value">${e(
+            [employee.prevFromDate && toDisplayDate(employee.prevFromDate), employee.prevToDate && toDisplayDate(employee.prevToDate)]
+              .filter(Boolean)
+              .join(' — ') || '—',
+          )}${prevDurationPrint ? ` · ${e(prevDurationPrint)}` : ''}</div></div>
           <div><div class="print-field-label">Previous manager</div><div class="print-field-value">${e(employee.prevManagerName || '—')}</div></div>
           <div><div class="print-field-label">Manager phone</div><div class="print-field-value">${e(employee.prevManagerPhone || '—')}</div></div>
           <div style="grid-column:1/-1"><div class="print-field-label">Manager email</div><div class="print-field-value">${e(employee.prevManagerEmail || '—')}</div></div>
@@ -2627,7 +2678,10 @@ export default function EmployeeProfile() {
                   </p>
                 )}
               </div>
-              {(employee.prevCompany || employee.prevDesignation) && (
+              {(employee.prevCompany ||
+                employee.prevDesignation ||
+                employee.prevFromDate ||
+                employee.prevToDate) && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Previous Experience</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2641,6 +2695,31 @@ export default function EmployeeProfile() {
                       <div>
                         <p className="text-xs text-gray-400">Previous Designation</p>
                         <p className="text-sm font-medium">{employee.prevDesignation}</p>
+                      </div>
+                    )}
+                    {(employee.prevFromDate || employee.prevToDate) && (
+                      <div className="sm:col-span-2">
+                        <p className="text-xs text-gray-400">Duration</p>
+                        <p className="text-sm font-medium">
+                          {employee.prevFromDate && toDisplayDate(employee.prevFromDate)}
+                          {employee.prevFromDate && employee.prevToDate && ' — '}
+                          {employee.prevToDate && toDisplayDate(employee.prevToDate)}
+                          {employee.prevFromDate &&
+                            employee.prevToDate &&
+                            (() => {
+                              const from = new Date(toDateString(employee.prevFromDate));
+                              const to = new Date(toDateString(employee.prevToDate));
+                              if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return '';
+                              const months =
+                                (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+                              const years = Math.floor(months / 12);
+                              const rem = months % 12;
+                              let dur = '';
+                              if (years > 0) dur += `${years}y `;
+                              if (rem > 0) dur += `${rem}m`;
+                              return dur ? ` · ${dur.trim()}` : '';
+                            })()}
+                        </p>
                       </div>
                     )}
                     {employee.prevManagerName && (
@@ -2752,17 +2831,23 @@ export default function EmployeeProfile() {
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Additional Benefits</p>
                   <div className="space-y-2">
-                    {employee.customBenefits.map((b) => (
+                    {employee.customBenefits.map((b) => {
+                      const benefitTpl = benefitTemplates.find((t) => t.name === b.name);
+                      return (
                       <div key={b.id} className="flex items-start justify-between p-2.5 bg-gray-50 rounded-lg gap-2">
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-gray-800">{b.name}</p>
+                          {benefitTpl?.description ? (
+                            <p className="text-xs text-gray-500 mt-0.5">{benefitTpl.description}</p>
+                          ) : null}
                           {b.notes && <p className="text-xs text-gray-400">{b.notes}</p>}
                         </div>
                         {b.value && (
                           <span className="text-sm font-medium text-[#1B6B6B] ml-3 flex-shrink-0">{b.value}</span>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -3320,6 +3405,50 @@ export default function EmployeeProfile() {
                             className="w-full rounded-lg border px-3 py-2 text-sm"
                           />
                         </div>
+                        <div className="col-span-2 grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">From Date</label>
+                            <input
+                              type="date"
+                              value={form.prevFromDate || ''}
+                              onChange={(e) => setForm((p) => ({ ...p, prevFromDate: e.target.value }))}
+                              className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">To Date</label>
+                            <input
+                              type="date"
+                              value={form.prevToDate || ''}
+                              onChange={(e) => setForm((p) => ({ ...p, prevToDate: e.target.value }))}
+                              className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B]"
+                            />
+                          </div>
+                        </div>
+                        {form.prevFromDate && form.prevToDate && (
+                          <div className="col-span-2 mt-1.5 px-3 py-1.5 bg-[#E8F5F5] rounded-lg">
+                            <p className="text-xs text-[#1B6B6B]">
+                              📅 Duration:{' '}
+                              {(() => {
+                                const from = new Date(form.prevFromDate);
+                                const to = new Date(form.prevToDate);
+                                const months =
+                                  (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+                                const years = Math.floor(months / 12);
+                                const remainingMonths = months % 12;
+                                if (years === 0) {
+                                  return `${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}`;
+                                }
+                                if (remainingMonths === 0) {
+                                  return `${years} year${years !== 1 ? 's' : ''}`;
+                                }
+                                return `${years} year${years !== 1 ? 's' : ''} ${remainingMonths} month${
+                                  remainingMonths !== 1 ? 's' : ''
+                                }`;
+                              })()}
+                            </p>
+                          </div>
+                        )}
                         <div>
                           <label className="block text-xs text-slate-600 mb-1">Previous Manager Name</label>
                           <input
@@ -3671,18 +3800,37 @@ export default function EmployeeProfile() {
                       {(form.customBenefits || []).map((benefit, index) => (
                         <div key={benefit.id} className="p-3 border border-gray-100 rounded-xl bg-gray-50">
                           <div className="flex gap-2 mb-2">
-                            <input
-                              placeholder="Benefit name (e.g. Medical Insurance)"
-                              value={benefit.name}
+                            <select
+                              value={
+                                !benefit.name
+                                  ? ''
+                                  : benefitTemplates.some((t) => t.name === benefit.name)
+                                    ? benefit.name
+                                    : '__custom__'
+                              }
                               onChange={(e) => {
+                                const v = e.target.value;
                                 setForm((prev) => {
                                   const updated = [...(prev.customBenefits || [])];
-                                  updated[index] = { ...updated[index], name: e.target.value };
+                                  const cur = updated[index];
+                                  updated[index] = {
+                                    ...cur,
+                                    name: v === '__custom__' ? '__custom__' : v,
+                                    customName: v === '__custom__' ? cur.customName || '' : '',
+                                  };
                                   return { ...prev, customBenefits: updated };
                                 });
                               }}
                               className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white"
-                            />
+                            >
+                              <option value="">Select benefit...</option>
+                              {benefitTemplates.map((bt) => (
+                                <option key={bt.id} value={bt.name}>
+                                  {bt.name}
+                                </option>
+                              ))}
+                              <option value="__custom__">Other (type below)</option>
+                            </select>
                             <button
                               type="button"
                               onClick={() => {
@@ -3696,6 +3844,29 @@ export default function EmployeeProfile() {
                               ✕
                             </button>
                           </div>
+                          {(benefit.name === '__custom__' ||
+                            (benefit.name && !benefitTemplates.some((t) => t.name === benefit.name))) && (
+                            <input
+                              placeholder="Enter benefit name"
+                              value={
+                                benefit.name === '__custom__'
+                                  ? benefit.customName || ''
+                                  : benefit.name || ''
+                              }
+                              onChange={(e) => {
+                                setForm((prev) => {
+                                  const updated = [...(prev.customBenefits || [])];
+                                  updated[index] = {
+                                    ...updated[index],
+                                    name: '__custom__',
+                                    customName: e.target.value,
+                                  };
+                                  return { ...prev, customBenefits: updated };
+                                });
+                              }}
+                              className="w-full border rounded-lg px-3 py-2 text-sm mt-2 bg-white"
+                            />
+                          )}
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <input
                               placeholder="Value (e.g. ₹5,00,000 or 2,500/month)"
