@@ -16,13 +16,15 @@ import {
   increment,
   Timestamp,
 } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, app } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { PLATFORM_CONFIG } from '../config/constants';
 import { SkeletonCard } from '../components/SkeletonRow';
 import EmployeeAvatar from '../components/EmployeeAvatar';
+import Cropper from 'react-easy-crop';
 import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -37,6 +39,40 @@ const JOINING_YEARS = ['All Years', 2020, 2021, 2022, 2023, 2024, 2025, 2026];
 const PAGE_SIZE = PLATFORM_CONFIG.EMPLOYEES_PAGE_SIZE;
 const VISIBLE_ROWS = 20;
 const ROW_HEIGHT = 56;
+
+async function getCroppedBlob(imageSrc, pixelCrop) {
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = imageSrc;
+  });
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = pixelCrop.width;
+  canvas.height = pixelCrop.height;
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    pixelCrop.width,
+    pixelCrop.height,
+  );
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error('Crop failed'));
+      },
+      'image/jpeg',
+      0.9,
+    );
+  });
+}
 
 function noticePeriodDaysRemaining(emp) {
   if ((emp.status || '') !== 'Notice Period') return '';
@@ -262,6 +298,13 @@ export default function Employees() {
   const [filterCategory, setFilterCategory] = useState('All Categories');
   const [filterJoiningYear, setFilterJoiningYear] = useState('All Years');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [newEmpPhoto, setNewEmpPhoto] = useState(null);
+  const [newEmpPhotoSrc, setNewEmpPhotoSrc] = useState(null);
+  const [newEmpRawSrc, setNewEmpRawSrc] = useState(null);
+  const [newEmpCropOpen, setNewEmpCropOpen] = useState(false);
+  const [newEmpCrop, setNewEmpCrop] = useState({ x: 0, y: 0 });
+  const [newEmpZoom, setNewEmpZoom] = useState(1);
+  const [newEmpCroppedPixels, setNewEmpCroppedPixels] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [formErrors, setFormErrors] = useState({});
   const [formWarnings, setFormWarnings] = useState({});
@@ -655,6 +698,14 @@ export default function Employees() {
   }, [filtered, scrollTop]);
 
   const handleCloseAddModal = () => {
+    if (newEmpPhotoSrc) URL.revokeObjectURL(newEmpPhotoSrc);
+    setNewEmpPhoto(null);
+    setNewEmpPhotoSrc(null);
+    setNewEmpRawSrc(null);
+    setNewEmpCropOpen(false);
+    setNewEmpCrop({ x: 0, y: 0 });
+    setNewEmpZoom(1);
+    setNewEmpCroppedPixels(null);
     setShowAddModal(false);
     setForm(initialForm);
     setFormErrors({});
@@ -790,8 +841,37 @@ export default function Employees() {
         createdAt: serverTimestamp(),
       };
       const ref = await addDoc(collection(db, 'companies', companyId, 'employees'), payload);
+      const newEmpId = ref.id;
+      let photoURL = null;
+      const photoBlob = newEmpPhoto;
+      if (photoBlob && newEmpId) {
+        try {
+          const storage = getStorage(app);
+          const photoRef = ref(storage, `companies/${companyId}/employees/${newEmpId}/profile.jpg`);
+          const snapshot = await uploadBytes(photoRef, photoBlob, {
+            contentType: 'image/jpeg',
+            customMetadata: {
+              empId: String(payload.empId || ''),
+              companyId: String(companyId),
+              uploadedAt: new Date().toISOString(),
+            },
+          });
+          photoURL = await getDownloadURL(snapshot.ref);
+          await updateDoc(doc(db, 'companies', companyId, 'employees', newEmpId), { photoURL });
+        } catch (err) {
+          console.error('Photo upload failed:', err);
+        }
+      }
       await updateDoc(doc(db, 'companies', companyId), { employeeCount: increment(1) });
-      setEmployees((prev) => [{ id: ref.id, ...payload, createdAt: new Date() }, ...prev]);
+      setEmployees((prev) => [
+        {
+          id: newEmpId,
+          ...payload,
+          createdAt: new Date(),
+          ...(photoURL ? { photoURL } : {}),
+        },
+        ...prev,
+      ]);
       setTotalCount((c) => c + 1);
       fetchStatsCounts();
       handleCloseAddModal();
@@ -1347,6 +1427,69 @@ export default function Employees() {
                     </div>
                     <form onSubmit={handleAddEmployee} className="flex flex-col flex-1 min-h-0">
                       <div className="flex-1 overflow-y-auto p-6 min-h-0">
+              <div className="flex flex-col items-center py-4 mb-6 border-b border-gray-100">
+                <div className="relative group mb-3">
+                  {newEmpPhotoSrc ? (
+                    <img
+                      src={newEmpPhotoSrc}
+                      alt="Preview"
+                      className="w-24 h-24 rounded-full object-cover ring-4 ring-[#E8F5F5] border-2 border-[#4ECDC4]"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400">
+                      <span className="text-2xl">📷</span>
+                      <span className="text-xs mt-1">No photo</span>
+                    </div>
+                  )}
+                  {newEmpPhotoSrc && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newEmpPhotoSrc) URL.revokeObjectURL(newEmpPhotoSrc);
+                        setNewEmpPhoto(null);
+                        setNewEmpPhotoSrc(null);
+                        setNewEmpRawSrc(null);
+                      }}
+                      className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-red-500 text-white text-xs flex items-center justify-center border-2 border-white hover:bg-red-600"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/jpg"
+                    className="hidden"
+                    onChange={(ev) => {
+                      const file = ev.target.files?.[0];
+                      if (!file) return;
+                      ev.target.value = '';
+                      if (!file.type.startsWith('image/')) {
+                        showError('Please select an image file');
+                        return;
+                      }
+                      if (file.size > 10 * 1024 * 1024) {
+                        showError('Image must be under 10MB');
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = (re) => {
+                        setNewEmpRawSrc(re.target?.result || null);
+                        setNewEmpCrop({ x: 0, y: 0 });
+                        setNewEmpZoom(1);
+                        setNewEmpCroppedPixels(null);
+                        setNewEmpCropOpen(true);
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                  <span className="px-4 py-2 text-sm border border-[#1B6B6B] text-[#1B6B6B] rounded-xl hover:bg-[#E8F5F5] transition-colors font-medium inline-block">
+                    {newEmpPhotoSrc ? '🔄 Change Photo' : '📷 Add Photo'}
+                  </span>
+                </label>
+                <p className="text-xs text-gray-400 mt-2">Optional · JPG or PNG · Max 10MB</p>
+              </div>
               <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
                   <span className="text-base">👤</span>
@@ -2426,6 +2569,103 @@ export default function Employees() {
                 );
               }
             })()}
+          </div>
+        </div>
+      )}
+
+      {newEmpCropOpen && newEmpRawSrc && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-semibold text-gray-800">Adjust Photo</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Drag to reposition · Scroll to zoom</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewEmpCropOpen(false);
+                  setNewEmpRawSrc(null);
+                }}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="relative bg-gray-900" style={{ height: '300px' }}>
+              <Cropper
+                image={newEmpRawSrc}
+                crop={newEmpCrop}
+                zoom={newEmpZoom}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={setNewEmpCrop}
+                onZoomChange={setNewEmpZoom}
+                onCropComplete={(_, pixels) => setNewEmpCroppedPixels(pixels)}
+                style={{
+                  cropAreaStyle: {
+                    border: '3px solid #4ECDC4',
+                    boxShadow: '0 0 0 9999px rgba(0,0,0,0.6)',
+                  },
+                }}
+              />
+            </div>
+
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400">🔍</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.05}
+                  value={newEmpZoom}
+                  onChange={(ev) => setNewEmpZoom(Number(ev.target.value))}
+                  className="flex-1 accent-[#1B6B6B]"
+                />
+                <span className="text-xs text-gray-400">🔎</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setNewEmpCropOpen(false);
+                  setNewEmpRawSrc(null);
+                }}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!newEmpCroppedPixels) {
+                    showError('Please adjust the crop area');
+                    return;
+                  }
+                  try {
+                    const blob = await getCroppedBlob(newEmpRawSrc, newEmpCroppedPixels);
+                    const previewUrl = URL.createObjectURL(blob);
+                    setNewEmpPhoto(blob);
+                    setNewEmpPhotoSrc((prev) => {
+                      if (prev) URL.revokeObjectURL(prev);
+                      return previewUrl;
+                    });
+                    setNewEmpCropOpen(false);
+                    setNewEmpRawSrc(null);
+                  } catch {
+                    showError('Failed to crop image');
+                  }
+                }}
+                className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
+              >
+                ✓ Use This Photo
+              </button>
+            </div>
           </div>
         </div>
       )}

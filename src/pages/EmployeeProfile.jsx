@@ -71,6 +71,21 @@ async function getCroppedBlob(imageSrc, pixelCrop) {
   });
 }
 
+async function getBase64FromUrl(url) {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
 const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
 const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
@@ -2720,9 +2735,13 @@ export default function EmployeeProfile() {
     }
   };
 
-  const handlePrintProfile = () => {
+  const handlePrintProfile = async () => {
     if (!employee) return;
     const e = escapeHtml;
+    let photoBase64 = null;
+    if (employee.photoURL) {
+      photoBase64 = await getBase64FromUrl(employee.photoURL);
+    }
     const companyName = getCompanyName() || '';
     const addrRaw =
       [employee.streetAddress, employee.city, employee.state, employee.pincode, employee.country].filter(Boolean).join(', ') ||
@@ -2852,16 +2871,16 @@ export default function EmployeeProfile() {
     const desigDept = [employee.designation || '', employee.department || ''].filter(Boolean).join(' · ');
     const empIdStatus = [employee.empId || '', status].filter(Boolean).join(' · ');
 
-    const photoSection = employee.photoURL
-      ? `<div style="display:flex;align-items:center;gap:20px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid #E8F5F5;">
-      <img src="${employee.photoURL}" alt="${e(employee.fullName || '')}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #4ECDC4;flex-shrink:0;" crossorigin="anonymous" />
+    const photoSection = photoBase64
+      ? `<div style="display:flex;align-items:center;gap:20px;margin-bottom:24px;padding-bottom:20px;border-bottom:2px solid #E8F5F5;">
+      <img src="${photoBase64}" alt="${e(employee.fullName || '')}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #4ECDC4;flex-shrink:0;" />
       <div>
         <h2 style="font-size:22px;font-weight:700;color:#1B6B6B;margin:0 0 4px;">${e(employee.fullName || '—')}</h2>
         <p style="font-size:14px;color:#6b7280;margin:0 0 2px;">${e(desigDept || '—')}</p>
         <p style="font-size:13px;color:#9ca3af;margin:0;">${e(empIdStatus || '—')}</p>
       </div>
     </div>`
-      : `<div style="margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid #E8F5F5;">
+      : `<div style="margin-bottom:24px;padding-bottom:20px;border-bottom:2px solid #E8F5F5;">
       <h2 style="font-size:22px;font-weight:700;color:#1B6B6B;margin:0 0 4px;">${e(employee.fullName || '—')}</h2>
       <p style="font-size:14px;color:#6b7280;margin:0;">${e(desigDept || '—')}</p>
     </div>`;

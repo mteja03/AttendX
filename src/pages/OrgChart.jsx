@@ -103,18 +103,23 @@ export default function OrgChart() {
     return unsub;
   }, [companyId]);
 
-  const roots = useMemo(() => buildOrgTree(employees), [employees]);
+  const activeEmployees = useMemo(
+    () => employees.filter((emp) => emp.status !== 'Inactive'),
+    [employees],
+  );
 
-  const hasReportingLinks = useMemo(() => employees.some((e) => !!e.reportingManagerId), [employees]);
+  const roots = useMemo(() => buildOrgTree(activeEmployees), [activeEmployees]);
+
+  const hasReportingLinks = useMemo(() => activeEmployees.some((e) => !!e.reportingManagerId), [activeEmployees]);
 
   const stats = useMemo(() => {
-    const deptSet = new Set(employees.map((e) => e.department).filter(Boolean));
+    const deptSet = new Set(activeEmployees.map((e) => e.department).filter(Boolean));
     return {
-      total: employees.length,
+      total: activeEmployees.length,
       departments: deptSet.size,
       levels: treeDepth(roots),
     };
-  }, [employees, roots]);
+  }, [activeEmployees, roots]);
 
   const companyName = (company?.name || 'org-chart').replace(/\s+/g, '-');
 
@@ -205,6 +210,11 @@ export default function OrgChart() {
 
       {employees.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-100 text-slate-500 text-sm">No employees to display.</div>
+      ) : activeEmployees.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-2xl border border-slate-100 text-slate-500 text-sm px-4">
+          No active employees to display. All {employees.length} employee{employees.length === 1 ? '' : 's'} in this company
+          {employees.length === 1 ? ' is' : ' are'} marked Inactive.
+        </div>
       ) : !hasReportingLinks ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-100">
           <p className="text-4xl mb-4">🏢</p>
@@ -253,6 +263,9 @@ export default function OrgChart() {
           <strong className="text-slate-800">{stats.levels}</strong> management levels
         </span>
       </div>
+      <p className="text-xs text-gray-400 text-center mt-2">
+        Showing active employees only · {employees.length - activeEmployees.length} inactive employees hidden
+      </p>
     </div>
   );
 }
