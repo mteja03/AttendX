@@ -96,6 +96,18 @@ const getDeptColor = (dept) => {
   return colors[dept] || '#9CA3AF';
 };
 
+function sanitizeCustomBenefitsForSave(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((b) => (b?.name || '').trim() || (b?.value || '').trim() || (b?.notes || '').trim())
+    .map((b, i) => ({
+      id: (b?.id && String(b.id).trim()) || `benefit_${Date.now()}_${i}`,
+      name: (b.name || '').trim(),
+      value: (b.value || '').trim(),
+      notes: (b.notes || '').trim(),
+    }));
+}
+
 /** CTC vs role salary band — guideline only, not blocking save */
 function validateCTC(ctcValue, role) {
   if (!role?.salaryBand || role.salaryBand.min === '' || role.salaryBand.min == null) return null;
@@ -138,6 +150,7 @@ const initialForm = {
   bloodGroup: '',
   maritalStatus: '',
   marriageDate: '',
+  disability: '',
   fatherName: '',
   streetAddress: '',
   city: '',
@@ -170,6 +183,7 @@ const initialForm = {
   esicApplicable: false,
   pfNumber: '',
   esicNumber: '',
+  customBenefits: [],
   panNumber: '',
   aadhaarNumber: '',
   drivingLicenceNumber: '',
@@ -662,6 +676,7 @@ export default function Employees() {
           form.maritalStatus === 'Married' && form.marriageDate
             ? Timestamp.fromDate(new Date(form.marriageDate))
             : null,
+        disability: form.disability?.trim() || null,
         fatherName: form.fatherName?.trim() || null,
         streetAddress: form.streetAddress?.trim() || null,
         city: form.city?.trim() || null,
@@ -694,6 +709,7 @@ export default function Employees() {
         esicApplicable: !!form.esicApplicable,
         pfNumber: form.pfApplicable ? form.pfNumber?.trim() || null : null,
         esicNumber: form.esicApplicable ? form.esicNumber?.trim() || null : null,
+        customBenefits: sanitizeCustomBenefitsForSave(form.customBenefits),
         panNumber: form.panNumber?.trim() || null,
         aadhaarNumber: form.aadhaarNumber?.trim() || null,
         drivingLicenceNumber: form.drivingLicenceNumber?.trim() || null,
@@ -1375,15 +1391,31 @@ export default function Employees() {
                       <option value="Widowed">Widowed</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 block mb-1">Disability</label>
+                    <select
+                      name="disability"
+                      value={form.disability}
+                      onChange={handleFormChange}
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] focus:ring-1 focus:ring-[#4ECDC4]"
+                    >
+                      <option value="">None</option>
+                      <option value="Visual Impairment">Visual Impairment</option>
+                      <option value="Hearing Impairment">Hearing Impairment</option>
+                      <option value="Physical Disability">Physical Disability</option>
+                      <option value="Intellectual Disability">Intellectual Disability</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
                   {form.maritalStatus === 'Married' && (
                     <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Marriage Date</label>
+                      <label className="block text-xs text-gray-500 mb-1">Marriage Date / Wedding Date</label>
                       <input
                         type="date"
                         name="marriageDate"
                         value={form.marriageDate}
                         onChange={handleFormChange}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] focus:ring-1 focus:ring-[#4ECDC4]"
                       />
                     </div>
                   )}
@@ -1996,7 +2028,7 @@ export default function Employees() {
                     )}
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Incentive (per annum)</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Incentive (per month)</label>
                     <input
                       type="number"
                       min="0"
@@ -2007,7 +2039,9 @@ export default function Employees() {
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                     {form.incentive !== '' && form.incentive != null && !Number.isNaN(Number(form.incentive)) && Number(form.incentive) !== 0 && (
-                      <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.incentive))} p.a.</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        = ₹{formatLakhs(Number(form.incentive))} per month · ₹{formatLakhs(Number(form.incentive) * 12)} per annum
+                      </p>
                     )}
                   </div>
                   <div>
@@ -2025,14 +2059,23 @@ export default function Employees() {
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
                   <span>🏥</span> Benefits
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs text-gray-500">PF Applicable</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div className="p-3 bg-gray-50 rounded-xl">
+                    <div className="flex items-center justify-between mb-2 gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Provident Fund (PF)</p>
+                        <p className="text-xs text-gray-400">Statutory benefit</p>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setForm((prev) => ({ ...prev, pfApplicable: !prev.pfApplicable }))}
-                        className={`relative w-10 h-5 rounded-full transition-colors ${form.pfApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            pfApplicable: !prev.pfApplicable,
+                            pfNumber: prev.pfApplicable ? '' : prev.pfNumber,
+                          }))
+                        }
+                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${form.pfApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
                       >
                         <div
                           className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
@@ -2044,20 +2087,29 @@ export default function Employees() {
                     {form.pfApplicable && (
                       <input
                         name="pfNumber"
-                        placeholder="PF Number"
+                        placeholder="PF Account Number"
                         value={form.pfNumber}
                         onChange={handleFormChange}
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white focus:ring-1 focus:ring-[#4ECDC4]"
                       />
                     )}
                   </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs text-gray-500">ESIC Applicable</label>
+                  <div className="p-3 bg-gray-50 rounded-xl">
+                    <div className="flex items-center justify-between mb-2 gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">ESIC</p>
+                        <p className="text-xs text-gray-400">Statutory benefit</p>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setForm((prev) => ({ ...prev, esicApplicable: !prev.esicApplicable }))}
-                        className={`relative w-10 h-5 rounded-full transition-colors ${form.esicApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            esicApplicable: !prev.esicApplicable,
+                            esicNumber: prev.esicApplicable ? '' : prev.esicNumber,
+                          }))
+                        }
+                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${form.esicApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
                       >
                         <div
                           className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
@@ -2072,9 +2124,99 @@ export default function Employees() {
                         placeholder="ESIC Number"
                         value={form.esicNumber}
                         onChange={handleFormChange}
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white focus:ring-1 focus:ring-[#4ECDC4]"
                       />
                     )}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">Additional Benefits</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newBenefit = { id: `benefit_${Date.now()}`, name: '', value: '', notes: '' };
+                        setForm((prev) => ({
+                          ...prev,
+                          customBenefits: [...(prev.customBenefits || []), newBenefit],
+                        }));
+                      }}
+                      className="text-xs text-[#1B6B6B] hover:underline flex items-center gap-1"
+                    >
+                      + Add Benefit
+                    </button>
+                  </div>
+                  {(form.customBenefits || []).length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm((prev) => ({
+                          ...prev,
+                          customBenefits: [{ id: `benefit_${Date.now()}`, name: '', value: '', notes: '' }],
+                        }));
+                      }}
+                      className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors"
+                    >
+                      + Add benefit (Medical Insurance, Food Allowance, etc.)
+                    </button>
+                  )}
+                  <div className="space-y-2">
+                    {(form.customBenefits || []).map((benefit, index) => (
+                      <div key={benefit.id} className="p-3 border border-gray-100 rounded-xl bg-gray-50">
+                        <div className="flex gap-2 mb-2">
+                          <input
+                            placeholder="Benefit name (e.g. Medical Insurance)"
+                            value={benefit.name}
+                            onChange={(e) => {
+                              setForm((prev) => {
+                                const updated = [...(prev.customBenefits || [])];
+                                updated[index] = { ...updated[index], name: e.target.value };
+                                return { ...prev, customBenefits: updated };
+                              });
+                            }}
+                            className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setForm((prev) => ({
+                                ...prev,
+                                customBenefits: (prev.customBenefits || []).filter((_, i) => i !== index),
+                              }));
+                            }}
+                            className="text-red-400 hover:text-red-600 px-2"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input
+                            placeholder="Value (e.g. ₹5,00,000 or 2,500/month)"
+                            value={benefit.value}
+                            onChange={(e) => {
+                              setForm((prev) => {
+                                const updated = [...(prev.customBenefits || [])];
+                                updated[index] = { ...updated[index], value: e.target.value };
+                                return { ...prev, customBenefits: updated };
+                              });
+                            }}
+                            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                          />
+                          <input
+                            placeholder="Notes (e.g. Family floater)"
+                            value={benefit.notes}
+                            onChange={(e) => {
+                              setForm((prev) => {
+                                const updated = [...(prev.customBenefits || [])];
+                                updated[index] = { ...updated[index], notes: e.target.value };
+                                return { ...prev, customBenefits: updated };
+                              });
+                            }}
+                            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>

@@ -44,6 +44,18 @@ const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
 const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
 const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 'Probationary', 'Seasonal', 'Other'];
 
+function sanitizeCustomBenefitsForSave(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((b) => (b?.name || '').trim() || (b?.value || '').trim() || (b?.notes || '').trim())
+    .map((b, i) => ({
+      id: (b?.id && String(b.id).trim()) || `benefit_${Date.now()}_${i}`,
+      name: (b.name || '').trim(),
+      value: (b.value || '').trim(),
+      notes: (b.notes || '').trim(),
+    }));
+}
+
 const INDIAN_STATES = [
   'Andhra Pradesh',
   'Arunachal Pradesh',
@@ -759,6 +771,7 @@ export default function EmployeeProfile() {
       bloodGroup: employee.bloodGroup || '',
       maritalStatus: employee.maritalStatus || '',
       marriageDate: toDateString(employee.marriageDate),
+      disability: employee.disability || '',
       fatherName: employee.fatherName || '',
       streetAddress: employee.streetAddress || '',
       city: employee.city || '',
@@ -790,6 +803,14 @@ export default function EmployeeProfile() {
       esicApplicable: employee.esicApplicable ?? !!String(employee.esicNumber || '').trim(),
       pfNumber: employee.pfNumber || '',
       esicNumber: employee.esicNumber || '',
+      customBenefits: Array.isArray(employee.customBenefits)
+        ? employee.customBenefits.map((b) => ({
+            id: b.id || `benefit_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            name: b.name || '',
+            value: b.value || '',
+            notes: b.notes || '',
+          }))
+        : [],
       panNumber: employee.panNumber || '',
       aadhaarNumber: employee.aadhaarNumber || '',
       drivingLicenceNumber: employee.drivingLicenceNumber || '',
@@ -837,6 +858,7 @@ export default function EmployeeProfile() {
         bloodGroup: form.bloodGroup || null,
         maritalStatus: form.maritalStatus || null,
         marriageDate: form.maritalStatus === 'Married' && form.marriageDate ? form.marriageDate : null,
+        disability: form.disability?.trim() || null,
         fatherName: form.fatherName?.trim() || null,
         streetAddress: form.streetAddress?.trim() || null,
         city: form.city?.trim() || null,
@@ -869,6 +891,7 @@ export default function EmployeeProfile() {
         esicApplicable: !!form.esicApplicable,
         pfNumber: form.pfApplicable ? form.pfNumber?.trim() || null : null,
         esicNumber: form.esicApplicable ? form.esicNumber?.trim() || null : null,
+        customBenefits: sanitizeCustomBenefitsForSave(form.customBenefits),
         panNumber: form.panNumber?.replace(/\s/g, '') || null,
         aadhaarNumber: form.aadhaarNumber?.replace(/\s/g, '') || null,
         drivingLicenceNumber: form.drivingLicenceNumber?.trim() || null,
@@ -2232,19 +2255,24 @@ export default function EmployeeProfile() {
       employee.basicSalary != null ? `₹${employee.basicSalary.toLocaleString('en-IN')}/month` : '—';
     const hraVal =
       employee.hra != null ? `₹${employee.hra.toLocaleString('en-IN')}/month` : '—';
+    const incNum =
+      employee.incentive != null && employee.incentive !== '' && !Number.isNaN(Number(employee.incentive))
+        ? Number(employee.incentive)
+        : null;
     const incentiveVal =
-      employee.incentive != null && employee.incentive !== ''
-        ? `₹${Number(employee.incentive).toLocaleString('en-IN')}`
+      incNum != null
+        ? `₹${incNum.toLocaleString('en-IN')}/month · ₹${(incNum * 12).toLocaleString('en-IN')} p.a.`
         : '—';
     const aadhaarDisp = employee.aadhaarNumber ? e(`XXXX XXXX ${String(employee.aadhaarNumber).slice(-4)}`) : '—';
     const pfOn = employee.pfApplicable ?? !!String(employee.pfNumber || '').trim();
     const esicOn = employee.esicApplicable ?? !!String(employee.esicNumber || '').trim();
     const pfPrint = pfOn ? e(employee.pfNumber || 'Applicable') : 'Not applicable';
     const esicPrint = esicOn ? e(employee.esicNumber || 'Applicable') : 'Not applicable';
-    const maritalPrint =
+    const maritalPrint = e(employee.maritalStatus || '—');
+    const weddingDatePrint =
       employee.maritalStatus === 'Married' && employee.marriageDate
-        ? `${e(employee.maritalStatus)} · ${e(toDisplayDate(employee.marriageDate) || '—')}`
-        : e(employee.maritalStatus || '—');
+        ? e(toDisplayDate(employee.marriageDate) || '—')
+        : null;
 
     const prevExpBlock =
       employee.prevCompany || employee.prevDesignation || employee.prevManagerName
@@ -2260,13 +2288,23 @@ export default function EmployeeProfile() {
       </div>`
         : '';
 
+    const customBenefitsPrintRows = (employee.customBenefits || [])
+      .filter((b) => (b?.name || '').trim())
+      .map(
+        (b) =>
+          `<div><div class="print-field-label">${e(b.name)}</div><div class="print-field-value">${e(
+            [b.value, b.notes].filter(Boolean).join(' · ') || '—',
+          )}</div></div>`,
+      )
+      .join('');
     const benefitsBlock =
-      pfOn || esicOn
+      pfOn || esicOn || customBenefitsPrintRows
         ? `<div class="print-section">
         <div class="print-section-title">Benefits</div>
         <div class="print-grid-2">
           <div><div class="print-field-label">PF</div><div class="print-field-value">${pfPrint}</div></div>
           <div><div class="print-field-label">ESIC</div><div class="print-field-value">${esicPrint}</div></div>
+          ${customBenefitsPrintRows}
         </div>
       </div>`
         : '';
@@ -2327,6 +2365,12 @@ export default function EmployeeProfile() {
           <div><div class="print-field-label">Gender</div><div class="print-field-value">${e(employee.gender || '—')}</div></div>
           <div><div class="print-field-label">Blood group</div><div class="print-field-value">${e(employee.bloodGroup || '—')}</div></div>
           <div><div class="print-field-label">Marital status</div><div class="print-field-value">${maritalPrint}</div></div>
+          ${
+            weddingDatePrint
+              ? `<div><div class="print-field-label">Wedding date</div><div class="print-field-value">${weddingDatePrint}</div></div>`
+              : ''
+          }
+          <div><div class="print-field-label">Disability</div><div class="print-field-value">${e(employee.disability || '—')}</div></div>
           <div style="grid-column:1/-1"><div class="print-field-label">Address</div><div class="print-field-value">${addr}</div></div>
           <div><div class="print-field-label">Qualification</div><div class="print-field-value">${e(employee.qualification || '—')}</div></div>
         </div>
@@ -2353,7 +2397,7 @@ export default function EmployeeProfile() {
         <div class="print-section-title">Compensation</div>
         <div class="print-grid-2">
           <div><div class="print-field-label">Annual gross salary</div><div class="print-field-value">${e(ctcVal)}</div></div>
-          <div><div class="print-field-label">Incentive (per annum)</div><div class="print-field-value">${e(incentiveVal)}</div></div>
+          <div><div class="print-field-label">Incentive (per month)</div><div class="print-field-value">${e(incentiveVal)}</div></div>
           <div><div class="print-field-label">Basic salary</div><div class="print-field-value">${e(basicVal)}</div></div>
           <div><div class="print-field-label">HRA</div><div class="print-field-value">${e(hraVal)}</div></div>
         </div>
@@ -2547,10 +2591,19 @@ export default function EmployeeProfile() {
               {employee.maritalStatus && (
                 <div>
                   <p className="text-xs text-gray-400">Marital Status</p>
-                  <p className="text-sm font-medium">
-                    {employee.maritalStatus}
-                    {employee.marriageDate && employee.maritalStatus === 'Married' && ` · ${toDisplayDate(employee.marriageDate)}`}
-                  </p>
+                  <p className="text-sm font-medium">{employee.maritalStatus}</p>
+                </div>
+              )}
+              {employee.maritalStatus === 'Married' && employee.marriageDate && (
+                <div>
+                  <p className="text-xs text-gray-400">Wedding Date</p>
+                  <p className="text-sm font-medium">{toDisplayDate(employee.marriageDate)}</p>
+                </div>
+              )}
+              {employee.disability && employee.disability !== 'None' && (
+                <div>
+                  <p className="text-xs text-gray-400">Disability</p>
+                  <p className="text-sm font-medium">{employee.disability}</p>
                 </div>
               )}
               <p><span className="text-slate-500 text-sm">Highest Qualification</span><br />{employee.qualification || '—'}</p>
@@ -2657,7 +2710,13 @@ export default function EmployeeProfile() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <p>Annual Gross Salary: ₹{(employee.ctcPerAnnum ?? employee.ctc ?? 0).toLocaleString('en-IN')}</p>
                 {employee.incentive != null && employee.incentive !== '' && (
-                  <p>Incentive (p.a.): ₹{Number(employee.incentive).toLocaleString('en-IN')}</p>
+                  <p>
+                    Incentive (p.m.): ₹{Number(employee.incentive).toLocaleString('en-IN')}
+                    <span className="text-gray-500">
+                      {' '}
+                      · ₹{(Number(employee.incentive) * 12).toLocaleString('en-IN')} p.a.
+                    </span>
+                  </p>
                 )}
                 <p>Basic Salary: ₹{(employee.basicSalary ?? 0).toLocaleString('en-IN')}/month</p>
                 <p>HRA: ₹{(employee.hra ?? 0).toLocaleString('en-IN')}/month</p>
@@ -2667,7 +2726,8 @@ export default function EmployeeProfile() {
           {(employee.pfApplicable ||
             employee.esicApplicable ||
             employee.pfNumber ||
-            employee.esicNumber) && (
+            employee.esicNumber ||
+            (employee.customBenefits || []).length > 0) && (
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <h3 className="font-medium text-slate-800 mb-3">Benefits</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2688,6 +2748,24 @@ export default function EmployeeProfile() {
                   </p>
                 </div>
               </div>
+              {(employee.customBenefits || []).length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Additional Benefits</p>
+                  <div className="space-y-2">
+                    {employee.customBenefits.map((b) => (
+                      <div key={b.id} className="flex items-start justify-between p-2.5 bg-gray-50 rounded-lg gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800">{b.name}</p>
+                          {b.notes && <p className="text-xs text-gray-400">{b.notes}</p>}
+                        </div>
+                        {b.value && (
+                          <span className="text-sm font-medium text-[#1B6B6B] ml-3 flex-shrink-0">{b.value}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -3176,14 +3254,29 @@ export default function EmployeeProfile() {
                             <option value="Widowed">Widowed</option>
                           </select>
                         </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Disability</label>
+                          <select
+                            value={form.disability}
+                            onChange={(e) => setForm((p) => ({ ...p, disability: e.target.value }))}
+                            className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B]"
+                          >
+                            <option value="">None</option>
+                            <option value="Visual Impairment">Visual Impairment</option>
+                            <option value="Hearing Impairment">Hearing Impairment</option>
+                            <option value="Physical Disability">Physical Disability</option>
+                            <option value="Intellectual Disability">Intellectual Disability</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
                         {form.maritalStatus === 'Married' && (
                           <div>
-                            <label className="block text-xs text-slate-600 mb-1">Marriage Date</label>
+                            <label className="block text-xs text-gray-500 mb-1">Marriage Date / Wedding Date</label>
                             <input
                               type="date"
                               value={form.marriageDate}
                               onChange={(e) => setForm((p) => ({ ...p, marriageDate: e.target.value }))}
-                              className="w-full rounded-lg border px-3 py-2 text-sm"
+                              className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B]"
                             />
                           </div>
                         )}
@@ -3455,7 +3548,7 @@ export default function EmployeeProfile() {
                   <input type="number" value={form.ctcPerAnnum} onChange={(e) => setForm((p) => ({ ...p, ctcPerAnnum: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs text-slate-600 mb-1">Incentive (per annum)</label>
+                  <label className="block text-xs text-slate-600 mb-1">Incentive (per month)</label>
                   <input
                     type="number"
                     placeholder="0"
@@ -3464,7 +3557,9 @@ export default function EmployeeProfile() {
                     className="w-full rounded-lg border px-3 py-2 text-sm"
                   />
                   {form.incentive !== '' && form.incentive != null && !Number.isNaN(Number(form.incentive)) && Number(form.incentive) !== 0 && (
-                    <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.incentive))} p.a.</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      = ₹{formatLakhs(Number(form.incentive))} per month · ₹{formatLakhs(Number(form.incentive) * 12)} per annum
+                    </p>
                   )}
                 </div>
                 <div><label className="block text-xs text-slate-600 mb-1">Basic Salary</label><input type="number" value={form.basicSalary} onChange={(e) => setForm((p) => ({ ...p, basicSalary: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
@@ -3473,14 +3568,23 @@ export default function EmployeeProfile() {
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-2 border-b border-gray-100 pb-2">
                     <span>🏥</span> Benefits
                   </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs text-gray-500">PF Applicable</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div className="p-3 bg-gray-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-2 gap-2">
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Provident Fund (PF)</p>
+                          <p className="text-xs text-gray-400">Statutory benefit</p>
+                        </div>
                         <button
                           type="button"
-                          onClick={() => setForm((prev) => ({ ...prev, pfApplicable: !prev.pfApplicable }))}
-                          className={`relative w-10 h-5 rounded-full transition-colors ${form.pfApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
+                          onClick={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              pfApplicable: !prev.pfApplicable,
+                              pfNumber: prev.pfApplicable ? '' : prev.pfNumber,
+                            }))
+                          }
+                          className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${form.pfApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
                         >
                           <div
                             className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
@@ -3491,20 +3595,29 @@ export default function EmployeeProfile() {
                       </div>
                       {form.pfApplicable && (
                         <input
-                          placeholder="PF Number"
+                          placeholder="PF Account Number"
                           value={form.pfNumber}
                           onChange={(e) => setForm((p) => ({ ...p, pfNumber: e.target.value }))}
-                          className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white"
                         />
                       )}
                     </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs text-gray-500">ESIC Applicable</label>
+                    <div className="p-3 bg-gray-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-2 gap-2">
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">ESIC</p>
+                          <p className="text-xs text-gray-400">Statutory benefit</p>
+                        </div>
                         <button
                           type="button"
-                          onClick={() => setForm((prev) => ({ ...prev, esicApplicable: !prev.esicApplicable }))}
-                          className={`relative w-10 h-5 rounded-full transition-colors ${form.esicApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
+                          onClick={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              esicApplicable: !prev.esicApplicable,
+                              esicNumber: prev.esicApplicable ? '' : prev.esicNumber,
+                            }))
+                          }
+                          className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${form.esicApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
                         >
                           <div
                             className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
@@ -3518,9 +3631,99 @@ export default function EmployeeProfile() {
                           placeholder="ESIC Number"
                           value={form.esicNumber}
                           onChange={(e) => setForm((p) => ({ ...p, esicNumber: e.target.value }))}
-                          className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white"
                         />
                       )}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-gray-700">Additional Benefits</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newBenefit = { id: `benefit_${Date.now()}`, name: '', value: '', notes: '' };
+                          setForm((prev) => ({
+                            ...prev,
+                            customBenefits: [...(prev.customBenefits || []), newBenefit],
+                          }));
+                        }}
+                        className="text-xs text-[#1B6B6B] hover:underline flex items-center gap-1"
+                      >
+                        + Add Benefit
+                      </button>
+                    </div>
+                    {(form.customBenefits || []).length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            customBenefits: [{ id: `benefit_${Date.now()}`, name: '', value: '', notes: '' }],
+                          }));
+                        }}
+                        className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors"
+                      >
+                        + Add benefit (Medical Insurance, Food Allowance, etc.)
+                      </button>
+                    )}
+                    <div className="space-y-2">
+                      {(form.customBenefits || []).map((benefit, index) => (
+                        <div key={benefit.id} className="p-3 border border-gray-100 rounded-xl bg-gray-50">
+                          <div className="flex gap-2 mb-2">
+                            <input
+                              placeholder="Benefit name (e.g. Medical Insurance)"
+                              value={benefit.name}
+                              onChange={(e) => {
+                                setForm((prev) => {
+                                  const updated = [...(prev.customBenefits || [])];
+                                  updated[index] = { ...updated[index], name: e.target.value };
+                                  return { ...prev, customBenefits: updated };
+                                });
+                              }}
+                              className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForm((prev) => ({
+                                  ...prev,
+                                  customBenefits: (prev.customBenefits || []).filter((_, i) => i !== index),
+                                }));
+                              }}
+                              className="text-red-400 hover:text-red-600 px-2"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <input
+                              placeholder="Value (e.g. ₹5,00,000 or 2,500/month)"
+                              value={benefit.value}
+                              onChange={(e) => {
+                                setForm((prev) => {
+                                  const updated = [...(prev.customBenefits || [])];
+                                  updated[index] = { ...updated[index], value: e.target.value };
+                                  return { ...prev, customBenefits: updated };
+                                });
+                              }}
+                              className="border rounded-lg px-3 py-2 text-sm bg-white"
+                            />
+                            <input
+                              placeholder="Notes (e.g. Family floater)"
+                              value={benefit.notes}
+                              onChange={(e) => {
+                                setForm((prev) => {
+                                  const updated = [...(prev.customBenefits || [])];
+                                  updated[index] = { ...updated[index], notes: e.target.value };
+                                  return { ...prev, customBenefits: updated };
+                                });
+                              }}
+                              className="border rounded-lg px-3 py-2 text-sm bg-white"
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
