@@ -122,18 +122,18 @@ const SECTIONS = [
     placeholder: 'e.g. Mumbai Office, Delhi Branch, Work From Home',
     description: 'Office locations and work sites',
   },
-  { key: 'employmentTypes', label: 'Employment Type', plural: 'Employment Types', field: 'employmentType', defaults: DEFAULT_EMPLOYMENT_TYPES },
-  { key: 'categories', label: 'Category', plural: 'Categories', field: 'category', defaults: DEFAULT_CATEGORIES },
-  { key: 'qualifications', label: 'Qualification', plural: 'Qualifications', field: 'qualification', defaults: DEFAULT_QUALIFICATIONS },
   {
     key: 'benefits',
     label: 'Benefit',
     plural: 'Benefits',
     defaults: [],
     icon: '🏥',
-    placeholder: 'e.g. Medical Insurance, Food Allowance, Gratuity, Mobile Allowance...',
-    description: 'Company benefit types',
+    placeholder: 'e.g. Medical Insurance, Food Allowance, Gratuity...',
+    description: 'Company benefit types for employee profiles',
   },
+  { key: 'employmentTypes', label: 'Employment Type', plural: 'Employment Types', field: 'employmentType', defaults: DEFAULT_EMPLOYMENT_TYPES },
+  { key: 'categories', label: 'Category', plural: 'Categories', field: 'category', defaults: DEFAULT_CATEGORIES },
+  { key: 'qualifications', label: 'Qualification', plural: 'Qualifications', field: 'qualification', defaults: DEFAULT_QUALIFICATIONS },
 ];
 
 const TABS = [
@@ -416,15 +416,23 @@ export default function Settings() {
   }, [activeTab, companyId, showError]);
 
   const handleAddLeaveType = () => {
-    if (!newLeaveTypeName.trim()) return;
-    const shortCode =
-      newLeaveTypeCode.trim().toUpperCase().slice(0, 4) ||
-      abbrevLeaveTypeName(newLeaveTypeName);
-    const dup = leaveTypes.some(
-      (x) => x.name.toLowerCase() === newLeaveTypeName.trim().toLowerCase() || x.shortCode === shortCode,
-    );
-    if (dup) {
-      showError('A leave type with this name or code already exists');
+    if (!newLeaveTypeName.trim()) {
+      showError('Enter leave type name');
+      return;
+    }
+    if (!newLeaveTypeCode.trim()) {
+      showError('Enter short code');
+      return;
+    }
+    const shortCode = newLeaveTypeCode.trim().toUpperCase().substring(0, 3);
+    const dupName = leaveTypes.some((x) => x.name.toLowerCase() === newLeaveTypeName.trim().toLowerCase());
+    if (dupName) {
+      showError('A leave type with this name already exists');
+      return;
+    }
+    const isDuplicateCode = leaveTypes.some((lt) => lt.shortCode?.toUpperCase() === shortCode);
+    if (isDuplicateCode) {
+      showError(`Short code "${shortCode}" already exists. Use a different code.`);
       return;
     }
     const newType = {
@@ -470,6 +478,11 @@ export default function Settings() {
     }
     setSaving(false);
   };
+
+  const duplicateShortCodes = useMemo(() => {
+    const codes = leaveTypes.map((l) => l.shortCode?.toUpperCase());
+    return codes.filter((code, index) => code && codes.indexOf(code) !== index);
+  }, [leaveTypes]);
 
   const normalizedAssetTypes = useMemo(() => {
     const raw = company?.assetTypes;
@@ -914,37 +927,42 @@ export default function Settings() {
         </div>
 
         <div className="space-y-1 mb-3 max-h-60 overflow-y-auto">
-          {leaveTypes.map((lt, index) => (
-            <div
-              key={`${lt.shortCode}-${index}`}
-              className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50"
-            >
-              <div className="flex items-center gap-2 flex-wrap min-w-0">
-                <span className="text-sm text-gray-800 truncate">{lt.name}</span>
-                {lt.shortCode && (
-                  <span className="text-xs px-1.5 py-0.5 bg-[#E8F5F5] text-[#1B6B6B] rounded font-mono shrink-0">
-                    {lt.shortCode}
-                  </span>
-                )}
-                {lt.isPaid !== undefined && (
-                  <span
-                    className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
-                      lt.isPaid ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'
-                    }`}
-                  >
-                    {lt.isPaid ? 'Paid' : 'Unpaid'}
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => handleDeleteLeaveType(index)}
-                className="text-red-400 hover:text-red-600 text-xs w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 shrink-0"
+          {leaveTypes.map((lt, index) => {
+            const codeUpper = lt.shortCode?.toUpperCase();
+            const isDup = codeUpper && duplicateShortCodes.includes(codeUpper);
+            return (
+              <div
+                key={`${lt.shortCode}-${index}`}
+                className={`flex items-center justify-between py-2.5 px-3 rounded-lg border ${
+                  isDup ? 'border-amber-200 bg-amber-50' : 'border-gray-100 bg-white'
+                }`}
               >
-                ✕
-              </button>
-            </div>
-          ))}
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                  <span className="text-sm font-medium text-gray-800 truncate">{lt.name}</span>
+                  {lt.shortCode && (
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded font-mono font-bold ${
+                        isDup ? 'bg-amber-200 text-amber-800' : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      {lt.shortCode}
+                    </span>
+                  )}
+                  <span className="text-xs text-gray-400">{lt.isPaid !== false ? 'Paid' : 'Unpaid'}</span>
+                  {isDup && (
+                    <span className="text-xs text-amber-600 font-medium">⚠ Duplicate code</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteLeaveType(index)}
+                  className="text-gray-300 hover:text-red-400 text-sm p-0.5 rounded"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
 
           {leaveTypes.length === 0 && (
             <p className="text-sm text-gray-400 text-center py-4">No leave types added yet</p>
@@ -961,13 +979,18 @@ export default function Settings() {
               onKeyDown={(e) => e.key === 'Enter' && handleAddLeaveType()}
               className="flex-1 min-w-32 text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#4ECDC4]"
             />
-            <input
-              placeholder="Short code (e.g. CL)"
-              value={newLeaveTypeCode}
-              onChange={(e) => setNewLeaveTypeCode(e.target.value.toUpperCase())}
-              maxLength={4}
-              className="w-24 text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#4ECDC4] font-mono"
-            />
+            <div className="flex flex-col">
+              <input
+                placeholder="e.g. CL"
+                value={newLeaveTypeCode}
+                onChange={(e) =>
+                  setNewLeaveTypeCode(e.target.value.toUpperCase().substring(0, 3))
+                }
+                maxLength={3}
+                className="w-20 border rounded-lg px-2 py-2 text-sm text-center font-mono font-bold uppercase focus:outline-none focus:border-[#1B6B6B]"
+              />
+              <p className="text-xs text-gray-400 mt-1">2–3 uppercase letters</p>
+            </div>
             <select
               value={newLeaveTypePaid ? 'true' : 'false'}
               onChange={(e) => setNewLeaveTypePaid(e.target.value === 'true')}
@@ -996,29 +1019,28 @@ export default function Settings() {
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-4 sm:grid-cols-3">
-          {leaveTypes
-            .filter((lt) => lt.isPaid)
-            .map((lt, index) => (
-              <div key={`${lt.shortCode}-allow-${index}`}>
-                <label className="text-xs text-gray-500 block mb-1">
-                  {lt.name}
-                  <span className="ml-1 font-mono text-[#1B6B6B]">({lt.shortCode})</span>
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={365}
-                  value={leaveAllowances[lt.shortCode] ?? leaveAllowances[lt.name] ?? 0}
-                  onChange={(e) =>
-                    setLeaveAllowances((prev) => ({
-                      ...prev,
-                      [lt.shortCode]: Number(e.target.value),
-                    }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#4ECDC4]"
-                />
-              </div>
-            ))}
+          {leaveTypes.map((lt, index) => (
+            <div key={`${lt.shortCode}-allow-${index}`}>
+              <label className="text-xs text-gray-500 block mb-1">
+                {lt.name}{' '}
+                <span className="text-gray-300 font-mono">({lt.shortCode})</span>
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={365}
+                value={leaveAllowances[lt.shortCode] ?? leaveAllowances[lt.name] ?? ''}
+                onChange={(e) =>
+                  setLeaveAllowances((prev) => ({
+                    ...prev,
+                    [lt.shortCode]: Number(e.target.value),
+                  }))
+                }
+                className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                placeholder="Days per year"
+              />
+            </div>
+          ))}
         </div>
 
         <button
