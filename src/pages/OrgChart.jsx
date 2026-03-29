@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useCompany } from '../contexts/CompanyContext';
-import { useToast } from '../contexts/ToastContext';
 import { getDeptColor, buildOrgTree, treeDepth } from '../utils/orgChartHelpers';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 
@@ -88,11 +87,9 @@ export default function OrgChart() {
   const { companyId } = useParams();
   const navigate = useNavigate();
   const { company } = useCompany();
-  const { error: showErrorToast } = useToast();
   const [employees, setEmployees] = useState([]);
   const [search, setSearch] = useState('');
   const [zoom, setZoom] = useState(1);
-  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!companyId) return () => {};
@@ -120,57 +117,6 @@ export default function OrgChart() {
     };
   }, [activeEmployees, roots]);
 
-  const handleDownloadPNG = useCallback(async () => {
-    const chartElement = document.getElementById('org-chart-container');
-    if (!chartElement) return;
-
-    try {
-      setDownloading(true);
-
-      const { default: html2canvas } = await import('html2canvas');
-
-      const scrollWidth = chartElement.scrollWidth;
-      const scrollHeight = chartElement.scrollHeight;
-
-      const canvas = await html2canvas(chartElement, {
-        backgroundColor: '#F8FAFC',
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        width: scrollWidth,
-        height: scrollHeight,
-        windowWidth: scrollWidth,
-        windowHeight: scrollHeight,
-        scrollX: 0,
-        scrollY: 0,
-        x: 0,
-        y: 0,
-        logging: false,
-        onclone: (clonedDoc) => {
-          const clonedEl = clonedDoc.getElementById('org-chart-container');
-          if (clonedEl) {
-            clonedEl.style.transform = 'scale(1)';
-            clonedEl.style.transformOrigin = 'top left';
-            clonedEl.style.overflow = 'visible';
-            clonedEl.style.width = `${scrollWidth}px`;
-            clonedEl.style.height = `${scrollHeight}px`;
-            clonedEl.style.padding = '60px 40px';
-          }
-        },
-      });
-
-      const fileStem = (company?.name || 'Company').replace(/\s+/g, '-');
-      const link = document.createElement('a');
-      link.download = `${fileStem}-org-chart.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch (error) {
-      showErrorToast(`Download failed: ${error?.message || 'Unknown error'}`);
-    } finally {
-      setDownloading(false);
-    }
-  }, [company?.name, showErrorToast]);
-
   if (!companyId) return null;
 
   return (
@@ -191,14 +137,6 @@ export default function OrgChart() {
           className="flex-1 min-w-[200px] min-h-[44px] rounded-xl border border-slate-200 px-3 py-2 text-sm"
         />
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleDownloadPNG}
-            disabled={downloading}
-            className="flex items-center gap-2 min-h-[44px] px-4 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 font-medium"
-          >
-            {downloading ? 'Downloading…' : 'Download PNG'}
-          </button>
           <button
             type="button"
             onClick={() => setZoom((z) => Math.min(1.75, Math.round((z + 0.15) * 100) / 100))}

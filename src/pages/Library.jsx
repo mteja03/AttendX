@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import html2canvas from 'html2canvas';
 import {
   addDoc,
   collection,
@@ -467,7 +466,6 @@ export default function Library() {
   const [showDeleteRoleModal, setShowDeleteRoleModal] = useState(false);
   const [deletingItem, setDeletingItem] = useState(false);
   const [archZoom, setArchZoom] = useState(0.9);
-  const [archDownloading, setArchDownloading] = useState(false);
   const [reportsToSearch, setReportsToSearch] = useState('');
   const [showReportsToDropdown, setShowReportsToDropdown] = useState(false);
   const reportsToDropdownRef = useRef(null);
@@ -683,39 +681,6 @@ export default function Library() {
   };
 
   const roleRoots = useMemo(() => buildRoleTree(roles), [roles]);
-
-  const downloadArchitecturePNG = useCallback(async () => {
-    const el = document.getElementById('job-architecture-capture');
-    if (!el) return;
-    try {
-      setArchDownloading(true);
-      const prev = el.style.transform;
-      el.style.transform = 'scale(1)';
-      const canvas = await html2canvas(el, {
-        backgroundColor: '#F9FAFB',
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        scrollX: 0,
-        scrollY: 0,
-        width: el.scrollWidth,
-        height: el.scrollHeight,
-        windowWidth: el.scrollWidth,
-        windowHeight: el.scrollHeight,
-        logging: false,
-      });
-      el.style.transform = prev;
-      const link = document.createElement('a');
-      link.download = `${(company?.name || 'company').replace(/\s+/g, '-')}-job-architecture.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch (e) {
-      console.error(e);
-      showError(`Download failed: ${e?.message || 'Unknown error'}`);
-    } finally {
-      setArchDownloading(false);
-    }
-  }, [company?.name, showError]);
 
   const openAddPolicy = () => {
     setEditingPolicy(null);
@@ -1494,17 +1459,6 @@ export default function Library() {
               </div>
 
               <div id="job-architecture-container" className="overflow-auto p-8 bg-gray-50 rounded-2xl min-h-96">
-                <div className="flex justify-end mb-4">
-                  <button
-                    type="button"
-                    onClick={downloadArchitecturePNG}
-                    disabled={archDownloading || roles.length === 0}
-                    className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 bg-white rounded-lg text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    {archDownloading ? 'Preparing…' : 'Download PNG'}
-                  </button>
-                </div>
-
                 <div
                   id="job-architecture-capture"
                   style={{
