@@ -13,7 +13,6 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { seedData } from '../firebase/seed';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { findAndDeleteFolder, deleteFileFromDrive } from '../utils/googleDrive';
@@ -183,7 +182,6 @@ export default function Companies() {
   const [deactivateConfirm, setDeactivateConfirm] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [seedLoading, setSeedLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -384,22 +382,6 @@ export default function Companies() {
     setSaving(false);
   };
 
-  const handleSeed = async () => {
-    try {
-      setSeedLoading(true);
-      const result = await seedData(currentUser?.email || 'admin');
-      if (result.success) {
-        success(result.message);
-      } else {
-        showError(result.message);
-      }
-    } catch (error) {
-      showError(`Seed failed: ${error?.message || error?.code || 'Unknown error'}`);
-    } finally {
-      setSeedLoading(false);
-    }
-  };
-
   const handleDeactivate = async () => {
     const company = deactivateConfirm;
     if (!company) return;
@@ -589,21 +571,6 @@ export default function Companies() {
                   Add your first company
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={handleSeed}
-                disabled={seedLoading}
-                className="px-6 py-3 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 mt-4 flex items-center gap-2 mx-auto"
-              >
-                {seedLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Creating sample data...
-                  </>
-                ) : (
-                  '🌱 Load sample data'
-                )}
-              </button>
             </>
           ) : (
             <>
