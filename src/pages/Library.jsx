@@ -22,7 +22,380 @@ import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/print
 const LIBRARY_TABS = [
   { id: 'policies', label: 'Policies', icon: '📋' },
   { id: 'roles', label: 'Roles & Responsibilities', icon: '👔' },
+  { id: 'guide', label: '📖 HR Guide', icon: '📖' },
 ];
+
+const GUIDE_TOPICS = [
+  {
+    id: 'employee_journey',
+    icon: '🗺️',
+    title: 'Employee Journey',
+    color: 'teal',
+    summary: 'Full lifecycle from joining to exit',
+    content: [
+      {
+        type: 'flow',
+        steps: [
+          {
+            status: 'Added',
+            color: 'teal',
+            icon: '➕',
+            desc: 'HR adds employee with joining date. Onboarding starts automatically.',
+          },
+          {
+            status: 'Active',
+            color: 'green',
+            icon: '✅',
+            desc: 'Employee works normally. Leave, assets, documents managed here.',
+          },
+          {
+            status: 'Notice Period',
+            color: 'amber',
+            icon: '⏰',
+            desc: 'HR records resignation. Notice period countdown begins. Can withdraw, buyout, or start exit tasks.',
+          },
+          {
+            status: 'Offboarding',
+            color: 'orange',
+            icon: '🚪',
+            desc: 'Exit tasks in progress. F&F settlement, asset return, documents issued.',
+          },
+          {
+            status: 'Inactive',
+            color: 'gray',
+            icon: '🔴',
+            desc: 'All tasks complete. HR clicks Complete Offboarding. Profile locked permanently.',
+          },
+        ],
+      },
+      {
+        type: 'rule',
+        title: 'Withdrawal Rule',
+        text: 'Employee can withdraw resignation ONLY during Notice Period. Once exit tasks start (Offboarding status), withdrawal is not possible.',
+      },
+      {
+        type: 'rule',
+        title: 'Rehire Rule',
+        text: 'Inactive employees can be rehired. Click Rehire Employee on their profile, enter new joining date. All previous history is preserved.',
+      },
+    ],
+  },
+  {
+    id: 'roles_access',
+    icon: '🔐',
+    title: 'Roles & Access',
+    color: 'purple',
+    summary: 'Who can do what in AttendX',
+    content: [
+      {
+        type: 'table',
+        headers: ['Action', 'Admin', 'HR Manager', 'IT Manager', 'Manager'],
+        rows: [
+          ['Add / Edit Employee', '✅', '✅', '❌', '❌'],
+          ['Delete Employee', '✅', '❌', '❌', '❌'],
+          ['Approve Leave', '✅', '✅', '❌', '✅'],
+          ['Upload Documents', '✅', '✅', '❌', '❌'],
+          ['Assign Assets', '✅', '✅', '✅', '❌'],
+          ['View Reports', '✅', '✅', '✅', '✅'],
+          ['Manage Settings', '✅', '✅', '❌', '❌'],
+          ['Add Companies', '✅', '❌', '❌', '❌'],
+          ['Manage Platform Users', '✅', '❌', '❌', '❌'],
+          ['Record Resignation', '✅', '✅', '❌', '❌'],
+          ['Upload Employee Photo', '✅', '✅', '❌', '❌'],
+        ],
+      },
+    ],
+  },
+  {
+    id: 'onboarding_guide',
+    icon: '🎯',
+    title: 'Onboarding Guide',
+    color: 'blue',
+    summary: 'How to onboard a new employee',
+    content: [
+      {
+        type: 'steps',
+        items: [
+          { step: 1, title: 'Add Employee', desc: 'Go to Employees → Add Employee. Fill in required fields. Photo is optional at this stage.' },
+          { step: 2, title: 'Start Onboarding', desc: 'Open employee profile → Onboarding tab → Start Onboarding. Tasks are auto-generated from your Settings template.' },
+          { step: 3, title: 'Complete Tasks', desc: 'HR, IT, and Admin complete their assigned tasks. Click Mark Complete on each task.' },
+          { step: 4, title: 'Track Progress', desc: 'Progress bar shows completion %. Dashboard shows employees with incomplete onboarding.' },
+          { step: 5, title: 'All Done', desc: 'When all required tasks are complete, onboarding is marked as Completed.' },
+        ],
+      },
+      {
+        type: 'rule',
+        title: 'Key Rule',
+        text: 'Onboarding can only be started for Active employees. If an employee resigns before onboarding is complete, a warning is shown but HR can still proceed with offboarding.',
+      },
+      {
+        type: 'tip',
+        text: 'Set up your onboarding template in Settings → Onboarding before adding employees. This ensures tasks are auto-generated correctly.',
+      },
+    ],
+  },
+  {
+    id: 'offboarding_guide',
+    icon: '🚪',
+    title: 'Offboarding Guide',
+    color: 'orange',
+    summary: 'How to handle employee exits',
+    content: [
+      {
+        type: 'steps',
+        items: [
+          { step: 1, title: 'Record Resignation', desc: 'Active employee → Offboarding tab → Record Resignation. Enter resignation date and notice period days. Expected last day is auto-calculated.' },
+          { step: 2, title: 'Notice Period', desc: 'Status changes to Notice Period. Progress bar tracks days elapsed. Three options available: Withdraw, Buyout, or Start Exit Tasks.' },
+          { step: 3, title: 'Start Exit Tasks', desc: 'Click Start Exit Tasks anytime during notice period. Do not wait for last day. Status changes to Offboarding.' },
+          { step: 4, title: 'Complete Tasks', desc: 'Work through exit checklist: asset return, F&F settlement, experience letter, PF withdrawal, knowledge transfer.' },
+          { step: 5, title: 'Complete Offboarding', desc: 'When all tasks done, green banner appears. Click Complete Offboarding & Mark as Inactive. Employee profile is locked.' },
+        ],
+      },
+      {
+        type: 'table',
+        headers: ['Scenario', 'Action', 'Result'],
+        rows: [
+          ['Employee changes mind', 'Withdraw Resignation', 'Back to Active'],
+          ['Company pays notice', 'Notice Buyout', 'Enter early exit date'],
+          ['Normal exit', 'Start Exit Tasks', 'Begin F&F process'],
+          ['All tasks complete', 'Complete Offboarding', 'Employee → Inactive'],
+        ],
+      },
+      {
+        type: 'rule',
+        title: 'Important',
+        text: 'Withdrawal is ONLY possible during Notice Period phase. Once exit tasks start, there is no going back.',
+      },
+    ],
+  },
+  {
+    id: 'leave_guide',
+    icon: '🏖️',
+    title: 'Leave Management',
+    color: 'pink',
+    summary: 'How to manage employee leaves',
+    content: [
+      {
+        type: 'steps',
+        items: [
+          { step: 1, title: 'Add Leave', desc: 'Leave page → Add Leave. Select employee, leave type, dates, and reason. Days are auto-calculated.' },
+          { step: 2, title: 'Approve or Reject', desc: 'Pending leaves show in the list. Click Approve or Reject. Rejected leaves require a reason.' },
+          { step: 3, title: 'Track Balance', desc: 'Leave balance is tracked per employee per leave type. View in Reports → Leave tab.' },
+        ],
+      },
+      {
+        type: 'rule',
+        title: 'Pro-ration Rule',
+        text: 'Employees who join mid-year get a pro-rated leave balance. Example: joining in July gives 6/12 of annual allowance.',
+      },
+      {
+        type: 'rule',
+        title: 'Inactive Employees',
+        text: 'Inactive employees cannot be selected in the Add Leave form. Deleted employee leave records are automatically hidden.',
+      },
+      {
+        type: 'tip',
+        text: 'Configure leave types and annual allowances in Settings → Leave before adding leave requests.',
+      },
+    ],
+  },
+  {
+    id: 'assets_guide',
+    icon: '📦',
+    title: 'Asset Management',
+    color: 'indigo',
+    summary: 'Trackable vs Consumable assets',
+    content: [
+      {
+        type: 'table',
+        headers: ['Feature', 'Trackable', 'Consumable'],
+        rows: [
+          ['Examples', 'Laptop, Mobile, ID Card', 'Stationary, SIM Cards'],
+          ['Individual tracking', '✅ Unique Asset ID', '❌ Stock quantity only'],
+          ['Assign to employee', '✅ One at a time', '✅ Issue from stock'],
+          ['Return process', '✅ Status → Available', '✅ Stock increases'],
+          ['Status tracking', 'Available / Assigned / Damaged', 'Stock / Issued'],
+        ],
+      },
+      {
+        type: 'rule',
+        title: 'Employee Exit Rule',
+        text: 'When an employee is deleted, all their assigned assets are automatically unassigned and returned to Available status. Asset return is part of the offboarding exit task checklist.',
+      },
+      {
+        type: 'tip',
+        text: 'Set up asset types in Settings → Manage Lists → Asset Types before adding assets.',
+      },
+    ],
+  },
+  {
+    id: 'documents_guide',
+    icon: '📄',
+    title: 'Documents Guide',
+    color: 'gray',
+    summary: 'Managing employee documents',
+    content: [
+      {
+        type: 'rule',
+        title: 'Google Drive Connection Required',
+        text: 'Documents are stored in Google Drive. HR must connect their Google Drive account before uploading. Drive session expires every few hours — click Refresh Session when prompted.',
+      },
+      {
+        type: 'steps',
+        items: [
+          { step: 1, title: 'Connect Drive', desc: 'Sidebar shows Drive: Connected or Drive: Session expired. Click to reconnect.' },
+          { step: 2, title: 'Upload Document', desc: 'Employee profile → Documents tab → Upload next to the document type.' },
+          { step: 3, title: 'View Document', desc: 'Click View to open in Google Drive. Documents are organised by employee automatically.' },
+          { step: 4, title: 'Track Completion', desc: 'Completion bar shows mandatory document progress. Reports → Documents shows missing docs across all employees.' },
+        ],
+      },
+      {
+        type: 'rule',
+        title: 'Inactive Employee Rule',
+        text: 'Documents for inactive employees are read-only. No upload, replace, or delete is allowed.',
+      },
+      {
+        type: 'tip',
+        text: 'Set up document types and mark Mandatory/Optional in Settings → Document Types. Mandatory documents affect the completion percentage.',
+      },
+    ],
+  },
+  {
+    id: 'settings_guide',
+    icon: '⚙️',
+    title: 'Settings Guide',
+    color: 'teal',
+    summary: 'How to configure AttendX for your company',
+    content: [
+      {
+        type: 'table',
+        headers: ['Tab', 'What to configure'],
+        rows: [
+          ['Manage Lists', 'Departments, Branches, Locations, Employment Types, Categories, Benefits, Asset Types'],
+          ['Leave', 'Leave types with short codes, annual allowance per type'],
+          ['Document Types', 'KYC docs, Employment docs, Education certs — Mandatory or Optional'],
+          ['Onboarding', 'Task checklist template used for every new employee'],
+          ['Offboarding', 'Exit task checklist used for every departing employee'],
+        ],
+      },
+      {
+        type: 'tip',
+        text: 'Set up all Settings BEFORE adding employees. This ensures dropdowns, templates, and document types are ready.',
+      },
+      {
+        type: 'rule',
+        title: 'Delete Protection',
+        text: 'Items in Manage Lists cannot be deleted if they have employees assigned. Example: cannot delete Engineering department if employees belong to it.',
+      },
+    ],
+  },
+  {
+    id: 'session_guide',
+    icon: '🔐',
+    title: 'Security & Session',
+    color: 'red',
+    summary: 'Session rules and security',
+    content: [
+      {
+        type: 'steps',
+        items: [
+          { step: 1, title: 'Session Duration', desc: 'AttendX automatically signs you out after 4 hours of inactivity to protect company data.' },
+          { step: 2, title: 'Warning Banner', desc: '5 minutes before sign-out, a warning banner appears at the bottom of the screen with a countdown.' },
+          { step: 3, title: 'Stay Signed In', desc: 'Click Stay Signed In to reset the 4-hour timer. Any activity (mouse, keyboard, scroll) also resets it.' },
+          { step: 4, title: 'Google Drive Session', desc: 'Drive has a separate session. When it expires, upload buttons are disabled. Click Refresh Session to reconnect.' },
+        ],
+      },
+      {
+        type: 'rule',
+        title: 'Irreversible Actions',
+        text: 'Deleting an employee is permanent and cannot be undone. Only delete incorrect or duplicate records. Use Inactive status for employees who have left.',
+      },
+    ],
+  },
+];
+
+const GUIDE_COLORS = {
+  teal: {
+    bg: 'bg-[#E8F5F5]',
+    border: 'border-[#4ECDC4]/40',
+    icon: 'bg-[#1B6B6B] text-white',
+    badge: 'bg-[#1B6B6B] text-white',
+    text: 'text-[#1B6B6B]',
+    dot: 'bg-[#1B6B6B]',
+  },
+  green: {
+    bg: 'bg-green-50',
+    border: 'border-green-200',
+    icon: 'bg-green-600 text-white',
+    badge: 'bg-green-600 text-white',
+    text: 'text-green-700',
+    dot: 'bg-green-500',
+  },
+  amber: {
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    icon: 'bg-amber-500 text-white',
+    badge: 'bg-amber-500 text-white',
+    text: 'text-amber-700',
+    dot: 'bg-amber-500',
+  },
+  orange: {
+    bg: 'bg-orange-50',
+    border: 'border-orange-200',
+    icon: 'bg-orange-500 text-white',
+    badge: 'bg-orange-500 text-white',
+    text: 'text-orange-700',
+    dot: 'bg-orange-500',
+  },
+  blue: {
+    bg: 'bg-blue-50',
+    border: 'border-blue-200',
+    icon: 'bg-blue-600 text-white',
+    badge: 'bg-blue-600 text-white',
+    text: 'text-blue-700',
+    dot: 'bg-blue-500',
+  },
+  purple: {
+    bg: 'bg-purple-50',
+    border: 'border-purple-200',
+    icon: 'bg-purple-600 text-white',
+    badge: 'bg-purple-600 text-white',
+    text: 'text-purple-700',
+    dot: 'bg-purple-500',
+  },
+  pink: {
+    bg: 'bg-pink-50',
+    border: 'border-pink-200',
+    icon: 'bg-pink-500 text-white',
+    badge: 'bg-pink-500 text-white',
+    text: 'text-pink-700',
+    dot: 'bg-pink-500',
+  },
+  indigo: {
+    bg: 'bg-indigo-50',
+    border: 'border-indigo-200',
+    icon: 'bg-indigo-600 text-white',
+    badge: 'bg-indigo-600 text-white',
+    text: 'text-indigo-700',
+    dot: 'bg-indigo-500',
+  },
+  gray: {
+    bg: 'bg-gray-50',
+    border: 'border-gray-200',
+    icon: 'bg-gray-600 text-white',
+    badge: 'bg-gray-600 text-white',
+    text: 'text-gray-700',
+    dot: 'bg-gray-500',
+  },
+  red: {
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+    icon: 'bg-red-600 text-white',
+    badge: 'bg-red-600 text-white',
+    text: 'text-red-700',
+    dot: 'bg-red-500',
+  },
+};
 
 const CATEGORIES = [
   'Leave',
@@ -432,6 +805,7 @@ export default function Library() {
   const canDeletePolicy = role === 'admin' || role === 'hrmanager';
 
   const [libraryTab, setLibraryTab] = useState('policies');
+  const [expandedGuide, setExpandedGuide] = useState(null);
   const [policies, setPolicies] = useState([]);
   const [roles, setRoles] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -500,6 +874,7 @@ export default function Library() {
     const t = searchParams.get('tab');
     if (t === 'roles') setLibraryTab('roles');
     else if (t === 'policies') setLibraryTab('policies');
+    else if (t === 'guide') setLibraryTab('guide');
   }, [searchParams]);
 
   useEffect(() => {
@@ -1486,6 +1861,184 @@ export default function Library() {
             <p className="text-center text-slate-500 py-12 text-sm">No roles match your filters.</p>
           )}
         </>
+      )}
+
+      {libraryTab === 'guide' && (
+        <div className="space-y-4">
+          <div className="bg-gradient-to-r from-[#1B6B6B] to-[#2D8A8A] rounded-2xl p-6 text-white">
+            <h2 className="text-lg font-bold mb-1">📖 AttendX HR Guide</h2>
+            <p className="text-sm opacity-80">
+              Everything you need to know to use AttendX effectively. Click any topic to learn more.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {GUIDE_TOPICS.map((topic) => {
+              const colors = GUIDE_COLORS[topic.color] || GUIDE_COLORS.teal;
+              const isOpen = expandedGuide === topic.id;
+
+              return (
+                <div
+                  key={topic.id}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') {
+                      ev.preventDefault();
+                      setExpandedGuide(isOpen ? null : topic.id);
+                    }
+                  }}
+                  className={`border rounded-2xl overflow-hidden transition-all cursor-pointer ${colors.border} ${
+                    isOpen ? 'md:col-span-2 lg:col-span-3' : ''
+                  }`}
+                  onClick={() => setExpandedGuide(isOpen ? null : topic.id)}
+                >
+                  <div className={`flex items-center justify-between p-4 ${colors.bg}`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${colors.icon}`}>
+                        {topic.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-semibold text-gray-800">{topic.title}</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">{topic.summary}</p>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-medium transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                  </div>
+
+                  {isOpen && (
+                    <div className="p-5 bg-white border-t border-gray-100">
+                      {topic.content.map((block, blockIdx) => (
+                        <div key={blockIdx} className="mb-5 last:mb-0">
+                          {block.type === 'flow' && (
+                            <div>
+                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Employee Lifecycle</p>
+                              <div className="flex flex-wrap gap-2 items-center">
+                                {block.steps.map((step, si) => {
+                                  const sc = GUIDE_COLORS[step.color] || GUIDE_COLORS.teal;
+                                  return (
+                                    <div key={si} className="flex items-center gap-2">
+                                      <div className={`p-3 rounded-xl border max-w-36 ${sc.bg} ${sc.border}`}>
+                                        <div className="flex items-center gap-1.5 mb-1">
+                                          <span>{step.icon}</span>
+                                          <span className={`text-xs font-bold ${sc.text}`}>{step.status}</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 leading-relaxed">{step.desc}</p>
+                                      </div>
+                                      {si < block.steps.length - 1 && <span className="text-gray-300 text-lg">→</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {block.type === 'steps' && (
+                            <div>
+                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Step by Step</p>
+                              <div className="space-y-3">
+                                {block.items.map((item, ii) => (
+                                  <div key={ii} className="flex gap-3">
+                                    <div
+                                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 text-white ${colors.icon}`}
+                                    >
+                                      {item.step}
+                                    </div>
+                                    <div className="flex-1 pt-0.5 min-w-0">
+                                      <p className="text-sm font-semibold text-gray-800">{item.title}</p>
+                                      <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{item.desc}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {block.type === 'table' && (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs border-collapse min-w-[280px]">
+                                <thead>
+                                  <tr>
+                                    {block.headers.map((h, hi) => (
+                                      <th
+                                        key={hi}
+                                        className={`text-left px-3 py-2 font-semibold text-white text-xs ${colors.icon} ${
+                                          hi === 0 ? 'rounded-tl-lg' : ''
+                                        } ${hi === block.headers.length - 1 ? 'rounded-tr-lg' : ''}`}
+                                      >
+                                        {h}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {block.rows.map((row, ri) => (
+                                    <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                      {row.map((cell, ci) => (
+                                        <td
+                                          key={ci}
+                                          className={`px-3 py-2 border-b border-gray-100 text-xs ${
+                                            ci === 0
+                                              ? 'font-medium text-gray-800'
+                                              : cell === '✅'
+                                                ? 'text-green-600 text-center font-bold'
+                                                : cell === '❌'
+                                                  ? 'text-red-400 text-center'
+                                                  : 'text-gray-500'
+                                          }`}
+                                        >
+                                          {cell}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+
+                          {block.type === 'rule' && (
+                            <div className={`flex gap-3 p-3 rounded-xl border ${colors.bg} ${colors.border}`}>
+                              <span className="text-base flex-shrink-0">📌</span>
+                              <div>
+                                <p className={`text-xs font-semibold mb-0.5 ${colors.text}`}>{block.title}</p>
+                                <p className="text-xs text-gray-600 leading-relaxed">{block.text}</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {block.type === 'tip' && (
+                            <div className="flex gap-3 p-3 rounded-xl bg-blue-50 border border-blue-200">
+                              <span className="text-base flex-shrink-0">💡</span>
+                              <p className="text-xs text-blue-700 leading-relaxed">{block.text}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedGuide(null);
+                        }}
+                        className="mt-4 text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+                      >
+                        ▲ Close
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="text-center py-4">
+            <p className="text-xs text-gray-400">
+              AttendX HR Guide · Built for HR Managers · Contact your admin for access issues
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Policy add/edit modal */}
