@@ -15,8 +15,7 @@ import {
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, app } from '../firebase/config';
+import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
@@ -34,7 +33,41 @@ const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Interns
 const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
 const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
 const DEFAULT_CATEGORIES = ['Permanent', 'Trainee', 'Contractual', 'Part-time', 'Probationary', 'Seasonal', 'Other'];
-const JOINING_YEARS = ['All Years', 2020, 2021, 2022, 2023, 2024, 2025, 2026];
+const EMPTY_EMPLOYEE_FILTERS = {
+  department: '',
+  branch: '',
+  location: '',
+  employmentType: '',
+  category: '',
+  designation: '',
+  gender: '',
+  bloodGroup: '',
+  reportingManager: '',
+  joinYearFrom: '',
+  joinYearTo: '',
+  maritalStatus: '',
+  disability: '',
+  pfApplicable: '',
+  esicApplicable: '',
+};
+
+const FILTER_LABELS = {
+  department: 'Department',
+  branch: 'Branch',
+  location: 'Location',
+  employmentType: 'Employment Type',
+  category: 'Category',
+  designation: 'Designation',
+  gender: 'Gender',
+  bloodGroup: 'Blood Group',
+  reportingManager: 'Reporting Manager',
+  joinYearFrom: 'Joined from',
+  joinYearTo: 'Joined to',
+  maritalStatus: 'Marital Status',
+  disability: 'Disability',
+  pfApplicable: 'PF',
+  esicApplicable: 'ESIC',
+};
 
 const FETCH_PAGE_SIZE = PLATFORM_CONFIG.EMPLOYEES_PAGE_SIZE;
 const TABLE_PAGE_SIZE = 25;
@@ -65,7 +98,7 @@ async function getCroppedBlob(imageSrc, pixelCrop) {
     canvas.toBlob(
       (blob) => {
         if (blob) resolve(blob);
-        else reject(new Error('Crop failed'));
+        else reject(new Error('Canvas to blob failed'));
       },
       'image/jpeg',
       0.9,
@@ -87,6 +120,12 @@ function customBenefitsExportText(emp) {
     .map((b) => [b?.name, b?.value, b?.notes].filter(Boolean).join(' · '))
     .filter(Boolean)
     .join('; ');
+}
+
+function getEmployeeJoinYear(emp) {
+  const d = toJSDate(emp?.joiningDate);
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return d.getFullYear();
 }
 
 // Add Employee form is intentionally flexible:
@@ -253,14 +292,8 @@ export default function Employees() {
   const [currentPage, setCurrentPage] = useState(1);
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [filterDept, setFilterDept] = useState('All Departments');
-  const [filterDesignation, setFilterDesignation] = useState('All Designations');
-  const [filterBranch, setFilterBranch] = useState('All Branches');
-  const [filterLocation, setFilterLocation] = useState('All Locations');
-  const [filterEmploymentType, setFilterEmploymentType] = useState('All Types');
-  const [filterCategory, setFilterCategory] = useState('All Categories');
-  const [filterJoiningYear, setFilterJoiningYear] = useState('All Years');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState(() => ({ ...EMPTY_EMPLOYEE_FILTERS }));
   const [showAddModal, setShowAddModal] = useState(false);
   const [newEmpPhoto, setNewEmpPhoto] = useState(null);
   const [newEmpPhotoSrc, setNewEmpPhotoSrc] = useState(null);
@@ -426,14 +459,14 @@ export default function Employees() {
         else if (tab === 'onleave') constraints.push(where('status', '==', 'On Leave'));
         else if (tab === 'offboarding') constraints.push(where('status', '==', 'Offboarding'));
         else if (tab === 'inactive') constraints.push(where('status', '==', 'Inactive'));
-        if (filterDept !== 'All Departments') {
-          constraints.push(where('department', '==', filterDept.trim()));
+        if (filters.department) {
+          constraints.push(where('department', '==', filters.department.trim()));
         }
-        if (filterBranch !== 'All Branches') {
-          constraints.push(where('branch', '==', filterBranch.trim()));
+        if (filters.branch) {
+          constraints.push(where('branch', '==', filters.branch.trim()));
         }
-        if (filterLocation !== 'All Locations') {
-          constraints.push(where('location', '==', filterLocation.trim()));
+        if (filters.location) {
+          constraints.push(where('location', '==', filters.location.trim()));
         }
         constraints.push(orderBy('fullName', 'asc'));
         constraints.push(limit(FETCH_PAGE_SIZE));
@@ -464,7 +497,7 @@ export default function Employees() {
         setLoadingMore(false);
       }
     },
-    [companyId, collRef, tab, filterDept, filterBranch, filterLocation, fetchAllEmployeesFallback, showError],
+    [companyId, collRef, tab, filters.department, filters.branch, filters.location, fetchAllEmployeesFallback, showError],
   );
 
   const searchAllEmployees = useCallback(
@@ -533,7 +566,7 @@ export default function Employees() {
     fetchEmployees(true);
     fetchTotalCount();
     fetchStatsCounts();
-  }, [companyId, tab, filterDept, filterBranch, filterLocation, fetchEmployees, fetchTotalCount, fetchStatsCounts]);
+  }, [companyId, tab, filters.department, filters.branch, filters.location, fetchEmployees, fetchTotalCount, fetchStatsCounts]);
 
   /** Suggested next Emp ID from currently loaded employees (server still validates uniqueness). */
   const nextEmpId = useMemo(() => {
@@ -565,54 +598,47 @@ export default function Employees() {
       ...new Set(roles.filter((r) => r.isActive !== false).map((r) => (r.title || '').trim()).filter(Boolean)),
     ].sort();
   }, [employees, roles]);
+
+  const reportingManagerFilterOptions = useMemo(() => {
+    const names = employees
+      .filter((e) => e.status !== 'Inactive' && (e.reportingManagerName || '').trim())
+      .map((e) => e.reportingManagerName.trim());
+    return [...new Set(names)].sort();
+  }, [employees]);
+
+  const joinYearSelectOptions = useMemo(
+    () => Array.from({ length: 15 }, (_, i) => new Date().getFullYear() - i),
+    [],
+  );
   const employmentTypes = company?.employmentTypes?.length ? company.employmentTypes : DEFAULT_EMPLOYMENT_TYPES;
   const branches = company?.branches?.length ? company.branches : DEFAULT_BRANCHES;
   const qualifications = company?.qualifications?.length ? company.qualifications : DEFAULT_QUALIFICATIONS;
   const categories = company?.categories?.length ? company.categories : DEFAULT_CATEGORIES;
   const locationFilterOptions = useMemo(() => company?.locations || [], [company?.locations]);
 
-  const activeFilterCount = useMemo(() => {
-    let n = 0;
-    if (filterDept !== 'All Departments') n++;
-    if (filterDesignation !== 'All Designations') n++;
-    if (filterBranch !== 'All Branches') n++;
-    if (filterLocation !== 'All Locations') n++;
-    if (filterEmploymentType !== 'All Types') n++;
-    if (filterCategory !== 'All Categories') n++;
-    if (filterJoiningYear !== 'All Years') n++;
-    return n;
-  }, [filterDept, filterDesignation, filterBranch, filterLocation, filterEmploymentType, filterCategory, filterJoiningYear]);
+  const activeFilterCount = useMemo(
+    () => Object.values(filters).filter((v) => v !== '' && v != null).length,
+    [filters],
+  );
 
-  const activeFilters = useMemo(() => {
-    const list = [];
-    if (filterDept !== 'All Departments') list.push({ key: 'department', label: 'Department', value: filterDept });
-    if (filterBranch !== 'All Branches') list.push({ key: 'branch', label: 'Branch', value: filterBranch });
-    if (filterLocation !== 'All Locations') list.push({ key: 'location', label: 'Location', value: filterLocation });
-    if (filterDesignation !== 'All Designations') list.push({ key: 'designation', label: 'Designation', value: filterDesignation });
-    if (filterEmploymentType !== 'All Types') list.push({ key: 'employmentType', label: 'Type', value: filterEmploymentType });
-    if (filterCategory !== 'All Categories') list.push({ key: 'category', label: 'Category', value: filterCategory });
-    if (filterJoiningYear !== 'All Years') list.push({ key: 'joiningYear', label: 'Year', value: filterJoiningYear });
-    return list;
-  }, [filterDept, filterBranch, filterLocation, filterDesignation, filterEmploymentType, filterCategory, filterJoiningYear]);
+  const activeFilters = useMemo(
+    () =>
+      Object.entries(filters)
+        .filter(([, v]) => v !== '' && v != null)
+        .map(([key, value]) => ({
+          key,
+          label: FILTER_LABELS[key] || key,
+          value: String(value),
+        })),
+    [filters],
+  );
 
   const clearFilter = (key) => {
-    if (key === 'department') setFilterDept('All Departments');
-    if (key === 'branch') setFilterBranch('All Branches');
-    if (key === 'location') setFilterLocation('All Locations');
-    if (key === 'designation') setFilterDesignation('All Designations');
-    if (key === 'employmentType') setFilterEmploymentType('All Types');
-    if (key === 'category') setFilterCategory('All Categories');
-    if (key === 'joiningYear') setFilterJoiningYear('All Years');
+    setFilters((prev) => ({ ...prev, [key]: '' }));
   };
 
   const clearFilters = () => {
-    setFilterDept('All Departments');
-    setFilterDesignation('All Designations');
-    setFilterBranch('All Branches');
-    setFilterLocation('All Locations');
-    setFilterEmploymentType('All Types');
-    setFilterCategory('All Categories');
-    setFilterJoiningYear('All Years');
+    setFilters({ ...EMPTY_EMPLOYEE_FILTERS });
   };
 
   const filtered = useMemo(() => {
@@ -635,49 +661,50 @@ export default function Employees() {
           (e.phone && String(e.phone).includes(search.trim())),
       );
     }
-    if (filterDept !== 'All Departments') list = list.filter((e) => (e.department || '').trim() === filterDept);
-    if (filterDesignation !== 'All Designations') list = list.filter((e) => (e.designation || '').trim() === filterDesignation);
-    if (filterBranch !== 'All Branches') list = list.filter((e) => (e.branch || '').trim() === filterBranch);
-    if (filterLocation !== 'All Locations') list = list.filter((e) => (e.location || '').trim() === filterLocation);
-    if (filterEmploymentType !== 'All Types') list = list.filter((e) => (e.employmentType || '').trim() === filterEmploymentType);
-    if (filterCategory !== 'All Categories') list = list.filter((e) => (e.category || '').trim() === filterCategory);
-    if (filterJoiningYear !== 'All Years') {
-      const year = Number(filterJoiningYear);
-      list = list.filter((e) => {
-        const d = toJSDate(e.joiningDate);
-        if (!d || Number.isNaN(d.getTime())) return false;
-        return d.getFullYear() === year;
-      });
-    }
+
+    const f = filters;
+    list = list.filter((emp) => {
+      if (f.department && (emp.department || '').trim() !== f.department) return false;
+      if (f.branch && (emp.branch || '').trim() !== f.branch) return false;
+      if (f.location && (emp.location || '').trim() !== f.location) return false;
+      if (f.employmentType && (emp.employmentType || '').trim() !== f.employmentType) return false;
+      if (f.category && (emp.category || '').trim() !== f.category) return false;
+      if (f.designation && (emp.designation || '').trim() !== f.designation) return false;
+      if (f.gender && (emp.gender || '') !== f.gender) return false;
+      if (f.bloodGroup && (emp.bloodGroup || '') !== f.bloodGroup) return false;
+      if (f.maritalStatus && (emp.maritalStatus || '') !== f.maritalStatus) return false;
+
+      if (f.disability === 'none') {
+        const d = (emp.disability || '').trim();
+        if (d && d !== 'None') return false;
+      } else if (f.disability && (emp.disability || '').trim() !== f.disability) {
+        return false;
+      }
+
+      if (f.reportingManager && (emp.reportingManagerName || '') !== f.reportingManager) return false;
+
+      if (f.pfApplicable === 'yes' && !emp.pfApplicable) return false;
+      if (f.pfApplicable === 'no' && emp.pfApplicable) return false;
+      if (f.esicApplicable === 'yes' && !emp.esicApplicable) return false;
+      if (f.esicApplicable === 'no' && emp.esicApplicable) return false;
+
+      const joinYear = getEmployeeJoinYear(emp);
+      if (f.joinYearFrom) {
+        if (!joinYear || joinYear < Number(f.joinYearFrom)) return false;
+      }
+      if (f.joinYearTo) {
+        if (!joinYear || joinYear > Number(f.joinYearTo)) return false;
+      }
+
+      return true;
+    });
+
     return list;
-  }, [
-    employees,
-    searchAllMode,
-    tab,
-    search,
-    filterDept,
-    filterDesignation,
-    filterBranch,
-    filterLocation,
-    filterEmploymentType,
-    filterCategory,
-    filterJoiningYear,
-  ]);
+  }, [employees, searchAllMode, tab, search, filters]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [
-    tab,
-    search,
-    filterDept,
-    filterDesignation,
-    filterBranch,
-    filterLocation,
-    filterEmploymentType,
-    filterCategory,
-    filterJoiningYear,
-    searchAllMode,
-  ]);
+  }, [tab, search, filters, searchAllMode]);
 
   const paginatedEmployees = useMemo(() => {
     const start = (currentPage - 1) * TABLE_PAGE_SIZE;
@@ -764,7 +791,7 @@ export default function Employees() {
         setSaving(false);
         return;
       }
-      const payload = {
+      const employeeData = {
         fullName: form.fullName?.trim() || null,
         email: form.email?.trim() || null,
         phone: form.phone?.trim() || null,
@@ -824,40 +851,38 @@ export default function Employees() {
         status: 'Active',
         createdAt: serverTimestamp(),
       };
-      const ref = await addDoc(collection(db, 'companies', companyId, 'employees'), payload);
-      const newEmpId = ref.id;
-      let photoURL = null;
+      const newEmpRef = await addDoc(collection(db, 'companies', companyId, 'employees'), employeeData);
+      const newEmpId = newEmpRef.id;
 
       if (newEmpPhotoSrc && !newEmpPhoto) {
         console.warn('No photo blob to upload');
       }
 
-      if (newEmpId && newEmpPhoto) {
+      if (newEmpPhoto) {
         try {
+          const { getStorage, ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
+          const { app } = await import('../firebase/config');
+          const { doc: firestoreDoc, updateDoc: firestoreUpdateDoc } = await import('firebase/firestore');
+
           const storage = getStorage(app);
-          const photoRef = ref(storage, `companies/${companyId}/employees/${newEmpId}/profile.jpg`);
-          const snapshot = await uploadBytes(photoRef, newEmpPhoto, {
-            contentType: 'image/jpeg',
-            customMetadata: {
-              empId: String(payload.empId || ''),
-              companyId: String(companyId),
-              uploadedAt: new Date().toISOString(),
-            },
-          });
-          photoURL = await getDownloadURL(snapshot.ref);
-          await updateDoc(doc(db, 'companies', companyId, 'employees', newEmpId), { photoURL });
-        } catch (err) {
-          console.error('Photo upload failed:', err);
+          const photoRef = storageRef(storage, `companies/${companyId}/employees/${newEmpId}/profile.jpg`);
+          const snapshot = await uploadBytes(photoRef, newEmpPhoto, { contentType: 'image/jpeg' });
+          const photoURL = await getDownloadURL(snapshot.ref);
+          await firestoreUpdateDoc(firestoreDoc(db, 'companies', companyId, 'employees', newEmpId), { photoURL });
+        } catch (photoErr) {
+          console.error('Photo upload failed:', photoErr);
+          showError(
+            'Employee added but photo upload failed. You can add photo from the profile.',
+          );
         }
       }
 
       await updateCompanyCounts(companyId);
-      await new Promise((r) => setTimeout(r, 200));
+      handleCloseAddModal();
+      success('Employee added successfully!');
       await fetchEmployees(true);
       fetchTotalCount();
       fetchStatsCounts();
-      success('Employee added successfully!');
-      handleCloseAddModal();
     } catch {
       showError('Failed to add employee');
     }
@@ -1019,15 +1044,17 @@ export default function Employees() {
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <button
             type="button"
-            onClick={() => setFilterOpen((o) => !o)}
-            className="inline-flex items-center gap-2 min-h-[44px] rounded-lg px-3 py-2 text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-300"
+            onClick={() => setShowFilters((o) => !o)}
+            className={`flex items-center gap-2 px-3 py-2 border rounded-xl text-sm transition-colors relative min-h-[44px] ${
+              showFilters || activeFilterCount > 0
+                ? 'border-[#1B6B6B] text-[#1B6B6B] bg-[#E8F5F5]'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-slate-500">
-              <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+            <span>⚙️</span>
             Filters
             {activeFilterCount > 0 && (
-              <span className="ml-1 inline-flex items-center justify-center rounded-full bg-[#1B6B6B] text-white px-2 py-0.5 text-[10px] font-semibold">
+              <span className="bg-[#1B6B6B] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
                 {activeFilterCount}
               </span>
             )}
@@ -1053,22 +1080,29 @@ export default function Employees() {
           </div>
         )}
 
-        {filterOpen && (
-          <div className="overflow-x-auto scrollbar-none -mx-4 px-4 lg:mx-0 lg:px-0 mb-2">
-            <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 min-w-0 lg:min-w-0">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 min-w-[min(100%,520px)] sm:min-w-0">
+        {showFilters && (
+          <div className="bg-white border border-gray-100 rounded-2xl p-5 mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-700">Filter Employees</h3>
+              <button
+                type="button"
+                onClick={() => setFilters({ ...EMPTY_EMPLOYEE_FILTERS })}
+                className="text-xs text-[#1B6B6B] hover:underline"
+              >
+                Clear all filters
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
-                <label className="block text-xs text-slate-500 mb-0.5">Department</label>
-                <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
-                  <option>All Departments</option>
-                  {departments.map((d) => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-0.5">Role / Designation</label>
-                <select value={filterDesignation} onChange={(e) => setFilterDesignation(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
-                  <option>All Designations</option>
-                  {designationFilterOptions.map((d) => (
+                <label className="text-xs text-gray-400 block mb-1">Department</label>
+                <select
+                  value={filters.department}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, department: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  {departments.map((d) => (
                     <option key={d} value={d}>
                       {d}
                     </option>
@@ -1076,16 +1110,28 @@ export default function Employees() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-0.5">Branch</label>
-                <select value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
-                  <option>All Branches</option>
-                  {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+                <label className="text-xs text-gray-400 block mb-1">Branch</label>
+                <select
+                  value={filters.branch}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, branch: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  {branches.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-0.5">Location</label>
-                <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
-                  <option value="All Locations">All Locations</option>
+                <label className="text-xs text-gray-400 block mb-1">Location</label>
+                <select
+                  value={filters.location}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, location: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
                   {locationFilterOptions.map((loc) => (
                     <option key={loc} value={loc}>
                       {loc}
@@ -1094,27 +1140,187 @@ export default function Employees() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-0.5">Employment Type</label>
-                <select value={filterEmploymentType} onChange={(e) => setFilterEmploymentType(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
-                  <option>All Types</option>
-                  {employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                <label className="text-xs text-gray-400 block mb-1">Employment Type</label>
+                <select
+                  value={filters.employmentType}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, employmentType: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  {employmentTypes.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-0.5">Category</label>
-                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
-                  <option>All Categories</option>
-                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                <label className="text-xs text-gray-400 block mb-1">Category</label>
+                <select
+                  value={filters.category}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  {categories.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-0.5">Joining Year</label>
-                <select value={filterJoiningYear} onChange={(e) => setFilterJoiningYear(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
-                  {JOINING_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+                <label className="text-xs text-gray-400 block mb-1">Designation</label>
+                <select
+                  value={filters.designation}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, designation: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  {designationFilterOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Gender</label>
+                <select
+                  value={filters.gender}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, gender: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Blood Group</label>
+                <select
+                  value={filters.bloodGroup}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, bloodGroup: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map((bg) => (
+                    <option key={bg} value={bg}>
+                      {bg}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Marital Status</label>
+                <select
+                  value={filters.maritalStatus}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, maritalStatus: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  <option value="Single">Single</option>
+                  <option value="Married">Married</option>
+                  <option value="Divorced">Divorced</option>
+                  <option value="Widowed">Widowed</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Disability</label>
+                <select
+                  value={filters.disability}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, disability: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  <option value="none">None</option>
+                  <option value="Visual Impairment">Visual Impairment</option>
+                  <option value="Hearing Impairment">Hearing Impairment</option>
+                  <option value="Physical Disability">Physical Disability</option>
+                  <option value="Intellectual Disability">Intellectual Disability</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Reporting Manager</label>
+                <select
+                  value={filters.reportingManager}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, reportingManager: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  {reportingManagerFilterOptions.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">PF Applicable</label>
+                <select
+                  value={filters.pfApplicable}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, pfApplicable: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">ESIC Applicable</label>
+                <select
+                  value={filters.esicApplicable}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, esicApplicable: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Joined From Year</label>
+                <select
+                  value={filters.joinYearFrom}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, joinYearFrom: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">Any</option>
+                  {joinYearSelectOptions.map((y) => (
+                    <option key={y} value={String(y)}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Joined To Year</label>
+                <select
+                  value={filters.joinYearTo}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, joinYearTo: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">Any</option>
+                  {joinYearSelectOptions.map((y) => (
+                    <option key={`to-${y}`} value={String(y)}>
+                      {y}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
-            </div>
+
+            {activeFilterCount > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-[#1B6B6B]">
+                  {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2754,21 +2960,19 @@ export default function Employees() {
               <button
                 type="button"
                 onClick={async () => {
-                  if (!newEmpCroppedPixels) {
-                    showError('Please adjust the crop area');
-                    return;
-                  }
+                  if (!newEmpCroppedPixels) return;
                   try {
                     const blob = await getCroppedBlob(newEmpRawSrc, newEmpCroppedPixels);
-                    const previewUrl = URL.createObjectURL(blob);
                     setNewEmpPhoto(blob);
+                    const previewUrl = URL.createObjectURL(blob);
                     setNewEmpPhotoSrc((prev) => {
                       if (prev) URL.revokeObjectURL(prev);
                       return previewUrl;
                     });
                     setNewEmpCropOpen(false);
                     setNewEmpRawSrc(null);
-                  } catch {
+                  } catch (err) {
+                    console.error('Crop failed:', err);
                     showError('Failed to crop image');
                   }
                 }}
