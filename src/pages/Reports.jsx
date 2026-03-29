@@ -1284,7 +1284,7 @@ export default function Reports() {
           <div class="print-section">
             <div class="print-section-title">Employee compensation</div>
             <table class="print-table">
-              <thead><tr><th>Emp ID</th><th>Name</th><th>Department</th><th>Annual salary</th><th>Monthly</th><th>PF</th><th>ESIC</th></tr></thead>
+              <thead><tr><th>Emp ID</th><th>Name</th><th>Department</th><th>Annual Gross Salary</th><th>Monthly</th><th>PF</th><th>ESIC</th></tr></thead>
               <tbody>
               ${[...compensationData.allEmps]
                 .sort((a, b) => (Number(b.ctcPerAnnum) || 0) - (Number(a.ctcPerAnnum) || 0))
