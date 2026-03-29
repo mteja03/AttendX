@@ -1701,7 +1701,7 @@ export default function Reports() {
 
           <div className="bg-white border border-gray-100 rounded-2xl p-5 mt-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-700">Role Vacancy Analysis</h3>
+              <h3 className="text-sm font-semibold text-gray-700">Designation Vacancy Analysis</h3>
               <div className="flex gap-3 text-xs">
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
@@ -1715,13 +1715,13 @@ export default function Reports() {
             </div>
             {roleVacancyData.length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-sm text-gray-400">No roles defined yet.</p>
+                <p className="text-sm text-gray-400">No designations defined yet.</p>
                 <button
                   type="button"
                   onClick={() => navigate(`/company/${companyId}/policies?tab=roles`)}
                   className="text-sm text-[#1B6B6B] hover:underline mt-1"
                 >
-                  Add roles in Library →
+                  Go to Library → Designations to add
                 </button>
               </div>
             ) : (

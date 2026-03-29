@@ -4363,7 +4363,7 @@ export default function EmployeeProfile() {
                   )}
                 </div>
                 <div className="col-span-2 relative" ref={editRoleDropdownRef}>
-                  <label className="block text-xs text-slate-600 mb-1">Role / Designation</label>
+                  <label className="block text-xs text-slate-600 mb-1">Designation</label>
                   <div
                     role="button"
                     tabIndex={0}
@@ -4382,7 +4382,7 @@ export default function EmployeeProfile() {
                           <p className="text-xs text-gray-400 mt-0.5">
                             {selectedEditRole.reportsTo
                               ? `Reports to ${selectedEditRole.reportsTo}`
-                              : 'Top level role'}
+                              : 'Top level designation'}
                             {selectedEditRole.salaryBand?.min != null &&
                               selectedEditRole.salaryBand?.min !== '' &&
                               ` · ₹${formatLakhs(selectedEditRole.salaryBand.min)}–${formatLakhs(selectedEditRole.salaryBand.max)}/mo`}
@@ -4392,7 +4392,7 @@ export default function EmployeeProfile() {
                     ) : form.designation ? (
                       <span className="text-gray-800">{form.designation}</span>
                     ) : (
-                      <span className="text-gray-400">Search or select role…</span>
+                      <span className="text-gray-400">Search or select designation…</span>
                     )}
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {(selectedEditRole || form.designation) && (
@@ -4416,7 +4416,7 @@ export default function EmployeeProfile() {
                         <input
                           autoFocus
                           type="text"
-                          placeholder="Search by role or reports-to…"
+                          placeholder="Search by designation or reports-to…"
                           value={editRoleSearch}
                           onChange={(e) => setEditRoleSearch(e.target.value)}
                           onClick={(e) => e.stopPropagation()}
@@ -4426,12 +4426,12 @@ export default function EmployeeProfile() {
                       <div className="overflow-y-auto max-h-52">
                         {roles.length === 0 && (
                           <div className="px-3 py-4 text-center">
-                            <p className="text-sm text-slate-400 mb-2">No roles defined yet</p>
-                            <p className="text-xs text-slate-400">Add roles in Library → Roles &amp; Responsibilities</p>
+                            <p className="text-sm text-slate-400 mb-2">No designations defined yet</p>
+                            <p className="text-xs text-slate-400">Go to Library → Designations to add</p>
                           </div>
                         )}
                         {roles.length > 0 && editModalActiveRoles.length === 0 && (
-                          <div className="px-3 py-4 text-center text-sm text-gray-400">No active roles.</div>
+                          <div className="px-3 py-4 text-center text-sm text-gray-400">No active designations.</div>
                         )}
                         {roles.length > 0 && editModalActiveRoles.length > 0 && (
                           <>
@@ -4480,7 +4480,7 @@ export default function EmployeeProfile() {
                                   <div className="flex-1 min-w-0 text-left">
                                     <p className="text-sm font-medium text-gray-900">{role.title}</p>
                                     <p className="text-xs text-gray-400 mt-0.5">
-                                      {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level role'}
+                                      {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level designation'}
                                       {role.salaryBand?.min != null &&
                                         role.salaryBand?.min !== '' &&
                                         ` · ₹${formatLakhs(role.salaryBand.min)}–${formatLakhs(role.salaryBand.max)}/mo (₹${formatLakhs(Number(role.salaryBand.min) * 12)}–${formatLakhs(Number(role.salaryBand.max) * 12)} pa)`}
@@ -4494,7 +4494,7 @@ export default function EmployeeProfile() {
                             ))}
                             {editModalFilteredRoles.length === 0 && (
                               <div className="px-3 py-4 text-center text-sm text-gray-400">
-                                No roles found.
+                                No designations found.
                                 {editRoleSearch.trim() && (
                                   <button
                                     type="button"
@@ -4767,7 +4767,7 @@ export default function EmployeeProfile() {
                           {Number(form.ctcPerAnnum) >= editRoleSalaryBand.min * 12 &&
                           Number(form.ctcPerAnnum) <= editRoleSalaryBand.max * 12
                             ? '✓ Within salary band'
-                            : '⚠ Outside salary band for this role'}
+                            : '⚠ Outside salary band for this designation'}
                         </p>
                       )}
                     </div>

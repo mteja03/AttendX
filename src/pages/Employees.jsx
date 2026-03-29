@@ -1535,7 +1535,7 @@ export default function Employees() {
 
                 <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
                   <div>
-                    <span className="text-gray-400">Role</span>
+                    <span className="text-gray-400">Designation</span>
                     <p className="text-gray-700 font-medium truncate">{emp.designation || '—'}</p>
                   </div>
                   <div>
@@ -2116,7 +2116,7 @@ export default function Employees() {
                     </select>
                   </div>
                   <div className="sm:col-span-2 relative" ref={roleDropdownRef}>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Role / Designation</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Designation</label>
                     <div
                       role="button"
                       tabIndex={0}
@@ -2133,7 +2133,7 @@ export default function Employees() {
                             <p className="text-xs text-gray-400 mt-0.5">
                               {selectedRole.reportsTo
                                 ? `Reports to ${selectedRole.reportsTo}`
-                                : 'Top level role'}
+                                : 'Top level designation'}
                               {selectedRole.salaryBand?.min != null &&
                                 selectedRole.salaryBand?.min !== '' &&
                                 ` · ₹${formatLakhs(selectedRole.salaryBand.min)}–${formatLakhs(selectedRole.salaryBand.max)}/mo`}
@@ -2141,7 +2141,7 @@ export default function Employees() {
                           </div>
                         </div>
                       ) : (
-                        <span className="text-slate-400">Select role/designation…</span>
+                        <span className="text-slate-400">Search or select designation…</span>
                       )}
                       <div className="flex items-center gap-1 flex-shrink-0">
                         {selectedRole && (
@@ -2165,7 +2165,7 @@ export default function Employees() {
                         <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
                           <input
                             autoFocus
-                            placeholder="Search by role or reports-to…"
+                            placeholder="Search by designation or reports-to…"
                             value={roleSearch}
                             onChange={(e) => setRoleSearch(e.target.value)}
                             className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]"
@@ -2175,8 +2175,8 @@ export default function Employees() {
                         <div className="overflow-y-auto max-h-52">
                           {roles.length === 0 && (
                             <div className="px-3 py-4 text-center">
-                              <p className="text-sm text-slate-400 mb-2">No roles defined yet</p>
-                              <p className="text-xs text-slate-400">Add roles in Library → Roles &amp; Responsibilities</p>
+                              <p className="text-sm text-slate-400 mb-2">No designations defined yet</p>
+                              <p className="text-xs text-slate-400">Go to Library → Designations to add</p>
                             </div>
                           )}
                           {roles
@@ -2224,7 +2224,7 @@ export default function Employees() {
                                   <div className="flex-1 min-w-0 text-left">
                                     <p className="text-sm font-medium text-gray-900">{role.title}</p>
                                     <p className="text-xs text-gray-400 mt-0.5">
-                                      {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level role'}
+                                      {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level designation'}
                                       {role.salaryBand?.min != null &&
                                         role.salaryBand?.min !== '' &&
                                         ` · ₹${formatLakhs(role.salaryBand.min)}–${formatLakhs(role.salaryBand.max)}/mo (₹${formatLakhs(Number(role.salaryBand.min) * 12)}–${formatLakhs(Number(role.salaryBand.max) * 12)} pa)`}
@@ -2236,6 +2236,17 @@ export default function Employees() {
                                 </div>
                               </div>
                             ))}
+                          {roles.filter((r) => r.isActive !== false).filter((r) => {
+                            if (!roleSearch.trim()) return true;
+                            const q = roleSearch.toLowerCase();
+                            return (
+                              (r.title || '').toLowerCase().includes(q) ||
+                              (r.reportsTo || '').toLowerCase().includes(q)
+                            );
+                          }).length === 0 &&
+                            roles.length > 0 && (
+                              <div className="px-3 py-4 text-center text-sm text-gray-400">No designations found.</div>
+                            )}
                         </div>
                       </div>
                     )}
@@ -2598,7 +2609,7 @@ export default function Employees() {
                         {Number(form.ctcPerAnnum) >= roleSalaryBand.min * 12 &&
                         Number(form.ctcPerAnnum) <= roleSalaryBand.max * 12
                           ? '✓ Within salary band'
-                          : '⚠ Outside salary band for this role'}
+                          : '⚠ Outside salary band for this designation'}
                       </p>
                     )}
                   </div>

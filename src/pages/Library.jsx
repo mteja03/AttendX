@@ -21,7 +21,7 @@ import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/print
 
 const LIBRARY_TABS = [
   { id: 'policies', label: 'Policies', icon: '📋' },
-  { id: 'roles', label: 'Roles & Responsibilities', icon: '👔' },
+  { id: 'roles', label: 'Designations', icon: '👔' },
   { id: 'guide', label: '📖 HR Guide', icon: '📖' },
 ];
 
@@ -271,7 +271,7 @@ const GUIDE_TOPICS = [
         type: 'table',
         headers: ['Tab', 'What to configure'],
         rows: [
-          ['Manage Lists', 'Departments, Branches, Locations, Employment Types, Categories, Benefits, Asset Types'],
+          ['Manage Lists', 'Departments, Branches, Locations, Designations (Library), Employment Types, Categories, Benefits, Asset Types'],
           ['Leave', 'Leave types with short codes, annual allowance per type'],
           ['Document Types', 'KYC docs, Employment docs, Education certs — Mandatory or Optional'],
           ['Onboarding', 'Task checklist template used for every new employee'],
@@ -281,6 +281,10 @@ const GUIDE_TOPICS = [
       {
         type: 'tip',
         text: 'Set up all Settings BEFORE adding employees. This ensures dropdowns, templates, and document types are ready.',
+      },
+      {
+        type: 'tip',
+        text: 'Job designations (titles, salary bands, responsibilities) are defined under Library → Designations.',
       },
       {
         type: 'rule',
@@ -1192,13 +1196,13 @@ export default function Library() {
       const techLine = (role.skills?.technical || []).map((s) => escapeHtml(s)).join(', ');
       const softLine = (role.skills?.soft || []).map((s) => escapeHtml(s)).join(', ');
       const reportsEsc = role.reportsTo ? escapeHtml(role.reportsTo) : '';
-      const roleLineMeta = reportsEsc ? `Reports to ${reportsEsc}` : 'Top level role';
+      const roleLineMeta = reportsEsc ? `Reports to ${reportsEsc}` : 'Top level designation';
 
       const inner = `
       <div class="print-highlight-card">
         <div class="print-field-label">Salary band (per month)</div>
         <div class="print-field-value" style="font-size:20px;color:#1B6B6B;margin-top:4px">₹${formatLakhs(role.salaryBand?.min)}/mo — ₹${formatLakhs(role.salaryBand?.max)}/mo (₹${formatLakhs(Number(role.salaryBand?.min || 0) * 12)} – ₹${formatLakhs(Number(role.salaryBand?.max || 0) * 12)} pa)</div>
-        <p class="print-meta" style="margin-top:8px">${roleLineMeta} · ${matchingEmps.length} employee(s) in role</p>
+        <p class="print-meta" style="margin-top:8px">${roleLineMeta} · ${matchingEmps.length} employee(s) in this designation</p>
       </div>
       <div class="print-section">
         <div class="print-section-title">Qualifications</div>
@@ -1226,8 +1230,8 @@ export default function Library() {
       }`;
 
       const html = createPrintDocument({
-        title: `${role.title} — Role Profile`,
-        subtitle: 'Role definition',
+        title: `${role.title} — Designation Profile`,
+        subtitle: 'Designation definition',
         companyName: company?.name || '',
         generatedBy: currentUser?.email || '',
         content: inner,
@@ -1318,7 +1322,7 @@ export default function Library() {
     e.preventDefault();
     if (!companyId || !currentUser?.email) return;
     if (!roleForm.title.trim()) {
-      showError('Role title is required');
+      showError('Designation title is required');
       return;
     }
     const min = Number(roleForm.salaryBand.min);
@@ -1367,20 +1371,20 @@ export default function Library() {
     try {
       if (editingRoleId) {
         await updateDoc(doc(db, 'companies', companyId, 'roles', editingRoleId), payload);
-        success('Role updated');
+        success('Designation updated');
       } else {
         await addDoc(collection(db, 'companies', companyId, 'roles'), {
           ...payload,
           createdAt: serverTimestamp(),
           createdBy: currentUser.email,
         });
-        success('Role created');
+        success('Designation created');
       }
       setShowRoleModal(false);
       setEditingRoleId(null);
     } catch (err) {
       console.error(err);
-      showError('Failed to save role');
+      showError('Failed to save designation');
     }
     setSavingRole(false);
   };
@@ -1429,7 +1433,7 @@ export default function Library() {
       <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-800">Library</h1>
-          <p className="text-sm text-gray-500 mt-1">Policies and role definitions</p>
+          <p className="text-sm text-gray-500 mt-1">Policies and designation definitions</p>
         </div>
         {libraryTab === 'policies' && canEdit && (
           <button
@@ -1557,13 +1561,13 @@ export default function Library() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
             <div>
               <p className="text-sm text-gray-500">
-                {roles.length} roles defined · {totalHeadcount} employees
+                {roles.length} designations defined · {totalHeadcount} employees
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:flex-1 sm:max-w-xl sm:ml-auto">
               <input
                 type="search"
-                placeholder="Search by role title or reports-to…"
+                placeholder="Search by designation or reports-to…"
                 value={roleSearch}
                 onChange={(e) => setRoleSearch(e.target.value)}
                 className="text-sm border border-gray-200 rounded-xl px-3 py-2 w-full min-h-[44px]"
@@ -1574,7 +1578,7 @@ export default function Library() {
                   onClick={openAddRole}
                   className="px-4 py-2 min-h-[44px] bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
                 >
-                  + Add Role
+                  + Add Designation
                 </button>
               )}
             </div>
@@ -1619,7 +1623,7 @@ export default function Library() {
                       <div className="min-w-0">
                         <h3 className="font-semibold text-gray-900">{role.title}</h3>
                         <p className="text-sm text-gray-400 mt-0.5">
-                          {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level role'}
+                          {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level designation'}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
@@ -1696,7 +1700,7 @@ export default function Library() {
                                 disabled={!canDeleteRole}
                                 title={
                                   canDeleteRole
-                                    ? 'Delete role'
+                                    ? 'Delete designation'
                                     : `Cannot delete — ${roleEmpCount} employee${roleEmpCount !== 1 ? 's' : ''} assigned`
                                 }
                                 className={`p-1.5 rounded-lg transition-colors ${
@@ -1729,7 +1733,7 @@ export default function Library() {
               <table className="w-full text-sm text-left min-w-[520px]">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                    <th className="px-4 py-3 font-semibold">Role</th>
+                    <th className="px-4 py-3 font-semibold">Designation</th>
                     <th className="px-4 py-3 font-semibold">Reports to</th>
                     <th className="px-4 py-3 font-semibold text-right">Headcount</th>
                     <th className="px-4 py-3 font-semibold">Salary band</th>
@@ -1790,7 +1794,7 @@ export default function Library() {
                               disabled={!canDeleteRole}
                               title={
                                 canDeleteRole
-                                  ? 'Delete role'
+                                  ? 'Delete designation'
                                   : `Cannot delete — ${roleEmpCount} employee${roleEmpCount !== 1 ? 's' : ''} assigned`
                               }
                               className={`p-1.5 rounded-lg align-middle transition-colors ${
@@ -1843,9 +1847,9 @@ export default function Library() {
                 >
                   <div className="flex flex-col items-center pb-8">
                     {roles.length === 0 ? (
-                      <p className="text-sm text-gray-500">No roles to display.</p>
+                      <p className="text-sm text-gray-500">No designations to display.</p>
                     ) : roleRoots.length === 0 ? (
-                      <p className="text-sm text-gray-500">No root roles — check reporting lines.</p>
+                      <p className="text-sm text-gray-500">No root designations — check reporting lines.</p>
                     ) : (
                       roleRoots.map((root) => (
                         <JobRoleNode key={root.id} node={root} employees={employees} onView={setViewingRole} />
@@ -1858,7 +1862,20 @@ export default function Library() {
           )}
 
           {rolesView !== 'architecture' && filteredRoles.length === 0 && (
-            <p className="text-center text-slate-500 py-12 text-sm">No roles match your filters.</p>
+            <div className="text-center py-12 space-y-3">
+              <p className="text-sm text-slate-500">
+                {roles.length === 0 ? 'No designations defined' : 'No designations match your filters.'}
+              </p>
+              {roles.length === 0 && canEdit && (
+                <button
+                  type="button"
+                  onClick={openAddRole}
+                  className="text-sm text-[#1B6B6B] font-medium hover:underline"
+                >
+                  Add your first designation
+                </button>
+              )}
+            </div>
           )}
         </>
       )}
@@ -2246,9 +2263,10 @@ export default function Library() {
               <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
                 <span className="text-xl">🗑️</span>
               </div>
-              <h3 className="text-base font-semibold text-gray-800 mb-1">Delete Role?</h3>
+              <h3 className="text-base font-semibold text-gray-800 mb-1">Delete Designation?</h3>
               <p className="text-sm text-gray-500">
-                Are you sure you want to delete<strong> {deletingRole.title}</strong>? This cannot be undone.
+                Are you sure you want to delete this designation?{' '}
+                <strong>{deletingRole.title}</strong> will be permanently removed. This cannot be undone.
               </p>
             </div>
 
@@ -2269,7 +2287,7 @@ export default function Library() {
                 disabled={deletingItem}
                 className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-50"
               >
-                {deletingItem ? 'Deleting...' : 'Delete Role'}
+                {deletingItem ? 'Deleting...' : 'Delete Designation'}
               </button>
             </div>
           </div>
@@ -2282,8 +2300,14 @@ export default function Library() {
           <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-3xl min-h-[50vh] max-h-[100dvh] sm:max-h-[95vh] overflow-y-auto shadow-xl p-6">
             <div className="flex justify-between items-start mb-6">
               <div>
-                <h2 className="text-lg font-semibold text-slate-800">Define Role</h2>
-                <p className="text-sm text-gray-400 mt-1">Add role details, responsibilities and compensation</p>
+                <h2 className="text-lg font-semibold text-slate-800">
+                  {editingRoleId ? 'Edit Designation' : 'Add Designation'}
+                </h2>
+                <p className="text-sm text-gray-400 mt-1">
+                  {editingRoleId
+                    ? 'Update designation details, responsibilities and compensation'
+                    : 'Add designation details, responsibilities and compensation'}
+                </p>
               </div>
               <button
                 type="button"
@@ -2300,11 +2324,11 @@ export default function Library() {
 
             <form onSubmit={handleSaveRole} className="space-y-0">
               <div className="mb-4">
-                <label className="text-xs text-gray-500 block mb-1">Role title *</label>
+                <label className="text-xs text-gray-500 block mb-1">Designation Title *</label>
                 <input
                   value={roleForm.title}
                   onChange={(e) => setRoleForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g. Sales Executive"
+                  placeholder="Designation (e.g. Software Engineer)"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
                   required
                 />
@@ -2327,7 +2351,7 @@ export default function Library() {
                         {roles.find((r) => r.id === roleForm.reportsToRoleId)?.title || '—'}
                       </span>
                     ) : (
-                      <span className="text-gray-400">None (Top level role)</span>
+                      <span className="text-gray-400">None (Top level designation)</span>
                     )}
                     <div className="flex items-center gap-1">
                       {!!roleForm.reportsToRoleId && (
@@ -2351,7 +2375,7 @@ export default function Library() {
                       <div className="p-2 border-b border-gray-100">
                         <input
                           autoFocus
-                          placeholder="Search role..."
+                          placeholder="Search designation..."
                           value={reportsToSearch}
                           onChange={(e) => setReportsToSearch(e.target.value)}
                           className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]"
@@ -2376,7 +2400,7 @@ export default function Library() {
                           }}
                           className="px-3 py-2.5 hover:bg-gray-50 cursor-pointer text-sm text-gray-400 border-b border-gray-50"
                         >
-                          None (Top level role)
+                          None (Top level designation)
                         </div>
                         {reportsToOptions
                           .filter((r) => {
@@ -2414,7 +2438,7 @@ export default function Library() {
                                 <div>
                                   <p className="text-sm font-medium text-gray-800">{role.title}</p>
                                   <p className="text-xs text-gray-400 mt-0.5">
-                                    {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level role'}
+                                    {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level designation'}
                                     {role.salaryBand?.min != null &&
                                       role.salaryBand?.min !== '' &&
                                       ` · ₹${formatLakhs(role.salaryBand.min)}–${formatLakhs(role.salaryBand.max)}/mo (₹${formatLakhs(Number(role.salaryBand.min) * 12)}–${formatLakhs(Number(role.salaryBand.max) * 12)} pa)`}
@@ -2433,7 +2457,7 @@ export default function Library() {
                             (r.reportsTo || '').toLowerCase().includes(q)
                           );
                         }).length === 0 && (
-                          <p className="text-center py-4 text-sm text-gray-400">No roles found</p>
+                          <p className="text-center py-4 text-sm text-gray-400">No designations found</p>
                         )}
                       </div>
                     </div>
@@ -2684,7 +2708,7 @@ export default function Library() {
                   disabled={savingRole}
                   className="flex-1 py-3 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium disabled:opacity-50"
                 >
-                  {savingRole ? 'Saving…' : 'Save Role'}
+                  {savingRole ? 'Saving…' : 'Save Designation'}
                 </button>
               </div>
             </form>
@@ -2704,7 +2728,7 @@ export default function Library() {
                     {viewingRole.reportsTo ? (
                       <span className="text-xs text-gray-500">Reports to {viewingRole.reportsTo}</span>
                     ) : (
-                      <span className="text-xs text-gray-500">Top level role</span>
+                      <span className="text-xs text-gray-500">Top level designation</span>
                     )}
                     <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
                       {viewingRole.currentHeadcount ?? matchingEmployeesForRole(viewingRole).filter((e) => (e.status || 'Active') === 'Active').length}{' '}
