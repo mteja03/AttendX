@@ -18,304 +18,12 @@ import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
 import { formatLakhs, toDisplayDate, toJSDate } from '../utils';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
+import { GUIDE_TOPICS } from './libraryGuideTopics';
 
 const LIBRARY_TABS = [
   { id: 'policies', label: 'Policies', icon: '📋' },
   { id: 'roles', label: 'Designations', icon: '👔' },
   { id: 'guide', label: '📖 HR Guide', icon: '📖' },
-];
-
-const GUIDE_TOPICS = [
-  {
-    id: 'employee_journey',
-    icon: '🗺️',
-    title: 'Employee Journey',
-    color: 'teal',
-    summary: 'Full lifecycle from joining to exit',
-    content: [
-      {
-        type: 'flow',
-        steps: [
-          {
-            status: 'Added',
-            color: 'teal',
-            icon: '➕',
-            desc: 'HR adds employee with joining date. Onboarding starts automatically.',
-          },
-          {
-            status: 'Active',
-            color: 'green',
-            icon: '✅',
-            desc: 'Employee works normally. Leave, assets, documents managed here.',
-          },
-          {
-            status: 'Notice Period',
-            color: 'amber',
-            icon: '⏰',
-            desc: 'HR records resignation. Notice period countdown begins. Can withdraw, buyout, or start exit tasks.',
-          },
-          {
-            status: 'Offboarding',
-            color: 'orange',
-            icon: '🚪',
-            desc: 'Exit tasks in progress. F&F settlement, asset return, documents issued.',
-          },
-          {
-            status: 'Inactive',
-            color: 'gray',
-            icon: '🔴',
-            desc: 'All tasks complete. HR clicks Complete Offboarding. Profile locked permanently.',
-          },
-        ],
-      },
-      {
-        type: 'rule',
-        title: 'Withdrawal Rule',
-        text: 'Employee can withdraw resignation ONLY during Notice Period. Once exit tasks start (Offboarding status), withdrawal is not possible.',
-      },
-      {
-        type: 'rule',
-        title: 'Rehire Rule',
-        text: 'Inactive employees can be rehired. Click Rehire Employee on their profile, enter new joining date. All previous history is preserved.',
-      },
-    ],
-  },
-  {
-    id: 'roles_access',
-    icon: '🔐',
-    title: 'Roles & Access',
-    color: 'purple',
-    summary: 'Who can do what in AttendX',
-    content: [
-      {
-        type: 'table',
-        headers: ['Action', 'Admin', 'HR Manager', 'IT Manager', 'Manager'],
-        rows: [
-          ['Add / Edit Employee', '✅', '✅', '❌', '❌'],
-          ['Delete Employee', '✅', '❌', '❌', '❌'],
-          ['Approve Leave', '✅', '✅', '❌', '✅'],
-          ['Upload Documents', '✅', '✅', '❌', '❌'],
-          ['Assign Assets', '✅', '✅', '✅', '❌'],
-          ['View Reports', '✅', '✅', '✅', '✅'],
-          ['Manage Settings', '✅', '✅', '❌', '❌'],
-          ['Add Companies', '✅', '❌', '❌', '❌'],
-          ['Manage Platform Users', '✅', '❌', '❌', '❌'],
-          ['Record Resignation', '✅', '✅', '❌', '❌'],
-          ['Upload Employee Photo', '✅', '✅', '❌', '❌'],
-        ],
-      },
-    ],
-  },
-  {
-    id: 'onboarding_guide',
-    icon: '🎯',
-    title: 'Onboarding Guide',
-    color: 'blue',
-    summary: 'How to onboard a new employee',
-    content: [
-      {
-        type: 'steps',
-        items: [
-          { step: 1, title: 'Add Employee', desc: 'Go to Employees → Add Employee. Fill in required fields. Photo is optional at this stage.' },
-          { step: 2, title: 'Start Onboarding', desc: 'Open employee profile → Onboarding tab → Start Onboarding. Tasks are auto-generated from your Settings template.' },
-          { step: 3, title: 'Complete Tasks', desc: 'HR, IT, and Admin complete their assigned tasks. Click Mark Complete on each task.' },
-          { step: 4, title: 'Track Progress', desc: 'Progress bar shows completion %. Dashboard shows employees with incomplete onboarding.' },
-          { step: 5, title: 'All Done', desc: 'When all required tasks are complete, onboarding is marked as Completed.' },
-        ],
-      },
-      {
-        type: 'rule',
-        title: 'Key Rule',
-        text: 'Onboarding can only be started for Active employees. If an employee resigns before onboarding is complete, a warning is shown but HR can still proceed with offboarding.',
-      },
-      {
-        type: 'tip',
-        text: 'Set up your onboarding template in Settings → Onboarding before adding employees. This ensures tasks are auto-generated correctly.',
-      },
-    ],
-  },
-  {
-    id: 'offboarding_guide',
-    icon: '🚪',
-    title: 'Offboarding Guide',
-    color: 'orange',
-    summary: 'How to handle employee exits',
-    content: [
-      {
-        type: 'steps',
-        items: [
-          { step: 1, title: 'Record Resignation', desc: 'Active employee → Offboarding tab → Record Resignation. Enter resignation date and notice period days. Expected last day is auto-calculated.' },
-          { step: 2, title: 'Notice Period', desc: 'Status changes to Notice Period. Progress bar tracks days elapsed. Three options available: Withdraw, Buyout, or Start Exit Tasks.' },
-          { step: 3, title: 'Start Exit Tasks', desc: 'Click Start Exit Tasks anytime during notice period. Do not wait for last day. Status changes to Offboarding.' },
-          { step: 4, title: 'Complete Tasks', desc: 'Work through exit checklist: asset return, F&F settlement, experience letter, PF withdrawal, knowledge transfer.' },
-          { step: 5, title: 'Complete Offboarding', desc: 'When all tasks done, green banner appears. Click Complete Offboarding & Mark as Inactive. Employee profile is locked.' },
-        ],
-      },
-      {
-        type: 'table',
-        headers: ['Scenario', 'Action', 'Result'],
-        rows: [
-          ['Employee changes mind', 'Withdraw Resignation', 'Back to Active'],
-          ['Company pays notice', 'Notice Buyout', 'Enter early exit date'],
-          ['Normal exit', 'Start Exit Tasks', 'Begin F&F process'],
-          ['All tasks complete', 'Complete Offboarding', 'Employee → Inactive'],
-        ],
-      },
-      {
-        type: 'rule',
-        title: 'Important',
-        text: 'Withdrawal is ONLY possible during Notice Period phase. Once exit tasks start, there is no going back.',
-      },
-    ],
-  },
-  {
-    id: 'leave_guide',
-    icon: '🏖️',
-    title: 'Leave Management',
-    color: 'pink',
-    summary: 'How to manage employee leaves',
-    content: [
-      {
-        type: 'steps',
-        items: [
-          { step: 1, title: 'Add Leave', desc: 'Leave page → Add Leave. Select employee, leave type, dates, and reason. Days are auto-calculated.' },
-          { step: 2, title: 'Approve or Reject', desc: 'Pending leaves show in the list. Click Approve or Reject. Rejected leaves require a reason.' },
-          { step: 3, title: 'Track Balance', desc: 'Leave balance is tracked per employee per leave type. View in Reports → Leave tab.' },
-        ],
-      },
-      {
-        type: 'rule',
-        title: 'Pro-ration Rule',
-        text: 'Employees who join mid-year get a pro-rated leave balance. Example: joining in July gives 6/12 of annual allowance.',
-      },
-      {
-        type: 'rule',
-        title: 'Inactive Employees',
-        text: 'Inactive employees cannot be selected in the Add Leave form. Deleted employee leave records are automatically hidden.',
-      },
-      {
-        type: 'tip',
-        text: 'Configure leave types and annual allowances in Settings → Leave before adding leave requests.',
-      },
-    ],
-  },
-  {
-    id: 'assets_guide',
-    icon: '📦',
-    title: 'Asset Management',
-    color: 'indigo',
-    summary: 'Trackable vs Consumable assets',
-    content: [
-      {
-        type: 'table',
-        headers: ['Feature', 'Trackable', 'Consumable'],
-        rows: [
-          ['Examples', 'Laptop, Mobile, ID Card', 'Stationary, SIM Cards'],
-          ['Individual tracking', '✅ Unique Asset ID', '❌ Stock quantity only'],
-          ['Assign to employee', '✅ One at a time', '✅ Issue from stock'],
-          ['Return process', '✅ Status → Available', '✅ Stock increases'],
-          ['Status tracking', 'Available / Assigned / Damaged', 'Stock / Issued'],
-        ],
-      },
-      {
-        type: 'rule',
-        title: 'Employee Exit Rule',
-        text: 'When an employee is deleted, all their assigned assets are automatically unassigned and returned to Available status. Asset return is part of the offboarding exit task checklist.',
-      },
-      {
-        type: 'tip',
-        text: 'Set up asset types in Settings → Manage Lists → Asset Types before adding assets.',
-      },
-    ],
-  },
-  {
-    id: 'documents_guide',
-    icon: '📄',
-    title: 'Documents Guide',
-    color: 'gray',
-    summary: 'Managing employee documents',
-    content: [
-      {
-        type: 'rule',
-        title: 'Google Drive Connection Required',
-        text: 'Documents are stored in Google Drive. HR must connect their Google Drive account before uploading. Drive session expires every few hours — click Refresh Session when prompted.',
-      },
-      {
-        type: 'steps',
-        items: [
-          { step: 1, title: 'Connect Drive', desc: 'Sidebar shows Drive: Connected or Drive: Session expired. Click to reconnect.' },
-          { step: 2, title: 'Upload Document', desc: 'Employee profile → Documents tab → Upload next to the document type.' },
-          { step: 3, title: 'View Document', desc: 'Click View to open in Google Drive. Documents are organised by employee automatically.' },
-          { step: 4, title: 'Track Completion', desc: 'Completion bar shows mandatory document progress. Reports → Documents shows missing docs across all employees.' },
-        ],
-      },
-      {
-        type: 'rule',
-        title: 'Inactive Employee Rule',
-        text: 'Documents for inactive employees are read-only. No upload, replace, or delete is allowed.',
-      },
-      {
-        type: 'tip',
-        text: 'Set up document types and mark Mandatory/Optional in Settings → Document Types. Mandatory documents affect the completion percentage.',
-      },
-    ],
-  },
-  {
-    id: 'settings_guide',
-    icon: '⚙️',
-    title: 'Settings Guide',
-    color: 'teal',
-    summary: 'How to configure AttendX for your company',
-    content: [
-      {
-        type: 'table',
-        headers: ['Tab', 'What to configure'],
-        rows: [
-          ['Manage Lists', 'Departments, Branches, Locations, Designations (Library), Employment Types, Categories, Benefits, Asset Types'],
-          ['Leave', 'Leave types with short codes, annual allowance per type'],
-          ['Document Types', 'KYC docs, Employment docs, Education certs — Mandatory or Optional'],
-          ['Onboarding', 'Task checklist template used for every new employee'],
-          ['Offboarding', 'Exit task checklist used for every departing employee'],
-        ],
-      },
-      {
-        type: 'tip',
-        text: 'Set up all Settings BEFORE adding employees. This ensures dropdowns, templates, and document types are ready.',
-      },
-      {
-        type: 'tip',
-        text: 'Job designations (titles, salary bands, responsibilities) are defined under Library → Designations.',
-      },
-      {
-        type: 'rule',
-        title: 'Delete Protection',
-        text: 'Items in Manage Lists cannot be deleted if they have employees assigned. Example: cannot delete Engineering department if employees belong to it.',
-      },
-    ],
-  },
-  {
-    id: 'session_guide',
-    icon: '🔐',
-    title: 'Security & Session',
-    color: 'red',
-    summary: 'Session rules and security',
-    content: [
-      {
-        type: 'steps',
-        items: [
-          { step: 1, title: 'Session Duration', desc: 'AttendX automatically signs you out after 4 hours of inactivity to protect company data.' },
-          { step: 2, title: 'Warning Banner', desc: '5 minutes before sign-out, a warning banner appears at the bottom of the screen with a countdown.' },
-          { step: 3, title: 'Stay Signed In', desc: 'Click Stay Signed In to reset the 4-hour timer. Any activity (mouse, keyboard, scroll) also resets it.' },
-          { step: 4, title: 'Google Drive Session', desc: 'Drive has a separate session. When it expires, upload buttons are disabled. Click Refresh Session to reconnect.' },
-        ],
-      },
-      {
-        type: 'rule',
-        title: 'Irreversible Actions',
-        text: 'Deleting an employee is permanent and cannot be undone. Only delete incorrect or duplicate records. Use Inactive status for employees who have left.',
-      },
-    ],
-  },
 ];
 
 const GUIDE_COLORS = {
@@ -2497,8 +2205,7 @@ export default function Library() {
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-1"
                     />
                     <p className="text-xs text-gray-400 mt-1">
-                      = ₹{formatLakhs(Number(roleForm.salaryBand.min) || 0)} / month · ₹
-                      {formatLakhs((Number(roleForm.salaryBand.min) || 0) * 12)} per annum
+                      = ₹{formatLakhs(Number(roleForm.salaryBand.min) || 0)} / month
                     </p>
                   </div>
                   <div>
@@ -2517,8 +2224,7 @@ export default function Library() {
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-1"
                     />
                     <p className="text-xs text-gray-400 mt-1">
-                      = ₹{formatLakhs(Number(roleForm.salaryBand.max) || 0)} / month · ₹
-                      {formatLakhs((Number(roleForm.salaryBand.max) || 0) * 12)} per annum
+                      = ₹{formatLakhs(Number(roleForm.salaryBand.max) || 0)} / month
                     </p>
                   </div>
                 </div>
@@ -2772,8 +2478,8 @@ export default function Library() {
                   ₹{formatLakhs(viewingRole.salaryBand?.min)}/month — ₹{formatLakhs(viewingRole.salaryBand?.max)}/month
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  (₹{formatLakhs(Number(viewingRole.salaryBand?.min || 0) * 12)} – ₹
-                  {formatLakhs(Number(viewingRole.salaryBand?.max || 0) * 12)} annually)
+                  Monthly band · annual equivalent ₹{formatLakhs(Number(viewingRole.salaryBand?.min || 0) * 12)} – ₹
+                  {formatLakhs(Number(viewingRole.salaryBand?.max || 0) * 12)}
                 </p>
               </div>
 

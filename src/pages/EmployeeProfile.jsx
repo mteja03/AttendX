@@ -254,7 +254,7 @@ const DEFAULT_OFFBOARDING_TEMPLATE = {
     { id: 'off_001', title: 'Resignation letter received', description: '', category: 'Resignation', assignedTo: 'hr', daysBefore: 30, isRequired: true, order: 1 },
     { id: 'off_002', title: 'Exit date confirmed with manager', description: '', category: 'Resignation', assignedTo: 'manager', daysBefore: 28, isRequired: true, order: 2 },
     { id: 'off_003', title: 'Handover plan created', description: '', category: 'Resignation', assignedTo: 'manager', daysBefore: 25, isRequired: true, order: 3 },
-    { id: 'off_004', title: 'Notice period terms confirmed', description: '', category: 'Resignation', assignedTo: 'hr', daysBefore: 28, isRequired: true, order: 4 },
+    { id: 'off_004', title: 'Notice Period terms confirmed', description: '', category: 'Resignation', assignedTo: 'hr', daysBefore: 28, isRequired: true, order: 4 },
 
     { id: 'off_005', title: 'Handover document prepared', description: '', category: 'Knowledge Transfer', assignedTo: 'employee', daysBefore: 14, isRequired: true, order: 5 },
     { id: 'off_006', title: 'Pending tasks documented', description: '', category: 'Knowledge Transfer', assignedTo: 'employee', daysBefore: 7, isRequired: true, order: 6 },
@@ -1941,7 +1941,7 @@ export default function EmployeeProfile() {
       return;
     }
     if (!expectedResignationLastDay) {
-      showError('Please set notice period');
+      showError('Please set Notice Period');
       return;
     }
     setSaving(true);
@@ -3090,7 +3090,7 @@ export default function EmployeeProfile() {
     const noticePrint =
       status === 'Notice Period' && employee.offboarding
         ? `<div class="print-section">
-        <div class="print-section-title">Notice period</div>
+        <div class="print-section-title">Notice Period</div>
         <div class="print-grid-2">
           <div><div class="print-field-label">Notice (days)</div><div class="print-field-value">${e(String(employee.offboarding.noticePeriodDays ?? '—'))}</div></div>
           <div><div class="print-field-label">Expected last day</div><div class="print-field-value">${e(toDisplayDate(employee.offboarding.expectedLastDay) || '—')}</div></div>
@@ -3143,14 +3143,14 @@ export default function EmployeeProfile() {
       <div class="print-section">
         <div class="print-section-title">Employment details</div>
         <div class="print-grid-2">
-          <div><div class="print-field-label">Employee ID</div><div class="print-field-value">${e(employee.empId || '—')}</div></div>
+          <div><div class="print-field-label">Emp ID</div><div class="print-field-value">${e(employee.empId || '—')}</div></div>
           <div><div class="print-field-label">Department</div><div class="print-field-value">${e(employee.department || '—')}</div></div>
           <div><div class="print-field-label">Designation</div><div class="print-field-value">${e(employee.designation || '—')}</div></div>
           <div><div class="print-field-label">Branch</div><div class="print-field-value">${e(employee.branch || '—')}</div></div>
           <div><div class="print-field-label">Location</div><div class="print-field-value">${e(employee.location || '—')}</div></div>
           <div><div class="print-field-label">Employment type</div><div class="print-field-value">${e(employee.employmentType || '—')}</div></div>
           <div><div class="print-field-label">Category</div><div class="print-field-value">${e(employee.category || '—')}</div></div>
-          <div><div class="print-field-label">Joining date</div><div class="print-field-value">${e(toDisplayDate(employee.joiningDate) || '—')}</div></div>
+          <div><div class="print-field-label">Joining Date</div><div class="print-field-value">${e(toDisplayDate(employee.joiningDate) || '—')}</div></div>
           <div><div class="print-field-label">Reporting manager</div><div class="print-field-value">${e(employee.reportingManagerName || '—')}</div></div>
         </div>
       </div>
@@ -3158,7 +3158,7 @@ export default function EmployeeProfile() {
       <div class="print-section">
         <div class="print-section-title">Compensation</div>
         <div class="print-grid-2">
-          <div><div class="print-field-label">Annual gross salary</div><div class="print-field-value">${e(ctcVal)}</div></div>
+          <div><div class="print-field-label">Annual Gross Salary</div><div class="print-field-value">${e(ctcVal)}</div></div>
           <div><div class="print-field-label">Incentive (per month)</div><div class="print-field-value">${e(incentiveVal)}</div></div>
           <div><div class="print-field-label">Basic salary</div><div class="print-field-value">${e(basicVal)}</div></div>
           <div><div class="print-field-label">HRA</div><div class="print-field-value">${e(hraVal)}</div></div>
@@ -5508,7 +5508,7 @@ export default function EmployeeProfile() {
                         <p className="text-sm text-amber-600">
                           {noticePeriodMetrics.daysRemaining > 0
                             ? `${noticePeriodMetrics.daysRemaining} days remaining`
-                            : 'Notice period completed'}
+                            : 'Notice Period completed'}
                         </p>
                       </div>
                       <span className="text-2xl font-bold text-amber-600">{noticePeriodMetrics.progressPct}%</span>
@@ -5813,7 +5813,7 @@ export default function EmployeeProfile() {
                   <div className="text-5xl mb-4">📋</div>
                   <h3 className="text-base font-semibold text-gray-700 mb-2">No resignation recorded</h3>
                   <p className="text-sm text-gray-400 mb-6 max-w-xs mx-auto">
-                    When an employee resigns, record it here to start tracking their notice period.
+                    When an employee resigns, record it here to start tracking their Notice Period.
                   </p>
                   {offPhase === 'withdrawn' && employee.offboarding?.withdrawnOn && (
                     <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl max-w-lg mx-auto">
@@ -6779,7 +6779,7 @@ export default function EmployeeProfile() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Notice period</label>
+                <label className="block text-xs text-gray-500 mb-1">Notice Period</label>
                 <select
                   value={resignForm.noticePeriodDays}
                   onChange={(e) => setResignForm((f) => ({ ...f, noticePeriodDays: Number(e.target.value) }))}
@@ -6898,7 +6898,7 @@ export default function EmployeeProfile() {
           <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold text-gray-900 mb-2">Notice Period Buyout</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Company is buying out the remaining notice period. Employee will exit earlier than planned.
+              Company is buying out the remaining Notice Period. Employee will exit earlier than planned.
             </p>
             <div className="space-y-4">
               <div>
@@ -7069,7 +7069,7 @@ export default function EmployeeProfile() {
           <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Start Exit Tasks</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Confirm last working day and exit reason. Exit checklist tasks will be generated, including asset returns.
+              Confirm last working day and exit reason. Exit Tasks will be generated, including asset returns.
             </p>
             <div className="space-y-4">
               <div>

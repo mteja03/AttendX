@@ -1399,7 +1399,7 @@ export default function Reports() {
           <div class="print-section">
             <div class="print-section-title">New joiners (last 90 days)</div>
             <table class="print-table">
-              <thead><tr><th>Name</th><th>Join date</th><th>Tenure</th><th>Onboarding %</th><th>Status</th><th>Tasks left</th></tr></thead>
+              <thead><tr><th>Name</th><th>Joining Date</th><th>Tenure</th><th>Onboarding %</th><th>Status</th><th>Tasks left</th></tr></thead>
               <tbody>
               ${newJoinersTable
                 .map(
@@ -1421,7 +1421,7 @@ export default function Reports() {
       case 'offboarding':
         content = `
           <div class="print-section">
-            <div class="print-section-title">Notice period (status: Notice Period)</div>
+            <div class="print-section-title">Notice Period (status: Notice Period)</div>
             <table class="print-table">
               <thead><tr><th>Employee</th><th>Resignation date</th><th>Last day</th><th>Days remaining</th><th>Reason</th></tr></thead>
               <tbody>
@@ -1437,12 +1437,12 @@ export default function Reports() {
                     </tr>`,
                 )
                 .join('')}
-              ${inNoticePeriodByStatus.length === 0 ? '<tr><td colspan="5">No employees in notice period</td></tr>' : ''}
+              ${inNoticePeriodByStatus.length === 0 ? '<tr><td colspan="5">No employees in Notice Period</td></tr>' : ''}
               </tbody>
             </table>
           </div>
           <div class="print-section">
-            <div class="print-section-title">Notice period (offboarding phase)</div>
+            <div class="print-section-title">Notice Period (offboarding phase)</div>
             <table class="print-table">
               <thead><tr><th>Name</th><th>Department</th><th>Resigned</th><th>Expected last day</th><th>Reason</th></tr></thead>
               <tbody>
@@ -2453,7 +2453,7 @@ export default function Reports() {
               <thead>
                 <tr className="text-left text-gray-600 border-b">
                   <th className="py-2">Name</th>
-                  <th className="py-2">Join date</th>
+                  <th className="py-2">Joining Date</th>
                   <th className="py-2">Tenure</th>
                   <th className="py-2">Onboarding %</th>
                   <th className="py-2">Status</th>
@@ -2505,7 +2505,7 @@ export default function Reports() {
               onClick={() =>
                 downloadReport(safeCompanyFile, 'Onboarding', newJoinersTable, [
                   { header: 'Name', accessor: (r) => r.e.fullName || '' },
-                  { header: 'Join Date', accessor: (r) => toDisplayDate(r.e.joiningDate) },
+                  { header: 'Joining Date', accessor: (r) => toDisplayDate(r.e.joiningDate) },
                   { header: 'Tenure', accessor: (r) => tenureLabel(r.e.joiningDate) },
                   { header: 'Onboarding %', accessor: (r) => r.pct },
                   { header: 'Status', accessor: (r) => r.status },
@@ -2521,7 +2521,7 @@ export default function Reports() {
       {activeTab === 'offboarding' && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <StatCard value={offboardingReportStats.inNotice} label="Currently in notice period" />
+            <StatCard value={offboardingReportStats.inNotice} label="Currently in Notice Period" />
             <StatCard value={offboardingReportStats.exitTasks} label="Exit tasks in progress" />
             <StatCard value={offboardingReportStats.exitsThisMonth} label="Exits this month" />
             <StatCard value={offboardingReportStats.withdrawnThisMonth} label="Withdrawn this month" />
@@ -2551,7 +2551,7 @@ export default function Reports() {
               </ResponsiveContainer>
             </ChartCard>
           </div>
-          <ChartCard title="Notice period (employee status)">
+          <ChartCard title="Notice Period (employee status)">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
@@ -2586,7 +2586,7 @@ export default function Reports() {
               )}
             </div>
           </ChartCard>
-          <ChartCard title="Notice period (offboarding phase)">
+          <ChartCard title="Notice Period (offboarding phase)">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
