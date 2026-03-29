@@ -74,9 +74,15 @@ export default function Documents() {
   const [company, setCompany] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterDept, setFilterDept] = useState('All Departments');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [filterCategory, setFilterCategory] = useState('All');
+  const [docFilters, setDocFilters] = useState({
+    department: '',
+    branch: '',
+    location: '',
+    employmentType: '',
+    completionStatus: '',
+    missingDoc: '',
+  });
+  const [showDocFilters, setShowDocFilters] = useState(false);
   const [missingAlertOpen, setMissingAlertOpen] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
 
@@ -114,11 +120,6 @@ export default function Documents() {
     [activeChecklist],
   );
 
-  const departments = useMemo(() => {
-    const set = new Set(employees.map((e) => e.department).filter(Boolean));
-    return ['All Departments', ...Array.from(set).sort()];
-  }, [employees]);
-
   const enrichedEmployees = useMemo(
     () =>
       employees.map((e) => ({
@@ -129,28 +130,37 @@ export default function Documents() {
     [employees, activeChecklist, totalMandatory],
   );
 
-  const filtered = useMemo(() => {
-    let list = enrichedEmployees;
-    if (filterDept !== 'All Departments') list = list.filter((e) => (e.department || '') === filterDept);
-    if (filterStatus === 'Complete') list = list.filter((e) => getOverallPct(e) === 100);
-    if (filterStatus === 'Incomplete')
-      list = list.filter((e) => {
-        const p = getOverallPct(e);
-        return p > 0 && p < 100;
-      });
-    if (filterStatus === 'Not Started') list = list.filter((e) => getOverallPct(e) === 0);
-    if (filterCategory !== 'All') {
-      const cat = activeChecklist.find((c) => c.category === filterCategory);
-      if (cat) {
-        const mandatoryIds = cat.documents.filter((d) => d.mandatory).map((d) => d.id);
-        list = list.filter((e) => {
-          const docByType = getDocByType(e);
-          return mandatoryIds.some((id) => !docByType[id]);
-        });
+  const getEmployeeDocCompletion = (emp) => getOverallPct(emp);
+  const getMissingMandatoryDocs = (emp) => getMissingMandatory(emp).map((d) => d.name);
+
+  const filteredDocEmployees = useMemo(() => {
+    return enrichedEmployees.filter((emp) => {
+      if (emp.status === 'Inactive') return false;
+      if (docFilters.department && emp.department !== docFilters.department) return false;
+      if (docFilters.branch && emp.branch !== docFilters.branch) return false;
+      if (docFilters.location && emp.location !== docFilters.location) return false;
+      if (docFilters.employmentType && emp.employmentType !== docFilters.employmentType) return false;
+
+      // Completion status filter
+      const completion = getEmployeeDocCompletion(emp);
+      if (docFilters.completionStatus === 'complete' && completion < 100) return false;
+      if (docFilters.completionStatus === 'incomplete' && completion >= 100) return false;
+      if (docFilters.completionStatus === 'missing_mandatory') {
+        const hasMissing = getMissingMandatoryDocs(emp).length > 0;
+        if (!hasMissing) return false;
       }
-    }
-    return list;
-  }, [enrichedEmployees, filterDept, filterStatus, filterCategory, activeChecklist]);
+      if (docFilters.completionStatus === '0' && completion > 0) return false;
+
+      // Missing specific doc filter
+      if (docFilters.missingDoc) {
+        const missing = getMissingMandatoryDocs(emp);
+        const hasMissingDoc = missing.some((d) => d.includes(docFilters.missingDoc));
+        if (!hasMissingDoc) return false;
+      }
+
+      return true;
+    });
+  }, [enrichedEmployees, docFilters]);
 
   const stats = useMemo(() => {
     const total = enrichedEmployees.length;
@@ -161,18 +171,18 @@ export default function Documents() {
   }, [enrichedEmployees]);
 
   const missingMandatoryList = useMemo(() => {
-    return enrichedEmployees
+    return filteredDocEmployees
       .map((e) => ({ emp: e, missing: getMissingMandatory(e) }))
       .filter((x) => x.missing.length > 0)
       .sort((a, b) => b.missing.length - a.missing.length);
-  }, [enrichedEmployees]);
+  }, [filteredDocEmployees]);
 
   if (!companyId) return null;
 
   const companyName = (company?.name || 'Company').replace(/\s+/g, '');
 
   const downloadDocumentReport = (format) => {
-    const rows = filtered.map((emp) => {
+    const rows = filteredDocEmployees.map((emp) => {
       const docs = emp.documents || [];
       const kycDocs = docs.filter((d) => d.category === 'KYC Documents');
       const empDocs = docs.filter((d) => d.category === 'Employment Documents');
@@ -227,6 +237,11 @@ export default function Documents() {
           <p className="text-sm text-gray-500 mt-1">Company document completion overview (Google Drive)</p>
         </div>
         <div className="relative">
+          {Object.values(docFilters).some((v) => v) && (
+            <p className="text-xs text-amber-600 mb-2">
+              ⚠️ Download will include only filtered results ({filteredDocEmployees.length} records)
+            </p>
+          )}
           <button
             type="button"
             onClick={() => setShowDownload((o) => !o)}
@@ -295,24 +310,160 @@ export default function Documents() {
             </div>
           </div>
 
-          <div className="overflow-x-auto scrollbar-none -mx-4 px-4 lg:mx-0 lg:px-0 mb-4">
-            <div className="flex gap-2 min-w-max pb-1">
-              <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 min-h-[44px] text-sm flex-shrink-0">
-                {departments.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 min-h-[44px] text-sm flex-shrink-0">
-                <option value="All">All</option>
-                <option value="Complete">Complete</option>
-                <option value="Incomplete">Incomplete</option>
-                <option value="Not Started">Not Started</option>
-              </select>
-              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 min-h-[44px] text-sm flex-shrink-0">
-                <option value="All">All</option>
-                {activeChecklist.map((c) => (
-                  <option key={c.category} value={c.category}>Missing: {c.category}</option>
-                ))}
-              </select>
-            </div>
+          <div className="mb-4">
+            <button
+              onClick={() => setShowDocFilters((v) => !v)}
+              className={`flex items-center gap-2 px-3 py-2 border rounded-xl text-sm
+              ${
+                showDocFilters || Object.values(docFilters).some((v) => v)
+                  ? 'border-[#1B6B6B] text-[#1B6B6B] bg-[#E8F5F5]'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              ⚙️ Filters
+              {Object.values(docFilters).some((v) => v) && (
+                <span className="bg-[#1B6B6B] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                  {Object.values(docFilters).filter((v) => v).length}
+                </span>
+              )}
+            </button>
+
+            {showDocFilters && (
+              <div className="bg-white border border-gray-100 rounded-2xl p-5 mb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-gray-700">Filter Documents</h3>
+                  <button
+                    onClick={() =>
+                      setDocFilters({
+                        department: '',
+                        branch: '',
+                        location: '',
+                        employmentType: '',
+                        completionStatus: '',
+                        missingDoc: '',
+                      })
+                    }
+                    className="text-xs text-[#1B6B6B] hover:underline"
+                  >
+                    Clear all
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {/* Department */}
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Department</label>
+                    <select
+                      value={docFilters.department}
+                      onChange={(e) => setDocFilters((prev) => ({ ...prev, department: e.target.value }))}
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">All Departments</option>
+                      {(company?.departments || []).map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Branch */}
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Branch</label>
+                    <select
+                      value={docFilters.branch}
+                      onChange={(e) => setDocFilters((prev) => ({ ...prev, branch: e.target.value }))}
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">All Branches</option>
+                      {(company?.branches || []).map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Location */}
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Location</label>
+                    <select
+                      value={docFilters.location}
+                      onChange={(e) => setDocFilters((prev) => ({ ...prev, location: e.target.value }))}
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">All Locations</option>
+                      {(company?.locations || []).map((l) => (
+                        <option key={l} value={l}>
+                          {l}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Employment Type */}
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Employment Type</label>
+                    <select
+                      value={docFilters.employmentType}
+                      onChange={(e) => setDocFilters((prev) => ({ ...prev, employmentType: e.target.value }))}
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">All Types</option>
+                      {(company?.employmentTypes || []).map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Completion Status */}
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Completion Status</label>
+                    <select
+                      value={docFilters.completionStatus}
+                      onChange={(e) =>
+                        setDocFilters((prev) => ({ ...prev, completionStatus: e.target.value }))
+                      }
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">All</option>
+                      <option value="complete">100% Complete</option>
+                      <option value="incomplete">Incomplete</option>
+                      <option value="missing_mandatory">Missing Mandatory Docs</option>
+                      <option value="0">0% — Not Started</option>
+                    </select>
+                  </div>
+
+                  {/* Missing Document Type */}
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Missing Document</label>
+                    <select
+                      value={docFilters.missingDoc}
+                      onChange={(e) => setDocFilters((prev) => ({ ...prev, missingDoc: e.target.value }))}
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">Any</option>
+                      <option value="PAN Card">PAN Card</option>
+                      <option value="Aadhaar Card">Aadhaar Card</option>
+                      <option value="Passport">Passport</option>
+                      <option value="Offer Letter">Offer Letter</option>
+                      <option value="Experience Letter">Experience Letter</option>
+                    </select>
+                  </div>
+                </div>
+
+                {Object.values(docFilters).some((v) => v) && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-xs text-[#1B6B6B]">
+                      {Object.values(docFilters).filter((v) => v).length} filter
+                      {Object.values(docFilters).filter((v) => v).length !== 1 ? 's' : ''} active
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="hidden lg:block overflow-x-auto border border-slate-200 rounded-xl bg-white">
@@ -330,7 +481,7 @@ export default function Documents() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((emp) => {
+                {filteredDocEmployees.map((emp) => {
                   const kyc = getCategoryStatus(emp, 'KYC Documents', activeChecklist);
                   const employment = getCategoryStatus(emp, 'Employment Documents', activeChecklist);
                   const education = getCategoryStatus(emp, 'Education Certificates', activeChecklist);
@@ -353,7 +504,7 @@ export default function Documents() {
                     </tr>
                   );
                 })}
-                {filtered.length === 0 && (
+                {filteredDocEmployees.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-slate-500">No employees match filters.</td>
                   </tr>
@@ -363,7 +514,7 @@ export default function Documents() {
           </div>
 
           <div className="lg:hidden space-y-3">
-            {filtered.map((emp) => {
+            {filteredDocEmployees.map((emp) => {
               const kyc = getCategoryStatus(emp, 'KYC Documents', activeChecklist);
               const employment = getCategoryStatus(emp, 'Employment Documents', activeChecklist);
               const education = getCategoryStatus(emp, 'Education Certificates', activeChecklist);
@@ -395,7 +546,7 @@ export default function Documents() {
                 </div>
               );
             })}
-            {filtered.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No employees match filters.</p>}
+            {filteredDocEmployees.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No employees match filters.</p>}
           </div>
 
           <div className="mt-6 border border-amber-200 rounded-xl overflow-hidden">
@@ -432,14 +583,6 @@ export default function Documents() {
                           >
                             View Documents
                           </Link>
-                          <button
-                            type="button"
-                            className="min-h-[44px] rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 active:bg-slate-100"
-                            disabled
-                            title="Coming soon"
-                          >
-                            Send Reminder
-                          </button>
                         </div>
                       </li>
                     ))}

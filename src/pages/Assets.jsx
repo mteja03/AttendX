@@ -109,8 +109,15 @@ export default function Assets() {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState('All Types');
-  const [filterStatus, setFilterStatus] = useState('All');
+  const [assetFilters, setAssetFilters] = useState({
+    assetType: '',
+    status: '',
+    mode: '',
+    assignedTo: '',
+    department: '',
+    branch: '',
+  });
+  const [showAssetFilters, setShowAssetFilters] = useState(false);
   const [assetView, setAssetView] = useState('all'); // all | trackable | consumable
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -264,46 +271,89 @@ export default function Assets() {
     return { total, trackable, consumable, assignedIssued: assignedTrackable + issuedConsumable };
   }, [assets]);
 
-  const filtered = useMemo(() => {
-    let list = assets;
+  const filteredAssets = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (term) {
-      list = list.filter((a) => {
-        const mode = a.mode || 'trackable';
-        const assignedName = mode === 'trackable' ? (a.assignedToName || '') : '';
-        const assignmentNames =
-          mode === 'consumable'
-            ? (a.assignments || []).filter((as) => !as.returned).map((as) => as.employeeName || '').join(' ')
-            : '';
-        return (
-          (a.assetId || '').toLowerCase().includes(term) ||
-          (a.name || '').toLowerCase().includes(term) ||
-          (a.serialNumber || '').toLowerCase().includes(term) ||
+
+    return assets.filter((asset) => {
+      const mode = asset.mode || 'trackable';
+      const isTrackable = mode === 'trackable';
+      const activeAssignments = !isTrackable ? (asset.assignments || []).filter((as) => !as.returned) : [];
+
+      // Search
+      if (term) {
+        const assignedName = isTrackable ? asset.assignedToName || '' : '';
+        const assignmentNames = !isTrackable ? activeAssignments.map((as) => as.employeeName || '').join(' ') : '';
+        const matchesTerm =
+          (asset.assetId || '').toLowerCase().includes(term) ||
+          (asset.name || '').toLowerCase().includes(term) ||
+          (asset.serialNumber || '').toLowerCase().includes(term) ||
           assignedName.toLowerCase().includes(term) ||
-          assignmentNames.toLowerCase().includes(term)
-        );
-      });
-    }
-    if (filterType !== 'All Types') {
-      list = list.filter((a) => (a.type || '') === filterType);
-    }
-    if (filterStatus !== 'All') {
-      list = list.filter((a) => {
-        const mode = a.mode || 'trackable';
-        if (mode === 'consumable') return false;
-        return (a.status || 'Available') === filterStatus;
-      });
-    }
-    return list;
-  }, [assets, search, filterType, filterStatus]);
+          assignmentNames.toLowerCase().includes(term);
+        if (!matchesTerm) return false;
+      }
+
+      // Spec filters
+      if (assetFilters.assetType && asset.type !== assetFilters.assetType) return false;
+
+      if (assetFilters.status) {
+        const effectiveStatus = asset.status || 'Available';
+        if (effectiveStatus !== assetFilters.status) return false;
+      }
+
+      if (assetFilters.mode) {
+        if (String(asset.mode || 'trackable').toLowerCase() !== String(assetFilters.mode).toLowerCase()) return false;
+      }
+
+      if (assetFilters.assignedTo === 'unassigned') {
+        const hasActiveAssignment = isTrackable ? !!asset.assignedToId : activeAssignments.length > 0;
+        if (hasActiveAssignment) return false;
+      }
+
+      if (assetFilters.assignedTo && assetFilters.assignedTo !== 'unassigned') {
+        const matchesAssigned =
+          isTrackable
+            ? asset.assignedToName === assetFilters.assignedTo
+            : activeAssignments.some((as) => (as.employeeName || '') === assetFilters.assignedTo);
+        if (!matchesAssigned) return false;
+      }
+
+      if (assetFilters.department) {
+        if (isTrackable) {
+          const emp = employees.find((e) => e.id === asset.assignedToId);
+          if (!emp || emp.department !== assetFilters.department) return false;
+        } else {
+          const deptMatches = activeAssignments.some((as) => {
+            const emp = employees.find((e) => e.id === as.employeeId);
+            return emp && emp.department === assetFilters.department;
+          });
+          if (!deptMatches) return false;
+        }
+      }
+
+      if (assetFilters.branch) {
+        if (isTrackable) {
+          const emp = employees.find((e) => e.id === asset.assignedToId);
+          if (!emp || emp.branch !== assetFilters.branch) return false;
+        } else {
+          const branchMatches = activeAssignments.some((as) => {
+            const emp = employees.find((e) => e.id === as.employeeId);
+            return emp && emp.branch === assetFilters.branch;
+          });
+          if (!branchMatches) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [assets, assetFilters, employees, search]);
 
   const trackableAssets = useMemo(
-    () => filtered.filter((a) => (a.mode || 'trackable') === 'trackable'),
-    [filtered],
+    () => filteredAssets.filter((a) => (a.mode || 'trackable') === 'trackable'),
+    [filteredAssets],
   );
   const consumableAssets = useMemo(
-    () => filtered.filter((a) => (a.mode || 'trackable') === 'consumable'),
-    [filtered],
+    () => filteredAssets.filter((a) => (a.mode || 'trackable') === 'consumable'),
+    [filteredAssets],
   );
 
   const resetAddForm = () => {
@@ -935,7 +985,7 @@ export default function Assets() {
 
   const downloadAssets = (format) => {
     if (!company) return;
-    const rows = filtered.map((a) => ({
+    const rows = filteredAssets.map((a) => ({
       'Asset ID': a.assetId || '',
       Name: a.name || '',
       Type: a.type || '',
@@ -981,6 +1031,11 @@ export default function Assets() {
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="relative">
+            {Object.values(assetFilters).some((v) => v) && (
+              <p className="text-xs text-amber-600 mb-2">
+                ⚠️ Download will include only filtered results ({filteredAssets.length} records)
+              </p>
+            )}
             <button
               type="button"
               onClick={() => setShowDownload((o) => !o)}
@@ -1051,47 +1106,162 @@ export default function Assets() {
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1 min-h-[44px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
           />
-          <div className="overflow-x-auto scrollbar-none -mx-1 px-1 md:mx-0 md:px-0">
-            <div className="flex gap-2 min-w-max md:min-w-0">
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="rounded-lg border border-slate-300 px-2 py-2 min-h-[44px] text-xs flex-shrink-0"
-              >
-                <option>All Types</option>
-                {assetTypes.map((t) => (
-                  <option key={t.name} value={t.name}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="rounded-lg border border-slate-300 px-2 py-2 min-h-[44px] text-xs flex-shrink-0"
-              >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              {(search || filterType !== 'All Types' || filterStatus !== 'All') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch('');
-                    setFilterType('All Types');
-                    setFilterStatus('All');
-                  }}
-                  className="text-xs text-slate-500 hover:text-slate-700 active:text-slate-900 px-3 py-2 min-h-[44px] flex-shrink-0 rounded-lg"
-                >
-                  Clear filters
-                </button>
+          <div className="flex flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowAssetFilters((v) => !v)}
+              className={`flex items-center gap-2 px-3 py-2 border rounded-xl text-sm ${
+                showAssetFilters || Object.values(assetFilters).some((v) => v)
+                  ? 'border-[#1B6B6B] text-[#1B6B6B] bg-[#E8F5F5]'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              ⚙️ Filters
+              {Object.values(assetFilters).some((v) => v) && (
+                <span className="bg-[#1B6B6B] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                  {Object.values(assetFilters).filter((v) => v).length}
+                </span>
               )}
-            </div>
+            </button>
           </div>
         </div>
+
+        {showAssetFilters && (
+          <div className="bg-white border border-gray-100 rounded-2xl p-5 mb-4 mt-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-700">Filter Assets</h3>
+              <button
+                onClick={() =>
+                  setAssetFilters({
+                    assetType: '',
+                    status: '',
+                    mode: '',
+                    assignedTo: '',
+                    department: '',
+                    branch: '',
+                  })
+                }
+                className="text-xs text-[#1B6B6B] hover:underline"
+              >
+                Clear all
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {/* Asset Type */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Asset Type</label>
+                <select
+                  value={assetFilters.assetType}
+                  onChange={(e) => setAssetFilters((prev) => ({ ...prev, assetType: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Types</option>
+                  {[...new Set(assets.map((a) => a.type).filter(Boolean))]
+                    .sort()
+                    .map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Status</label>
+                <select
+                  value={assetFilters.status}
+                  onChange={(e) => setAssetFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Available">Available</option>
+                  <option value="Assigned">Assigned</option>
+                  <option value="Damaged">Damaged</option>
+                  <option value="Lost">Lost</option>
+                </select>
+              </div>
+
+              {/* Mode */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Mode</label>
+                <select
+                  value={assetFilters.mode}
+                  onChange={(e) => setAssetFilters((prev) => ({ ...prev, mode: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All</option>
+                  <option value="Trackable">Trackable</option>
+                  <option value="Consumable">Consumable</option>
+                </select>
+              </div>
+
+              {/* Assigned To Employee */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Assigned To</label>
+                <select
+                  value={assetFilters.assignedTo}
+                  onChange={(e) => setAssetFilters((prev) => ({ ...prev, assignedTo: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">Anyone</option>
+                  <option value="unassigned">Unassigned</option>
+                  {[...new Set(assets.filter((a) => a.assignedToName).map((a) => a.assignedToName))].sort().map(
+                    (name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </div>
+
+              {/* Department of assigned employee */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Department</label>
+                <select
+                  value={assetFilters.department}
+                  onChange={(e) => setAssetFilters((prev) => ({ ...prev, department: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Departments</option>
+                  {(company?.departments || []).map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Branch */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Branch</label>
+                <select
+                  value={assetFilters.branch}
+                  onChange={(e) => setAssetFilters((prev) => ({ ...prev, branch: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Branches</option>
+                  {(company?.branches || []).map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {Object.values(assetFilters).some((v) => v) && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-[#1B6B6B]">
+                  {Object.values(assetFilters).filter((v) => v).length} filter
+                  {Object.values(assetFilters).filter((v) => v).length !== 1 ? 's' : ''} active
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="overflow-x-auto scrollbar-none -mx-1 px-1 mb-4 lg:mx-0 lg:px-0">

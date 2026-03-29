@@ -175,12 +175,17 @@ export default function Leave() {
   const [showEmpDropdown, setShowEmpDropdown] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
 
-  const [filterEmployee, setFilterEmployee] = useState('');
-  const [filterType, setFilterType] = useState('');
-  const [filterDept, setFilterDept] = useState('');
-  const [filterFrom, setFilterFrom] = useState('');
-  const [filterTo, setFilterTo] = useState('');
-  const [filterStatusDropdown, setFilterStatusDropdown] = useState('');
+  const [leaveFilters, setLeaveFilters] = useState({
+    status: '',
+    leaveType: '',
+    employeeId: '',
+    department: '',
+    branch: '',
+    location: '',
+    month: '',
+    year: new Date().getFullYear().toString(),
+  });
+  const [showLeaveFilters, setShowLeaveFilters] = useState(false);
 
   const [showDownload, setShowDownload] = useState(false);
   const [loadedYears, setLoadedYears] = useState([]);
@@ -248,38 +253,66 @@ export default function Leave() {
     return [...s].sort();
   }, [employees]);
 
+  const branches = useMemo(() => {
+    const s = new Set();
+    employees.forEach((e) => {
+      if (e.branch?.trim()) s.add(e.branch.trim());
+    });
+    return [...s].sort();
+  }, [employees]);
+
+  const locations = useMemo(() => {
+    const s = new Set();
+    employees.forEach((e) => {
+      if (e.location?.trim()) s.add(e.location.trim());
+    });
+    return [...s].sort();
+  }, [employees]);
+
   const activeEmployeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
 
-  const filteredLeaves = useMemo(
+  const activeEmployeeLeaves = useMemo(
     () => leaveList.filter((leave) => activeEmployeeIds.has(leave.employeeId)),
     [leaveList, activeEmployeeIds],
   );
 
-  const activeStatus = filterStatusDropdown || tab;
+  const filteredLeaves = useMemo(() => {
+    const activeIds = activeEmployeeIds;
+    const effectiveStatus = leaveFilters.status || (tab === 'All' ? '' : tab);
 
-  const filteredLeave = useMemo(() => {
-    return filteredLeaves.filter((l) => {
-      if (activeStatus !== 'All' && (l.status || '') !== activeStatus) return false;
-      if (filterEmployee && !(`${l.employeeName || ''}`.toLowerCase().includes(filterEmployee.toLowerCase()))) return false;
-      if (filterType && (l.leaveType || '') !== filterType) return false;
-      if (filterDept) {
-        const emp = employees.find((e) => e.id === l.employeeId);
-        if ((emp?.department || '').trim() !== filterDept) return false;
+    return activeEmployeeLeaves.filter((leave) => {
+      // Hide deleted employee leaves (defensive; activeEmployeeLeaves already does this)
+      if (!activeIds.has(leave.employeeId)) return false;
+
+      if (effectiveStatus && (leave.status || '') !== effectiveStatus) return false;
+      if (leaveFilters.leaveType && (leave.leaveType || '') !== leaveFilters.leaveType) return false;
+      if (leaveFilters.employeeId && leave.employeeId !== leaveFilters.employeeId) return false;
+
+      if (leaveFilters.department) {
+        const emp = employees.find((e) => e.id === leave.employeeId);
+        if (!emp || (emp.department || '').trim() !== leaveFilters.department) return false;
       }
-      if (filterFrom) {
-        const start = toJSDate(l.startDate);
-        const fromD = new Date(filterFrom);
-        if (!start || start < fromD) return false;
+
+      if (leaveFilters.branch) {
+        const emp = employees.find((e) => e.id === leave.employeeId);
+        if (!emp || (emp.branch || '').trim() !== leaveFilters.branch) return false;
       }
-      if (filterTo) {
-        const end = toJSDate(l.endDate);
-        const toD = new Date(filterTo);
-        toD.setHours(23, 59, 59, 999);
-        if (!end || end > toD) return false;
+
+      if (leaveFilters.location) {
+        const emp = employees.find((e) => e.id === leave.employeeId);
+        if (!emp || (emp.location || '').trim() !== leaveFilters.location) return false;
       }
+
+      if (leaveFilters.month || leaveFilters.year) {
+        const start = toJSDate(leave.startDate);
+        if (!start) return false;
+        if (leaveFilters.month && start.getMonth() + 1 !== Number(leaveFilters.month)) return false;
+        if (leaveFilters.year && start.getFullYear() !== Number(leaveFilters.year)) return false;
+      }
+
       return true;
     });
-  }, [filteredLeaves, activeStatus, filterEmployee, filterType, filterDept, filterFrom, filterTo, employees]);
+  }, [activeEmployeeLeaves, activeEmployeeIds, leaveFilters, employees, tab]);
 
   const employeeMap = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
 
@@ -317,7 +350,7 @@ export default function Leave() {
   const paidLeaveTypes = useMemo(() => leaveTypes.filter((lt) => lt.isPaid), [leaveTypes]);
 
   const leaveBalance = useMemo(() => {
-    const approved = filteredLeaves.filter((l) => l.status === 'Approved');
+    const approved = activeEmployeeLeaves.filter((l) => l.status === 'Approved');
     const byEmployee = {};
 
     const ensureRow = (id, name) => {
@@ -342,7 +375,7 @@ export default function Leave() {
     });
 
     return byEmployee;
-  }, [filteredLeaves, employees, paidLeaveTypes]);
+  }, [activeEmployeeLeaves, employees, paidLeaveTypes]);
 
   const loadPreviousCalendarYear = async () => {
     if (!companyId || loadedYears.length === 0) return;
@@ -369,7 +402,7 @@ export default function Leave() {
   };
 
   const downloadLeaveReport = (format) => {
-    const rows = filteredLeave.map((l) => ({
+    const rows = filteredLeaves.map((l) => ({
       'Employee Name': l.employeeName || '',
       'Emp ID': employees.find((e) => e.id === l.employeeId)?.empId || '',
       Department: employees.find((e) => e.id === l.employeeId)?.department || '',
@@ -509,7 +542,11 @@ export default function Leave() {
 
   if (!companyId) return null;
 
-  const filtersActive = !!(filterEmployee || filterType || filterDept || filterFrom || filterTo || filterStatusDropdown);
+  const currentYearStr = new Date().getFullYear().toString();
+  const activeLeaveFiltersCount = Object.entries(leaveFilters).filter(
+    ([k, v]) => v && !(k === 'year' && v === currentYearStr),
+  ).length;
+  const hasActiveLeaveFilters = activeLeaveFiltersCount > 0;
 
   return (
     <div className="p-4 sm:p-8">
@@ -520,6 +557,11 @@ export default function Leave() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
+            {hasActiveLeaveFilters && (
+              <p className="text-xs text-amber-600 mb-2">
+                ⚠️ Download will include only filtered results ({filteredLeaves.length} records)
+              </p>
+            )}
             <button
               type="button"
               onMouseDown={(e) => e.stopPropagation()}
@@ -630,10 +672,9 @@ export default function Leave() {
               type="button"
               onClick={() => {
                 setTab(t);
-                setFilterStatusDropdown('');
               }}
               className={`rounded-lg min-h-[44px] px-3 py-2 text-sm font-medium flex-shrink-0 active:opacity-90 ${
-                tab === t && !filterStatusDropdown ? 'bg-[#1B6B6B] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
+                tab === t ? 'bg-[#1B6B6B] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
               }`}
             >
               {t}
@@ -642,79 +683,208 @@ export default function Leave() {
         </div>
       </div>
 
-      <div className="overflow-x-auto scrollbar-none -mx-4 px-4 lg:mx-0 lg:px-0 mb-4">
-        <div className="flex gap-2 min-w-max p-3 bg-gray-50 rounded-xl border border-gray-200">
-          <input
-            placeholder="Search employee..."
-            value={filterEmployee}
-            onChange={(e) => setFilterEmployee(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] w-44 flex-shrink-0"
-          />
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] flex-shrink-0"
-          >
-            <option value="">All leave types</option>
-            {leaveTypes.map((lt) => (
-              <option key={lt.name} value={lt.name}>
-                {lt.name} ({lt.shortCode})
-                {!lt.isPaid ? ' — Unpaid' : ''}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filterDept}
-            onChange={(e) => setFilterDept(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] flex-shrink-0"
-          >
-            <option value="">All departments</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filterStatusDropdown}
-            onChange={(e) => setFilterStatusDropdown(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] flex-shrink-0"
-          >
-            <option value="">Status: use tab above</option>
-            <option value="Pending">Pending</option>
-            <option value="Approved">Approved</option>
-            <option value="Rejected">Rejected</option>
-            <option value="All">All</option>
-          </select>
-          <input
-            type="date"
-            value={filterFrom}
-            onChange={(e) => setFilterFrom(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] flex-shrink-0"
-          />
-          <input
-            type="date"
-            value={filterTo}
-            onChange={(e) => setFilterTo(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] flex-shrink-0"
-          />
-          {filtersActive && (
-            <button
-              type="button"
-              onClick={() => {
-                setFilterEmployee('');
-                setFilterType('');
-                setFilterDept('');
-                setFilterFrom('');
-                setFilterTo('');
-                setFilterStatusDropdown('');
-              }}
-              className="text-sm text-red-500 hover:text-red-700 active:text-red-800 px-3 py-2 min-h-[44px] flex-shrink-0 rounded-lg"
-            >
-              Clear filters
-            </button>
+      <div className="mb-4">
+        <button
+          onClick={() => setShowLeaveFilters((v) => !v)}
+          className={`flex items-center gap-2 px-3 py-2 border rounded-xl text-sm ${
+            showLeaveFilters || hasActiveLeaveFilters
+              ? 'border-[#1B6B6B] text-[#1B6B6B] bg-[#E8F5F5]'
+              : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          ⚙️ Filters
+          {hasActiveLeaveFilters && (
+            <span className="bg-[#1B6B6B] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+              {activeLeaveFiltersCount}
+            </span>
           )}
-        </div>
+        </button>
+
+        {showLeaveFilters && (
+          <div className="bg-white border border-gray-100 rounded-2xl p-5 mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-700">Filter Leave</h3>
+              <button
+                onClick={() =>
+                  setLeaveFilters({
+                    status: '',
+                    leaveType: '',
+                    employeeId: '',
+                    department: '',
+                    branch: '',
+                    location: '',
+                    month: '',
+                    year: currentYearStr,
+                  })
+                }
+                className="text-xs text-[#1B6B6B] hover:underline"
+              >
+                Clear all
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {/* Status */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Status</label>
+                <select
+                  value={leaveFilters.status}
+                  onChange={(e) => setLeaveFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </div>
+
+              {/* Leave Type */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Leave Type</label>
+                <select
+                  value={leaveFilters.leaveType}
+                  onChange={(e) => setLeaveFilters((prev) => ({ ...prev, leaveType: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Types</option>
+                  {leaveTypes.map((lt) => (
+                    <option key={lt.id || lt.name} value={lt.name}>
+                      {lt.name} ({lt.shortCode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Employee */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Employee</label>
+                <select
+                  value={leaveFilters.employeeId}
+                  onChange={(e) => setLeaveFilters((prev) => ({ ...prev, employeeId: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Employees</option>
+                  {employees
+                    .filter((e) => (e.status || 'Active') !== 'Inactive')
+                    .sort((a, b) => a.fullName.localeCompare(b.fullName))
+                    .map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.fullName}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Department */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Department</label>
+                <select
+                  value={leaveFilters.department}
+                  onChange={(e) => setLeaveFilters((prev) => ({ ...prev, department: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Departments</option>
+                  {departments.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Branch */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Branch</label>
+                <select
+                  value={leaveFilters.branch}
+                  onChange={(e) => setLeaveFilters((prev) => ({ ...prev, branch: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Branches</option>
+                  {branches.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Location</label>
+                <select
+                  value={leaveFilters.location}
+                  onChange={(e) => setLeaveFilters((prev) => ({ ...prev, location: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Locations</option>
+                  {locations.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Month */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Month</label>
+                <select
+                  value={leaveFilters.month}
+                  onChange={(e) => setLeaveFilters((prev) => ({ ...prev, month: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Months</option>
+                  {[
+                    'January',
+                    'February',
+                    'March',
+                    'April',
+                    'May',
+                    'June',
+                    'July',
+                    'August',
+                    'September',
+                    'October',
+                    'November',
+                    'December',
+                  ].map((m, i) => (
+                    <option key={m} value={i + 1}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Year */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Year</label>
+                <select
+                  value={leaveFilters.year}
+                  onChange={(e) => setLeaveFilters((prev) => ({ ...prev, year: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Years</option>
+                  {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {Object.values(leaveFilters).some((v) => v && v !== currentYearStr) && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-[#1B6B6B]">
+                  {Object.values(leaveFilters).filter((v) => v && v !== currentYearStr).length} filter
+                  {Object.values(leaveFilters).filter((v) => v && v !== currentYearStr).length !== 1 ? 's' : ''} active
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -736,7 +906,7 @@ export default function Leave() {
                 </tr>
               </thead>
               <tbody>
-                {filteredLeave.map((l) => (
+                {filteredLeaves.map((l) => (
                   <tr key={l.id} className="border-t border-slate-100">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
@@ -796,7 +966,7 @@ export default function Leave() {
                     </td>
                   </tr>
                 ))}
-                {filteredLeave.length === 0 && (
+                {filteredLeaves.length === 0 && (
                   <tr>
                     <td className="px-4 py-8 text-center text-slate-500" colSpan={8}>
                       No leave requests.
@@ -808,7 +978,7 @@ export default function Leave() {
           </div>
 
           <div className="lg:hidden space-y-3">
-            {filteredLeave.map((leave) => (
+            {filteredLeaves.map((leave) => (
               <div key={leave.id} className="bg-white border border-gray-100 rounded-2xl p-4 mb-3 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -870,7 +1040,7 @@ export default function Leave() {
                 )}
               </div>
             ))}
-            {filteredLeave.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No leave requests.</p>}
+            {filteredLeaves.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No leave requests.</p>}
             {loadedYears.length > 0 && Math.min(...loadedYears) > 2000 && (
               <button
                 type="button"
