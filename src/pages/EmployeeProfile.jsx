@@ -97,7 +97,6 @@ function sanitizeForFirestore(obj) {
 }
 
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
-const DEFAULT_DESIGNATIONS = ['Director', 'General Manager', 'Manager', 'Assistant Manager', 'Team Lead', 'Senior Executive', 'Executive', 'Junior Executive', 'Intern', 'Other'];
 const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
 const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
 const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
@@ -688,6 +687,9 @@ export default function EmployeeProfile() {
   const [locationSearch, setLocationSearch] = useState('');
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const locationDropdownRef = useRef(null);
+  const [editRoleSearch, setEditRoleSearch] = useState('');
+  const [showEditRoleDropdown, setShowEditRoleDropdown] = useState(false);
+  const editRoleDropdownRef = useRef(null);
   const [assetList, setAssetList] = useState([]);
   const [showAssignAssetModal, setShowAssignAssetModal] = useState(false);
   const [showProfileAssignModal, setShowProfileAssignModal] = useState(null); // trackable assign or consumable issue
@@ -801,8 +803,18 @@ export default function EmployeeProfile() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [showLocationDropdown]);
 
+  useEffect(() => {
+    if (!showEditRoleDropdown) return undefined;
+    const onDown = (e) => {
+      if (editRoleDropdownRef.current && !editRoleDropdownRef.current.contains(e.target)) {
+        setShowEditRoleDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showEditRoleDropdown]);
+
   const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
-  const designations = company?.designations?.length ? company.designations : DEFAULT_DESIGNATIONS;
   const employmentTypes = company?.employmentTypes?.length ? company.employmentTypes : DEFAULT_EMPLOYMENT_TYPES;
   const branches = company?.branches?.length ? company.branches : DEFAULT_BRANCHES;
   const qualifications = company?.qualifications?.length ? company.qualifications : DEFAULT_QUALIFICATIONS;
@@ -934,20 +946,21 @@ export default function EmployeeProfile() {
   }, [showEditModal, companyId]);
 
   useEffect(() => {
-    if (!showEditModal || !companyId) return;
+    if (!companyId) return;
     let cancelled = false;
     (async () => {
       try {
         const snap = await getDocs(collection(db, 'companies', companyId, 'roles'));
         if (!cancelled) setRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch {
+      } catch (e) {
+        console.error('Failed to fetch roles:', e);
         if (!cancelled) setRoles([]);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [showEditModal, companyId]);
+  }, [companyId]);
 
   const editRoleSalaryBand = useMemo(() => {
     if (!form?.designation) return null;
@@ -958,6 +971,31 @@ export default function EmployeeProfile() {
       max: Number(role.salaryBand.max),
     };
   }, [form?.designation, roles]);
+
+  const selectedEditRole = useMemo(() => {
+    if (!form?.designation) return null;
+    if (form.designationRoleId) {
+      const byId = roles.find((r) => r.id === form.designationRoleId);
+      if (byId) return byId;
+    }
+    return roles.find((r) => r.title === form.designation) || null;
+  }, [form?.designation, form?.designationRoleId, roles]);
+
+  const editModalActiveRoles = useMemo(
+    () => roles.filter((r) => r.isActive !== false),
+    [roles],
+  );
+
+  const editModalFilteredRoles = useMemo(() => {
+    const q = (editRoleSearch || '').trim().toLowerCase();
+    return editModalActiveRoles.filter((r) => {
+      if (!q) return true;
+      return (
+        (r.title || '').toLowerCase().includes(q) ||
+        (r.reportsTo || '').toLowerCase().includes(q)
+      );
+    });
+  }, [editModalActiveRoles, editRoleSearch]);
 
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab');
@@ -1167,6 +1205,7 @@ export default function EmployeeProfile() {
       branch: employee.branch || '',
       location: employee.location || '',
       designation: employee.designation || '',
+      designationRoleId: employee.designationRoleId || '',
       employmentType: employee.employmentType || 'Full-time',
       category: employee.category || '',
       joiningDate: toDateString(employee.joiningDate),
@@ -1205,6 +1244,8 @@ export default function EmployeeProfile() {
     });
     setLocationSearch('');
     setShowLocationDropdown(false);
+    setEditRoleSearch('');
+    setShowEditRoleDropdown(false);
     setShowEditModal(true);
   };
 
@@ -1277,6 +1318,7 @@ export default function EmployeeProfile() {
         branch: form.branch || null,
         location: form.location?.trim() || null,
         designation: form.designation || null,
+        designationRoleId: form.designationRoleId || null,
         employmentType: form.employmentType || 'Full-time',
         category: form.category || null,
         qualification: form.qualification || null,
@@ -1326,6 +1368,8 @@ export default function EmployeeProfile() {
       setManagerSearch('');
       setShowLocationDropdown(false);
       setLocationSearch('');
+      setEditRoleSearch('');
+      setShowEditRoleDropdown(false);
       success('Employee updated');
     } catch {
       showError('Failed to update');
@@ -4318,7 +4362,171 @@ export default function EmployeeProfile() {
                     </div>
                   )}
                 </div>
-                <div><label className="block text-xs text-slate-600 mb-1">Designation</label><select value={form.designation} onChange={(e) => setForm((p) => ({ ...p, designation: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{designations.map((d) => <option key={d} value={d}>{d}</option>)}{!designations.includes('Other') && <option value="Other">Other</option>}</select></div>
+                <div className="col-span-2 relative" ref={editRoleDropdownRef}>
+                  <label className="block text-xs text-slate-600 mb-1">Role / Designation</label>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setShowEditRoleDropdown(true)}
+                    onKeyDown={(ev) => {
+                      if (ev.key === 'Enter' || ev.key === ' ') setShowEditRoleDropdown(true);
+                    }}
+                    className={`w-full border rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px] ${
+                      showEditRoleDropdown ? 'border-[#1B6B6B]' : 'border-gray-200'
+                    }`}
+                  >
+                    {selectedEditRole ? (
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="min-w-0 text-left">
+                          <p className="text-sm font-medium text-gray-900">{selectedEditRole.title}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {selectedEditRole.reportsTo
+                              ? `Reports to ${selectedEditRole.reportsTo}`
+                              : 'Top level role'}
+                            {selectedEditRole.salaryBand?.min != null &&
+                              selectedEditRole.salaryBand?.min !== '' &&
+                              ` · ₹${formatLakhs(selectedEditRole.salaryBand.min)}–${formatLakhs(selectedEditRole.salaryBand.max)}/mo`}
+                          </p>
+                        </div>
+                      </div>
+                    ) : form.designation ? (
+                      <span className="text-gray-800">{form.designation}</span>
+                    ) : (
+                      <span className="text-gray-400">Search or select role…</span>
+                    )}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {(selectedEditRole || form.designation) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setForm((prev) => ({ ...prev, designation: '', designationRoleId: '' }));
+                          }}
+                          className="text-slate-400 hover:text-slate-600 text-xs"
+                        >
+                          ✕
+                        </button>
+                      )}
+                      <span className="text-gray-400 text-xs">▾</span>
+                    </div>
+                  </div>
+                  {showEditRoleDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-[60] max-h-64 overflow-hidden">
+                      <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
+                        <input
+                          autoFocus
+                          type="text"
+                          placeholder="Search by role or reports-to…"
+                          value={editRoleSearch}
+                          onChange={(e) => setEditRoleSearch(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#1B6B6B]"
+                        />
+                      </div>
+                      <div className="overflow-y-auto max-h-52">
+                        {roles.length === 0 && (
+                          <div className="px-3 py-4 text-center">
+                            <p className="text-sm text-slate-400 mb-2">No roles defined yet</p>
+                            <p className="text-xs text-slate-400">Add roles in Library → Roles &amp; Responsibilities</p>
+                          </div>
+                        )}
+                        {roles.length > 0 && editModalActiveRoles.length === 0 && (
+                          <div className="px-3 py-4 text-center text-sm text-gray-400">No active roles.</div>
+                        )}
+                        {roles.length > 0 && editModalActiveRoles.length > 0 && (
+                          <>
+                            <div
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setForm((prev) => ({ ...prev, designation: '', designationRoleId: '' }));
+                                setShowEditRoleDropdown(false);
+                                setEditRoleSearch('');
+                              }}
+                              className="px-3 py-2 text-xs text-gray-400 hover:bg-gray-50 cursor-pointer border-b border-gray-50"
+                            >
+                              — Clear selection
+                            </div>
+                            {editModalFilteredRoles.map((role) => (
+                              <div
+                                key={role.id}
+                                role="button"
+                                tabIndex={0}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    designation: role.title || '',
+                                    designationRoleId: role.id,
+                                  }));
+                                  setShowEditRoleDropdown(false);
+                                  setEditRoleSearch('');
+                                }}
+                                onKeyDown={(ev) => {
+                                  if (ev.key === 'Enter' || ev.key === ' ') {
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      designation: role.title || '',
+                                      designationRoleId: role.id,
+                                    }));
+                                    setShowEditRoleDropdown(false);
+                                    setEditRoleSearch('');
+                                  }
+                                }}
+                                className={`px-3 py-3 hover:bg-[#E8F5F5] cursor-pointer border-b border-slate-50 last:border-0 transition-colors ${
+                                  selectedEditRole?.id === role.id ? 'bg-[#E8F5F5]' : ''
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex-1 min-w-0 text-left">
+                                    <p className="text-sm font-medium text-gray-900">{role.title}</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                      {role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level role'}
+                                      {role.salaryBand?.min != null &&
+                                        role.salaryBand?.min !== '' &&
+                                        ` · ₹${formatLakhs(role.salaryBand.min)}–${formatLakhs(role.salaryBand.max)}/mo (₹${formatLakhs(Number(role.salaryBand.min) * 12)}–${formatLakhs(Number(role.salaryBand.max) * 12)} pa)`}
+                                    </p>
+                                  </div>
+                                  {selectedEditRole?.id === role.id && (
+                                    <span className="text-[#1B6B6B] flex-shrink-0">✓</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                            {editModalFilteredRoles.length === 0 && (
+                              <div className="px-3 py-4 text-center text-sm text-gray-400">
+                                No roles found.
+                                {editRoleSearch.trim() && (
+                                  <button
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      setForm((prev) => ({
+                                        ...prev,
+                                        designation: editRoleSearch.trim(),
+                                        designationRoleId: '',
+                                      }));
+                                      setShowEditRoleDropdown(false);
+                                      setEditRoleSearch('');
+                                    }}
+                                    className="block mx-auto mt-2 text-xs text-[#1B6B6B] underline"
+                                  >
+                                    Use &quot;{editRoleSearch.trim()}&quot; as designation
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {selectedEditRole?.salaryBand?.min != null && selectedEditRole.salaryBand.min !== '' && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Band: ₹{formatLakhs(Number(selectedEditRole.salaryBand.min))}/mo — ₹
+                      {formatLakhs(Number(selectedEditRole.salaryBand.max))}/mo
+                    </p>
+                  )}
+                </div>
                 <div><label className="block text-xs text-slate-600 mb-1">Employment Type</label><select value={form.employmentType} onChange={(e) => setForm((p) => ({ ...p, employmentType: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}{!employmentTypes.includes('Other') && <option value="Other">Other</option>}</select></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Category</label><select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}{!categories.includes('Other') && <option value="Other">Other</option>}</select></div>
                 <div><label className="block text-xs text-slate-600 mb-1">Highest Qualification</label><select value={form.qualification} onChange={(e) => setForm((p) => ({ ...p, qualification: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">—</option>{qualifications.map((q) => <option key={q} value={q}>{q}</option>)}{!qualifications.includes('Other') && <option value="Other">Other</option>}</select></div>
@@ -4802,6 +5010,8 @@ export default function EmployeeProfile() {
                     setShowEditModal(false);
                     setShowLocationDropdown(false);
                     setLocationSearch('');
+                    setEditRoleSearch('');
+                    setShowEditRoleDropdown(false);
                   }}
                   className="text-slate-500 text-sm"
                 >
