@@ -174,41 +174,6 @@ function sanitizeCustomBenefitsForSave(raw) {
     .filter((b) => b.name || b.value || b.notes);
 }
 
-/** Annual CTC vs role salary band (monthly min/max × 12) — guideline only, not blocking save */
-function validateCTC(ctcValue, role) {
-  if (!role?.salaryBand || role.salaryBand.min === '' || role.salaryBand.min == null) return null;
-  const str = ctcValue != null ? String(ctcValue).trim() : '';
-  if (!str) return null;
-  const annualCTC = Number(str);
-  if (Number.isNaN(annualCTC)) return null;
-  const monthlyMin = Number(role.salaryBand.min);
-  const monthlyMax = Number(role.salaryBand.max);
-  const title = role.title || 'this role';
-  if (Number.isNaN(monthlyMin)) return null;
-  const annualMin = monthlyMin * 12;
-  const maxOk = !Number.isNaN(monthlyMax) && role.salaryBand.max !== '' && role.salaryBand.max != null;
-  const annualMax = maxOk ? monthlyMax * 12 : null;
-
-  if (annualCTC < annualMin) {
-    return {
-      type: 'warning',
-      message: `⚠️ Annual salary ₹${formatLakhs(annualCTC)} is below ${title} band (₹${formatLakhs(annualMin)} – ${
-        annualMax != null ? `₹${formatLakhs(annualMax)}` : '—'
-      } per annum)`,
-    };
-  }
-  if (annualMax != null && annualCTC > annualMax) {
-    return {
-      type: 'warning',
-      message: `⚠️ Annual salary ₹${formatLakhs(annualCTC)} is above ${title} band (₹${formatLakhs(annualMin)} – ₹${formatLakhs(annualMax)} per annum)`,
-    };
-  }
-  return {
-    type: 'success',
-    message: `✓ Salary within ${title} band`,
-  };
-}
-
 const initialForm = {
   fullName: '',
   email: '',
@@ -321,7 +286,6 @@ export default function Employees() {
   const [roleSearch, setRoleSearch] = useState('');
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
-  const [ctcValidation, setCtcValidation] = useState(null);
   const roleDropdownRef = useRef(null);
   const locationDropdownRef = useRef(null);
   const [locationSearch, setLocationSearch] = useState('');
@@ -344,6 +308,16 @@ export default function Employees() {
     };
     fetchRoles();
   }, [companyId]);
+
+  const roleSalaryBand = useMemo(() => {
+    if (!form.designation) return null;
+    const role = roles.find((r) => r.title === form.designation);
+    if (!role?.salaryBand || role.salaryBand.min === '' || role.salaryBand.min == null) return null;
+    return {
+      min: Number(role.salaryBand.min),
+      max: Number(role.salaryBand.max),
+    };
+  }, [form.designation, roles]);
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -730,7 +704,6 @@ export default function Employees() {
     setShowRoleDropdown(false);
     setManagerSearch('');
     setShowManagerDropdown(false);
-    setCtcValidation(null);
     setLocationSearch('');
     setShowLocationDropdown(false);
   };
@@ -741,10 +714,6 @@ export default function Employees() {
     if (formErrors[name]) setFormErrors((prev) => ({ ...prev, [name]: null }));
     if (formWarnings[name]) setFormWarnings((prev) => ({ ...prev, [name]: null }));
   };
-
-  useEffect(() => {
-    setCtcValidation(validateCTC(form.ctcPerAnnum, selectedRole));
-  }, [selectedRole, form.ctcPerAnnum]);
 
   const validate = () => {
     const err = {};
@@ -858,12 +827,16 @@ export default function Employees() {
       const ref = await addDoc(collection(db, 'companies', companyId, 'employees'), payload);
       const newEmpId = ref.id;
       let photoURL = null;
-      const photoBlob = newEmpPhoto;
-      if (photoBlob && newEmpId) {
+
+      if (newEmpPhotoSrc && !newEmpPhoto) {
+        console.warn('No photo blob to upload');
+      }
+
+      if (newEmpId && newEmpPhoto) {
         try {
           const storage = getStorage(app);
           const photoRef = ref(storage, `companies/${companyId}/employees/${newEmpId}/profile.jpg`);
-          const snapshot = await uploadBytes(photoRef, photoBlob, {
+          const snapshot = await uploadBytes(photoRef, newEmpPhoto, {
             contentType: 'image/jpeg',
             customMetadata: {
               empId: String(payload.empId || ''),
@@ -877,20 +850,14 @@ export default function Employees() {
           console.error('Photo upload failed:', err);
         }
       }
+
       await updateCompanyCounts(companyId);
-      setEmployees((prev) => [
-        {
-          id: newEmpId,
-          ...payload,
-          createdAt: new Date(),
-          ...(photoURL ? { photoURL } : {}),
-        },
-        ...prev,
-      ]);
-      setTotalCount((c) => c + 1);
+      await new Promise((r) => setTimeout(r, 200));
+      await fetchEmployees(true);
+      fetchTotalCount();
       fetchStatsCounts();
+      success('Employee added successfully!');
       handleCloseAddModal();
-      success('Employee added');
     } catch {
       showError('Failed to add employee');
     }
@@ -1987,14 +1954,6 @@ export default function Employees() {
                         <span className="text-slate-400 text-xs">▾</span>
                       </div>
                     </div>
-                    {selectedRole?.salaryBand?.min != null && selectedRole?.salaryBand?.min !== '' && (
-                      <div className="mt-1.5 text-xs text-[#1B6B6B] bg-[#E8F5F5] px-3 py-1.5 rounded-lg">
-                        💰 Salary band for this role: ₹{formatLakhs(selectedRole.salaryBand.min)} – ₹
-                        {formatLakhs(selectedRole.salaryBand.max)} per month (₹
-                        {formatLakhs(Number(selectedRole.salaryBand.min) * 12)} – ₹
-                        {formatLakhs(Number(selectedRole.salaryBand.max) * 12)} per annum)
-                      </div>
-                    )}
                     {showRoleDropdown && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-[60] max-h-64 overflow-hidden">
                         <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
@@ -2319,29 +2278,63 @@ export default function Employees() {
                   <span className="text-base">💰</span>
                   Compensation
                 </h3>
+                {form.designation && roleSalaryBand && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl mb-4">
+                    <p className="text-xs text-blue-700 font-medium">
+                      💼 Salary band for <strong>{form.designation}</strong>: ₹{formatLakhs(roleSalaryBand.min)}/mo — ₹
+                      {formatLakhs(roleSalaryBand.max)}/mo (₹{formatLakhs(roleSalaryBand.min * 12)}—₹
+                      {formatLakhs(roleSalaryBand.max * 12)} p.a.)
+                    </p>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Annual Gross Salary</label>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Basic Salary (per month) ₹</label>
                     <input
                       type="number"
-                      min="0"
-                      name="ctcPerAnnum"
-                      value={form.ctcPerAnnum}
-                      onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      placeholder="0"
+                      value={form.basicSalary || ''}
+                      onChange={(e) => {
+                        const basic = Number(e.target.value);
+                        const hra = Number(form.hra) || 0;
+                        const incentive = Number(form.incentive) || 0;
+                        const annual = (basic + hra + incentive) * 12;
+                        setForm((prev) => ({
+                          ...prev,
+                          basicSalary: e.target.value,
+                          ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum,
+                        }));
+                      }}
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-slate-300"
                     />
-                    {ctcValidation && (
-                      <div
-                        className={`flex items-center gap-2 mt-1.5 px-3 py-1.5 rounded-lg text-xs ${
-                          ctcValidation.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-                        }`}
-                      >
-                        {ctcValidation.message}
-                      </div>
-                    )}
-                    {selectedRole?.salaryBand?.min != null && selectedRole?.salaryBand?.min !== '' && (
-                      <p className="text-xs text-gray-400 mt-1.5">This is a guideline, not a restriction.</p>
-                    )}
+                    {form.basicSalary ? (
+                      <p className="text-xs text-gray-400 mt-1">
+                        = ₹{formatLakhs(Number(form.basicSalary) * 12)} per annum
+                      </p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">HRA (per month) ₹</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={form.hra || ''}
+                      onChange={(e) => {
+                        const hra = Number(e.target.value);
+                        const basic = Number(form.basicSalary) || 0;
+                        const incentive = Number(form.incentive) || 0;
+                        const annual = (basic + hra + incentive) * 12;
+                        setForm((prev) => ({
+                          ...prev,
+                          hra: e.target.value,
+                          ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum,
+                        }));
+                      }}
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-slate-300"
+                    />
+                    {form.hra ? (
+                      <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.hra) * 12)} per annum</p>
+                    ) : null}
                   </div>
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-medium text-slate-600 mb-1">Incentive (per month)</label>
@@ -2351,7 +2344,17 @@ export default function Employees() {
                       name="incentive"
                       placeholder="0"
                       value={form.incentive}
-                      onChange={handleFormChange}
+                      onChange={(e) => {
+                        const incentive = Number(e.target.value);
+                        const basic = Number(form.basicSalary) || 0;
+                        const hra = Number(form.hra) || 0;
+                        const annual = (basic + hra + incentive) * 12;
+                        setForm((prev) => ({
+                          ...prev,
+                          incentive: e.target.value,
+                          ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum,
+                        }));
+                      }}
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
                     />
                     {form.incentive !== '' && form.incentive != null && !Number.isNaN(Number(form.incentive)) && Number(form.incentive) !== 0 && (
@@ -2360,13 +2363,38 @@ export default function Employees() {
                       </p>
                     )}
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Basic Salary / month</label>
-                    <input type="number" min="0" name="basicSalary" value={form.basicSalary} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">HRA / month</label>
-                    <input type="number" min="0" name="hra" value={form.hra} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
+                  <div className="sm:col-span-2">
+                    <label className="text-xs text-gray-500 block mb-1.5">
+                      Annual Gross Salary ₹
+                      <span className="text-gray-300 ml-1 font-normal">(auto-calculated · editable)</span>
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Auto-calculated from above"
+                      value={form.ctcPerAnnum || ''}
+                      onChange={(e) => setForm((prev) => ({ ...prev, ctcPerAnnum: e.target.value }))}
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-slate-300"
+                    />
+                    {form.ctcPerAnnum ? (
+                      <p className="text-xs text-gray-400 mt-1">
+                        = ₹{formatLakhs(Number(form.ctcPerAnnum) / 12)} per month
+                      </p>
+                    ) : null}
+                    {form.ctcPerAnnum && roleSalaryBand && (
+                      <p
+                        className={`text-xs mt-1 font-medium ${
+                          Number(form.ctcPerAnnum) >= roleSalaryBand.min * 12 &&
+                          Number(form.ctcPerAnnum) <= roleSalaryBand.max * 12
+                            ? 'text-green-600'
+                            : 'text-amber-600'
+                        }`}
+                      >
+                        {Number(form.ctcPerAnnum) >= roleSalaryBand.min * 12 &&
+                        Number(form.ctcPerAnnum) <= roleSalaryBand.max * 12
+                          ? '✓ Within salary band'
+                          : '⚠ Outside salary band for this role'}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

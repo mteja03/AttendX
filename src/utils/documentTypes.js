@@ -72,3 +72,30 @@ export function acceptsFile(docType, fileName) {
   if (!accepts.length) return true;
   return accepts.some((a) => a.trim().toLowerCase() === ext);
 }
+
+/** Settings UI: sections with editable names; persisted under companies/.../settings/documentTypes */
+export function documentTypesToSections(legacy) {
+  const list = Array.isArray(legacy) && legacy.length > 0 ? legacy : DOCUMENT_CHECKLIST;
+  return list.map((cat, i) => ({
+    id: `sec_${String(cat.category || 'section')
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/[^a-z0-9_]/g, '')}_${i}`,
+    name: cat.category || 'Section',
+    order: i + 1,
+    mandatory: cat.mandatory !== false,
+    types: Array.isArray(cat.documents) ? cat.documents.map((d) => ({ ...d })) : [],
+  }));
+}
+
+/** Employee profile & company doc: flat categories with `documents` arrays */
+export function sectionsToDocumentTypes(sections) {
+  if (!Array.isArray(sections) || sections.length === 0) return DOCUMENT_CHECKLIST;
+  return [...sections]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((s) => ({
+      category: s.name,
+      mandatory: s.mandatory !== false,
+      documents: Array.isArray(s.types) ? s.types : [],
+    }));
+}

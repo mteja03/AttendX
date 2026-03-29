@@ -12,7 +12,7 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
-import { DOCUMENT_CHECKLIST } from '../utils/documentTypes';
+import { DOCUMENT_CHECKLIST, documentTypesToSections, sectionsToDocumentTypes } from '../utils/documentTypes';
 
 const FORMAT_OPTIONS = [
   { ext: '.pdf', label: 'PDF' },
@@ -230,7 +230,8 @@ export default function Settings() {
   const [tab, setTab] = useState('lists');
   const [newAssetType, setNewAssetType] = useState('');
   const [newAssetMode, setNewAssetMode] = useState('trackable');
-  const [docTypes, setDocTypes] = useState(null);
+  const [docSections, setDocSections] = useState([]);
+  const [editingSectionName, setEditingSectionName] = useState({});
   const [docTypesLoading, setDocTypesLoading] = useState(false);
   const [newDocNames, setNewDocNames] = useState({});
   const [templateTasks, setTemplateTasks] = useState([]);
@@ -299,16 +300,21 @@ export default function Settings() {
     const fetchDocTypes = async () => {
       setDocTypesLoading(true);
       try {
-        const companyDoc = await getDoc(doc(db, 'companies', companyId));
-        const data = companyDoc.data();
-        if (data?.documentTypes && Array.isArray(data.documentTypes)) {
-          setDocTypes(data.documentTypes);
+        const settingsSnap = await getDoc(doc(db, 'companies', companyId, 'settings', 'documentTypes'));
+        if (settingsSnap.exists() && Array.isArray(settingsSnap.data()?.sections) && settingsSnap.data().sections.length > 0) {
+          setDocSections(settingsSnap.data().sections);
         } else {
-          setDocTypes(DOCUMENT_CHECKLIST);
+          const companyDoc = await getDoc(doc(db, 'companies', companyId));
+          const data = companyDoc.data();
+          const legacy =
+            data?.documentTypes && Array.isArray(data.documentTypes) && data.documentTypes.length > 0
+              ? data.documentTypes
+              : DOCUMENT_CHECKLIST;
+          setDocSections(documentTypesToSections(legacy));
         }
       } catch {
         showError('Failed to load document types');
-        setDocTypes(DOCUMENT_CHECKLIST);
+        setDocSections(documentTypesToSections(DOCUMENT_CHECKLIST));
       }
       setDocTypesLoading(false);
     };
@@ -568,40 +574,39 @@ export default function Settings() {
     }
   };
 
-  const addDocType = (category) => {
-    if (!docTypes) return;
-    const name = (newDocNames[category] || '').trim();
+  const addDocType = (sectionId) => {
+    const name = (newDocNames[sectionId] || '').trim();
     if (!name) return;
     const id = `${name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
-    const next = docTypes.map((cat) =>
-      cat.category === category
-        ? {
-            ...cat,
-            documents: [
-              ...cat.documents,
-              {
-                id,
-                name,
-                mandatory: false,
-                accepts: ['.pdf', '.jpg', '.jpeg', '.png'],
-                maxSizeMB: 5,
-              },
-            ],
-          }
-        : cat,
+    setDocSections((prev) =>
+      prev.map((s) =>
+        s.id === sectionId
+          ? {
+              ...s,
+              types: [
+                ...(s.types || []),
+                {
+                  id,
+                  name,
+                  mandatory: false,
+                  accepts: ['.pdf', '.jpg', '.jpeg', '.png'],
+                  maxSizeMB: 5,
+                },
+              ],
+            }
+          : s,
+      ),
     );
-    setDocTypes(next);
-    setNewDocNames((prev) => ({ ...prev, [category]: '' }));
+    setNewDocNames((prev) => ({ ...prev, [sectionId]: '' }));
   };
 
-  const toggleFormat = (categoryName, docId, ext) => {
-    setDocTypes((prev) => {
-      if (!prev) return prev;
-      return prev.map((cat) => {
-        if (cat.category !== categoryName) return cat;
+  const toggleFormat = (sectionId, docId, ext) => {
+    setDocSections((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId) return s;
         return {
-          ...cat,
-          documents: cat.documents.map((d) => {
+          ...s,
+          types: (s.types || []).map((d) => {
             if (d.id !== docId) return d;
             const current = Array.isArray(d.accepts) ? d.accepts : ['.pdf', '.jpg', '.jpeg', '.png'];
             const has = current.includes(ext);
@@ -612,54 +617,55 @@ export default function Settings() {
             };
           }),
         };
-      });
-    });
+      }),
+    );
   };
 
-  const updateMaxSize = (categoryName, docId, sizeMB) => {
-    setDocTypes((prev) => {
-      if (!prev) return prev;
-      return prev.map((cat) => {
-        if (cat.category !== categoryName) return cat;
+  const updateMaxSize = (sectionId, docId, sizeMB) => {
+    setDocSections((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId) return s;
         return {
-          ...cat,
-          documents: cat.documents.map((d) => (d.id === docId ? { ...d, maxSizeMB: sizeMB } : d)),
+          ...s,
+          types: (s.types || []).map((d) => (d.id === docId ? { ...d, maxSizeMB: sizeMB } : d)),
         };
-      });
-    });
+      }),
+    );
   };
 
-  const toggleMandatory = (categoryName, docId) => {
-    setDocTypes((prev) => {
-      if (!prev) return prev;
-      return prev.map((cat) => {
-        if (cat.category !== categoryName) return cat;
+  const toggleMandatory = (sectionId, docId) => {
+    setDocSections((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId) return s;
         return {
-          ...cat,
-          documents: cat.documents.map((d) => (d.id === docId ? { ...d, mandatory: !d.mandatory } : d)),
+          ...s,
+          types: (s.types || []).map((d) => (d.id === docId ? { ...d, mandatory: !d.mandatory } : d)),
         };
-      });
-    });
+      }),
+    );
   };
 
-  const removeDocType = (categoryName, docId) => {
-    setDocTypes((prev) => {
-      if (!prev) return prev;
-      return prev.map((cat) => {
-        if (cat.category !== categoryName) return cat;
+  const removeDocType = (sectionId, docId) => {
+    setDocSections((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId) return s;
         return {
-          ...cat,
-          documents: cat.documents.filter((d) => d.id !== docId),
+          ...s,
+          types: (s.types || []).filter((d) => d.id !== docId),
         };
-      });
-    });
+      }),
+    );
   };
 
-  const saveDocTypes = async () => {
-    if (!docTypes) return;
+  const saveDocSections = async (sectionsArg) => {
+    const sections = sectionsArg ?? docSections;
+    if (!companyId || !sections?.length) return;
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'companies', companyId), { documentTypes: docTypes });
+      const legacy = sectionsToDocumentTypes(sections);
+      await setDoc(doc(db, 'companies', companyId, 'settings', 'documentTypes'), { sections });
+      await updateDoc(doc(db, 'companies', companyId), { documentTypes: legacy });
+      setCompany((prev) => (prev ? { ...prev, documentTypes: legacy } : null));
       success('Document types saved successfully');
     } catch (err) {
       showError(`Failed to save: ${err?.message || 'Unknown error'}`);
@@ -1058,113 +1064,187 @@ export default function Settings() {
   const renderDocumentsTab = () => (
     <div className="space-y-4">
       {docTypesLoading && <PageLoader />}
-      {!docTypesLoading && docTypes && docTypes.map((cat) => (
-        <div key={cat.category} className="bg-white border rounded-xl p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-medium text-sm">{cat.category}</h3>
-            <span className="text-xs text-gray-400">
-              {cat.documents.length} document types
-            </span>
-          </div>
-          {cat.documents.map((docItem) => (
-            <div key={docItem.id} className="py-3 border-b last:border-0">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-800">
-                  {docItem.name}
-                </span>
-                <div className="flex items-center gap-2">
+      {!docTypesLoading &&
+        docSections.map((section) => (
+          <div key={section.id} className="bg-white border rounded-xl p-4 mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              {editingSectionName[section.id] ? (
+                <input
+                  autoFocus
+                  value={section.name}
+                  onChange={(e) => {
+                    setDocSections((prev) =>
+                      prev.map((s) => (s.id === section.id ? { ...s, name: e.target.value } : s)),
+                    );
+                  }}
+                  onBlur={() => {
+                    setEditingSectionName((prev) => ({ ...prev, [section.id]: false }));
+                    saveDocSections();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setEditingSectionName((prev) => ({ ...prev, [section.id]: false }));
+                      saveDocSections();
+                    }
+                  }}
+                  className="text-base font-semibold border-b-2 border-[#1B6B6B] outline-none bg-transparent text-gray-800 min-w-0 flex-1"
+                />
+              ) : (
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   <button
                     type="button"
-                    onClick={() => toggleMandatory(cat.category, docItem.id)}
-                    className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${
-                      docItem.mandatory
-                        ? 'bg-red-50 text-red-600 border-red-200'
-                        : 'bg-gray-50 text-gray-500 border-gray-200'
-                    }`}
+                    onClick={() =>
+                      setEditingSectionName((prev) => ({
+                        ...prev,
+                        [section.id]: true,
+                      }))
+                    }
+                    className="text-base font-semibold text-gray-800 hover:text-[#1B6B6B] flex items-center gap-2 group text-left"
                   >
-                    {docItem.mandatory ? 'Mandatory' : 'Optional'}
+                    {section.name}
+                    <span className="text-gray-300 group-hover:text-[#1B6B6B] text-xs opacity-0 group-hover:opacity-100">
+                      ✏️
+                    </span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => removeDocType(cat.category, docItem.id)}
-                    className="w-6 h-6 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded text-sm"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-
-              <div className="mb-2">
-                <span className="text-xs text-gray-400 block mb-1">Accepted formats</span>
-                <div className="flex flex-wrap gap-1">
-                  {FORMAT_OPTIONS.map((fmt) => (
+                  {(section.types || []).length === 0 && (
                     <button
-                      key={fmt.ext}
                       type="button"
-                      onClick={() => toggleFormat(cat.category, docItem.id, fmt.ext)}
-                      className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                        (Array.isArray(docItem.accepts) ? docItem.accepts : [])
-                          .includes(fmt.ext)
-                          ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]'
-                          : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400 hover:text-gray-600'
-                      }`}
+                      onClick={() => {
+                        setDocSections((prev) => {
+                          const next = prev.filter((s) => s.id !== section.id);
+                          saveDocSections(next);
+                          return next;
+                        });
+                      }}
+                      className="text-xs text-red-400 hover:text-red-600 ml-2 flex-shrink-0"
                     >
-                      {fmt.label}
+                      Remove section
                     </button>
-                  ))}
+                  )}
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">Max file size</span>
-                <div className="flex gap-1 flex-wrap">
-                  {SIZE_OPTIONS.map((size) => (
-                    <button
-                      key={size.value}
-                      type="button"
-                      onClick={() => updateMaxSize(cat.category, docItem.id, size.value)}
-                      className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                        (docItem.maxSizeMB || 5) === size.value
-                          ? 'bg-green-600 text-white border-green-600'
-                          : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400 hover:text-gray-600'
-                      }`}
-                    >
-                      {size.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
+              <span className="text-xs text-gray-400 flex-shrink-0">{(section.types || []).length} document types</span>
             </div>
-          ))}
-          <div className="flex gap-2 mt-3 pt-3 border-t">
-            <input
-              value={newDocNames[cat.category] || ''}
-              onChange={(e) =>
-                setNewDocNames((prev) => ({
-                  ...prev,
-                  [cat.category]: e.target.value,
-                }))
-              }
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') addDocType(cat.category);
-              }}
-              placeholder="Add document type..."
-              className="flex-1 text-sm border rounded px-2 py-1.5 focus:outline-none focus:border-[#4ECDC4]"
-            />
-            <button
-              type="button"
-              onClick={() => addDocType(cat.category)}
-              className="text-sm bg-[#1B6B6B] text-white px-3 py-1.5 rounded hover:bg-[#155858]"
-            >
-              Add
-            </button>
+            {(section.types || []).map((docItem) => (
+              <div key={docItem.id} className="py-3 border-b last:border-0">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-800">{docItem.name}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleMandatory(section.id, docItem.id)}
+                      className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${
+                        docItem.mandatory
+                          ? 'bg-red-50 text-red-600 border-red-200'
+                          : 'bg-gray-50 text-gray-500 border-gray-200'
+                      }`}
+                    >
+                      {docItem.mandatory ? 'Mandatory' : 'Optional'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeDocType(section.id, docItem.id)}
+                      className="w-6 h-6 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mb-2">
+                  <span className="text-xs text-gray-400 block mb-1">Accepted formats</span>
+                  <div className="flex flex-wrap gap-1">
+                    {FORMAT_OPTIONS.map((fmt) => (
+                      <button
+                        key={fmt.ext}
+                        type="button"
+                        onClick={() => toggleFormat(section.id, docItem.id, fmt.ext)}
+                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                          (Array.isArray(docItem.accepts) ? docItem.accepts : [])
+                            .includes(fmt.ext)
+                            ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]'
+                            : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400 hover:text-gray-600'
+                        }`}
+                      >
+                        {fmt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">Max file size</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {SIZE_OPTIONS.map((size) => (
+                      <button
+                        key={size.value}
+                        type="button"
+                        onClick={() => updateMaxSize(section.id, docItem.id, size.value)}
+                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                          (docItem.maxSizeMB || 5) === size.value
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400 hover:text-gray-600'
+                        }`}
+                      >
+                        {size.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div className="flex gap-2 mt-3 pt-3 border-t">
+              <input
+                value={newDocNames[section.id] || ''}
+                onChange={(e) =>
+                  setNewDocNames((prev) => ({
+                    ...prev,
+                    [section.id]: e.target.value,
+                  }))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') addDocType(section.id);
+                }}
+                placeholder="Add document type..."
+                className="flex-1 text-sm border rounded px-2 py-1.5 focus:outline-none focus:border-[#4ECDC4]"
+              />
+              <button
+                type="button"
+                onClick={() => addDocType(section.id)}
+                className="text-sm bg-[#1B6B6B] text-white px-3 py-1.5 rounded hover:bg-[#155858]"
+              >
+                Add
+              </button>
+            </div>
           </div>
-        </div>
-      ))}
-      {!docTypesLoading && docTypes && (
+        ))}
+      {!docTypesLoading && docSections.length > 0 && (
         <button
           type="button"
-          onClick={saveDocTypes}
+          onClick={() => {
+            const newSection = {
+              id: `section_${Date.now()}`,
+              name: 'Additional Documents',
+              order: docSections.length + 1,
+              types: [],
+              mandatory: false,
+            };
+            const next = [...docSections, newSection];
+            setDocSections(next);
+            setTimeout(() => {
+              setEditingSectionName((prev) => ({ ...prev, [newSection.id]: true }));
+              saveDocSections(next);
+            }, 100);
+          }}
+          className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors mt-4"
+        >
+          + Add New Section
+        </button>
+      )}
+      {!docTypesLoading && docSections.length > 0 && (
+        <button
+          type="button"
+          onClick={() => saveDocSections()}
           disabled={saving}
           className="w-full bg-[#1B6B6B] text-white py-2.5 rounded-lg text-sm font-medium hover:bg-[#155858] disabled:opacity-50 mt-2"
         >

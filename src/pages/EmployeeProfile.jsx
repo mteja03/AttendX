@@ -23,11 +23,7 @@ import { PLATFORM_CONFIG } from '../config/constants';
 import PageLoader from '../components/PageLoader';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
-import {
-  DOCUMENT_CHECKLIST,
-  DOCUMENT_CATEGORIES,
-  getDocById,
-} from '../utils/documentTypes';
+import { DOCUMENT_CHECKLIST, getDocById } from '../utils/documentTypes';
 import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDrive';
 import { toDisplayDate, toJSDate, toDateString, formatLakhs } from '../utils';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
@@ -679,15 +675,12 @@ export default function EmployeeProfile() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(null);
+  const [roles, setRoles] = useState([]);
   const [categoryOpen, setCategoryOpen] = useState({});
   const [uploadingDocId, setUploadingDocId] = useState(null);
   const [deletingDocId, setDeletingDocId] = useState(null);
   const [replacingDocId, setReplacingDocId] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [additionalDocName, setAdditionalDocName] = useState('');
-  const [additionalDocCategory, setAdditionalDocCategory] = useState(DOCUMENT_CATEGORIES[0]);
-  const [additionalDocFile, setAdditionalDocFile] = useState(null);
-  const additionalFileInputRef = useRef(null);
   const leaveFetchedRef = useRef(false);
   const assetsFetchedRef = useRef(false);
   const [managerSearch, setManagerSearch] = useState('');
@@ -941,6 +934,32 @@ export default function EmployeeProfile() {
   }, [showEditModal, companyId]);
 
   useEffect(() => {
+    if (!showEditModal || !companyId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDocs(collection(db, 'companies', companyId, 'roles'));
+        if (!cancelled) setRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch {
+        if (!cancelled) setRoles([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showEditModal, companyId]);
+
+  const editRoleSalaryBand = useMemo(() => {
+    if (!form?.designation) return null;
+    const role = roles.find((r) => r.title === form.designation);
+    if (!role?.salaryBand || role.salaryBand.min === '' || role.salaryBand.min == null) return null;
+    return {
+      min: Number(role.salaryBand.min),
+      max: Number(role.salaryBand.max),
+    };
+  }, [form?.designation, roles]);
+
+  useEffect(() => {
     const tabFromUrl = searchParams.get('tab');
     if (!tabFromUrl) return;
     const tabMap = {
@@ -1064,12 +1083,6 @@ export default function EmployeeProfile() {
     return null;
   };
 
-  const isChecklistDoc = useCallback(
-    (uploadedDoc) =>
-      activeChecklist.some((cat) => (cat.documents || []).some((d) => d.id === uploadedDoc?.id)),
-    [activeChecklist],
-  );
-
   const totalMandatory = useMemo(
     () =>
       activeChecklist
@@ -1097,11 +1110,6 @@ export default function EmployeeProfile() {
     return map;
   }, [employee?.documents, checklistIds]);
 
-  const additionalDocs = useMemo(() => {
-    const docs = employee?.documents || [];
-    // Only show docs that are truly not part of the current checklist
-    return docs.filter((d) => !isChecklistDoc(d));
-  }, [employee?.documents, isChecklistDoc]);
   const mandatoryUploaded = useMemo(() => {
     let n = 0;
     activeChecklist.forEach((cat) => {
@@ -1464,7 +1472,7 @@ export default function EmployeeProfile() {
     setUploadingDocId(docId);
     try {
       const categoryFromChecklist = findDocCategory(docId, activeChecklist);
-      const finalCategoryName = categoryFromChecklist || 'Additional Documents';
+      const finalCategoryName = categoryFromChecklist || activeChecklist[0]?.category || 'Documents';
       const result = await uploadEmployeeDocument(
         token,
         file,
@@ -1605,91 +1613,6 @@ export default function EmployeeProfile() {
 
   const handleViewDoc = (docEntry) => {
     if (docEntry?.webViewLink) window.open(docEntry.webViewLink, '_blank');
-  };
-
-  const handleUploadAdditionalDoc = async () => {
-    if (!additionalDocName.trim() || !additionalDocFile) {
-      showError('Name and file required');
-      return;
-    }
-    const token = await getValidToken();
-    if (!token) {
-      showError('Please sign in again to upload documents');
-      return;
-    }
-    try {
-      validateFile(additionalDocFile, {
-        name: additionalDocName.trim(),
-        accepts: ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.xls', '.xlsx'],
-        maxSizeMB: 25,
-      });
-    } catch (error) {
-      showError(error.message);
-      return;
-    }
-    setUploadingDocId('additional');
-    try {
-      const result = await uploadEmployeeDocument(
-        token,
-        additionalDocFile,
-        getCompanyName(),
-        employee.empId,
-        employee.fullName,
-        additionalDocCategory,
-      );
-      const entry = {
-        id: `additional_${Date.now()}`,
-        name: additionalDocName.trim(),
-        category: additionalDocCategory,
-        fileName: result.fileName,
-        fileId: result.fileId,
-        webViewLink: result.webViewLink,
-        uploadedAt: new Date(),
-        uploadedBy: currentUser?.email || null,
-        fileSize: result.fileSize,
-      };
-      const nextDocs = [...(employee.documents || []), entry];
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { documents: nextDocs, updatedAt: serverTimestamp() });
-      setEmployee((prev) => (prev ? { ...prev, documents: nextDocs } : null));
-      success('Document uploaded');
-      setAdditionalDocName('');
-      setAdditionalDocCategory(DOCUMENT_CATEGORIES[0]);
-      setAdditionalDocFile(null);
-      if (additionalFileInputRef.current) additionalFileInputRef.current.value = '';
-    } catch (err) {
-      driveAccessError(err);
-    }
-    setUploadingDocId(null);
-  };
-
-  const handleDeleteAdditionalDoc = async (index) => {
-    const docEntry = additionalDocs[index];
-    if (!docEntry?.fileId) return;
-    const token = await getValidToken();
-    if (!token) {
-      showError('Please sign in again to upload documents');
-      return;
-    }
-    setDeletingDocId(docEntry.fileId);
-    try {
-      try {
-        await deleteFileFromDrive(token, docEntry.fileId);
-      } catch {
-        // ignore Drive delete error
-      }
-      if (empRef) {
-        await updateDoc(empRef, {
-          documents: arrayRemove(docEntry),
-          updatedAt: serverTimestamp(),
-        });
-        await refreshEmployee();
-      }
-      success('Document deleted');
-    } catch (err) {
-      driveAccessError(err);
-    }
-    setDeletingDocId(null);
-    setDeleteConfirm(null);
   };
 
   const formatDocDate = (v) => toDisplayDate(v);
@@ -3608,19 +3531,37 @@ export default function EmployeeProfile() {
                 <button type="button" onClick={() => setShowSalary(true)} className="text-sm text-[#1B6B6B] hover:underline">Show</button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <p>Annual Gross Salary: ₹{(employee.ctcPerAnnum ?? employee.ctc ?? 0).toLocaleString('en-IN')}</p>
-                {employee.incentive != null && employee.incentive !== '' && (
-                  <p>
-                    Incentive (p.m.): ₹{Number(employee.incentive).toLocaleString('en-IN')}
-                    <span className="text-gray-500">
-                      {' '}
-                      · ₹{(Number(employee.incentive) * 12).toLocaleString('en-IN')} p.a.
-                    </span>
-                  </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {employee.basicSalary != null && employee.basicSalary !== '' && (
+                  <div>
+                    <p className="text-xs text-gray-400">Basic Salary (Monthly)</p>
+                    <p className="text-sm font-medium">₹{formatLakhs(Number(employee.basicSalary))}</p>
+                  </div>
                 )}
-                <p>Basic Salary: ₹{(employee.basicSalary ?? 0).toLocaleString('en-IN')}/month</p>
-                <p>HRA: ₹{(employee.hra ?? 0).toLocaleString('en-IN')}/month</p>
+                {employee.hra != null && employee.hra !== '' && (
+                  <div>
+                    <p className="text-xs text-gray-400">HRA (Monthly)</p>
+                    <p className="text-sm font-medium">₹{formatLakhs(Number(employee.hra))}</p>
+                  </div>
+                )}
+                {employee.incentive != null && employee.incentive !== '' && (
+                  <div>
+                    <p className="text-xs text-gray-400">Incentive (Monthly)</p>
+                    <p className="text-sm font-medium">
+                      ₹{formatLakhs(Number(employee.incentive))}
+                      <span className="text-gray-500 text-xs font-normal">
+                        {' '}
+                        · ₹{formatLakhs(Number(employee.incentive) * 12)} p.a.
+                      </span>
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-gray-400">Annual Gross Salary</p>
+                  <p className="text-sm font-medium">
+                    ₹{(employee.ctcPerAnnum ?? employee.ctc ?? 0).toLocaleString('en-IN')}
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -3989,109 +3930,16 @@ export default function EmployeeProfile() {
             );
           })}
 
-          <div className="border border-slate-200 rounded-xl overflow-hidden">
-            <h3 className="px-4 py-3 bg-slate-50 font-medium text-slate-800">Additional Documents</h3>
-            <div className="p-4 space-y-3">
-              {showDocManageUi && (
-                <div className="flex flex-wrap items-end gap-3">
-                  <input
-                    type="text"
-                    value={additionalDocName}
-                    onChange={(e) => setAdditionalDocName(e.target.value)}
-                    placeholder="Document name"
-                    disabled={!isDriveConnected}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-48 disabled:opacity-50"
-                  />
-                  <select
-                    value={additionalDocCategory}
-                    onChange={(e) => setAdditionalDocCategory(e.target.value)}
-                    disabled={!isDriveConnected}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
-                  >
-                    {DOCUMENT_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    ref={additionalFileInputRef}
-                    type="file"
-                    className="hidden"
-                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
-                    disabled={!isDriveConnected}
-                    onChange={(e) => setAdditionalDocFile(e.target.files?.[0] || null)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => additionalFileInputRef.current?.click()}
-                    disabled={!isDriveConnected}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {additionalDocFile ? additionalDocFile.name : 'Choose file'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleUploadAdditionalDoc}
-                    disabled={
-                      uploadingDocId === 'additional' ||
-                      !additionalDocName.trim() ||
-                      !additionalDocFile ||
-                      !isDriveConnected
-                    }
-                    title={!isDriveConnected ? 'Refresh Drive session to upload' : undefined}
-                    className={`rounded-lg text-sm font-medium px-4 py-2 disabled:opacity-50 ${
-                      isDriveConnected
-                        ? 'bg-[#1B6B6B] text-white hover:bg-[#155858]'
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    }`}
-                  >
-                    {uploadingDocId === 'additional' ? 'Uploading…' : 'Upload Additional Document'}
-                  </button>
-                </div>
-              )}
-              {additionalDocs.length === 0 ? (
-                <p className="text-slate-500 text-sm">No additional documents</p>
-              ) : (
-                <ul className="divide-y divide-slate-100">
-                  {additionalDocs.map((doc, i) => (
-                    <li key={doc.fileId || i} className="flex items-center justify-between py-2">
-                      <span className="text-sm">{doc.name} — {formatDocDate(doc.uploadedAt)}</span>
-                      <div className="flex gap-2">
-                        {doc.webViewLink && <a href={doc.webViewLink} target="_blank" rel="noopener noreferrer" className="text-[#1B6B6B] text-xs">View</a>}
-                        {showDocManageUi && (
-                          <button
-                            type="button"
-                            onClick={() => setDeleteConfirm({ type: 'additional', index: i })}
-                            disabled={!isDriveConnected}
-                            title={!isDriveConnected ? 'Refresh Drive session to upload' : undefined}
-                            className={`text-xs font-medium ${
-                              isDriveConnected ? 'text-red-600 hover:underline' : 'text-gray-400 cursor-not-allowed'
-                            }`}
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
           {deleteConfirm && (
             <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
               <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6">
-                <h3 className="text-lg font-semibold text-slate-800 mb-2">
-                  Delete {deleteConfirm.type === 'checklist' ? deleteConfirm.doc.name : 'document'}?
-                </h3>
+                <h3 className="text-lg font-semibold text-slate-800 mb-2">Delete {deleteConfirm.doc.name}?</h3>
                 <p className="text-sm text-slate-600 mb-4">File will be removed from Google Drive.</p>
                 <div className="flex justify-end gap-3">
                   <button type="button" onClick={() => setDeleteConfirm(null)} className="text-slate-500 text-sm">Cancel</button>
                     <button
                       type="button"
-                      onClick={() => deleteConfirm.type === 'checklist' ? handleDeleteChecklistDoc(deleteConfirm.doc) : handleDeleteAdditionalDoc(deleteConfirm.index)}
+                      onClick={() => handleDeleteChecklistDoc(deleteConfirm.doc)}
                       className="rounded-lg bg-red-600 text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
                       disabled={!!deletingDocId}
                     >
@@ -4599,26 +4447,124 @@ export default function EmployeeProfile() {
                   </div>
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs text-slate-600 mb-1">Annual Gross Salary</label>
-                  <input type="number" value={form.ctcPerAnnum} onChange={(e) => setForm((p) => ({ ...p, ctcPerAnnum: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs text-slate-600 mb-1">Incentive (per month)</label>
-                  <input
-                    type="number"
-                    placeholder="0"
-                    value={form.incentive}
-                    onChange={(e) => setForm((p) => ({ ...p, incentive: e.target.value }))}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                  />
-                  {form.incentive !== '' && form.incentive != null && !Number.isNaN(Number(form.incentive)) && Number(form.incentive) !== 0 && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      = ₹{formatLakhs(Number(form.incentive))} per month · ₹{formatLakhs(Number(form.incentive) * 12)} per annum
-                    </p>
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 border-b border-gray-100 pb-2">
+                    Compensation
+                  </h4>
+                  {form.designation && editRoleSalaryBand && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl mb-4">
+                      <p className="text-xs text-blue-700 font-medium">
+                        💼 Salary band for <strong>{form.designation}</strong>: ₹{formatLakhs(editRoleSalaryBand.min)}/mo — ₹
+                        {formatLakhs(editRoleSalaryBand.max)}/mo (₹{formatLakhs(editRoleSalaryBand.min * 12)}—₹
+                        {formatLakhs(editRoleSalaryBand.max * 12)} p.a.)
+                      </p>
+                    </div>
                   )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1.5">Basic Salary (per month) ₹</label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={form.basicSalary || ''}
+                        onChange={(e) => {
+                          const basic = Number(e.target.value);
+                          const hra = Number(form.hra) || 0;
+                          const incentive = Number(form.incentive) || 0;
+                          const annual = (basic + hra + incentive) * 12;
+                          setForm((prev) => ({
+                            ...prev,
+                            basicSalary: e.target.value,
+                            ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum,
+                          }));
+                        }}
+                        className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-slate-300"
+                      />
+                      {form.basicSalary ? (
+                        <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.basicSalary) * 12)} per annum</p>
+                      ) : null}
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1.5">HRA (per month) ₹</label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={form.hra || ''}
+                        onChange={(e) => {
+                          const hra = Number(e.target.value);
+                          const basic = Number(form.basicSalary) || 0;
+                          const incentive = Number(form.incentive) || 0;
+                          const annual = (basic + hra + incentive) * 12;
+                          setForm((prev) => ({
+                            ...prev,
+                            hra: e.target.value,
+                            ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum,
+                          }));
+                        }}
+                        className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-slate-300"
+                      />
+                      {form.hra ? (
+                        <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.hra) * 12)} per annum</p>
+                      ) : null}
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Incentive (per month)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={form.incentive}
+                        onChange={(e) => {
+                          const incentive = Number(e.target.value);
+                          const basic = Number(form.basicSalary) || 0;
+                          const hra = Number(form.hra) || 0;
+                          const annual = (basic + hra + incentive) * 12;
+                          setForm((prev) => ({
+                            ...prev,
+                            incentive: e.target.value,
+                            ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum,
+                          }));
+                        }}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      />
+                      {form.incentive !== '' && form.incentive != null && !Number.isNaN(Number(form.incentive)) && Number(form.incentive) !== 0 && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          = ₹{formatLakhs(Number(form.incentive))} per month · ₹{formatLakhs(Number(form.incentive) * 12)} per annum
+                        </p>
+                      )}
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-xs text-gray-500 block mb-1.5">
+                        Annual Gross Salary ₹
+                        <span className="text-gray-300 ml-1 font-normal">(auto-calculated · editable)</span>
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="Auto-calculated from above"
+                        value={form.ctcPerAnnum || ''}
+                        onChange={(e) => setForm((prev) => ({ ...prev, ctcPerAnnum: e.target.value }))}
+                        className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-slate-300"
+                      />
+                      {form.ctcPerAnnum ? (
+                        <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.ctcPerAnnum) / 12)} per month</p>
+                      ) : null}
+                      {form.ctcPerAnnum && editRoleSalaryBand && (
+                        <p
+                          className={`text-xs mt-1 font-medium ${
+                            Number(form.ctcPerAnnum) >= editRoleSalaryBand.min * 12 &&
+                            Number(form.ctcPerAnnum) <= editRoleSalaryBand.max * 12
+                              ? 'text-green-600'
+                              : 'text-amber-600'
+                          }`}
+                        >
+                          {Number(form.ctcPerAnnum) >= editRoleSalaryBand.min * 12 &&
+                          Number(form.ctcPerAnnum) <= editRoleSalaryBand.max * 12
+                            ? '✓ Within salary band'
+                            : '⚠ Outside salary band for this role'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div><label className="block text-xs text-slate-600 mb-1">Basic Salary</label><input type="number" value={form.basicSalary} onChange={(e) => setForm((p) => ({ ...p, basicSalary: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
-                <div><label className="block text-xs text-slate-600 mb-1">HRA</label><input type="number" value={form.hra} onChange={(e) => setForm((p) => ({ ...p, hra: e.target.value }))} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
                 <div className="col-span-2">
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-2 border-b border-gray-100 pb-2">
                     <span>🏥</span> Benefits
