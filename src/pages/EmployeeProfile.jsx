@@ -734,6 +734,7 @@ export default function EmployeeProfile() {
   const [showResignationModal, setShowResignationModal] = useState(false);
   const [showOnboardingWarningModal, setShowOnboardingWarningModal] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showRemovePhotoConfirm, setShowRemovePhotoConfirm] = useState(false);
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [rawImageSrc, setRawImageSrc] = useState(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -1340,7 +1341,6 @@ export default function EmployeeProfile() {
         const leavesQuery = query(leavesRef, where('employeeId', '==', empId));
         const leavesSnap = await getDocs(leavesQuery);
         await Promise.all(leavesSnap.docs.map((d) => deleteDoc(d.ref)));
-        console.log(`Deleted ${leavesSnap.docs.length} leave records`);
       } catch (leaveErr) {
         console.warn('Leave cleanup failed:', leaveErr);
       }
@@ -3311,22 +3311,7 @@ export default function EmployeeProfile() {
                 <button
                   type="button"
                   title="Remove photo"
-                  onClick={async () => {
-                    if (!window.confirm('Remove this photo?')) return;
-                    try {
-                      setUploadingPhoto(true);
-                      await deleteEmployeePhoto(companyId, empId);
-                      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
-                        photoURL: deleteField(),
-                      });
-                      success('Photo removed');
-                      await fetchEmployee();
-                    } catch (e) {
-                      showError('Failed to remove photo');
-                    } finally {
-                      setUploadingPhoto(false);
-                    }
-                  }}
+                  onClick={() => setShowRemovePhotoConfirm(true)}
                   className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-red-500 text-white text-sm flex items-center justify-center shadow-md hover:bg-red-600 transition-colors border-2 border-white z-10"
                 >
                   ✕
@@ -5786,7 +5771,7 @@ export default function EmployeeProfile() {
 
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl mb-4">
               <p className="text-xs text-red-600 font-medium">
-                ⚠️ This action cannot be undone. Only delete test or duplicate records.
+                ⚠️ This action cannot be undone. Only delete incorrect or duplicate records. This action is permanent.
               </p>
             </div>
 
@@ -6972,6 +6957,49 @@ export default function EmployeeProfile() {
                 className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-medium hover:bg-orange-600 disabled:opacity-50"
               >
                 {saving ? 'Starting…' : 'Start Exit Tasks'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRemovePhotoConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-xs text-center shadow-xl">
+            <div className="text-3xl mb-3">🗑️</div>
+            <h3 className="text-sm font-semibold text-gray-800 mb-1">Remove Photo?</h3>
+            <p className="text-xs text-gray-400 mb-4">
+              The employee&apos;s photo will be removed and replaced with initials.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRemovePhotoConfirm(false)}
+                className="flex-1 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowRemovePhotoConfirm(false);
+                  try {
+                    setUploadingPhoto(true);
+                    await deleteEmployeePhoto(companyId, empId);
+                    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+                      photoURL: deleteField(),
+                    });
+                    success('Photo removed');
+                    await fetchEmployee();
+                  } catch (e) {
+                    showError('Failed to remove photo');
+                  } finally {
+                    setUploadingPhoto(false);
+                  }
+                }}
+                className="flex-1 py-2 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600"
+              >
+                Remove
               </button>
             </div>
           </div>

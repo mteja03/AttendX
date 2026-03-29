@@ -195,7 +195,6 @@ export default function Assets() {
         } catch {
           assetSnap = await getDocs(collection(db, 'companies', companyId, 'assets'));
         }
-        console.log('Assets found:', assetSnap.docs.length);
         setAssets(
           assetSnap.docs.map((d) => ({
             id: d.id,
