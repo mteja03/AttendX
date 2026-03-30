@@ -22,9 +22,12 @@ import { useCompany } from '../contexts/CompanyContext';
 import { PLATFORM_CONFIG } from '../config/constants';
 import { SkeletonCard } from '../components/SkeletonRow';
 import EmployeeAvatar from '../components/EmployeeAvatar';
+import ErrorModal from '../components/ErrorModal';
 import Cropper from 'react-easy-crop';
 import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
 import { updateCompanyCounts } from '../utils/updateCompanyCounts';
+import { withRetry } from '../utils/firestoreWithRetry';
+import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -271,7 +274,7 @@ export default function Employees() {
   const { companyId } = useParams();
   const navigate = useNavigate();
   const { success, error: showError } = useToast();
-  const { role: userRole } = useAuth();
+  const { role: userRole, signOut } = useAuth();
   const { company } = useCompany();
   const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
   const [employees, setEmployees] = useState([]);
@@ -313,6 +316,7 @@ export default function Employees() {
   const [formErrors, setFormErrors] = useState({});
   const [formWarnings, setFormWarnings] = useState({});
   const [saving, setSaving] = useState(false);
+  const [errorModal, setErrorModal] = useState(null);
   const [managerSearch, setManagerSearch] = useState('');
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
   const [roles, setRoles] = useState([]);
@@ -777,6 +781,14 @@ export default function Employees() {
     setFormWarnings((p) => ({ ...p, empId: nextWarn.empId || null }));
   };
 
+  const handleSmartError = async (error, context, fallback = 'Failed to save. Please try again.') => {
+    await logError(error, { companyId, ...context });
+    const errType = getErrorMessage(error);
+    if (error?._needsReauth || errType === 'auth_expired') return setErrorModal('auth_expired');
+    if (errType === 'network_error') return setErrorModal('network_error');
+    showError(ERROR_MESSAGES[errType]?.message || fallback);
+  };
+
   const handleAddEmployee = async (e) => {
     e.preventDefault();
     if (!validate()) return;
@@ -851,7 +863,10 @@ export default function Employees() {
         status: 'Active',
         createdAt: serverTimestamp(),
       };
-      const newEmpRef = await addDoc(collection(db, 'companies', companyId, 'employees'), employeeData);
+      const newEmpRef = await withRetry(
+        () => addDoc(collection(db, 'companies', companyId, 'employees'), employeeData),
+        { companyId, action: 'addEmployee' },
+      );
       const newEmpId = newEmpRef.id;
 
       if (newEmpPhotoSrc && !newEmpPhoto) {
@@ -883,8 +898,8 @@ export default function Employees() {
       await fetchEmployees(true);
       fetchTotalCount();
       fetchStatsCounts();
-    } catch {
-      showError('Failed to add employee');
+    } catch (error) {
+      await handleSmartError(error, { action: 'addEmployee' }, 'Failed to add employee');
     }
     setSaving(false);
   };
@@ -2994,6 +3009,17 @@ export default function Employees() {
             </div>
           </div>
         </div>
+      )}
+      {errorModal && (
+        <ErrorModal
+          errorType={errorModal}
+          onRetry={() => setErrorModal(null)}
+          onDismiss={() => setErrorModal(null)}
+          onSignOut={async () => {
+            setErrorModal(null);
+            await signOut();
+          }}
+        />
       )}
     </div>
   );

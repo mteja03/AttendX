@@ -10,6 +10,7 @@ import {
   deleteDoc,
   query,
   orderBy,
+  limit,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -170,7 +171,7 @@ function CardSkeleton() {
 
 export default function Companies() {
   const navigate = useNavigate();
-  const { currentUser, getValidToken } = useAuth();
+  const { currentUser, getValidToken, role: userRole } = useAuth();
   const { success, error: showError } = useToast();
   const [companies, setCompanies] = useState([]);
   const [users, setUsers] = useState([]);
@@ -183,6 +184,9 @@ export default function Companies() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [errorLogs, setErrorLogs] = useState([]);
+  const [showLogs, setShowLogs] = useState(false);
+  const [logsLoading, setLogsLoading] = useState(false);
   const [form, setForm] = useState({
     name: '',
     initials: '',
@@ -483,6 +487,20 @@ export default function Companies() {
     setDeleting(false);
   };
 
+  const fetchErrorLogs = async () => {
+    try {
+      setLogsLoading(true);
+      const logsSnap = await getDocs(
+        query(collection(db, 'errorLogs'), orderBy('timestamp', 'desc'), limit(50)),
+      );
+      setErrorLogs(logsSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (e) {
+      console.error('Failed to fetch logs:', e);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
   return (
     <div className="p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -656,6 +674,70 @@ export default function Companies() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {userRole === 'admin' && (
+        <div className="mt-8">
+          <button
+            onClick={() => {
+              setShowLogs(!showLogs);
+              if (!showLogs) fetchErrorLogs();
+            }}
+            className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600"
+          >
+            🔧 {showLogs ? 'Hide' : 'View'} Error Logs
+            {errorLogs.length > 0 && (
+              <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full">
+                {errorLogs.length}
+              </span>
+            )}
+          </button>
+
+          {showLogs && (
+            <div className="mt-4 bg-white border border-gray-100 rounded-2xl overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-700">Recent Error Logs (last 50)</h3>
+                <button onClick={fetchErrorLogs} className="text-xs text-[#1B6B6B] hover:underline">
+                  Refresh
+                </button>
+              </div>
+
+              {logsLoading ? (
+                <div className="p-8 text-center text-gray-400 text-sm">Loading...</div>
+              ) : errorLogs.length === 0 ? (
+                <div className="p-8 text-center text-gray-400 text-sm">No errors logged</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        {['Time', 'User', 'Page', 'Action', 'Error', 'Code'].map((h) => (
+                          <th key={h} className="text-left px-4 py-2.5 font-semibold text-gray-500">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {errorLogs.map((log, i) => (
+                        <tr key={log.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">
+                            {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('en-IN') : '—'}
+                          </td>
+                          <td className="px-4 py-2.5 text-gray-700">{log.context?.userEmail?.split('@')[0] || '—'}</td>
+                          <td className="px-4 py-2.5 text-gray-500 max-w-32 truncate">{log.context?.page || '—'}</td>
+                          <td className="px-4 py-2.5 text-gray-500">{log.context?.action || '—'}</td>
+                          <td className="px-4 py-2.5 text-red-600 max-w-48 truncate" title={log.errorMessage}>
+                            {log.errorMessage?.substring(0, 60) || '—'}
+                          </td>
+                          <td className="px-4 py-2.5 text-gray-400">{log.errorCode || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

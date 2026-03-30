@@ -5,6 +5,7 @@ import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/config';
 import { PLATFORM_CONFIG } from '../config/constants';
+import { setSentryUser } from '../utils/sentry';
 
 const AuthContext = createContext(null);
 
@@ -36,6 +37,7 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (!firebaseUser || !firebaseUser.email) {
         setCurrentUser(null);
+        setSentryUser(null);
         setRole(null);
         setCompanyId(null);
         setUserPermissions(null);
@@ -63,6 +65,7 @@ export function AuthProvider({ children }) {
 
           if (!snap.exists()) {
             await signOut(auth);
+            setSentryUser(null);
             setCurrentUser(null);
             setRole(null);
             setCompanyId(null);
@@ -76,6 +79,7 @@ export function AuthProvider({ children }) {
 
           if (data.isActive === false) {
             await signOut(auth);
+            setSentryUser(null);
             setCurrentUser(null);
             setRole(null);
             setCompanyId(null);
@@ -86,6 +90,7 @@ export function AuthProvider({ children }) {
           }
 
           setCurrentUser(firebaseUser);
+          setSentryUser(firebaseUser);
           setRole(data.role || null);
           setCompanyId(data.companyId ?? null);
           setUserPermissions(data.permissions ?? null);
@@ -142,6 +147,7 @@ export function AuthProvider({ children }) {
         } catch (error) {
           console.error('Error checking users whitelist', error);
           await signOut(auth);
+          setSentryUser(null);
           setCurrentUser(null);
           setRole(null);
           setCompanyId(null);
@@ -262,6 +268,7 @@ export function AuthProvider({ children }) {
       // ignore
     }
     setGoogleAccessToken(null);
+    setSentryUser(null);
     await signOut(auth);
   }, []);
 

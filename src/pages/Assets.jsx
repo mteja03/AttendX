@@ -21,6 +21,9 @@ import PageLoader from '../components/PageLoader';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { toDisplayDate } from '../utils';
+import ErrorModal from '../components/ErrorModal';
+import { withRetry } from '../utils/firestoreWithRetry';
+import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 
 const DEFAULT_ASSET_TYPES = [
   { name: 'Laptop', mode: 'trackable' },
@@ -102,7 +105,7 @@ const buildAssetIdPrefix = (type) => {
 export default function Assets() {
   const { companyId } = useParams();
   const navigate = useNavigate();
-  const { currentUser, role: userRole } = useAuth();
+  const { currentUser, role: userRole, signOut } = useAuth();
   const { success, error: showError } = useToast();
   const [company, setCompany] = useState(null);
   const [assets, setAssets] = useState([]);
@@ -182,6 +185,15 @@ export default function Assets() {
   });
   const [formErrors, setFormErrors] = useState({});
   const [showDownload, setShowDownload] = useState(false);
+  const [errorModal, setErrorModal] = useState(null);
+
+  const handleSmartError = async (error, context, fallback = 'Failed to save. Please try again.') => {
+    await logError(error, { companyId, ...context });
+    const errType = getErrorMessage(error);
+    if (error?._needsReauth || errType === 'auth_expired') return setErrorModal('auth_expired');
+    if (errType === 'network_error') return setErrorModal('network_error');
+    showError(ERROR_MESSAGES[errType]?.message || fallback);
+  };
 
   useEffect(() => {
     if (!companyId) return;
@@ -502,12 +514,15 @@ export default function Assets() {
         };
       }
 
-      const ref = await addDoc(collection(db, 'companies', companyId, 'assets'), payload);
+      const ref = await withRetry(
+        () => addDoc(collection(db, 'companies', companyId, 'assets'), payload),
+        { companyId, action: 'addAsset' },
+      );
       setAssets((prev) => [{ id: ref.id, ...payload }, ...prev]);
       setShowAddModal(false);
       success('Asset added');
-    } catch {
-      showError('Failed to add asset');
+    } catch (error) {
+      await handleSmartError(error, { action: 'addAsset' }, 'Failed to add asset');
     }
     setSaving(false);
   };
@@ -565,7 +580,7 @@ export default function Assets() {
 
       const existingHistory = Array.isArray(asset.history) ? asset.history : [];
 
-      await updateDoc(assetRef, {
+      await withRetry(() => updateDoc(assetRef, {
         status: 'Assigned',
         assignedToId: emp.id,
         assignedToName: emp.fullName || '',
@@ -573,7 +588,7 @@ export default function Assets() {
         issueDate: issueTs,
         condition: assignForm.condition || asset.condition || 'Good',
         history: [...existingHistory, historyEntry],
-      });
+      }), { companyId, action: 'assignAsset' });
 
       setAssets((prev) =>
         prev.map((a) =>
@@ -595,8 +610,8 @@ export default function Assets() {
 
       success(`${asset.name || asset.assetId} assigned to ${emp.fullName || ''}`);
       setShowAssignModal(false);
-    } catch {
-      showError('Failed to assign asset');
+    } catch (error) {
+      await handleSmartError(error, { action: 'assignAsset', assetId: assignForm.assetId }, 'Failed to assign asset');
     }
     setSaving(false);
   };
@@ -644,7 +659,7 @@ export default function Assets() {
       };
       const existingHistory = Array.isArray(asset.history) ? asset.history : [];
 
-      await updateDoc(assetRef, {
+      await withRetry(() => updateDoc(assetRef, {
         status: newStatus,
         assignedToId: null,
         assignedToName: null,
@@ -652,7 +667,7 @@ export default function Assets() {
         returnDate: returnTs,
         condition: returnForm.condition || asset.condition || 'Good',
         history: [...existingHistory, historyEntry],
-      });
+      }), { companyId, action: 'returnAsset' });
 
       setAssets((prev) =>
         prev.map((a) =>
@@ -674,8 +689,8 @@ export default function Assets() {
 
       success(`${asset.name || asset.assetId} returned`);
       setShowReturnModal(false);
-    } catch {
-      showError('Failed to return asset');
+    } catch (error) {
+      await handleSmartError(error, { action: 'returnAsset', assetId: selectedAsset.id }, 'Failed to return asset');
     }
     setSaving(false);
   };
@@ -2503,6 +2518,17 @@ export default function Assets() {
             </div>
           </div>
         </div>
+      )}
+      {errorModal && (
+        <ErrorModal
+          errorType={errorModal}
+          onRetry={() => setErrorModal(null)}
+          onDismiss={() => setErrorModal(null)}
+          onSignOut={async () => {
+            setErrorModal(null);
+            await signOut();
+          }}
+        />
       )}
     </div>
   );

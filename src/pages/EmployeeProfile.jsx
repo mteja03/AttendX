@@ -30,6 +30,9 @@ import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/print
 import { deleteEmployeePhoto } from '../utils/photoUpload';
 import { updateCompanyCounts } from '../utils/updateCompanyCounts';
 import EmployeeAvatar from '../components/EmployeeAvatar';
+import ErrorModal from '../components/ErrorModal';
+import { withRetry } from '../utils/firestoreWithRetry';
+import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 
 async function getCroppedBlob(imageSrc, pixelCrop) {
   const image = await new Promise((resolve, reject) => {
@@ -653,7 +656,7 @@ export default function EmployeeProfile() {
   const { companyId, empId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { currentUser, getValidToken, isTokenValid, role: authRole } = useAuth();
+  const { currentUser, getValidToken, isTokenValid, role: authRole, signOut } = useAuth();
   const userRole = authRole;
   const canDeleteEmployee = userRole === 'admin';
   const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
@@ -673,6 +676,7 @@ export default function EmployeeProfile() {
   const [showSalary, setShowSalary] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [errorModal, setErrorModal] = useState(null);
   const [form, setForm] = useState(null);
   const [roles, setRoles] = useState([]);
   const [categoryOpen, setCategoryOpen] = useState({});
@@ -695,6 +699,14 @@ export default function EmployeeProfile() {
   const [showProfileAssignModal, setShowProfileAssignModal] = useState(null); // trackable assign or consumable issue
   const [profileAssignMode, setProfileAssignMode] = useState('trackable'); // 'trackable' | 'consumable'
   const [showProfileAssetDropdown, setShowProfileAssetDropdown] = useState(false);
+
+  const handleSmartError = async (error, context, fallback = 'Failed to save. Please try again.') => {
+    await logError(error, { companyId, employeeId: empId, ...context });
+    const errType = getErrorMessage(error);
+    if (error?._needsReauth || errType === 'auth_expired') return setErrorModal('auth_expired');
+    if (errType === 'network_error') return setErrorModal('network_error');
+    showError(ERROR_MESSAGES[errType]?.message || fallback);
+  };
   const [profileAssetSearch, setProfileAssetSearch] = useState('');
   const [showAssetHistory, setShowAssetHistory] = useState(false);
   const [assignAssetForm, setAssignAssetForm] = useState({
@@ -1361,7 +1373,10 @@ export default function EmployeeProfile() {
           changes,
         });
       }
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), savePayload);
+      await withRetry(
+        () => updateDoc(doc(db, 'companies', companyId, 'employees', empId), savePayload),
+        { companyId, action: 'updateEmployee' },
+      );
       setEmployee((prev) => (prev ? { ...prev, ...savePayload } : null));
       setShowEditModal(false);
       setShowManagerDropdown(false);
@@ -1371,8 +1386,8 @@ export default function EmployeeProfile() {
       setEditRoleSearch('');
       setShowEditRoleDropdown(false);
       success('Employee updated');
-    } catch {
-      showError('Failed to update');
+    } catch (error) {
+      await handleSmartError(error, { action: 'updateEmployee' }, 'Failed to update');
     }
     setSaving(false);
   };
@@ -1386,7 +1401,7 @@ export default function EmployeeProfile() {
     try {
       setDeleting(true);
 
-      await deleteDoc(empRef);
+      await withRetry(() => deleteDoc(empRef), { companyId, action: 'deleteEmployee' });
 
       try {
         const leavesRef = collection(db, 'companies', companyId, 'leave');
@@ -1449,7 +1464,7 @@ export default function EmployeeProfile() {
       setDeleteConfirmName('');
       navigate(`/company/${companyId}/employees`);
     } catch (error) {
-      showError(`Delete failed: ${error?.message || 'Unknown error'}`);
+      await handleSmartError(error, { action: 'deleteEmployee' }, `Delete failed: ${error?.message || 'Unknown error'}`);
     } finally {
       setDeleting(false);
     }
@@ -1967,17 +1982,17 @@ export default function EmployeeProfile() {
           },
         ],
       };
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+      await withRetry(() => updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
         status: 'Notice Period',
         offboarding: sanitizeForFirestore(offboardingData),
         updatedAt: serverTimestamp(),
-      });
+      }), { companyId, action: 'recordResignation' });
       await refreshEmployee();
       success(`Resignation recorded. Last day: ${toDisplayDate(expectedTs)}`);
       setShowResignationModal(false);
     } catch (e) {
       console.error(e);
-      showError('Failed to record resignation');
+      await handleSmartError(e, { action: 'recordResignation' }, 'Failed to record resignation');
     }
     setSaving(false);
   };
@@ -1996,7 +2011,7 @@ export default function EmployeeProfile() {
           notes: withdrawNotes.trim() || 'Resignation withdrawn',
         },
       ];
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+      await withRetry(() => updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
         status: 'Active',
         offboarding: sanitizeForFirestore({
           ...employee.offboarding,
@@ -2007,7 +2022,7 @@ export default function EmployeeProfile() {
           history: updatedHistory,
         }),
         updatedAt: serverTimestamp(),
-      });
+      }), { companyId, action: 'withdrawResignation' });
       await refreshEmployee();
       try {
         await updateCompanyCounts(companyId);
@@ -2019,7 +2034,7 @@ export default function EmployeeProfile() {
       setWithdrawNotes('');
     } catch (e) {
       console.error(e);
-      showError('Failed to withdraw resignation');
+      await handleSmartError(e, { action: 'withdrawResignation' }, 'Failed to withdraw resignation');
     }
     setSaving(false);
   };
@@ -2214,51 +2229,54 @@ export default function EmployeeProfile() {
 
   const markOffboardingTaskComplete = async (taskId, notes) => {
     if (!companyId || !empId || !employee || !currentUser || !offboarding) return;
-    const taskMeta = offTasks.find((t) => t.id === taskId);
-    const now = Timestamp.now();
-    const nextTasks = offTasks.map((t) =>
-      t.id === taskId
-        ? { ...t, completed: true, completedAt: now, completedBy: currentUser.email || '', notes: notes || '' }
-        : t,
-    );
-    const done = nextTasks.filter((t) => t.completed).length;
-    const total = nextTasks.length || 1;
+    try {
+      const taskMeta = offTasks.find((t) => t.id === taskId);
+      const now = Timestamp.now();
+      const nextTasks = offTasks.map((t) =>
+        t.id === taskId
+          ? { ...t, completed: true, completedAt: now, completedBy: currentUser.email || '', notes: notes || '' }
+          : t,
+      );
+      const done = nextTasks.filter((t) => t.completed).length;
+      const total = nextTasks.length || 1;
 
-    const pct = Math.round((done / total) * 100);
-    const offboardingPayload = {
-      ...(offboarding || {}),
-      phase: 'exit_tasks',
-      status: 'in_progress',
-      completionPct: pct,
-      tasks: nextTasks,
-      completedAt: offboarding.completedAt || null,
-      completedBy: offboarding.completedBy || null,
-      history: offboarding.history || [],
-    };
+      const pct = Math.round((done / total) * 100);
+      const offboardingPayload = {
+        ...(offboarding || {}),
+        phase: 'exit_tasks',
+        status: 'in_progress',
+        completionPct: pct,
+        tasks: nextTasks,
+        completedAt: offboarding.completedAt || null,
+        completedBy: offboarding.completedBy || null,
+        history: offboarding.history || [],
+      };
 
-    const payload = {
-      offboarding: sanitizeForFirestore(offboardingPayload),
-      status: employee.status || 'Offboarding',
-      updatedAt: serverTimestamp(),
-    };
+      const payload = {
+        offboarding: sanitizeForFirestore(offboardingPayload),
+        status: employee.status || 'Offboarding',
+        updatedAt: serverTimestamp(),
+      };
 
-    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
+      await withRetry(
+        () => updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload),
+        { companyId, action: 'markOffboardingTaskComplete' },
+      );
 
-    const assetAutoReturned = await returnAssetForCompletedOffTask(taskMeta);
-
-    setEmployee((prev) =>
-      prev
-        ? {
-            ...prev,
-            offboarding: payload.offboarding,
-            status: payload.status,
-          }
-        : null,
-    );
-    if (assetAutoReturned) {
-      success(`✓ ${taskMeta?.title || 'Task'} marked complete and asset returned in inventory`);
-    } else {
-      success('Task marked complete');
+      const assetAutoReturned = await returnAssetForCompletedOffTask(taskMeta);
+      setEmployee((prev) =>
+        prev
+          ? {
+              ...prev,
+              offboarding: payload.offboarding,
+              status: payload.status,
+            }
+          : null,
+      );
+      if (assetAutoReturned) success(`✓ ${taskMeta?.title || 'Task'} marked complete and asset returned in inventory`);
+      else success('Task marked complete');
+    } catch (error) {
+      await handleSmartError(error, { action: 'markOffboardingTaskComplete', taskId }, 'Failed to update task');
     }
   };
 
@@ -2308,7 +2326,7 @@ export default function EmployeeProfile() {
         by: currentUser.email || '',
         notes: notesText,
       };
-      await updateDoc(
+      await withRetry(() => updateDoc(
         doc(db, 'companies', companyId, 'employees', empId),
         sanitizeForFirestore({
           status: 'Inactive',
@@ -2327,7 +2345,7 @@ export default function EmployeeProfile() {
           deactivationReason: 'Offboarding completed',
           updatedAt: serverTimestamp(),
         }),
-      );
+      ), { companyId, action: 'completeOffboarding' });
       setShowCompleteOffboardingModal(false);
       setCompletionNotes('');
       await refreshEmployee();
@@ -2338,7 +2356,7 @@ export default function EmployeeProfile() {
       }
       success(`✅ ${employee.fullName} offboarding complete. Marked as Inactive.`);
     } catch (e) {
-      showError(`Failed to complete offboarding: ${e?.message || 'Unknown error'}`);
+      await handleSmartError(e, { action: 'completeOffboarding' }, `Failed to complete offboarding: ${e?.message || 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
@@ -2377,7 +2395,7 @@ export default function EmployeeProfile() {
           `Rehired. New joining: ${toDisplayDate(newJoinTs)}`,
       });
 
-      await updateDoc(empRef, {
+      await withRetry(() => updateDoc(empRef, {
         status: 'Active',
         joiningDate: newJoinTs,
         employmentHistory: [...(employee.employmentHistory || []), previousEmployment],
@@ -2391,7 +2409,7 @@ export default function EmployeeProfile() {
         rehiredAt: Timestamp.now(),
         rehiredBy: currentUser.email || '',
         updatedAt: serverTimestamp(),
-      });
+      }), { companyId, action: 'rehireEmployee' });
 
       success(`✅ ${employee.fullName} rehired! Please update their profile details.`);
       setShowRehireModal(false);
@@ -2403,7 +2421,7 @@ export default function EmployeeProfile() {
         console.warn('Count update failed:', countErr);
       }
     } catch (e) {
-      showError(`Failed to rehire: ${e?.message || 'Unknown error'}`);
+      await handleSmartError(e, { action: 'rehireEmployee' }, `Failed to rehire: ${e?.message || 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
@@ -2538,39 +2556,46 @@ export default function EmployeeProfile() {
 
   const markTaskComplete = async (taskId, notes) => {
     if (!companyId || !empId || !employee || !currentUser || !onboarding) return;
-    const now = Timestamp.now();
-    const nextTasks = onboardingTasks.map((t) =>
-      t.id === taskId
-        ? {
-            ...t,
-            completed: true,
-            completedAt: now,
-            completedBy: currentUser.email || '',
-            notes: notes || '',
-          }
-        : t,
-    );
-    const done = nextTasks.filter((t) => t.completed).length;
-    const total = nextTasks.length || 1;
-    const pct = Math.round((done / total) * 100);
-    const requiredDone = nextTasks.filter((t) => t.isRequired).every((t) => t.completed);
-    const status = requiredDone && done === nextTasks.length ? 'completed' : 'in_progress';
+    try {
+      const now = Timestamp.now();
+      const nextTasks = onboardingTasks.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              completed: true,
+              completedAt: now,
+              completedBy: currentUser.email || '',
+              notes: notes || '',
+            }
+          : t,
+      );
+      const done = nextTasks.filter((t) => t.completed).length;
+      const total = nextTasks.length || 1;
+      const pct = Math.round((done / total) * 100);
+      const requiredDone = nextTasks.filter((t) => t.isRequired).every((t) => t.completed);
+      const status = requiredDone && done === nextTasks.length ? 'completed' : 'in_progress';
 
-    const payload = {
-      onboarding: sanitizeForFirestore({
-        ...(onboarding || {}),
-        status,
-        completionPct: pct,
-        tasks: nextTasks,
-        completedAt: status === 'completed' ? now : onboarding.completedAt || null,
-      }),
-      updatedAt: serverTimestamp(),
-    };
+      const payload = {
+        onboarding: sanitizeForFirestore({
+          ...(onboarding || {}),
+          status,
+          completionPct: pct,
+          tasks: nextTasks,
+          completedAt: status === 'completed' ? now : onboarding.completedAt || null,
+        }),
+        updatedAt: serverTimestamp(),
+      };
 
-    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
-    setEmployee((prev) => (prev ? { ...prev, onboarding: payload.onboarding } : prev));
-    if (status === 'completed') success('🎉 Onboarding completed!');
-    else success('Task marked complete');
+      await withRetry(
+        () => updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload),
+        { companyId, action: 'markOnboardingTaskComplete' },
+      );
+      setEmployee((prev) => (prev ? { ...prev, onboarding: payload.onboarding } : prev));
+      if (status === 'completed') success('🎉 Onboarding completed!');
+      else success('Task marked complete');
+    } catch (error) {
+      await handleSmartError(error, { action: 'markOnboardingTaskComplete', taskId }, 'Failed to update task');
+    }
   };
 
   const unmarkTask = async (taskId) => {
@@ -7160,6 +7185,17 @@ export default function EmployeeProfile() {
             </div>
           </div>
         </div>
+      )}
+      {errorModal && (
+        <ErrorModal
+          errorType={errorModal}
+          onRetry={() => setErrorModal(null)}
+          onDismiss={() => setErrorModal(null)}
+          onSignOut={async () => {
+            setErrorModal(null);
+            await signOut();
+          }}
+        />
       )}
 
     </div>

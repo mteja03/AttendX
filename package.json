@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@sentry/react": "^10.46.0",
     "autoprefixer": "^10.4.27",
     "file-saver": "^2.0.5",
     "firebase": "^12.10.0",

@@ -12,7 +12,10 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
+import ErrorModal from '../components/ErrorModal';
 import { DOCUMENT_CHECKLIST, documentTypesToSections, sectionsToDocumentTypes } from '../utils/documentTypes';
+import { withRetry } from '../utils/firestoreWithRetry';
+import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 
 const FORMAT_OPTIONS = [
   { ext: '.pdf', label: 'PDF' },
@@ -211,7 +214,7 @@ const DEFAULT_OFFBOARDING_TEMPLATE = {
 
 export default function Settings() {
   const { companyId } = useParams();
-  const { currentUser } = useAuth();
+  const { currentUser, signOut } = useAuth();
   const { success, error: showError } = useToast();
   const [company, setCompany] = useState(null);
   const [employees, setEmployees] = useState([]);
@@ -242,7 +245,22 @@ export default function Settings() {
   const [savingOffTemplate, setSavingOffTemplate] = useState(false);
   const [showOffCategoryPicker, setShowOffCategoryPicker] = useState(false);
   const [policiesForOnboarding, setPoliciesForOnboarding] = useState([]);
+  const [errorModal, setErrorModal] = useState(null);
   const activeTab = tab;
+
+  const handleSmartError = async (error, context, fallback = 'Failed to save. Please try again.') => {
+    await logError(error, { companyId, ...context });
+    const errType = getErrorMessage(error);
+    if (error?._needsReauth || errType === 'auth_expired') {
+      setErrorModal('auth_expired');
+      return;
+    }
+    if (errType === 'network_error') {
+      setErrorModal('network_error');
+      return;
+    }
+    showError(ERROR_MESSAGES[errType]?.message || fallback);
+  };
 
   useEffect(() => {
     if (!companyId) return;
@@ -473,14 +491,14 @@ export default function Settings() {
   const handleSaveLeavePolicy = async () => {
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'companies', companyId), {
+      await withRetry(() => updateDoc(doc(db, 'companies', companyId), {
         leaveTypes,
         leavePolicy: leaveAllowances,
-      });
+      }), { companyId, action: 'saveLeavePolicy' });
       setCompany((prev) => (prev ? { ...prev, leaveTypes, leavePolicy: leaveAllowances } : null));
       success('Leave policy saved successfully!');
-    } catch {
-      showError('Failed to save leave policy');
+    } catch (error) {
+      await handleSmartError(error, { action: 'saveLeavePolicy' }, 'Failed to save leave policy');
     }
     setSaving(false);
   };
@@ -528,7 +546,10 @@ export default function Settings() {
   };
 
   const saveAssetTypes = async (next) => {
-    await updateDoc(doc(db, 'companies', companyId), { assetTypes: next });
+    await withRetry(
+      () => updateDoc(doc(db, 'companies', companyId), { assetTypes: next }),
+      { companyId, action: 'saveAssetTypes' },
+    );
     setCompany((prev) => (prev ? { ...prev, assetTypes: next } : prev));
   };
 
@@ -543,14 +564,17 @@ export default function Settings() {
     setSaving(true);
     try {
       const next = [...list, name];
-      await updateDoc(doc(db, 'companies', companyId), { [sectionKey]: next });
+      await withRetry(
+        () => updateDoc(doc(db, 'companies', companyId), { [sectionKey]: next }),
+        { companyId, action: 'addListItem', section: sectionKey },
+      );
       setCompany((prev) => (prev ? { ...prev, [sectionKey]: next } : null));
       setAddValue('');
       setAddingSection(null);
       const section = SECTIONS.find((s) => s.key === sectionKey);
       success(section ? `${section.label} added` : 'Added');
-    } catch {
-      showError('Failed to add');
+    } catch (error) {
+      await handleSmartError(error, { action: 'addListItem', section: sectionKey, value: name }, 'Failed to add');
     }
     setSaving(false);
   };
@@ -565,12 +589,15 @@ export default function Settings() {
     try {
       const list = getList(sectionKey, defaults);
       const next = list.filter((x) => x !== name);
-      await updateDoc(doc(db, 'companies', companyId), { [sectionKey]: next });
+      await withRetry(
+        () => updateDoc(doc(db, 'companies', companyId), { [sectionKey]: next }),
+        { companyId, action: 'removeListItem', section: sectionKey },
+      );
       setCompany((prev) => (prev ? { ...prev, [sectionKey]: next } : null));
       setDeleteConfirm(null);
       success(section ? `${section.label} removed` : 'Removed');
-    } catch {
-      showError('Failed to remove');
+    } catch (error) {
+      await handleSmartError(error, { action: 'removeListItem', section: sectionKey, value: name }, 'Failed to remove');
     }
   };
 
@@ -663,12 +690,18 @@ export default function Settings() {
     setSaving(true);
     try {
       const legacy = sectionsToDocumentTypes(sections);
-      await setDoc(doc(db, 'companies', companyId, 'settings', 'documentTypes'), { sections });
-      await updateDoc(doc(db, 'companies', companyId), { documentTypes: legacy });
+      await withRetry(
+        () => setDoc(doc(db, 'companies', companyId, 'settings', 'documentTypes'), { sections }),
+        { companyId, action: 'saveDocumentTypes' },
+      );
+      await withRetry(
+        () => updateDoc(doc(db, 'companies', companyId), { documentTypes: legacy }),
+        { companyId, action: 'saveDocumentTypesLegacy' },
+      );
       setCompany((prev) => (prev ? { ...prev, documentTypes: legacy } : null));
       success('Document types saved successfully');
     } catch (err) {
-      showError(`Failed to save: ${err?.message || 'Unknown error'}`);
+      await handleSmartError(err, { action: 'saveDocumentTypes' }, `Failed to save: ${err?.message || 'Unknown error'}`);
     }
     setSaving(false);
   };
@@ -1316,15 +1349,15 @@ export default function Settings() {
         }));
 
         const templateRef = doc(db, 'companies', companyId, 'settings', 'onboardingTemplate');
-        await setDoc(templateRef, {
+        await withRetry(() => setDoc(templateRef, {
           tasks: cleanTasks,
           updatedAt: new Date(),
           updatedBy: currentUser?.email || 'admin',
-        });
+        }), { companyId, action: 'saveOnboardingTemplate' });
 
         success(`${cleanTasks.length} tasks saved successfully!`);
       } catch (error) {
-        showError(`Save failed: ${error.message}`);
+        await handleSmartError(error, { action: 'saveOnboardingTemplate' }, `Save failed: ${error.message}`);
       } finally {
         setSavingTemplate(false);
       }
@@ -1576,14 +1609,14 @@ export default function Settings() {
         }));
 
         const templateRef = doc(db, 'companies', companyId, 'settings', 'offboardingTemplate');
-        await setDoc(templateRef, {
+        await withRetry(() => setDoc(templateRef, {
           tasks: cleanTasks,
           updatedAt: new Date(),
           updatedBy: currentUser?.email || 'admin',
-        });
+        }), { companyId, action: 'saveOffboardingTemplate' });
         success(`Offboarding template saved! ${cleanTasks.length} tasks saved.`);
       } catch (error) {
-        showError(`Save failed: ${error.message}`);
+        await handleSmartError(error, { action: 'saveOffboardingTemplate' }, `Save failed: ${error.message}`);
       } finally {
         setSavingOffTemplate(false);
       }
@@ -1827,6 +1860,17 @@ export default function Settings() {
             </div>
           </div>
         </div>
+      )}
+      {errorModal && (
+        <ErrorModal
+          errorType={errorModal}
+          onRetry={() => setErrorModal(null)}
+          onDismiss={() => setErrorModal(null)}
+          onSignOut={async () => {
+            setErrorModal(null);
+            await signOut();
+          }}
+        />
       )}
     </div>
   );

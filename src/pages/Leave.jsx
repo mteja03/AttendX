@@ -18,10 +18,14 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import PageLoader from '../components/PageLoader';
+import ErrorModal from '../components/ErrorModal';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import { toDisplayDate, toJSDate } from '../utils';
 import { calculateProRatedAllowance, isMidYearJoinerThisYear } from '../utils/leaveProration';
+import { withRetry } from '../utils/firestoreWithRetry';
+import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 
 function mergeLeaveListsById(a, b) {
   const m = new Map();
@@ -149,6 +153,7 @@ function leaveTypeBadgeClass(raw, leaveTypesArr) {
 
 export default function Leave() {
   const { companyId } = useParams();
+  const { signOut } = useAuth();
   const { success, error: showError } = useToast();
   const [leaveList, setLeaveList] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -170,6 +175,15 @@ export default function Leave() {
   });
   const [saving, setSaving] = useState(false);
   const [actioningId, setActioningId] = useState(null);
+  const [errorModal, setErrorModal] = useState(null);
+
+  const handleSmartError = async (error, context, fallback = 'Failed to save. Please try again.') => {
+    await logError(error, { companyId, ...context });
+    const errType = getErrorMessage(error);
+    if (error?._needsReauth || errType === 'auth_expired') return setErrorModal('auth_expired');
+    if (errType === 'network_error') return setErrorModal('network_error');
+    showError(ERROR_MESSAGES[errType]?.message || fallback);
+  };
 
   const [empSearch, setEmpSearch] = useState('');
   const [showEmpDropdown, setShowEmpDropdown] = useState(false);
@@ -431,18 +445,18 @@ export default function Leave() {
   const handleApprove = async (leaveDoc) => {
     setActioningId(leaveDoc.id);
     try {
-      await updateDoc(doc(db, 'companies', companyId, 'leave', leaveDoc.id), {
+      await withRetry(() => updateDoc(doc(db, 'companies', companyId, 'leave', leaveDoc.id), {
         status: 'Approved',
         decidedAt: serverTimestamp(),
-      });
+      }), { companyId, action: 'approveLeave' });
       const empRef = doc(db, 'companies', companyId, 'employees', leaveDoc.employeeId);
       const code = incrementKeyForLeaveType(leaveDoc.leaveType, leaveTypes);
       const key = `leaveUsed.${code}`;
-      await updateDoc(empRef, { [key]: increment(leaveDoc.days || 0) });
+      await withRetry(() => updateDoc(empRef, { [key]: increment(leaveDoc.days || 0) }), { companyId, action: 'approveLeaveBalanceUpdate' });
       setLeaveList((prev) => prev.map((l) => (l.id === leaveDoc.id ? { ...l, status: 'Approved' } : l)));
       success('Leave approved');
-    } catch {
-      showError('Failed to approve');
+    } catch (error) {
+      await handleSmartError(error, { action: 'approveLeave', leaveId: leaveDoc.id }, 'Failed to approve');
     }
     setActioningId(null);
   };
@@ -450,14 +464,14 @@ export default function Leave() {
   const handleReject = async (leaveDoc) => {
     setActioningId(leaveDoc.id);
     try {
-      await updateDoc(doc(db, 'companies', companyId, 'leave', leaveDoc.id), {
+      await withRetry(() => updateDoc(doc(db, 'companies', companyId, 'leave', leaveDoc.id), {
         status: 'Rejected',
         decidedAt: serverTimestamp(),
-      });
+      }), { companyId, action: 'rejectLeave' });
       setLeaveList((prev) => prev.map((l) => (l.id === leaveDoc.id ? { ...l, status: 'Rejected' } : l)));
       success('Leave rejected');
-    } catch {
-      showError('Failed to reject');
+    } catch (error) {
+      await handleSmartError(error, { action: 'rejectLeave', leaveId: leaveDoc.id }, 'Failed to reject');
     }
     setActioningId(null);
   };
@@ -471,7 +485,7 @@ export default function Leave() {
       const daysCount = getDaysBetween(form.startDate, form.endDate);
       const startTs = Timestamp.fromDate(new Date(form.startDate));
       const endTs = Timestamp.fromDate(new Date(form.endDate));
-      await addDoc(collection(db, 'companies', companyId, 'leave'), {
+      await withRetry(() => addDoc(collection(db, 'companies', companyId, 'leave'), {
         employeeId: form.employeeId,
         employeeName: emp.fullName,
         empId: emp.empId || '',
@@ -484,7 +498,7 @@ export default function Leave() {
         status: 'Approved',
         appliedAt: serverTimestamp(),
         decidedAt: serverTimestamp(),
-      });
+      }), { companyId, action: 'addLeave' });
       setLeaveList((prev) => [
         {
           id: `leave_${Date.now()}`,
@@ -517,8 +531,8 @@ export default function Leave() {
       setEmpSearch('');
       setShowEmpDropdown(false);
       success('Leave added');
-    } catch {
-      showError('Failed to add leave');
+    } catch (error) {
+      await handleSmartError(error, { action: 'addLeave', employeeId: form.employeeId }, 'Failed to add leave');
     }
     setSaving(false);
   };
@@ -1240,6 +1254,17 @@ export default function Leave() {
             </form>
           </div>
         </div>
+      )}
+      {errorModal && (
+        <ErrorModal
+          errorType={errorModal}
+          onRetry={() => setErrorModal(null)}
+          onDismiss={() => setErrorModal(null)}
+          onSignOut={async () => {
+            setErrorModal(null);
+            await signOut();
+          }}
+        />
       )}
     </div>
   );
