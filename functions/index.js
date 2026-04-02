@@ -1,3 +1,4 @@
+const functions = require('firebase-functions/v1');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineString } = require('firebase-functions/params');
 const admin = require('firebase-admin');
@@ -5,9 +6,121 @@ const { google } = require('googleapis');
 
 admin.initializeApp();
 
+const db = admin.firestore();
+const messaging = admin.messaging();
+
 const clientEmail = defineString('DRIVE_CLIENT_EMAIL');
 const privateKey = defineString('DRIVE_PRIVATE_KEY');
 const rootFolderId = defineString('DRIVE_ROOT_FOLDER_ID');
+
+const FCM_MAX_TOKENS_PER_MULTICAST = 500;
+
+function stringifyData(data) {
+  const out = {};
+  Object.entries(data || {}).forEach(([k, v]) => {
+    if (v === undefined || v === null) return;
+    out[k] = typeof v === 'string' ? v : String(v);
+  });
+  return out;
+}
+
+function toJsDate(value) {
+  if (!value) return null;
+  if (typeof value.toDate === 'function') return value.toDate();
+  if (value instanceof Date) return value;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatDayForMessage(value) {
+  if (!value) return 'TBD';
+  const d = toJsDate(value);
+  if (!d) return 'TBD';
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Send FCM to all HR managers and admins relevant to a company.
+ * Users: `users` doc id should match `fcmTokens` doc id (lowercased email).
+ */
+async function sendToCompanyHR(companyId, notification, data = {}) {
+  try {
+    const [usersSnap, adminSnap] = await Promise.all([
+      db.collection('users').where('companyId', '==', companyId).get(),
+      db.collection('users').where('role', '==', 'admin').get(),
+    ]);
+
+    const emails = new Set();
+
+    usersSnap.docs.forEach((docSnap) => {
+      const user = docSnap.data();
+      if (user.isActive === false) return;
+      if (user.role === 'hrmanager' || user.role === 'admin') {
+        emails.add(String(docSnap.id).toLowerCase());
+      }
+    });
+
+    adminSnap.docs.forEach((docSnap) => {
+      const user = docSnap.data();
+      if (user.isActive === false) return;
+      emails.add(String(docSnap.id).toLowerCase());
+    });
+
+    if (emails.size === 0) return;
+
+    const tokens = [];
+    for (const email of emails) {
+      const tokenDoc = await db.collection('fcmTokens').doc(email).get();
+      if (tokenDoc.exists && tokenDoc.data()?.token) {
+        tokens.push(tokenDoc.data().token);
+      }
+    }
+
+    if (tokens.length === 0) return;
+
+    const dataPayload = stringifyData({
+      ...data,
+      companyId,
+      timestamp: new Date().toISOString(),
+    });
+
+    for (let i = 0; i < tokens.length; i += FCM_MAX_TOKENS_PER_MULTICAST) {
+      const batch = tokens.slice(i, i + FCM_MAX_TOKENS_PER_MULTICAST);
+      const message = {
+        notification: {
+          title: notification.title,
+          body: notification.body,
+        },
+        data: dataPayload,
+        tokens: batch,
+      };
+
+      const response = await messaging.sendEachForMulticast(message);
+
+      await Promise.all(
+        response.responses.map(async (resp, idx) => {
+          if (resp.success) return;
+          const code = resp.error?.code;
+          if (
+            code !== 'messaging/invalid-registration-token' &&
+            code !== 'messaging/registration-token-not-registered'
+          ) {
+            return;
+          }
+          const invalidToken = batch[idx];
+          const snap = await db.collection('fcmTokens').where('token', '==', invalidToken).get();
+          await Promise.all(snap.docs.map((d) => d.ref.delete()));
+        }),
+      );
+
+      console.log(
+        `Sent ${response.successCount}/${batch.length} notifications (batch) for company ${companyId}`,
+      );
+    }
+  } catch (error) {
+    console.error('sendToCompanyHR error:', error);
+  }
+}
 
 function getDriveConfig() {
   let email;
@@ -147,9 +260,7 @@ exports.uploadFileToDrive = onCall(
         (error?.response?.data?.error?.errors?.[0]?.message) ||
         String(error).slice(0, 300) ||
         'Unknown error';
-      // Log full error for debugging (Firebase Console → Functions → Logs)
       console.error('uploadFileToDrive error:', rawMessage, error);
-      // Use failed-precondition so the client receives the message (internal is often hidden by SDK)
       const userMessage =
         /403|forbidden|permission/i.test(rawMessage)
           ? 'Drive access denied. Share the root folder with the service account in Google Drive.'
@@ -169,22 +280,362 @@ exports.deleteFileFromDrive = onCall(
     invoker: 'public',
   },
   async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Must be logged in');
-  }
-  if (!request.data.fileId) {
-    throw new HttpsError('invalid-argument', 'fileId required');
-  }
-  try {
-    const drive = getDriveClient();
-    await drive.files.delete({
-      fileId: request.data.fileId,
-    });
-    return { success: true };
-  } catch (error) {
-    if (error instanceof HttpsError) throw error;
-    const rawMessage = error?.message || error?.response?.data?.error?.message || String(error).slice(0, 300) || 'Unknown error';
-    console.error('deleteFileFromDrive error:', rawMessage, error);
-    throw new HttpsError('failed-precondition', 'Could not delete file. Check Firebase logs for details.');
-  }
-});
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be logged in');
+    }
+    if (!request.data.fileId) {
+      throw new HttpsError('invalid-argument', 'fileId required');
+    }
+    try {
+      const drive = getDriveClient();
+      await drive.files.delete({
+        fileId: request.data.fileId,
+      });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      const rawMessage = error?.message || error?.response?.data?.error?.message || String(error).slice(0, 300) || 'Unknown error';
+      console.error('deleteFileFromDrive error:', rawMessage, error);
+      throw new HttpsError('failed-precondition', 'Could not delete file. Check Firebase logs for details.');
+    }
+  },
+);
+
+// ─── FCM: Firestore triggers (collection name is `leave`, not `leaves`) ───
+
+exports.onNewLeaveRequest = functions.firestore
+  .document('companies/{companyId}/leave/{leaveId}')
+  .onCreate(async (snap, context) => {
+    const leave = snap.data();
+    const { companyId } = context.params;
+
+    if (!leave || !leave.employeeName) return;
+
+    await sendToCompanyHR(
+      companyId,
+      {
+        title: '🏖️ New Leave Request',
+        body: `${leave.employeeName} has applied for ${leave.days || 1} day${leave.days !== 1 ? 's' : ''} of ${leave.leaveType || 'leave'}`,
+      },
+      {
+        type: 'leave',
+        url: `/company/${companyId}/leave`,
+        leaveId: context.params.leaveId,
+      },
+    );
+  });
+
+exports.onLeaveStatusChanged = functions.firestore
+  .document('companies/{companyId}/leave/{leaveId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    const { companyId } = context.params;
+
+    if (before.status === after.status) return;
+    if (after.status !== 'Approved' && after.status !== 'Rejected') return;
+
+    await sendToCompanyHR(
+      companyId,
+      {
+        title: after.status === 'Approved' ? '✅ Leave Approved' : '❌ Leave Rejected',
+        body: `${after.employeeName}'s ${after.leaveType || 'leave'} request has been ${after.status.toLowerCase()}`,
+      },
+      {
+        type: 'leave',
+        url: `/company/${companyId}/leave`,
+        leaveId: context.params.leaveId,
+      },
+    );
+  });
+
+exports.onNewEmployee = functions.firestore
+  .document('companies/{companyId}/employees/{empId}')
+  .onCreate(async (snap, context) => {
+    const emp = snap.data();
+    const { companyId } = context.params;
+
+    if (!emp || !emp.fullName) return;
+
+    await sendToCompanyHR(
+      companyId,
+      {
+        title: '👤 New Employee Added',
+        body: `${emp.fullName} has joined ${emp.department ? `the ${emp.department} department` : 'the company'}`,
+      },
+      {
+        type: 'employee',
+        url: `/company/${companyId}/employees/${context.params.empId}`,
+        empId: context.params.empId,
+      },
+    );
+  });
+
+exports.onResignationRecorded = functions.firestore
+  .document('companies/{companyId}/employees/{empId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    const { companyId } = context.params;
+
+    if (before.status === after.status) return;
+    if (after.status !== 'Notice Period') return;
+
+    const lastDay = formatDayForMessage(after.offboarding?.expectedLastDay);
+
+    await sendToCompanyHR(
+      companyId,
+      {
+        title: '🚪 Resignation Recorded',
+        body: `${after.fullName} has resigned. Last day: ${lastDay}`,
+      },
+      {
+        type: 'offboarding',
+        url: `/company/${companyId}/employees/${context.params.empId}?tab=offboarding`,
+        empId: context.params.empId,
+      },
+    );
+  });
+
+exports.dailyCelebrationReminders = functions.pubsub
+  .schedule('0 9 * * *')
+  .timeZone('Asia/Kolkata')
+  .onRun(async () => {
+    const today = new Date();
+    const todayMonth = today.getMonth() + 1;
+    const todayDate = today.getDate();
+
+    const companiesSnap = await db.collection('companies').get();
+
+    for (const companyDoc of companiesSnap.docs) {
+      const companyId = companyDoc.id;
+
+      const empSnap = await db
+        .collection('companies')
+        .doc(companyId)
+        .collection('employees')
+        .where('status', 'in', ['Active', 'Notice Period'])
+        .get();
+
+      const birthdays = [];
+      const workAnniversaries = [];
+      const weddingAnniversaries = [];
+
+      empSnap.docs.forEach((doc) => {
+        const emp = doc.data();
+
+        if (emp.dateOfBirth) {
+          const dob = toJsDate(emp.dateOfBirth);
+          if (dob && dob.getMonth() + 1 === todayMonth && dob.getDate() === todayDate) {
+            birthdays.push(emp.fullName);
+          }
+        }
+
+        if (emp.joiningDate && emp.status === 'Active') {
+          const jd = toJsDate(emp.joiningDate);
+          if (jd) {
+            const years = today.getFullYear() - jd.getFullYear();
+            if (years >= 1 && jd.getMonth() + 1 === todayMonth && jd.getDate() === todayDate) {
+              workAnniversaries.push({ name: emp.fullName, years });
+            }
+          }
+        }
+
+        if (emp.maritalStatus === 'Married' && emp.marriageDate) {
+          const md = toJsDate(emp.marriageDate);
+          if (md) {
+            const years = today.getFullYear() - md.getFullYear();
+            if (years >= 1 && md.getMonth() + 1 === todayMonth && md.getDate() === todayDate) {
+              weddingAnniversaries.push({ name: emp.fullName, years });
+            }
+          }
+        }
+      });
+
+      if (birthdays.length > 0) {
+        await sendToCompanyHR(
+          companyId,
+          {
+            title: '🎂 Birthday Today!',
+            body:
+              birthdays.length === 1
+                ? `Today is ${birthdays[0]}'s birthday! Don't forget to wish them.`
+                : `${birthdays.join(', ')} have birthdays today!`,
+          },
+          {
+            type: 'birthday',
+            url: `/company/${companyId}/dashboard`,
+          },
+        );
+      }
+
+      if (workAnniversaries.length > 0) {
+        const msg = workAnniversaries
+          .map((e) => `${e.name} (${e.years} year${e.years !== 1 ? 's' : ''})`)
+          .join(', ');
+        await sendToCompanyHR(
+          companyId,
+          {
+            title: '🏆 Work Anniversary!',
+            body: `${msg} — celebrate their milestone!`,
+          },
+          {
+            type: 'anniversary',
+            url: `/company/${companyId}/dashboard`,
+          },
+        );
+      }
+
+      if (weddingAnniversaries.length > 0) {
+        const msg = weddingAnniversaries
+          .map((e) => `${e.name} (${e.years} year${e.years !== 1 ? 's' : ''})`)
+          .join(', ');
+        await sendToCompanyHR(
+          companyId,
+          {
+            title: '💍 Wedding Anniversary!',
+            body: `${msg} — wish them well!`,
+          },
+          {
+            type: 'wedding',
+            url: `/company/${companyId}/dashboard`,
+          },
+        );
+      }
+    }
+
+    return null;
+  });
+
+exports.dailyOnboardingOverdue = functions.pubsub
+  .schedule('0 10 * * *')
+  .timeZone('Asia/Kolkata')
+  .onRun(async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const companiesSnap = await db.collection('companies').get();
+
+    for (const companyDoc of companiesSnap.docs) {
+      const companyId = companyDoc.id;
+
+      const empSnap = await db
+        .collection('companies')
+        .doc(companyId)
+        .collection('employees')
+        .where('status', '==', 'Active')
+        .get();
+
+      const overdueEmployees = [];
+
+      empSnap.docs.forEach((doc) => {
+        const emp = doc.data();
+        if (!emp.onboarding?.tasks) return;
+        if (emp.onboarding.status === 'completed') return;
+
+        const overdueTasks = emp.onboarding.tasks.filter((task) => {
+          if (task.completed) return false;
+          if (!task.dueDate) return false;
+          const due = toJsDate(task.dueDate);
+          if (!due) return false;
+          due.setHours(0, 0, 0, 0);
+          return due < today;
+        });
+
+        if (overdueTasks.length > 0) {
+          overdueEmployees.push({
+            name: emp.fullName,
+            count: overdueTasks.length,
+            id: doc.id,
+          });
+        }
+      });
+
+      if (overdueEmployees.length === 0) continue;
+
+      const body =
+        overdueEmployees.length === 1
+          ? `${overdueEmployees[0].name} has ${overdueEmployees[0].count} overdue onboarding task${overdueEmployees[0].count !== 1 ? 's' : ''}`
+          : `${overdueEmployees.length} employees have overdue onboarding tasks`;
+
+      await sendToCompanyHR(
+        companyId,
+        {
+          title: '⚠️ Onboarding Overdue',
+          body,
+        },
+        {
+          type: 'onboarding',
+          url: `/company/${companyId}/employees`,
+        },
+      );
+    }
+
+    return null;
+  });
+
+exports.dailyOffboardingOverdue = functions.pubsub
+  .schedule('0 10 * * *')
+  .timeZone('Asia/Kolkata')
+  .onRun(async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const companiesSnap = await db.collection('companies').get();
+
+    for (const companyDoc of companiesSnap.docs) {
+      const companyId = companyDoc.id;
+
+      const empSnap = await db
+        .collection('companies')
+        .doc(companyId)
+        .collection('employees')
+        .where('status', '==', 'Offboarding')
+        .get();
+
+      const overdueEmployees = [];
+
+      empSnap.docs.forEach((doc) => {
+        const emp = doc.data();
+        if (!emp.offboarding?.tasks) return;
+
+        const overdueTasks = emp.offboarding.tasks.filter((task) => {
+          if (task.completed) return false;
+          if (!task.dueDate) return false;
+          const due = toJsDate(task.dueDate);
+          if (!due) return false;
+          due.setHours(0, 0, 0, 0);
+          return due < today;
+        });
+
+        if (overdueTasks.length > 0) {
+          overdueEmployees.push({
+            name: emp.fullName,
+            count: overdueTasks.length,
+            id: doc.id,
+          });
+        }
+      });
+
+      if (overdueEmployees.length === 0) continue;
+
+      const body =
+        overdueEmployees.length === 1
+          ? `${overdueEmployees[0].name} has ${overdueEmployees[0].count} overdue exit task${overdueEmployees[0].count !== 1 ? 's' : ''}`
+          : `${overdueEmployees.length} employees have overdue exit tasks`;
+
+      await sendToCompanyHR(
+        companyId,
+        {
+          title: '⚠️ Exit Tasks Overdue',
+          body,
+        },
+        {
+          type: 'offboarding',
+          url: `/company/${companyId}/employees`,
+        },
+      );
+    }
+
+    return null;
+  });
