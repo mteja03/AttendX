@@ -9,6 +9,7 @@ import {
   updateDoc,
   deleteDoc,
   query,
+  where,
   orderBy,
   limit,
   serverTimestamp,
@@ -412,6 +413,19 @@ export default function Companies() {
     await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
   }
 
+  const handleDeleteCompanyClick = (company) => {
+    const cachedCount = company.employeeCount || 0;
+    if (cachedCount > 0) {
+      showError(
+        `Cannot delete ${company.name || 'this company'}. This company has ${cachedCount} employee${
+          cachedCount !== 1 ? 's' : ''
+        }. Remove all employees first.`,
+      );
+      return;
+    }
+    setDeleteConfirm(company);
+  };
+
   const handleDelete = async () => {
     const company = deleteConfirm;
     if (!company) return;
@@ -422,8 +436,29 @@ export default function Companies() {
     let driveToken = null;
 
     try {
-      // Step 1 — Collect all Drive file IDs from all employees
       const employeesSnap = await getDocs(collection(db, 'companies', companyId, 'employees'));
+      if (employeesSnap.docs.length > 0) {
+        showError(
+          `Cannot delete ${companyName}. This company has ${employeesSnap.docs.length} employee record${
+            employeesSnap.docs.length !== 1 ? 's' : ''
+          }. Please remove all employees first.`,
+        );
+        return;
+      }
+
+      const assignedUsersSnap = await getDocs(
+        query(collection(db, 'users'), where('companyId', '==', companyId)),
+      );
+      if (assignedUsersSnap.docs.length > 0) {
+        showError(
+          `Cannot delete ${companyName}. ${assignedUsersSnap.docs.length} platform user${
+            assignedUsersSnap.docs.length !== 1 ? 's are' : ' is'
+          } assigned to this company. Remove them first in Platform Users.`,
+        );
+        return;
+      }
+
+      // Step 1 — Collect all Drive file IDs from all employees (none when subcollection is empty)
       const driveFileIds = [];
       employeesSnap.docs.forEach((empDoc) => {
         const data = empDoc.data();
@@ -459,9 +494,9 @@ export default function Companies() {
       await deleteSubcollection(companyId, 'teamMembers');
       await deleteDoc(doc(db, 'companies', companyId));
 
-      const usersSnap = await getDocs(collection(db, 'users'));
+      const allUsersSnap = await getDocs(collection(db, 'users'));
       await Promise.all(
-        usersSnap.docs
+        allUsersSnap.docs
           .filter((d) => d.data().companyId === companyId)
           .map((d) => updateDoc(doc(db, 'users', d.id), { companyId: null })),
       );
@@ -482,9 +517,10 @@ export default function Companies() {
       }
     } catch (err) {
       console.error(err);
-      showError('Failed to delete company');
+      showError(`Failed to delete company: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setDeleting(false);
     }
-    setDeleting(false);
   };
 
   const fetchErrorLogs = async () => {
@@ -633,7 +669,7 @@ export default function Companies() {
                 <CompanyMenu
                   company={c}
                   onEdit={() => openEdit(c)}
-                  onDelete={() => setDeleteConfirm(c)}
+                  onDelete={() => handleDeleteCompanyClick(c)}
                   onDeactivate={() => setDeactivateConfirm(c)}
                   onActivate={() => handleActivate(c)}
                 />
@@ -867,21 +903,28 @@ export default function Companies() {
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-slate-800 mb-2">
-              Delete {deleteConfirm.name || 'this company'}?
-            </h3>
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">Delete Company?</h3>
             <p className="text-sm text-slate-600 mb-4">
-              This will permanently delete:
+              Are you sure you want to permanently delete{' '}
+              <span className="font-medium text-slate-800">{deleteConfirm.name || 'this company'}</span>? This cannot be
+              undone.
+            </p>
+            <p className="text-sm text-slate-600 mb-4">
+              This will permanently remove:
               <br />
-              • All employee records ({deleteConfirm.employeeCount ?? 0} employees)
+              • All employee records ({deleteConfirm.employeeCount ?? 0} on record)
               <br />
               • All leave and attendance data
               <br />
               • All documents from Google Drive
-              <br />
-              <br />
-              This cannot be undone.
             </p>
+            {(deleteConfirm.employeeCount || 0) > 0 && (
+              <p className="text-sm text-red-600 font-medium mb-4 rounded-lg bg-red-50 border border-red-100 px-3 py-2">
+                This company still shows {deleteConfirm.employeeCount} employee
+                {(deleteConfirm.employeeCount || 0) !== 1 ? 's' : ''}. Delete is blocked until the employee list is
+                empty.
+              </p>
+            )}
             <div className="flex justify-end gap-3">
               <button
                 type="button"
@@ -894,7 +937,7 @@ export default function Companies() {
               <button
                 type="button"
                 onClick={handleDelete}
-                disabled={deleting}
+                disabled={deleting || (deleteConfirm.employeeCount || 0) > 0}
                 className="rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
               >
                 {deleting ? 'Deleting company data and Drive files...' : 'Delete Forever'}

@@ -11,7 +11,7 @@ export default function Layout() {
   const companyMatch = useMatch('/company/:companyId/*');
   const companyIdFromRoute = companyMatch?.params?.companyId ?? null;
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { currentUser, signOut } = useAuth();
   const [showIdleWarning, setShowIdleWarning] = useState(false);
 
   const handleIdleSignOut = useCallback(async () => {
@@ -23,7 +23,7 @@ export default function Layout() {
     }
   }, [signOut, navigate]);
 
-  const handleIdleWarningShow = useCallback(() => {
+  const handleIdleWarning = useCallback(() => {
     setShowIdleWarning(true);
   }, []);
 
@@ -31,7 +31,11 @@ export default function Layout() {
     setShowIdleWarning(false);
   }, []);
 
-  const resetIdleTimers = useIdleTimeout(handleIdleSignOut, handleIdleWarningShow, handleIdleActive);
+  const resetIdleTimers = useIdleTimeout(
+    currentUser ? handleIdleSignOut : null,
+    currentUser ? handleIdleWarning : null,
+    currentUser ? handleIdleActive : null,
+  );
 
   const handleStaySignedIn = useCallback(() => {
     setShowIdleWarning(false);

@@ -1,8 +1,15 @@
 import { useEffect, useRef, useCallback } from 'react';
 
-const IDLE_TIMEOUT_MS = 4 * 60 * 60 * 1000;
-const WARNING_BEFORE_MS = 5 * 60 * 1000;
+/** 4 hours idle → warning, then sign-out */
+export const IDLE_TIMEOUT_MS = 4 * 60 * 60 * 1000;
+/** Warning appears this many ms before auto sign-out */
+export const WARNING_BEFORE_MS = 5 * 60 * 1000;
 
+/**
+ * @param {(() => void | Promise<void>) | null} onSignOut
+ * @param {(() => void) | null} onWarning
+ * @param {(() => void) | null} onActive — e.g. hide warning when user is active again after warning
+ */
 export function useIdleTimeout(onSignOut, onWarning, onActive) {
   const idleTimer = useRef(null);
   const warningTimer = useRef(null);
@@ -35,10 +42,22 @@ export function useIdleTimeout(onSignOut, onWarning, onActive) {
   }, []);
 
   useEffect(() => {
-    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click', 'focus'];
+    if (!onSignOut) return undefined;
+
+    const events = [
+      'mousedown',
+      'mousemove',
+      'keydown',
+      'scroll',
+      'touchstart',
+      'click',
+      'focus',
+    ];
 
     let lastReset = 0;
-    const handleActivity = () => {
+
+    const handleActivity = (e) => {
+      if (e?.type === 'visibilitychange' && document.visibilityState !== 'visible') return;
       const now = Date.now();
       if (now - lastReset > 60000) {
         lastReset = now;
@@ -46,18 +65,18 @@ export function useIdleTimeout(onSignOut, onWarning, onActive) {
       }
     };
 
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.log('[IdleTimeout] timers started');
+    }
+
     resetTimers();
 
     events.forEach((event) => {
       document.addEventListener(event, handleActivity, { passive: true });
     });
 
-    const handleVisible = () => {
-      if (document.visibilityState === 'visible') {
-        resetTimers();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisible);
+    document.addEventListener('visibilitychange', handleActivity);
 
     return () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -65,9 +84,9 @@ export function useIdleTimeout(onSignOut, onWarning, onActive) {
       events.forEach((event) => {
         document.removeEventListener(event, handleActivity);
       });
-      document.removeEventListener('visibilitychange', handleVisible);
+      document.removeEventListener('visibilitychange', handleActivity);
     };
-  }, [resetTimers]);
+  }, [resetTimers, onSignOut]);
 
   return resetTimers;
 }

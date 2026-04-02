@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
+import { WARNING_BEFORE_MS } from '../hooks/useIdleTimeout';
+
+const WARNING_SECONDS = Math.floor(WARNING_BEFORE_MS / 1000);
 
 export default function IdleWarningBanner({ onStaySignedIn, onSignOut, visible }) {
-  const [countdown, setCountdown] = useState(300);
+  const [countdown, setCountdown] = useState(WARNING_SECONDS);
 
   useEffect(() => {
     if (!visible) {
-      setCountdown(300);
+      setCountdown(WARNING_SECONDS);
       return undefined;
     }
 
@@ -64,7 +67,7 @@ export default function IdleWarningBanner({ onStaySignedIn, onSignOut, visible }
         <div className="mt-3 h-1 bg-gray-700 rounded-full overflow-hidden">
           <div
             className="h-full bg-amber-400 rounded-full transition-all duration-1000"
-            style={{ width: `${(countdown / 300) * 100}%` }}
+            style={{ width: `${(countdown / WARNING_SECONDS) * 100}%` }}
           />
         </div>
       </div>
