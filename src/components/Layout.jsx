@@ -1,19 +1,85 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Outlet, useMatch, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { CompanyProvider } from '../contexts/CompanyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useIdleTimeout } from '../hooks/useIdleTimeout';
 import IdleWarningBanner from './IdleWarningBanner';
+import NotificationBanner from './NotificationBanner';
+import NotificationPermissionPrompt from './NotificationPermissionPrompt';
 import { trackSessionTimeout } from '../utils/analytics';
+import { initMessaging, onForegroundMessage, requestNotificationPermission } from '../utils/fcm';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const companyMatch = useMatch('/company/:companyId/*');
   const companyIdFromRoute = companyMatch?.params?.companyId ?? null;
   const navigate = useNavigate();
-  const { currentUser, signOut } = useAuth();
+  const { currentUser, signOut, companyId } = useAuth();
   const [showIdleWarning, setShowIdleWarning] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
+  const fgUnsubRef = useRef(() => {});
+
+  const clearForegroundListener = useCallback(() => {
+    fgUnsubRef.current();
+    fgUnsubRef.current = () => {};
+  }, []);
+
+  const startForegroundListener = useCallback(async () => {
+    clearForegroundListener();
+    await initMessaging();
+    const unsub = onForegroundMessage((payload) => {
+      setNotification({
+        title: payload.notification?.title || 'AttendX',
+        body: payload.notification?.body || '',
+        data: payload.data || {},
+      });
+    });
+    fgUnsubRef.current = typeof unsub === 'function' ? unsub : () => {};
+  }, [clearForegroundListener]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      clearForegroundListener();
+      return undefined;
+    }
+
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    if (Notification.permission === 'granted') {
+      (async () => {
+        await startForegroundListener();
+        if (cancelled) clearForegroundListener();
+      })();
+      return () => {
+        cancelled = true;
+        clearForegroundListener();
+      };
+    }
+
+    if (Notification.permission === 'default') {
+      const timer = setTimeout(() => setShowPermissionPrompt(true), 30000);
+      return () => clearTimeout(timer);
+    }
+
+    return undefined;
+  }, [currentUser, startForegroundListener, clearForegroundListener]);
+
+  const handleAllowNotifications = useCallback(async () => {
+    const emailKey = currentUser?.email?.toLowerCase() || '';
+    const token = await requestNotificationPermission(emailKey, companyId ?? companyIdFromRoute);
+    setShowPermissionPrompt(false);
+    if (token) {
+      await startForegroundListener();
+    }
+  }, [currentUser?.email, companyId, companyIdFromRoute, startForegroundListener]);
+
+  const dismissNotification = useCallback(() => setNotification(null), []);
 
   const handleIdleSignOut = useCallback(async () => {
     setShowIdleWarning(false);
@@ -83,6 +149,25 @@ export default function Layout() {
           onStaySignedIn={handleStaySignedIn}
           onSignOut={handleIdleSignOut}
         />
+
+        {notification && (
+          <NotificationBanner
+            notification={notification}
+            onClose={dismissNotification}
+            onClick={() => {
+              const url = notification.data?.url;
+              if (url) navigate(url);
+              dismissNotification();
+            }}
+          />
+        )}
+
+        {showPermissionPrompt && (
+          <NotificationPermissionPrompt
+            onAllow={handleAllowNotifications}
+            onDismiss={() => setShowPermissionPrompt(false)}
+          />
+        )}
       </div>
     </CompanyProvider>
   );
