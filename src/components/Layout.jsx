@@ -5,6 +5,7 @@ import { CompanyProvider } from '../contexts/CompanyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useIdleTimeout } from '../hooks/useIdleTimeout';
 import IdleWarningBanner from './IdleWarningBanner';
+import { trackSessionTimeout } from '../utils/analytics';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -16,6 +17,7 @@ export default function Layout() {
 
   const handleIdleSignOut = useCallback(async () => {
     setShowIdleWarning(false);
+    trackSessionTimeout();
     try {
       await signOut();
     } finally {

@@ -16,6 +16,7 @@ import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { toDateString, toDisplayDate, toJSDate } from '../utils';
+import { trackPageView } from '../utils/analytics';
 
 const EMPTY_ASSET_STATS = {
   total: 0,
@@ -155,6 +156,10 @@ export default function Dashboard() {
   const [actioningId, setActioningId] = useState(null);
   const [celebTab, setCelebTab] = useState('today');
   const [showCelebrations, setShowCelebrations] = useState(true);
+
+  useEffect(() => {
+    trackPageView('Dashboard');
+  }, []);
 
   const showAssetOverview = role === 'admin' || role === 'hrmanager' || role === 'itmanager';
 

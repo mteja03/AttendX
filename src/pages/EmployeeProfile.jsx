@@ -33,6 +33,15 @@ import EmployeeAvatar from '../components/EmployeeAvatar';
 import ErrorModal from '../components/ErrorModal';
 import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
+import {
+  trackEmployeeDeleted,
+  trackOffboardingCompleted,
+  trackOnboardingCompleted,
+  trackOnboardingStarted,
+  trackPhotoUploaded,
+  trackResignationRecorded,
+  trackResignationWithdrawn,
+} from '../utils/analytics';
 
 async function getCroppedBlob(imageSrc, pixelCrop) {
   const image = await new Promise((resolve, reject) => {
@@ -1459,6 +1468,7 @@ export default function EmployeeProfile() {
         console.warn('Count update failed:', countErr);
       }
 
+      trackEmployeeDeleted();
       success(`${employee.fullName} deleted permanently.`);
       setShowDeleteModal(false);
       setDeleteConfirmName('');
@@ -1988,6 +1998,7 @@ export default function EmployeeProfile() {
         updatedAt: serverTimestamp(),
       }), { companyId, action: 'recordResignation' });
       await refreshEmployee();
+      trackResignationRecorded();
       success(`Resignation recorded. Last day: ${toDisplayDate(expectedTs)}`);
       setShowResignationModal(false);
     } catch (e) {
@@ -2029,6 +2040,7 @@ export default function EmployeeProfile() {
       } catch (countErr) {
         console.warn('Count update failed:', countErr);
       }
+      trackResignationWithdrawn();
       success(`${employee.fullName} is back to Active!`);
       setShowWithdrawModal(false);
       setWithdrawNotes('');
@@ -2354,6 +2366,7 @@ export default function EmployeeProfile() {
       } catch (countErr) {
         console.warn('Count update failed:', countErr);
       }
+      trackOffboardingCompleted();
       success(`✅ ${employee.fullName} offboarding complete. Marked as Inactive.`);
     } catch (e) {
       await handleSmartError(e, { action: 'completeOffboarding' }, `Failed to complete offboarding: ${e?.message || 'Unknown error'}`);
@@ -2547,6 +2560,7 @@ export default function EmployeeProfile() {
 
       await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
       setEmployee((prev) => (prev ? { ...prev, ...payload } : prev));
+      trackOnboardingStarted();
       success('Onboarding started');
     } catch (error) {
       showError(`Failed to start: ${error?.message || 'Unknown error'}`);
@@ -2591,8 +2605,10 @@ export default function EmployeeProfile() {
         { companyId, action: 'markOnboardingTaskComplete' },
       );
       setEmployee((prev) => (prev ? { ...prev, onboarding: payload.onboarding } : prev));
-      if (status === 'completed') success('🎉 Onboarding completed!');
-      else success('Task marked complete');
+      if (status === 'completed') {
+        trackOnboardingCompleted();
+        success('🎉 Onboarding completed!');
+      } else success('Task marked complete');
     } catch (error) {
       await handleSmartError(error, { action: 'markOnboardingTaskComplete', taskId }, 'Failed to update task');
     }
@@ -7072,6 +7088,7 @@ export default function EmployeeProfile() {
                     await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { photoURL: url });
 
                     setRawImageSrc(null);
+                    trackPhotoUploaded();
                     success('✓ Photo updated!');
                     await fetchEmployee();
                   } catch (err) {

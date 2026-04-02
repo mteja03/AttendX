@@ -28,6 +28,7 @@ import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
 import { updateCompanyCounts } from '../utils/updateCompanyCounts';
 import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
+import { trackEmployeeAdded, trackPageView } from '../utils/analytics';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -332,6 +333,10 @@ export default function Employees() {
     () => (company?.benefits || []).map((b) => ({ id: b, name: b })),
     [company?.benefits],
   );
+
+  useEffect(() => {
+    trackPageView('Employees');
+  }, []);
 
   useEffect(() => {
     if (!companyId) return;
@@ -894,6 +899,7 @@ export default function Employees() {
 
       await updateCompanyCounts(companyId);
       handleCloseAddModal();
+      trackEmployeeAdded();
       success('Employee added successfully!');
       await fetchEmployees(true);
       fetchTotalCount();

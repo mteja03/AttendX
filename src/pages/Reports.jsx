@@ -26,6 +26,7 @@ import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
 import { calculateProRatedAllowance, isMidYearJoinerThisYear } from '../utils/leaveProration';
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
+import { trackPageView, trackReportViewed } from '../utils/analytics';
 
 const CHART_COLORS = ['#1B6B6B', '#4ECDC4', '#2BB8B0', '#155858', '#7EDDD8', '#0F4444', '#A8EDEA', '#264653', '#2A9D8F'];
 
@@ -221,6 +222,14 @@ export default function Reports() {
   const [roles, setRoles] = useState([]);
   const [activeTab, setActiveTab] = useState('headcount');
   const [tabLoading, setTabLoading] = useState(false);
+
+  useEffect(() => {
+    trackPageView('Reports');
+  }, []);
+
+  useEffect(() => {
+    trackReportViewed(activeTab);
+  }, [activeTab]);
   const [empFilterDept, setEmpFilterDept] = useState('All');
   const [empFilterBranch, setEmpFilterBranch] = useState('All');
   const [empFilterStatus, setEmpFilterStatus] = useState('All');

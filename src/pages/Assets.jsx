@@ -24,6 +24,7 @@ import { toDisplayDate } from '../utils';
 import ErrorModal from '../components/ErrorModal';
 import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
+import { trackAssetAdded, trackAssetAssigned, trackPageView } from '../utils/analytics';
 
 const DEFAULT_ASSET_TYPES = [
   { name: 'Laptop', mode: 'trackable' },
@@ -194,6 +195,10 @@ export default function Assets() {
     if (errType === 'network_error') return setErrorModal('network_error');
     showError(ERROR_MESSAGES[errType]?.message || fallback);
   };
+
+  useEffect(() => {
+    trackPageView('Assets');
+  }, []);
 
   useEffect(() => {
     if (!companyId) return;
@@ -520,6 +525,7 @@ export default function Assets() {
       );
       setAssets((prev) => [{ id: ref.id, ...payload }, ...prev]);
       setShowAddModal(false);
+      trackAssetAdded(form.type || payload.type || '');
       success('Asset added');
     } catch (error) {
       await handleSmartError(error, { action: 'addAsset' }, 'Failed to add asset');
@@ -608,6 +614,7 @@ export default function Assets() {
         ),
       );
 
+      trackAssetAssigned();
       success(`${asset.name || asset.assetId} assigned to ${emp.fullName || ''}`);
       setShowAssignModal(false);
     } catch (error) {

@@ -16,6 +16,7 @@ import ErrorModal from '../components/ErrorModal';
 import { DOCUMENT_CHECKLIST, documentTypesToSections, sectionsToDocumentTypes } from '../utils/documentTypes';
 import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
+import { trackPageView } from '../utils/analytics';
 
 const FORMAT_OPTIONS = [
   { ext: '.pdf', label: 'PDF' },
@@ -247,6 +248,10 @@ export default function Settings() {
   const [policiesForOnboarding, setPoliciesForOnboarding] = useState([]);
   const [errorModal, setErrorModal] = useState(null);
   const activeTab = tab;
+
+  useEffect(() => {
+    trackPageView('Settings');
+  }, []);
 
   const handleSmartError = async (error, context, fallback = 'Failed to save. Please try again.') => {
     await logError(error, { companyId, ...context });

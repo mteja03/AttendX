@@ -23,6 +23,7 @@ import {
   buildCalendarDays,
   expandEventDays,
 } from '../utils/calendarHelpers';
+import { trackPageView } from '../utils/analytics';
 
 export default function Calendar() {
   const { companyId } = useParams();
@@ -40,6 +41,10 @@ export default function Calendar() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    trackPageView('Calendar');
+  }, []);
 
   const [eventForm, setEventForm] = useState({
     title: '',

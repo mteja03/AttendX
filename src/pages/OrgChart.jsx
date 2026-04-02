@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { trackPageView } from '../utils/analytics';
 import { useCompany } from '../contexts/CompanyContext';
 import { getDeptColor, buildOrgTree, treeDepth } from '../utils/orgChartHelpers';
 import EmployeeAvatar from '../components/EmployeeAvatar';
@@ -90,6 +91,10 @@ export default function OrgChart() {
   const [employees, setEmployees] = useState([]);
   const [search, setSearch] = useState('');
   const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    trackPageView('OrgChart');
+  }, []);
 
   useEffect(() => {
     if (!companyId) return () => {};

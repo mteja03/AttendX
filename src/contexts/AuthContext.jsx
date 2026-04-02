@@ -6,6 +6,7 @@ import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firest
 import { auth, googleProvider, db } from '../firebase/config';
 import { PLATFORM_CONFIG } from '../config/constants';
 import { setSentryUser } from '../utils/sentry';
+import { trackLogin, trackLogout } from '../utils/analytics';
 
 const AuthContext = createContext(null);
 
@@ -258,9 +259,11 @@ export function AuthProvider({ children }) {
       }
       setGoogleAccessToken(null);
     }
+    trackLogin();
   }, [persistDriveToken]);
 
   const signOutUser = useCallback(async () => {
+    trackLogout();
     try {
       localStorage.removeItem('gat');
       localStorage.removeItem('gat_expiry');

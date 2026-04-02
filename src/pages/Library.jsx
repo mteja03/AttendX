@@ -19,6 +19,7 @@ import PageLoader from '../components/PageLoader';
 import { formatLakhs, toDisplayDate, toJSDate } from '../utils';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 import { GUIDE_TOPICS } from './libraryGuideTopics';
+import { trackPageView } from '../utils/analytics';
 
 const LIBRARY_TABS = [
   { id: 'policies', label: 'Policies', icon: '📋' },
@@ -515,6 +516,10 @@ export default function Library() {
   const { success, error: showError } = useToast();
   const canEdit = role === 'admin' || role === 'hrmanager';
   const canDeletePolicy = role === 'admin' || role === 'hrmanager';
+
+  useEffect(() => {
+    trackPageView('Library');
+  }, []);
 
   const [libraryTab, setLibraryTab] = useState('policies');
   const [expandedGuide, setExpandedGuide] = useState(null);

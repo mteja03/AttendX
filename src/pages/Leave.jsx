@@ -26,6 +26,12 @@ import { toDisplayDate, toJSDate } from '../utils';
 import { calculateProRatedAllowance, isMidYearJoinerThisYear } from '../utils/leaveProration';
 import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
+import {
+  trackLeaveAdded,
+  trackLeaveApproved,
+  trackLeaveRejected,
+  trackPageView,
+} from '../utils/analytics';
 
 function mergeLeaveListsById(a, b) {
   const m = new Map();
@@ -184,6 +190,10 @@ export default function Leave() {
     if (errType === 'network_error') return setErrorModal('network_error');
     showError(ERROR_MESSAGES[errType]?.message || fallback);
   };
+
+  useEffect(() => {
+    trackPageView('Leave');
+  }, []);
 
   const [empSearch, setEmpSearch] = useState('');
   const [showEmpDropdown, setShowEmpDropdown] = useState(false);
@@ -454,6 +464,7 @@ export default function Leave() {
       const key = `leaveUsed.${code}`;
       await withRetry(() => updateDoc(empRef, { [key]: increment(leaveDoc.days || 0) }), { companyId, action: 'approveLeaveBalanceUpdate' });
       setLeaveList((prev) => prev.map((l) => (l.id === leaveDoc.id ? { ...l, status: 'Approved' } : l)));
+      trackLeaveApproved();
       success('Leave approved');
     } catch (error) {
       await handleSmartError(error, { action: 'approveLeave', leaveId: leaveDoc.id }, 'Failed to approve');
@@ -469,6 +480,7 @@ export default function Leave() {
         decidedAt: serverTimestamp(),
       }), { companyId, action: 'rejectLeave' });
       setLeaveList((prev) => prev.map((l) => (l.id === leaveDoc.id ? { ...l, status: 'Rejected' } : l)));
+      trackLeaveRejected();
       success('Leave rejected');
     } catch (error) {
       await handleSmartError(error, { action: 'rejectLeave', leaveId: leaveDoc.id }, 'Failed to reject');
@@ -530,6 +542,7 @@ export default function Leave() {
       setSelectedEmployee(null);
       setEmpSearch('');
       setShowEmpDropdown(false);
+      trackLeaveAdded(form.leaveType);
       success('Leave added');
     } catch (error) {
       await handleSmartError(error, { action: 'addLeave', employeeId: form.employeeId }, 'Failed to add leave');

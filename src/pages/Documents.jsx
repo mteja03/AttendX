@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { PLATFORM_CONFIG } from '../config/constants';
 import PageLoader from '../components/PageLoader';
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
+import { trackPageView } from '../utils/analytics';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -85,6 +86,10 @@ export default function Documents() {
   const [showDocFilters, setShowDocFilters] = useState(false);
   const [missingAlertOpen, setMissingAlertOpen] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
+
+  useEffect(() => {
+    trackPageView('Documents');
+  }, []);
 
   useEffect(() => {
     if (!companyId) return;
