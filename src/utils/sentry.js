@@ -13,15 +13,36 @@ export const initSentry = () => {
         'Non-Error promise rejection',
         'Network request failed',
         'Load failed',
+        // Chunk load errors after deploy
+        'Failed to fetch dynamically imported module',
+        'Loading chunk',
+        'Loading CSS chunk',
+        'Importing a module script failed',
+        'Unable to preload CSS',
+        /ChunkLoadError/,
       ],
       beforeSend(event, hint) {
         const error = hint.originalException;
+
+        // Don't send auth errors
         if (
           error?.code?.includes('permission-denied') ||
           error?.code?.includes('unauthenticated')
         ) {
           return null;
         }
+
+        // Don't send chunk load errors
+        const msg = error?.message || '';
+        if (
+          msg.includes('Failed to fetch dynamically') ||
+          msg.includes('Loading chunk') ||
+          msg.includes('Importing a module') ||
+          msg.includes('Unable to preload')
+        ) {
+          return null;
+        }
+
         return event;
       },
     });
