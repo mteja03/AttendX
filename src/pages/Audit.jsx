@@ -469,11 +469,11 @@ function AuditTemplates({ auditTypes, companyId, currentUser, saving, setSaving,
                                   value={item.riskLevel || 'Medium'}
                                   onChange={(e) => updateItem(item.id, 'riskLevel', e.target.value)}
                                   className={`border rounded-lg px-2 py-1.5 text-xs font-medium ${
-                                    item.riskLevel === 'Critical'
+                                    (item.riskLevel || 'Medium') === 'Critical'
                                       ? 'bg-red-50 border-red-200 text-red-700'
-                                      : item.riskLevel === 'High'
+                                      : (item.riskLevel || 'Medium') === 'High'
                                         ? 'bg-orange-50 border-orange-200 text-orange-700'
-                                        : item.riskLevel === 'Medium'
+                                        : (item.riskLevel || 'Medium') === 'Medium'
                                           ? 'bg-amber-50 border-amber-200 text-amber-700'
                                           : 'bg-green-50 border-green-200 text-green-700'
                                   }`}
