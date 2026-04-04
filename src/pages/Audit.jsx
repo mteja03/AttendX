@@ -69,8 +69,9 @@ function AuditDashboard({ audits }) {
   const closed = audits.filter((a) => a.status === 'Closed').length;
   const overdue = audits.filter((a) => {
     if (a.status === 'Closed') return false;
-    if (!a.dueDate) return false;
-    return new Date(a.dueDate) < new Date();
+    const end = a.endDate || a.dueDate;
+    if (!end) return false;
+    return new Date(end) < new Date();
   }).length;
 
   return (
@@ -111,7 +112,7 @@ function AuditDashboard({ audits }) {
                 <div>
                   <p className="text-sm font-medium text-gray-800">{audit.title || audit.auditTypeName}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {audit.branch || audit.location || '—'} · Due: {audit.dueDate || '—'}
+                    {audit.branch || audit.location || '—'} · End: {audit.endDate || audit.dueDate || '—'}
                   </p>
                 </div>
                 <span
@@ -634,7 +635,8 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
               </span>
             </div>
             <p className="text-xs text-gray-400">
-              {audit.branch || audit.location || '—'} · Due: {audit.dueDate || 'Not set'} · Auditor: {audit.auditorName || '—'}
+              {audit.branch || audit.location || '—'} · End: {audit.endDate || audit.dueDate || 'Not set'} · Auditor:{' '}
+              {audit.auditorName || '—'}
             </p>
           </div>
           <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
@@ -861,6 +863,19 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
   );
 }
 
+const EMPTY_ASSIGN_AUDIT_FORM = {
+  auditTypeId: '',
+  location: '',
+  branch: '',
+  department: '',
+  auditorId: '',
+  auditorName: '',
+  auditorEmail: '',
+  startDate: '',
+  endDate: '',
+  notes: '',
+};
+
 function AuditList({
   audits,
   auditTypes,
@@ -871,6 +886,7 @@ function AuditList({
   setSaving,
   showSuccess,
   showError,
+  setShowSettings,
 }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedAudit, setSelectedAudit] = useState(null);
@@ -897,24 +913,9 @@ function AuditList({
     search: '',
   });
 
-  const [createForm, setCreateForm] = useState({
-    auditTypeId: '',
-    title: '',
-    location: '',
-    branch: '',
-    department: '',
-    auditorId: '',
-    auditorName: '',
-    auditorEmail: '',
-    auditorDesignation: '',
-    startDate: '',
-    dueDate: '',
-    notes: '',
-  });
+  const [createForm, setCreateForm] = useState(() => ({ ...EMPTY_ASSIGN_AUDIT_FORM }));
 
   const branchOptions = company?.branches?.length ? company.branches : [];
-  const locationOptions = company?.locations || [];
-  const departmentOptions = company?.departments?.length ? company.departments : [];
 
   const filteredAudits = useMemo(() => {
     return audits.filter((audit) => {
@@ -939,8 +940,12 @@ function AuditList({
       showError('Select an audit template');
       return;
     }
-    if (!createForm.dueDate) {
-      showError('Set a due date');
+    if (!createForm.auditorId) {
+      showError('Select an auditor');
+      return;
+    }
+    if (!createForm.endDate) {
+      showError('Set an end date');
       return;
     }
 
@@ -966,19 +971,19 @@ function AuditList({
       await addDoc(collection(db, 'companies', companyId, 'audits'), {
         auditTypeId: createForm.auditTypeId,
         auditTypeName: auditType?.name || '',
-        auditCategory: auditType?.auditCategory || 'Internal',
         auditTypeColor: auditType?.color || '#8B5CF6',
-        templateRiskLevel: auditType?.riskLevel || 'Medium',
-        title: createForm.title.trim() || auditType?.name || '',
+        auditCategory: auditType?.auditCategory || 'Internal',
+        riskLevel: auditType?.riskLevel || 'Medium',
+        title: auditType?.name || '',
         location: createForm.location,
         branch: createForm.branch,
         department: createForm.department,
-        auditorId: createForm.auditorId || '',
+        auditorId: createForm.auditorId,
         auditorName: createForm.auditorName.trim(),
         auditorEmail: (createForm.auditorEmail || '').trim().toLowerCase(),
-        auditorDesignation: createForm.auditorDesignation || '',
         startDate: createForm.startDate,
-        dueDate: createForm.dueDate,
+        endDate: createForm.endDate,
+        dueDate: createForm.endDate,
         notes: createForm.notes,
         status: 'Assigned',
         checklist,
@@ -994,22 +999,9 @@ function AuditList({
         overallScore: null,
       });
 
-      showSuccess('Audit created and assigned!');
+      showSuccess(`Audit assigned to ${createForm.auditorName}!`);
       setShowCreateModal(false);
-      setCreateForm({
-        auditTypeId: '',
-        title: '',
-        location: '',
-        branch: '',
-        department: '',
-        auditorId: '',
-        auditorName: '',
-        auditorEmail: '',
-        auditorDesignation: '',
-        startDate: '',
-        dueDate: '',
-        notes: '',
-      });
+      setCreateForm({ ...EMPTY_ASSIGN_AUDIT_FORM });
     } catch (e) {
       showError(`Failed: ${e.message}`);
     } finally {
@@ -1019,8 +1011,9 @@ function AuditList({
 
   const isOverdue = (audit) => {
     if (audit.status === 'Closed') return false;
-    if (!audit.dueDate) return false;
-    return new Date(audit.dueDate) < new Date();
+    const end = audit.endDate || audit.dueDate;
+    if (!end) return false;
+    return new Date(end) < new Date();
   };
 
   return (
@@ -1134,7 +1127,9 @@ function AuditList({
                       <p className="text-xs text-gray-400">{audit.auditTypeName}</p>
                       {audit.branch && <p className="text-xs text-gray-400">· {audit.branch}</p>}
                       {audit.auditorName && <p className="text-xs text-gray-400">· {audit.auditorName}</p>}
-                      <p className="text-xs text-gray-400">· Due: {audit.dueDate || 'Not set'}</p>
+                      <p className="text-xs text-gray-400">
+                        · End: {audit.endDate || audit.dueDate || 'Not set'}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1162,180 +1157,301 @@ function AuditList({
       )}
 
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
-              <h2 className="text-lg font-semibold text-gray-800">Assign Audit</h2>
-              <button type="button" onClick={() => setShowCreateModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
-                ✕
-              </button>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-100 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-[#E8F5F5] rounded-xl flex items-center justify-center text-lg">🔍</div>
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-800">Assign Audit</h2>
+                    <p className="text-xs text-gray-400">Assign an audit to an auditor for a location</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setCreateForm({ ...EMPTY_ASSIGN_AUDIT_FORM });
+                  }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
               <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Audit Template *</label>
-                <select
-                  value={createForm.auditTypeId}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, auditTypeId: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                >
-                  <option value="">Select audit template...</option>
-                  {auditTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} · {(t.checklistTemplate || []).length} items
-                    </option>
-                  ))}
-                </select>
-                {createForm.auditTypeId &&
-                  (() => {
-                    const t = auditTypes.find((x) => x.id === createForm.auditTypeId);
-                    if (!t) return null;
-                    return (
-                      <div className="flex items-center gap-2 mt-2">
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            t.auditCategory === 'Internal' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Template</p>
+                <div className="space-y-2">
+                  {auditTypes.length === 0 ? (
+                    <div className="p-4 border-2 border-dashed border-gray-200 rounded-xl text-center">
+                      <p className="text-sm text-gray-400">
+                        No templates yet.{' '}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowCreateModal(false);
+                            setShowSettings(true);
+                          }}
+                          className="text-[#1B6B6B] underline"
+                        >
+                          Create one in Settings
+                        </button>
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {auditTypes.map((type) => (
+                        <button
+                          key={type.id}
+                          type="button"
+                          onClick={() =>
+                            setCreateForm((prev) => ({
+                              ...prev,
+                              auditTypeId: type.id,
+                            }))
+                          }
+                          className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 text-left transition-all ${
+                            createForm.auditTypeId === type.id
+                              ? 'border-[#1B6B6B] bg-[#E8F5F5]'
+                              : 'border-gray-100 hover:border-gray-200 bg-white'
                           }`}
                         >
-                          {t.auditCategory || 'Internal'}
-                        </span>
-                        <span className="text-xs text-gray-400">{(t.checklistTemplate || []).length} checklist items</span>
-                      </div>
-                    );
-                  })()}
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Audit Title (optional)</label>
-                <input
-                  value={createForm.title}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, title: e.target.value }))}
-                  placeholder="Leave blank to use template name"
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1.5">Branch</label>
-                  <select
-                    value={createForm.branch}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, branch: e.target.value }))}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                  >
-                    <option value="">Select branch...</option>
-                    {branchOptions.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1.5">Location</label>
-                  <select
-                    value={createForm.location}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, location: e.target.value }))}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                  >
-                    <option value="">Select location...</option>
-                    {locationOptions.map((l) => (
-                      <option key={l} value={l}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Department</label>
-                <select
-                  value={createForm.department}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, department: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                >
-                  <option value="">Select department...</option>
-                  {departmentOptions.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Assign Auditor</label>
-                <select
-                  value={createForm.auditorId}
-                  onChange={(e) => {
-                    const emp = employees.find((x) => x.id === e.target.value);
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      auditorId: e.target.value,
-                      auditorName: emp?.fullName || '',
-                      auditorEmail: emp?.email || '',
-                      auditorDesignation: emp?.designation || '',
-                    }));
-                  }}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                >
-                  <option value="">Select auditor...</option>
-                  {[...employees]
-                    .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
-                    .map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.fullName} — {emp.designation || emp.department || ''}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1.5">Start Date</label>
-                  <input
-                    type="date"
-                    value={createForm.startDate}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, startDate: e.target.value }))}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1.5">Due Date *</label>
-                  <input
-                    type="date"
-                    value={createForm.dueDate}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                  />
+                          <div
+                            className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center text-white font-bold text-sm"
+                            style={{ background: type.color || '#8B5CF6' }}
+                          >
+                            {type.name?.charAt(0)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p
+                              className={`text-sm font-medium truncate ${
+                                createForm.auditTypeId === type.id ? 'text-[#1B6B6B]' : 'text-gray-800'
+                              }`}
+                            >
+                              {type.name}
+                            </p>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span
+                                className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                                  type.auditCategory === 'External' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                                }`}
+                              >
+                                {type.auditCategory === 'External' ? '🌐' : '🏢'} {type.auditCategory || 'Internal'}
+                              </span>
+                              <span
+                                className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                                  type.riskLevel === 'Critical'
+                                    ? 'bg-red-100 text-red-600'
+                                    : type.riskLevel === 'High'
+                                      ? 'bg-orange-100 text-orange-600'
+                                      : type.riskLevel === 'Medium'
+                                        ? 'bg-amber-100 text-amber-600'
+                                        : 'bg-green-100 text-green-600'
+                                }`}
+                              >
+                                {type.riskLevel === 'Critical' && '🔴 '}
+                                {type.riskLevel === 'High' && '🟠 '}
+                                {type.riskLevel === 'Medium' && '🟡 '}
+                                {type.riskLevel === 'Low' && '🟢 '}
+                                {type.riskLevel || 'Medium'}
+                              </span>
+                              <span className="text-xs text-gray-400">{(type.checklistTemplate || []).length} items</span>
+                            </div>
+                          </div>
+                          {createForm.auditTypeId === type.id && (
+                            <div className="w-5 h-5 bg-[#1B6B6B] rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-white text-xs font-bold">✓</span>
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Notes (optional)</label>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Location</p>
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Location</label>
+                    <select
+                      value={createForm.location}
+                      onChange={(e) => setCreateForm((prev) => ({ ...prev, location: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">Select location...</option>
+                      {(company?.locations || []).map((l) => (
+                        <option key={l} value={l}>
+                          {l}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1.5">Branch</label>
+                      <select
+                        value={createForm.branch}
+                        onChange={(e) => setCreateForm((prev) => ({ ...prev, branch: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                      >
+                        <option value="">Select branch...</option>
+                        {(company?.branches || []).map((b) => (
+                          <option key={b} value={b}>
+                            {b}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1.5">Department</label>
+                      <select
+                        value={createForm.department}
+                        onChange={(e) => setCreateForm((prev) => ({ ...prev, department: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                      >
+                        <option value="">Select department...</option>
+                        {(company?.departments || []).map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Auditor</p>
+                <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-100 rounded-xl p-2">
+                  {employees.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-4">No active employees found</p>
+                  ) : (
+                    [...employees]
+                      .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
+                      .map((emp) => (
+                        <button
+                          key={emp.id}
+                          type="button"
+                          onClick={() =>
+                            setCreateForm((prev) => ({
+                              ...prev,
+                              auditorId: emp.id,
+                              auditorName: emp.fullName || '',
+                              auditorEmail: emp.email || '',
+                            }))
+                          }
+                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all ${
+                            createForm.auditorId === emp.id
+                              ? 'bg-[#E8F5F5] border border-[#1B6B6B]'
+                              : 'hover:bg-gray-50 border border-transparent'
+                          }`}
+                        >
+                          <div className="w-8 h-8 rounded-full flex-shrink-0 bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
+                            {emp.fullName?.charAt(0)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p
+                              className={`text-sm font-medium truncate ${
+                                createForm.auditorId === emp.id ? 'text-[#1B6B6B]' : 'text-gray-800'
+                              }`}
+                            >
+                              {emp.fullName}
+                            </p>
+                            <p className="text-xs text-gray-400 truncate">{emp.designation || emp.department || '—'}</p>
+                          </div>
+                          {createForm.auditorId === emp.id && (
+                            <div className="w-5 h-5 bg-[#1B6B6B] rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-white text-xs font-bold">✓</span>
+                            </div>
+                          )}
+                        </button>
+                      ))
+                  )}
+                </div>
+                {createForm.auditorId && (
+                  <div className="mt-2 flex items-center gap-2 p-2.5 bg-[#E8F5F5] rounded-xl">
+                    <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
+                      {createForm.auditorName?.charAt(0)}
+                    </div>
+                    <p className="text-xs text-[#1B6B6B] font-medium">{createForm.auditorName} assigned as auditor</p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Schedule</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Start Date</label>
+                    <input
+                      type="date"
+                      value={createForm.startDate}
+                      onChange={(e) => setCreateForm((prev) => ({ ...prev, startDate: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">End Date *</label>
+                    <input
+                      type="date"
+                      value={createForm.endDate}
+                      onChange={(e) => setCreateForm((prev) => ({ ...prev, endDate: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Notes for Auditor (optional)</label>
                 <textarea
                   value={createForm.notes}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, notes: e.target.value }))}
                   rows={2}
-                  placeholder="Any instructions for the auditor..."
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]"
+                  placeholder="Any special instructions or context for the auditor..."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]"
                 />
               </div>
             </div>
 
-            <div className="p-6 border-t flex-shrink-0 flex gap-3">
-              <button type="button" onClick={() => setShowCreateModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
-              >
-                {saving ? 'Assigning...' : 'Assign Audit'}
-              </button>
+            <div className="px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-gray-50/50">
+              {createForm.auditTypeId && createForm.auditorId && (
+                <div className="mb-3 p-3 bg-[#E8F5F5] rounded-xl">
+                  <p className="text-xs text-[#1B6B6B] font-medium">
+                    📋 {auditTypes.find((t) => t.id === createForm.auditTypeId)?.name}
+                    {' → '}
+                    {createForm.auditorName}
+                    {createForm.branch && ` · ${createForm.branch}`}
+                    {createForm.endDate && ` · Due ${createForm.endDate}`}
+                  </p>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setCreateForm({ ...EMPTY_ASSIGN_AUDIT_FORM });
+                  }}
+                  className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 bg-white hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  disabled={saving || !createForm.auditTypeId || !createForm.auditorId}
+                  className="flex-[2] px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {saving ? 'Assigning...' : '+ Assign Audit'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1477,6 +1593,7 @@ export default function Audit() {
             setSaving={setSaving}
             showSuccess={showSuccess}
             showError={showError}
+            setShowSettings={setShowSettings}
           />
         )}
       </div>
