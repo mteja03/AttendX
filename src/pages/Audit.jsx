@@ -630,10 +630,35 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
             </div>
             <div className="flex flex-col gap-0.5">
               <p className="text-xs text-gray-400">
-                {audit.branch || audit.location || '—'} · End: {audit.endDate || audit.dueDate || 'Not set'} · Auditor:{' '}
+                {audit.branch || audit.location || '—'} · End: {audit.endDate || audit.dueDate || 'Not set'} · Lead:{' '}
                 {audit.auditorName || '—'}
               </p>
               {audit.category && <span className="text-xs text-gray-400">{audit.category}</span>}
+            </div>
+            <div className="mt-2">
+              <p className="text-xs text-gray-400 mb-1.5">Audit Team</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {audit.auditorName && (
+                  <div className="flex items-center gap-1.5 bg-[#E8F5F5] px-2.5 py-1 rounded-full">
+                    <div className="w-4 h-4 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
+                      {audit.auditorName?.charAt(0)}
+                    </div>
+                    <span className="text-xs text-[#1B6B6B] font-medium">{audit.auditorName}</span>
+                    <span className="text-xs text-[#1B6B6B]/60">Lead</span>
+                  </div>
+                )}
+                {(audit.teamMembers || []).map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex items-center gap-1.5 bg-gray-100 px-2.5 py-1 rounded-full"
+                  >
+                    <div className="w-4 h-4 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold">
+                      {m.fullName?.charAt(0)}
+                    </div>
+                    <span className="text-xs text-gray-600">{m.fullName}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
           <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
@@ -869,6 +894,7 @@ const EMPTY_ASSIGN_AUDIT_FORM = {
   auditorId: '',
   auditorName: '',
   auditorEmail: '',
+  teamMembers: [],
   startDate: '',
   endDate: '',
   notes: '',
@@ -939,7 +965,7 @@ function AuditList({
       return;
     }
     if (!createForm.auditorId) {
-      showError('Select an auditor');
+      showError('Select a lead auditor');
       return;
     }
     if (!createForm.endDate) {
@@ -980,6 +1006,8 @@ function AuditList({
         auditorId: createForm.auditorId,
         auditorName: createForm.auditorName.trim(),
         auditorEmail: (createForm.auditorEmail || '').trim().toLowerCase(),
+        teamMembers: createForm.teamMembers,
+        teamSize: 1 + createForm.teamMembers.length,
         startDate: createForm.startDate,
         endDate: createForm.endDate,
         dueDate: createForm.endDate,
@@ -998,7 +1026,11 @@ function AuditList({
         overallScore: null,
       });
 
-      showSuccess(`Audit assigned to ${createForm.auditorName}!`);
+      showSuccess(
+        createForm.teamMembers.length > 0
+          ? `Audit assigned to ${createForm.auditorName} and team (${1 + createForm.teamMembers.length} people)!`
+          : `Audit assigned to ${createForm.auditorName}!`,
+      );
       setShowCreateModal(false);
       setCreateForm({ ...EMPTY_ASSIGN_AUDIT_FORM });
     } catch (e) {
@@ -1131,6 +1163,11 @@ function AuditList({
                       )}
                       {audit.branch && <p className="text-xs text-gray-400">· {audit.branch}</p>}
                       {audit.auditorName && <p className="text-xs text-gray-400">· {audit.auditorName}</p>}
+                      {(audit.teamMembers?.length ?? 0) > 0 && (
+                        <span className="text-xs text-gray-400">
+                          · 👥 Team of {1 + audit.teamMembers.length}
+                        </span>
+                      )}
                       <p className="text-xs text-gray-400">
                         · End: {audit.endDate || audit.dueDate || 'Not set'}
                       </p>
@@ -1330,39 +1367,145 @@ function AuditList({
               </div>
 
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Auditor</p>
-                <select
-                  value={createForm.auditorId}
-                  onChange={(e) => {
-                    const emp = employees.find((x) => x.id === e.target.value);
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      auditorId: e.target.value,
-                      auditorName: emp?.fullName || '',
-                      auditorEmail: emp?.email || '',
-                    }));
-                  }}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                >
-                  <option value="">Select auditor...</option>
-                  {employees
-                    .filter((e) => e.status === 'Active')
-                    .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
-                    .map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.fullName}
-                        {emp.designation ? ` — ${emp.designation}` : emp.department ? ` — ${emp.department}` : ''}
-                      </option>
-                    ))}
-                </select>
-                {createForm.auditorId && (
-                  <div className="mt-2 flex items-center gap-2 p-2.5 bg-[#E8F5F5] rounded-xl">
-                    <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                      {createForm.auditorName?.charAt(0)}
-                    </div>
-                    <p className="text-xs text-[#1B6B6B] font-medium">{createForm.auditorName} assigned as auditor</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Team</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">
+                      Lead Auditor *
+                      <span className="text-gray-400 font-normal ml-1">(responsible for submission)</span>
+                    </label>
+                    <select
+                      value={createForm.auditorId}
+                      onChange={(e) => {
+                        const emp = employees.find((x) => x.id === e.target.value);
+                        setCreateForm((prev) => ({
+                          ...prev,
+                          auditorId: e.target.value,
+                          auditorName: emp?.fullName || '',
+                          auditorEmail: emp?.email || '',
+                          teamMembers: prev.teamMembers.filter((m) => m.id !== e.target.value),
+                        }));
+                      }}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">Select lead auditor...</option>
+                      {employees
+                        .filter((e) => e.status === 'Active')
+                        .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
+                        .map((emp) => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.fullName}
+                            {emp.designation ? ` — ${emp.designation}` : emp.department ? ` — ${emp.department}` : ''}
+                          </option>
+                        ))}
+                    </select>
+                    {createForm.auditorId && (
+                      <div className="mt-2 flex items-center gap-2 p-2.5 bg-[#E8F5F5] rounded-xl">
+                        <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          {createForm.auditorName?.charAt(0)}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs text-[#1B6B6B] font-medium">{createForm.auditorName}</p>
+                          <p className="text-xs text-[#1B6B6B]/60">Lead Auditor</p>
+                        </div>
+                        <span className="text-xs bg-[#1B6B6B] text-white px-2 py-0.5 rounded-full font-medium">Lead</span>
+                      </div>
+                    )}
                   </div>
-                )}
+
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">
+                      Team Members
+                      <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                    </label>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        if (!id) return;
+                        const emp = employees.find((x) => x.id === id);
+                        if (!emp) return;
+                        setCreateForm((prev) => {
+                          if (prev.teamMembers.some((m) => m.id === id)) return prev;
+                          return {
+                            ...prev,
+                            teamMembers: [
+                              ...prev.teamMembers,
+                              {
+                                id: emp.id,
+                                fullName: emp.fullName || '',
+                                email: emp.email || '',
+                                designation: emp.designation || emp.department || '',
+                              },
+                            ],
+                          };
+                        });
+                      }}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">+ Add team member...</option>
+                      {employees
+                        .filter(
+                          (e) =>
+                            e.status === 'Active' &&
+                            e.id !== createForm.auditorId &&
+                            !createForm.teamMembers.some((m) => m.id === e.id),
+                        )
+                        .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
+                        .map((emp) => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.fullName}
+                            {emp.designation ? ` — ${emp.designation}` : emp.department ? ` — ${emp.department}` : ''}
+                          </option>
+                        ))}
+                    </select>
+                    {createForm.teamMembers.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {createForm.teamMembers.map((member) => (
+                          <div
+                            key={member.id}
+                            className="flex items-center gap-2 p-2.5 bg-gray-50 border border-gray-100 rounded-xl"
+                          >
+                            <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                              {member.fullName?.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-700 truncate">{member.fullName}</p>
+                              {member.designation ? (
+                                <p className="text-xs text-gray-400 truncate">{member.designation}</p>
+                              ) : null}
+                            </div>
+                            <span className="text-xs text-gray-400 bg-white border border-gray-200 px-2 py-0.5 rounded-full">
+                              Member
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCreateForm((prev) => ({
+                                  ...prev,
+                                  teamMembers: prev.teamMembers.filter((m) => m.id !== member.id),
+                                }))
+                              }
+                              className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-red-100 text-gray-300 hover:text-red-500 flex-shrink-0 transition-colors text-sm"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {(createForm.auditorId || createForm.teamMembers.length > 0) && (
+                      <div className="mt-2 p-2.5 bg-gray-50 rounded-xl">
+                        <p className="text-xs text-gray-500">
+                          👥 Team of <strong>{1 + createForm.teamMembers.length}</strong> — {createForm.auditorName || '—'}
+                          {createForm.teamMembers.length > 0
+                            ? ` + ${createForm.teamMembers.map((m) => (m.fullName || '').split(' ')[0]).join(', ')}`
+                            : ''}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -1407,9 +1550,9 @@ function AuditList({
                   <p className="text-xs text-[#1B6B6B] font-medium">
                     📋 {auditTypes.find((t) => t.id === createForm.auditTypeId)?.name}
                     {' → '}
-                    {createForm.auditorName}
+                    👥 Team of {1 + createForm.teamMembers.length}
                     {createForm.branch && ` · ${createForm.branch}`}
-                    {createForm.endDate && ` · Due ${createForm.endDate}`}
+                    {createForm.endDate && ` · Ends ${createForm.endDate}`}
                   </p>
                 </div>
               )}
