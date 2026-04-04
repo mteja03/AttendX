@@ -10,7 +10,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
-  setDoc,
+  getDocs,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,8 +20,6 @@ import { trackPageView } from '../utils/analytics';
 const AUDIT_TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'audits', label: 'Audits', icon: '🔍' },
-  { id: 'types', label: 'Audit Types', icon: '📋' },
-  { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
 const STATUS_COLORS = {
@@ -32,12 +30,6 @@ const STATUS_COLORS = {
   Closed: 'bg-green-100 text-green-700',
   Overdue: 'bg-red-100 text-red-700',
 };
-
-const ITEM_TYPES = [
-  { value: 'yesno', label: 'Yes / No' },
-  { value: 'rating', label: 'Rating 1–5' },
-  { value: 'text', label: 'Text Response' },
-];
 
 const AUDIT_COLORS = [
   '#8B5CF6',
@@ -51,14 +43,23 @@ const AUDIT_COLORS = [
   '#14B8A6',
 ];
 
-function itemHasResponse(item) {
-  if (item.type === 'rating') {
-    return typeof item.response === 'number' && item.response >= 1 && item.response <= 5;
+function itemFullyAnswered(item) {
+  const yn = item.yesNoResponse;
+  const hasYn = yn === 'Yes' || yn === 'No' || yn === 'N/A';
+  const hasRating = typeof item.rating === 'number' && item.rating >= 1 && item.rating <= 5;
+  return hasYn && hasRating;
+}
+
+function normalizeChecklistItem(item) {
+  const next = { ...item };
+  if (next.riskLevel == null || next.riskLevel === '') next.riskLevel = 'Medium';
+  if (next.yesNoResponse == null && ['Yes', 'No', 'N/A'].includes(next.response)) {
+    next.yesNoResponse = next.response;
   }
-  if (item.type === 'yesno') {
-    return item.response === 'Yes' || item.response === 'No' || item.response === 'N/A';
+  if (next.rating == null && typeof next.response === 'number' && next.response >= 1 && next.response <= 5) {
+    next.rating = next.response;
   }
-  return (item.response ?? '').toString().trim() !== '';
+  return next;
 }
 
 function AuditDashboard({ audits }) {
@@ -129,19 +130,12 @@ function AuditDashboard({ audits }) {
   );
 }
 
-function AuditTypes({
-  auditTypes,
-  companyId,
-  currentUser,
-  saving,
-  setSaving,
-  showSuccess,
-  showError,
-}) {
+function AuditTemplates({ auditTypes, companyId, currentUser, saving, setSaving, showSuccess, showError }) {
   const [showModal, setShowModal] = useState(false);
   const [editingType, setEditingType] = useState(null);
   const [selectedColor, setSelectedColor] = useState(AUDIT_COLORS[0]);
   const [form, setForm] = useState({
+    auditCategory: '',
     name: '',
     description: '',
     color: AUDIT_COLORS[0],
@@ -151,7 +145,7 @@ function AuditTypes({
   const [sections, setSections] = useState(['General']);
 
   const resetForm = () => {
-    setForm({ name: '', description: '', color: AUDIT_COLORS[0] });
+    setForm({ auditCategory: '', name: '', description: '', color: AUDIT_COLORS[0] });
     setChecklist([]);
     setSections(['General']);
     setSelectedColor(AUDIT_COLORS[0]);
@@ -161,13 +155,22 @@ function AuditTypes({
   const openEdit = (type) => {
     setEditingType(type);
     setForm({
+      auditCategory: type.auditCategory || 'Internal',
       name: type.name,
       description: type.description || '',
       color: type.color || AUDIT_COLORS[0],
     });
     setSelectedColor(type.color || AUDIT_COLORS[0]);
-    setChecklist(type.checklistTemplate || []);
-    const uniqueSections = [...new Set((type.checklistTemplate || []).map((i) => i.section))];
+    const tpl = (type.checklistTemplate || []).map((i) => {
+      const { type: _t, ...rest } = i;
+      return {
+        ...rest,
+        riskLevel: i.riskLevel || 'Medium',
+        required: i.required !== false,
+      };
+    });
+    setChecklist(tpl);
+    const uniqueSections = [...new Set(tpl.map((x) => x.section))];
     setSections(uniqueSections.length > 0 ? uniqueSections : ['General']);
     setShowModal(true);
   };
@@ -177,7 +180,7 @@ function AuditTypes({
       id: `item_${Date.now()}`,
       section,
       question: '',
-      type: 'yesno',
+      riskLevel: 'Medium',
       required: true,
       order: checklist.length,
     };
@@ -193,8 +196,12 @@ function AuditTypes({
   };
 
   const handleSave = async () => {
+    if (!form.auditCategory) {
+      showError('Select Internal or External audit');
+      return;
+    }
     if (!form.name.trim()) {
-      showError('Enter audit type name');
+      showError('Enter template name');
       return;
     }
     if (checklist.length === 0) {
@@ -209,25 +216,30 @@ function AuditTypes({
 
     try {
       setSaving(true);
+      const checklistTemplate = checklist.map((item, idx) => {
+        const { type: _omit, response: _r, ...rest } = item;
+        return { ...rest, order: idx, riskLevel: item.riskLevel || 'Medium' };
+      });
       const data = {
+        auditCategory: form.auditCategory,
         name: form.name.trim(),
         description: form.description.trim(),
         color: selectedColor,
-        checklistTemplate: checklist.map((item, idx) => ({ ...item, order: idx })),
+        checklistTemplate,
         updatedAt: serverTimestamp(),
         updatedBy: currentUser?.email || '',
       };
 
       if (editingType) {
         await updateDoc(doc(db, 'companies', companyId, 'auditTypes', editingType.id), data);
-        showSuccess('Audit type updated!');
+        showSuccess('Audit template updated!');
       } else {
         await addDoc(collection(db, 'companies', companyId, 'auditTypes'), {
           ...data,
           createdAt: serverTimestamp(),
           createdBy: currentUser?.email || '',
         });
-        showSuccess('Audit type created!');
+        showSuccess('Audit template created!');
       }
       setShowModal(false);
       resetForm();
@@ -239,7 +251,7 @@ function AuditTypes({
   };
 
   const handleDelete = async (type) => {
-    if (!window.confirm(`Delete "${type.name}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete audit template "${type.name}"? This cannot be undone.`)) return;
     try {
       await deleteDoc(doc(db, 'companies', companyId, 'auditTypes', type.id));
       showSuccess(`"${type.name}" deleted`);
@@ -252,8 +264,8 @@ function AuditTypes({
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-base font-semibold text-gray-800">Audit Types</h2>
-          <p className="text-sm text-gray-400">Define audit types and their checklist templates</p>
+          <h2 className="text-base font-semibold text-gray-800">Audit Templates</h2>
+          <p className="text-sm text-gray-400">Define audit templates and their checklist items</p>
         </div>
         <button
           type="button"
@@ -263,15 +275,15 @@ function AuditTypes({
           }}
           className="flex items-center gap-2 px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
         >
-          + Add Audit Type
+          + Add Audit Template
         </button>
       </div>
 
       {auditTypes.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
           <p className="text-4xl mb-3">📋</p>
-          <p className="text-base font-medium text-gray-700 mb-1">No audit types yet</p>
-          <p className="text-sm text-gray-400 mb-4">Create your first audit type with a checklist template</p>
+          <p className="text-base font-medium text-gray-700 mb-1">No audit templates yet</p>
+          <p className="text-sm text-gray-400 mb-4">Create your first audit template with a checklist</p>
           <button
             type="button"
             onClick={() => {
@@ -280,7 +292,7 @@ function AuditTypes({
             }}
             className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium"
           >
-            + Create Audit Type
+            + Create Audit Template
           </button>
         </div>
       ) : (
@@ -299,7 +311,16 @@ function AuditTypes({
                     {type.name?.charAt(0)}
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">{type.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-gray-800">{type.name}</p>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          type.auditCategory === 'Internal' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                        }`}
+                      >
+                        {type.auditCategory || 'Internal'}
+                      </span>
+                    </div>
                     <p className="text-xs text-gray-400 mt-0.5">{(type.checklistTemplate || []).length} items</p>
                   </div>
                 </div>
@@ -331,10 +352,10 @@ function AuditTypes({
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
-              <h2 className="text-lg font-semibold text-gray-800">{editingType ? 'Edit Audit Type' : 'New Audit Type'}</h2>
+              <h2 className="text-lg font-semibold text-gray-800">{editingType ? 'Edit Audit Template' : 'New Audit Template'}</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -349,135 +370,178 @@ function AuditTypes({
 
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
               <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Audit Type Name *</label>
-                <input
-                  value={form.name}
-                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g. Internal Audit, Cash Handling, Compliance"
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Description (optional)</label>
-                <input
-                  value={form.description}
-                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="Brief description of this audit type"
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Color</label>
-                <div className="flex gap-2 flex-wrap">
-                  {AUDIT_COLORS.map((color) => (
+                <label className="text-xs text-gray-500 block mb-1.5">Audit Category *</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {['Internal', 'External'].map((cat) => (
                     <button
-                      key={color}
+                      key={cat}
                       type="button"
-                      onClick={() => setSelectedColor(color)}
-                      className={`w-8 h-8 rounded-full transition-transform ${
-                        selectedColor === color ? 'scale-125 ring-2 ring-offset-2 ring-gray-400' : 'hover:scale-110'
+                      onClick={() => setForm((prev) => ({ ...prev, auditCategory: cat }))}
+                      className={`py-3 px-4 rounded-xl border-2 text-sm font-medium transition-all ${
+                        form.auditCategory === cat
+                          ? 'border-[#1B6B6B] bg-[#E8F5F5] text-[#1B6B6B]'
+                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
                       }`}
-                      style={{ background: color }}
-                    />
+                    >
+                      {cat === 'Internal' ? '🏢 Internal Audit' : '🌐 External Audit'}
+                    </button>
                   ))}
                 </div>
+                {form.auditCategory && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    {form.auditCategory === 'Internal'
+                      ? 'Conducted by internal team members'
+                      : 'Conducted by external auditors'}
+                  </p>
+                )}
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Checklist Template</label>
-                  <span className="text-xs text-gray-400">{checklist.length} items</span>
-                </div>
-
-                {sections.map((section) => (
-                  <div key={section} className="mb-4">
-                    <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-2">
-                      <h4 className="text-sm font-semibold text-gray-700">{section}</h4>
-                      <button type="button" onClick={() => addChecklistItem(section)} className="text-xs text-[#1B6B6B] hover:underline">
-                        + Add item
-                      </button>
-                    </div>
-
-                    {checklist
-                      .filter((i) => i.section === section)
-                      .map((item) => (
-                        <div key={item.id} className="flex gap-2 mb-2 p-3 bg-gray-50 rounded-xl">
-                          <div className="flex-1 space-y-2">
-                            <input
-                              value={item.question}
-                              onChange={(e) => updateItem(item.id, 'question', e.target.value)}
-                              placeholder="Checklist question..."
-                              className="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                            />
-                            <div className="flex gap-2 items-center">
-                              <select
-                                value={item.type}
-                                onChange={(e) => updateItem(item.id, 'type', e.target.value)}
-                                className="border rounded-lg px-2 py-1.5 text-xs bg-white"
-                              >
-                                {ITEM_TYPES.map((t) => (
-                                  <option key={t.value} value={t.value}>
-                                    {t.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={item.required}
-                                  onChange={(e) => updateItem(item.id, 'required', e.target.checked)}
-                                  className="accent-[#1B6B6B]"
-                                />
-                                Required
-                              </label>
-                            </div>
-                          </div>
-                          <button type="button" onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 px-1 flex-shrink-0 self-start mt-2">
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-
-                    {checklist.filter((i) => i.section === section).length === 0 && (
-                      <button
-                        type="button"
-                        onClick={() => addChecklistItem(section)}
-                        className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors"
-                      >
-                        + Add first item
-                      </button>
-                    )}
+              {form.auditCategory && (
+                <>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Template Name *</label>
+                    <input
+                      value={form.name}
+                      onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g. Cash Handling Audit, Compliance Audit, Safety Audit"
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    />
                   </div>
-                ))}
 
-                <div className="flex gap-2 mt-3">
-                  <input
-                    value={newSection}
-                    onChange={(e) => setNewSection(e.target.value)}
-                    placeholder="New section name..."
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newSection.trim()) {
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Description (optional)</label>
+                    <input
+                      value={form.description}
+                      onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                      placeholder="Brief description of this audit template"
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Color</label>
+                    <div className="flex gap-2 flex-wrap">
+                      {AUDIT_COLORS.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setSelectedColor(color)}
+                          className={`w-8 h-8 rounded-full transition-transform ${
+                            selectedColor === color ? 'scale-125 ring-2 ring-offset-2 ring-gray-400' : 'hover:scale-110'
+                          }`}
+                          style={{ background: color }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {form.auditCategory && form.name.trim() && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Checklist Template</label>
+                    <span className="text-xs text-gray-400">{checklist.length} items</span>
+                  </div>
+
+                  {sections.map((section) => (
+                    <div key={section} className="mb-4">
+                      <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-2">
+                        <h4 className="text-sm font-semibold text-gray-700">{section}</h4>
+                        <button type="button" onClick={() => addChecklistItem(section)} className="text-xs text-[#1B6B6B] hover:underline">
+                          + Add item
+                        </button>
+                      </div>
+
+                      {checklist
+                        .filter((i) => i.section === section)
+                        .map((item) => (
+                          <div key={item.id} className="flex gap-2 mb-3 p-3 bg-gray-50 rounded-xl">
+                            <div className="flex-1 space-y-2">
+                              <input
+                                value={item.question}
+                                onChange={(e) => updateItem(item.id, 'question', e.target.value)}
+                                placeholder="Checklist item question..."
+                                className="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                              />
+                              <div className="flex gap-2 items-center flex-wrap">
+                                <select
+                                  value={item.riskLevel || 'Medium'}
+                                  onChange={(e) => updateItem(item.id, 'riskLevel', e.target.value)}
+                                  className={`border rounded-lg px-2 py-1.5 text-xs font-medium ${
+                                    item.riskLevel === 'Critical'
+                                      ? 'bg-red-50 border-red-200 text-red-700'
+                                      : item.riskLevel === 'High'
+                                        ? 'bg-orange-50 border-orange-200 text-orange-700'
+                                        : item.riskLevel === 'Medium'
+                                          ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                          : 'bg-green-50 border-green-200 text-green-700'
+                                  }`}
+                                >
+                                  <option value="Low">🟢 Low</option>
+                                  <option value="Medium">🟡 Medium</option>
+                                  <option value="High">🟠 High</option>
+                                  <option value="Critical">🔴 Critical</option>
+                                </select>
+                                <div className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 rounded-lg">
+                                  <span className="text-xs text-gray-400">✅ Yes/No + ⭐ Rating 1-5</span>
+                                </div>
+                                <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={item.required}
+                                    onChange={(e) => updateItem(item.id, 'required', e.target.checked)}
+                                    className="accent-[#1B6B6B]"
+                                  />
+                                  Required
+                                </label>
+                              </div>
+                            </div>
+                            <button type="button" onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 px-1 flex-shrink-0 self-start mt-2">
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+
+                      {checklist.filter((i) => i.section === section).length === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => addChecklistItem(section)}
+                          className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors"
+                        >
+                          + Add first item
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  <div className="flex gap-2 mt-3">
+                    <input
+                      value={newSection}
+                      onChange={(e) => setNewSection(e.target.value)}
+                      placeholder="New section name..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newSection.trim()) {
+                          setSections((prev) => [...prev, newSection.trim()]);
+                          setNewSection('');
+                        }
+                      }}
+                      className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!newSection.trim()) return;
                         setSections((prev) => [...prev, newSection.trim()]);
                         setNewSection('');
-                      }
-                    }}
-                    className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!newSection.trim()) return;
-                      setSections((prev) => [...prev, newSection.trim()]);
-                      setNewSection('');
-                    }}
-                    className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm"
-                  >
-                    + Section
-                  </button>
+                      }}
+                      className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm"
+                    >
+                      + Section
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="p-6 border-t flex-shrink-0 flex gap-3">
@@ -497,7 +561,7 @@ function AuditTypes({
                 disabled={saving}
                 className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
               >
-                {saving ? 'Saving...' : editingType ? 'Update Type' : 'Create Type'}
+                {saving ? 'Saving...' : editingType ? 'Update Template' : 'Create Template'}
               </button>
             </div>
           </div>
@@ -508,16 +572,16 @@ function AuditTypes({
 }
 
 function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, showError }) {
-  const [checklist, setChecklist] = useState(() => audit.checklist || []);
+  const [checklist, setChecklist] = useState(() => (audit.checklist || []).map(normalizeChecklistItem));
   const [saving, setSaving] = useState(false);
   const [managerComment, setManagerComment] = useState(audit.managerComments || '');
 
   useEffect(() => {
-    setChecklist(audit.checklist || []);
+    setChecklist((audit.checklist || []).map(normalizeChecklistItem));
     setManagerComment(audit.managerComments || '');
   }, [audit.id]);
 
-  const completedCount = useMemo(() => checklist.filter((i) => itemHasResponse(i)).length, [checklist]);
+  const completedCount = useMemo(() => checklist.filter((i) => itemFullyAnswered(i)).length, [checklist]);
 
   const updateItemResponse = (id, field, value) => {
     setChecklist((prev) => prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
@@ -542,9 +606,11 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
   };
 
   const handleSubmit = async () => {
-    const missing = checklist.filter((i) => i.required && !itemHasResponse(i));
-    if (missing.length > 0) {
-      showError('Complete all required items first');
+    const requiredIncomplete = checklist.filter((i) => i.required && !itemFullyAnswered(i));
+    if (requiredIncomplete.length > 0) {
+      showError(
+        `Complete all required items. ${requiredIncomplete.length} items need both Yes/No and Rating.`,
+      );
       return;
     }
     try {
@@ -662,107 +728,128 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
                     <div
                       key={item.id}
                       className={`p-4 rounded-xl border transition-colors ${
-                        itemHasResponse(item) ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100'
+                        item.yesNoResponse != null &&
+                        item.yesNoResponse !== '' &&
+                        typeof item.rating === 'number' &&
+                        item.rating >= 1 &&
+                        item.rating <= 5
+                          ? 'bg-green-50 border-green-100'
+                          : 'bg-white border-gray-100'
                       }`}
                     >
-                      <div className="flex items-start gap-2 mb-3">
-                        <span className="text-xs font-medium text-gray-400 mt-0.5 flex-shrink-0 w-5">{idx + 1}.</span>
-                        <div className="flex-1">
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <span className="text-xs font-medium text-gray-400 mt-0.5 w-5 flex-shrink-0">{idx + 1}.</span>
                           <p className="text-sm font-medium text-gray-800">
                             {item.question}
                             {item.required && <span className="text-red-400 ml-1">*</span>}
                           </p>
-                          <span className="text-xs text-gray-400">
-                            {item.type === 'yesno' ? 'Yes / No' : item.type === 'rating' ? 'Rating 1–5' : 'Text response'}
-                          </span>
                         </div>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                            item.riskLevel === 'Critical'
+                              ? 'bg-red-100 text-red-700'
+                              : item.riskLevel === 'High'
+                                ? 'bg-orange-100 text-orange-700'
+                                : item.riskLevel === 'Medium'
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-green-100 text-green-700'
+                          }`}
+                        >
+                          {item.riskLevel === 'Critical' && '🔴 '}
+                          {item.riskLevel === 'High' && '🟠 '}
+                          {item.riskLevel === 'Medium' && '🟡 '}
+                          {item.riskLevel === 'Low' && '🟢 '}
+                          {item.riskLevel || 'Medium'}
+                        </span>
                       </div>
 
-                      {item.type === 'yesno' && (
-                        <div className="flex gap-2 mb-3 ml-7">
-                          {['Yes', 'No', 'N/A'].map((opt) => (
-                            <button
-                              key={opt}
-                              type="button"
-                              disabled={isReadOnly}
-                              onClick={() => updateItemResponse(item.id, 'response', opt)}
-                              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                                item.response === opt
-                                  ? opt === 'Yes'
-                                    ? 'bg-green-500 text-white'
-                                    : opt === 'No'
-                                      ? 'bg-red-500 text-white'
-                                      : 'bg-gray-500 text-white'
-                                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                              } ${isReadOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
-                            >
-                              {opt}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {item.type === 'rating' && (
-                        <div className="flex gap-2 mb-3 ml-7">
-                          {[1, 2, 3, 4, 5].map((n) => (
-                            <button
-                              key={n}
-                              type="button"
-                              disabled={isReadOnly}
-                              onClick={() => updateItemResponse(item.id, 'response', n)}
-                              className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors ${
-                                item.response === n ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                              } ${isReadOnly ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                            >
-                              {n}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {item.type === 'text' && (
-                        <textarea
-                          value={item.response ?? ''}
-                          disabled={isReadOnly}
-                          onChange={(e) => updateItemResponse(item.id, 'response', e.target.value)}
-                          placeholder="Enter response..."
-                          rows={2}
-                          className="w-full border rounded-lg px-3 py-2 text-sm resize-none mb-3 ml-7 focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50"
-                          style={{ width: 'calc(100% - 28px)' }}
-                        />
-                      )}
-
-                      <div className="ml-7">
-                        <input
-                          value={item.remarks || ''}
-                          disabled={isReadOnly}
-                          onChange={(e) => updateItemResponse(item.id, 'remarks', e.target.value)}
-                          placeholder="Remarks / observations (optional)"
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50"
-                        />
-                      </div>
-
-                      {item.response === 'No' && (
-                        <div className="ml-7 mt-2 p-3 bg-red-50 rounded-lg border border-red-100 space-y-2">
-                          <p className="text-xs font-medium text-red-700">Non-compliant — assign owner to fix</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            <input
-                              value={item.ownerName || ''}
-                              disabled={isReadOnly}
-                              onChange={(e) => updateItemResponse(item.id, 'ownerName', e.target.value)}
-                              placeholder="Owner name"
-                              className="border rounded-lg px-3 py-2 text-xs bg-white focus:outline-none"
-                            />
-                            <input
-                              type="date"
-                              value={item.targetDate || ''}
-                              disabled={isReadOnly}
-                              onChange={(e) => updateItemResponse(item.id, 'targetDate', e.target.value)}
-                              className="border rounded-lg px-3 py-2 text-xs bg-white focus:outline-none"
-                            />
+                      <div className="ml-7 space-y-3">
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1.5 font-medium">Compliance Check</p>
+                          <div className="flex gap-2">
+                            {['Yes', 'No', 'N/A'].map((opt) => (
+                              <button
+                                key={opt}
+                                type="button"
+                                disabled={isReadOnly}
+                                onClick={() => updateItemResponse(item.id, 'yesNoResponse', opt)}
+                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                  item.yesNoResponse === opt
+                                    ? opt === 'Yes'
+                                      ? 'bg-green-500 text-white'
+                                      : opt === 'No'
+                                        ? 'bg-red-500 text-white'
+                                        : 'bg-gray-500 text-white'
+                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                } ${isReadOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+                              >
+                                {opt}
+                              </button>
+                            ))}
                           </div>
                         </div>
-                      )}
+
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1.5 font-medium">Quality Rating</p>
+                          <div className="flex gap-2 items-center flex-wrap">
+                            {[1, 2, 3, 4, 5].map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                disabled={isReadOnly}
+                                onClick={() => updateItemResponse(item.id, 'rating', n)}
+                                className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors ${
+                                  item.rating === n ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                } ${isReadOnly ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                            {item.rating != null && (
+                              <span className="text-xs text-gray-400 ml-1">
+                                {item.rating === 1 && 'Poor'}
+                                {item.rating === 2 && 'Fair'}
+                                {item.rating === 3 && 'Good'}
+                                {item.rating === 4 && 'Very Good'}
+                                {item.rating === 5 && 'Excellent'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <input
+                            value={item.remarks || ''}
+                            disabled={isReadOnly}
+                            onChange={(e) => updateItemResponse(item.id, 'remarks', e.target.value)}
+                            placeholder="Remarks / observations..."
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50"
+                          />
+                        </div>
+
+                        {item.yesNoResponse === 'No' && (
+                          <div className="p-3 bg-red-50 rounded-lg border border-red-100 space-y-2">
+                            <p className="text-xs font-medium text-red-700">⚠️ Non-compliant — assign owner to fix</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                value={item.ownerName || ''}
+                                disabled={isReadOnly}
+                                onChange={(e) => updateItemResponse(item.id, 'ownerName', e.target.value)}
+                                placeholder="Owner name"
+                                className="border rounded-lg px-3 py-2 text-xs bg-white focus:outline-none"
+                              />
+                              <input
+                                type="date"
+                                value={item.targetDate || ''}
+                                disabled={isReadOnly}
+                                onChange={(e) => updateItemResponse(item.id, 'targetDate', e.target.value)}
+                                className="border rounded-lg px-3 py-2 text-xs bg-white focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
               </div>
@@ -857,6 +944,22 @@ function AuditList({
 }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedAudit, setSelectedAudit] = useState(null);
+  const [employees, setEmployees] = useState([]);
+
+  useEffect(() => {
+    if (!companyId) return undefined;
+    getDocs(collection(db, 'companies', companyId, 'employees'))
+      .then((snap) => {
+        setEmployees(
+          snap.docs
+            .filter((d) => d.data().status === 'Active')
+            .map((d) => ({ id: d.id, ...d.data() })),
+        );
+      })
+      .catch(() => setEmployees([]));
+    return undefined;
+  }, [companyId]);
+
   const [filters, setFilters] = useState({
     status: '',
     type: '',
@@ -870,8 +973,10 @@ function AuditList({
     location: '',
     branch: '',
     department: '',
+    auditorId: '',
     auditorName: '',
     auditorEmail: '',
+    auditorDesignation: '',
     startDate: '',
     dueDate: '',
     notes: '',
@@ -901,7 +1006,7 @@ function AuditList({
 
   const handleCreate = async () => {
     if (!createForm.auditTypeId) {
-      showError('Select an audit type');
+      showError('Select an audit template');
       return;
     }
     if (!createForm.dueDate) {
@@ -914,26 +1019,34 @@ function AuditList({
 
       const auditType = auditTypes.find((t) => t.id === createForm.auditTypeId);
 
-      const checklist = (auditType?.checklistTemplate || []).map((item) => ({
-        ...item,
-        response: null,
-        remarks: '',
-        isCompliant: null,
-        ownerName: '',
-        targetDate: '',
-        managerComment: '',
-      }));
+      const checklist = (auditType?.checklistTemplate || []).map((item) => {
+        const { type: _t, response: _r, ...rest } = item;
+        return {
+          ...rest,
+          riskLevel: item.riskLevel || 'Medium',
+          yesNoResponse: null,
+          rating: null,
+          remarks: '',
+          isCompliant: null,
+          ownerName: '',
+          targetDate: '',
+          managerComment: '',
+        };
+      });
 
       await addDoc(collection(db, 'companies', companyId, 'audits'), {
         auditTypeId: createForm.auditTypeId,
         auditTypeName: auditType?.name || '',
+        auditCategory: auditType?.auditCategory || 'Internal',
         auditTypeColor: auditType?.color || '#8B5CF6',
         title: createForm.title.trim() || auditType?.name || '',
         location: createForm.location,
         branch: createForm.branch,
         department: createForm.department,
+        auditorId: createForm.auditorId || '',
         auditorName: createForm.auditorName.trim(),
-        auditorEmail: createForm.auditorEmail.trim().toLowerCase(),
+        auditorEmail: (createForm.auditorEmail || '').trim().toLowerCase(),
+        auditorDesignation: createForm.auditorDesignation || '',
         startDate: createForm.startDate,
         dueDate: createForm.dueDate,
         notes: createForm.notes,
@@ -959,8 +1072,10 @@ function AuditList({
         location: '',
         branch: '',
         department: '',
+        auditorId: '',
         auditorName: '',
         auditorEmail: '',
+        auditorDesignation: '',
         startDate: '',
         dueDate: '',
         notes: '',
@@ -1006,7 +1121,7 @@ function AuditList({
           onChange={(e) => setFilters((prev) => ({ ...prev, type: e.target.value }))}
           className="border rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
         >
-          <option value="">All Types</option>
+          <option value="">All Templates</option>
           {auditTypes.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
@@ -1033,7 +1148,7 @@ function AuditList({
           type="button"
           onClick={() => setShowCreateModal(true)}
           disabled={auditTypes.length === 0}
-          title={auditTypes.length === 0 ? 'Create an audit type first' : ''}
+          title={auditTypes.length === 0 ? 'Create an audit template first' : ''}
           className="flex items-center gap-2 px-4 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 whitespace-nowrap"
         >
           + New Audit
@@ -1128,19 +1243,36 @@ function AuditList({
 
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Audit Type *</label>
+                <label className="text-xs text-gray-500 block mb-1.5">Audit Template *</label>
                 <select
                   value={createForm.auditTypeId}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, auditTypeId: e.target.value }))}
                   className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 >
-                  <option value="">Select audit type...</option>
+                  <option value="">Select audit template...</option>
                   {auditTypes.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name} · {(t.checklistTemplate || []).length} items
                     </option>
                   ))}
                 </select>
+                {createForm.auditTypeId &&
+                  (() => {
+                    const t = auditTypes.find((x) => x.id === createForm.auditTypeId);
+                    if (!t) return null;
+                    return (
+                      <div className="flex items-center gap-2 mt-2">
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            t.auditCategory === 'Internal' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                          }`}
+                        >
+                          {t.auditCategory || 'Internal'}
+                        </span>
+                        <span className="text-xs text-gray-400">{(t.checklistTemplate || []).length} checklist items</span>
+                      </div>
+                    );
+                  })()}
               </div>
 
               <div>
@@ -1148,7 +1280,7 @@ function AuditList({
                 <input
                   value={createForm.title}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, title: e.target.value }))}
-                  placeholder="Leave blank to use audit type name"
+                  placeholder="Leave blank to use template name"
                   className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 />
               </div>
@@ -1202,26 +1334,31 @@ function AuditList({
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1.5">Auditor Name</label>
-                  <input
-                    value={createForm.auditorName}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, auditorName: e.target.value }))}
-                    placeholder="Full name"
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1.5">Auditor Email</label>
-                  <input
-                    type="email"
-                    value={createForm.auditorEmail}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, auditorEmail: e.target.value }))}
-                    placeholder="email@company.com"
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                  />
-                </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Assign Auditor</label>
+                <select
+                  value={createForm.auditorId}
+                  onChange={(e) => {
+                    const emp = employees.find((x) => x.id === e.target.value);
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      auditorId: e.target.value,
+                      auditorName: emp?.fullName || '',
+                      auditorEmail: emp?.email || '',
+                      auditorDesignation: emp?.designation || '',
+                    }));
+                  }}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">Select auditor...</option>
+                  {[...employees]
+                    .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
+                    .map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.fullName} — {emp.designation || emp.department || ''}
+                      </option>
+                    ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1289,106 +1426,13 @@ function AuditList({
   );
 }
 
-function AuditSettingsTab({ companyId, currentUser, showSuccess, showError }) {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [emailsText, setEmailsText] = useState('');
-  const [notes, setNotes] = useState('');
-
-  useEffect(() => {
-    if (!companyId) return undefined;
-    const ref = doc(db, 'companies', companyId, 'auditSettings', 'config');
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        if (snap.exists()) {
-          const d = snap.data();
-          const list = Array.isArray(d.auditorEmails) ? d.auditorEmails : [];
-          setEmailsText(list.join('\n'));
-          setNotes(d.notes || '');
-        } else {
-          setEmailsText('');
-          setNotes('');
-        }
-        setLoading(false);
-      },
-      () => setLoading(false),
-    );
-    return unsub;
-  }, [companyId]);
-
-  const handleSave = async () => {
-    const auditorEmails = emailsText
-      .split(/[\n,;]+/)
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-    try {
-      setSaving(true);
-      await setDoc(doc(db, 'companies', companyId, 'auditSettings', 'config'), {
-        auditorEmails,
-        notes: notes.trim(),
-        updatedAt: serverTimestamp(),
-        updatedBy: currentUser?.email || '',
-      });
-      showSuccess('Auditor list saved');
-    } catch (e) {
-      showError(`Failed to save: ${e.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) {
-    return <p className="text-sm text-gray-400">Loading settings…</p>;
-  }
-
-  return (
-    <div className="max-w-2xl space-y-6">
-      <div>
-        <h2 className="text-base font-semibold text-gray-800">Auditor management</h2>
-        <p className="text-sm text-gray-400 mt-0.5">Registered auditor emails (one per line). Used for reference and future notifications.</p>
-      </div>
-
-      <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-4">
-        <div>
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Auditor emails</label>
-          <textarea
-            value={emailsText}
-            onChange={(e) => setEmailsText(e.target.value)}
-            rows={8}
-            placeholder="auditor1@company.com&#10;auditor2@company.com"
-            className="w-full border rounded-xl px-3 py-2.5 text-sm font-mono resize-y focus:outline-none focus:border-[#1B6B6B]"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Internal notes (optional)</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-            placeholder="Notes visible to HR only…"
-            className="w-full border rounded-xl px-3 py-2.5 text-sm resize-y focus:outline-none focus:border-[#1B6B6B]"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="px-5 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : 'Save settings'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function Audit() {
   const { companyId } = useParams();
   const { currentUser } = useAuth();
   const { company } = useCompany();
 
   const [activeTab, setActiveTab] = useState('audits');
+  const [showSettings, setShowSettings] = useState(false);
   const [auditTypes, setAuditTypes] = useState([]);
   const [audits, setAudits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1457,11 +1501,18 @@ export default function Audit() {
       )}
 
       <div className="bg-white border-b border-gray-100 px-6 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-semibold text-gray-800">Audit</h1>
             <p className="text-sm text-gray-400 mt-0.5">Manage audits and compliance tracking</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 flex-shrink-0"
+          >
+            ⚙️ Settings
+          </button>
         </div>
 
         <div className="flex gap-1 mt-4 flex-wrap">
@@ -1497,23 +1548,40 @@ export default function Audit() {
             showError={showError}
           />
         )}
-
-        {activeTab === 'types' && (
-          <AuditTypes
-            auditTypes={auditTypes}
-            companyId={companyId}
-            currentUser={currentUser}
-            saving={saving}
-            setSaving={setSaving}
-            showSuccess={showSuccess}
-            showError={showError}
-          />
-        )}
-
-        {activeTab === 'settings' && (
-          <AuditSettingsTab companyId={companyId} currentUser={currentUser} showSuccess={showSuccess} showError={showError} />
-        )}
       </div>
+
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div
+            role="presentation"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowSettings(false)}
+          />
+          <div className="relative bg-white w-full max-w-2xl h-full overflow-y-auto shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
+              <h2 className="text-lg font-semibold text-gray-800">Audit Settings</h2>
+              <button
+                type="button"
+                onClick={() => setShowSettings(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 p-6">
+              <AuditTemplates
+                auditTypes={auditTypes}
+                companyId={companyId}
+                currentUser={currentUser}
+                saving={saving}
+                setSaving={setSaving}
+                showSuccess={showSuccess}
+                showError={showError}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
