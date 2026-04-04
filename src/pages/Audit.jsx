@@ -628,10 +628,13 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
                 {audit.status}
               </span>
             </div>
-            <p className="text-xs text-gray-400">
-              {audit.branch || audit.location || '—'} · End: {audit.endDate || audit.dueDate || 'Not set'} · Auditor:{' '}
-              {audit.auditorName || '—'}
-            </p>
+            <div className="flex flex-col gap-0.5">
+              <p className="text-xs text-gray-400">
+                {audit.branch || audit.location || '—'} · End: {audit.endDate || audit.dueDate || 'Not set'} · Auditor:{' '}
+                {audit.auditorName || '—'}
+              </p>
+              {audit.category && <span className="text-xs text-gray-400">{audit.category}</span>}
+            </div>
           </div>
           <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
             ✕
@@ -859,6 +862,7 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
 
 const EMPTY_ASSIGN_AUDIT_FORM = {
   auditTypeId: '',
+  category: '',
   location: '',
   branch: '',
   department: '',
@@ -969,6 +973,7 @@ function AuditList({
         auditCategory: auditType?.auditCategory || 'Internal',
         riskLevel: auditType?.riskLevel || 'Medium',
         title: auditType?.name || '',
+        category: createForm.category,
         location: createForm.location,
         branch: createForm.branch,
         department: createForm.department,
@@ -1119,6 +1124,11 @@ function AuditList({
                     </div>
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
                       <p className="text-xs text-gray-400">{audit.auditTypeName}</p>
+                      {audit.category && (
+                        <p className="text-xs text-gray-400">
+                          · {audit.category}
+                        </p>
+                      )}
                       {audit.branch && <p className="text-xs text-gray-400">· {audit.branch}</p>}
                       {audit.auditorName && <p className="text-xs text-gray-400">· {audit.auditorName}</p>}
                       <p className="text-xs text-gray-400">
@@ -1254,6 +1264,21 @@ function AuditList({
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Location</p>
                 <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Category</label>
+                    <select
+                      value={createForm.category}
+                      onChange={(e) => setCreateForm((prev) => ({ ...prev, category: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">Select category...</option>
+                      {(company?.categories || []).map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="text-xs text-gray-500 block mb-1.5">Location</label>
                     <select
