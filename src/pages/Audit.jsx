@@ -308,7 +308,7 @@ const AuditTemplates = forwardRef(function AuditTemplates(
                           : 'border-gray-200 text-gray-500 hover:border-gray-300'
                       }`}
                     >
-                      {cat === 'Internal' ? '🏢 Internal Audit' : '🌐 External Audit'}
+                      {cat === 'Internal' ? '🏢 Internal' : '🌐 External'}
                     </button>
                   ))}
                 </div>
@@ -321,177 +321,171 @@ const AuditTemplates = forwardRef(function AuditTemplates(
                 )}
               </div>
 
-              {form.auditCategory && (
-                <>
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1.5">Template Name *</label>
-                    <input
-                      value={form.name}
-                      onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                      placeholder="e.g. Cash Handling Audit, Compliance Audit, Safety Audit"
-                      className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                    />
-                  </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Template Name *</label>
+                <input
+                  value={form.name}
+                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. Cash Handling Audit, Compliance Audit, Safety Audit"
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
 
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1.5">Description (optional)</label>
-                    <input
-                      value={form.description}
-                      onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                      placeholder="Brief description of this audit template"
-                      className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                    />
-                  </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Description (optional)</label>
+                <input
+                  value={form.description}
+                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                  placeholder="Brief description..."
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
 
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1.5">Color</label>
-                    <div className="flex gap-2 flex-wrap">
-                      {AUDIT_COLORS.map((color) => (
-                        <button
-                          key={color}
-                          type="button"
-                          onClick={() => setSelectedColor(color)}
-                          className={`w-8 h-8 rounded-full transition-transform ${
-                            selectedColor === color ? 'scale-125 ring-2 ring-offset-2 ring-gray-400' : 'hover:scale-110'
-                          }`}
-                          style={{ background: color }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1.5">Risk Level</label>
-                    <div className="flex gap-2 flex-wrap">
-                      {[
-                        {
-                          value: 'Low',
-                          color: 'bg-green-50 border-green-200 text-green-700',
-                          active: 'bg-green-500 border-green-500 text-white',
-                          icon: '🟢',
-                        },
-                        {
-                          value: 'Medium',
-                          color: 'bg-amber-50 border-amber-200 text-amber-700',
-                          active: 'bg-amber-500 border-amber-500 text-white',
-                          icon: '🟡',
-                        },
-                        {
-                          value: 'High',
-                          color: 'bg-orange-50 border-orange-200 text-orange-700',
-                          active: 'bg-orange-500 border-orange-500 text-white',
-                          icon: '🟠',
-                        },
-                        {
-                          value: 'Critical',
-                          color: 'bg-red-50 border-red-200 text-red-700',
-                          active: 'bg-red-500 border-red-500 text-white',
-                          icon: '🔴',
-                        },
-                      ].map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => setForm((prev) => ({ ...prev, riskLevel: opt.value }))}
-                          className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all ${
-                            form.riskLevel === opt.value ? opt.active : opt.color
-                          }`}
-                        >
-                          {opt.icon} {opt.value}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {form.auditCategory && form.name.trim() && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Checklist</label>
-                    <span className="text-xs text-gray-400">{checklist.length} items</span>
-                  </div>
-
-                  {sections.map((section) => (
-                    <div key={section} className="mb-4">
-                      <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-2">
-                        <h4 className="text-sm font-semibold text-gray-700">{section}</h4>
-                        <button type="button" onClick={() => addChecklistItem(section)} className="text-xs text-[#1B6B6B] hover:underline">
-                          + Add item
-                        </button>
-                      </div>
-
-                      {checklist
-                        .filter((i) => i.section === section)
-                        .map((item) => (
-                          <div key={item.id} className="flex gap-2 mb-3 p-3 bg-gray-50 rounded-xl">
-                            <div className="flex-1 space-y-2">
-                              <input
-                                value={item.question}
-                                onChange={(e) => updateItem(item.id, 'question', e.target.value)}
-                                placeholder="Checklist item question..."
-                                className="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                              />
-                              <div className="flex gap-2 items-center flex-wrap">
-                                <div className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 rounded-lg">
-                                  <span className="text-xs text-gray-400">✅ Yes/No + ⭐ Rating 1-5</span>
-                                </div>
-                                <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={item.required}
-                                    onChange={(e) => updateItem(item.id, 'required', e.target.checked)}
-                                    className="accent-[#1B6B6B]"
-                                  />
-                                  Required
-                                </label>
-                              </div>
-                            </div>
-                            <button type="button" onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 px-1 flex-shrink-0 self-start mt-2">
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-
-                      {checklist.filter((i) => i.section === section).length === 0 && (
-                        <button
-                          type="button"
-                          onClick={() => addChecklistItem(section)}
-                          className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors"
-                        >
-                          + Add first item
-                        </button>
-                      )}
-                    </div>
-                  ))}
-
-                  <div className="flex gap-2 mt-3">
-                    <input
-                      value={newSection}
-                      onChange={(e) => setNewSection(e.target.value)}
-                      placeholder="New section name..."
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && newSection.trim()) {
-                          setSections((prev) => [...prev, newSection.trim()]);
-                          setNewSection('');
-                        }
-                      }}
-                      className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                    />
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Color</label>
+                <div className="flex gap-2 flex-wrap">
+                  {AUDIT_COLORS.map((color) => (
                     <button
+                      key={color}
                       type="button"
-                      onClick={() => {
-                        if (!newSection.trim()) return;
+                      onClick={() => setSelectedColor(color)}
+                      className={`w-8 h-8 rounded-full transition-transform ${
+                        selectedColor === color ? 'scale-125 ring-2 ring-offset-2 ring-gray-400' : 'hover:scale-110'
+                      }`}
+                      style={{ background: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Risk Level</label>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    {
+                      value: 'Low',
+                      color: 'bg-green-50 border-green-200 text-green-700',
+                      active: 'bg-green-500 border-green-500 text-white',
+                      icon: '🟢',
+                    },
+                    {
+                      value: 'Medium',
+                      color: 'bg-amber-50 border-amber-200 text-amber-700',
+                      active: 'bg-amber-500 border-amber-500 text-white',
+                      icon: '🟡',
+                    },
+                    {
+                      value: 'High',
+                      color: 'bg-orange-50 border-orange-200 text-orange-700',
+                      active: 'bg-orange-500 border-orange-500 text-white',
+                      icon: '🟠',
+                    },
+                    {
+                      value: 'Critical',
+                      color: 'bg-red-50 border-red-200 text-red-700',
+                      active: 'bg-red-500 border-red-500 text-white',
+                      icon: '🔴',
+                    },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, riskLevel: opt.value }))}
+                      className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all ${
+                        form.riskLevel === opt.value ? opt.active : opt.color
+                      }`}
+                    >
+                      {opt.icon} {opt.value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Checklist</label>
+                  <span className="text-xs text-gray-400">{checklist.length} items</span>
+                </div>
+
+                {sections.map((section) => (
+                  <div key={section} className="mb-4">
+                    <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-2">
+                      <h4 className="text-sm font-semibold text-gray-700">{section}</h4>
+                      <button type="button" onClick={() => addChecklistItem(section)} className="text-xs text-[#1B6B6B] hover:underline">
+                        + Add item
+                      </button>
+                    </div>
+
+                    {checklist
+                      .filter((i) => i.section === section)
+                      .map((item) => (
+                        <div key={item.id} className="flex gap-2 mb-3 p-3 bg-gray-50 rounded-xl">
+                          <div className="flex-1 space-y-2">
+                            <input
+                              value={item.question}
+                              onChange={(e) => updateItem(item.id, 'question', e.target.value)}
+                              placeholder="Checklist item question..."
+                              className="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                            />
+                            <div className="flex gap-2 items-center flex-wrap">
+                              <div className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 rounded-lg">
+                                <span className="text-xs text-gray-400">✅ Yes/No + ⭐ Rating 1-5</span>
+                              </div>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={item.required}
+                                  onChange={(e) => updateItem(item.id, 'required', e.target.checked)}
+                                  className="accent-[#1B6B6B]"
+                                />
+                                Required
+                              </label>
+                            </div>
+                          </div>
+                          <button type="button" onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 px-1 flex-shrink-0 self-start mt-2">
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+
+                    {checklist.filter((i) => i.section === section).length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => addChecklistItem(section)}
+                        className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors"
+                      >
+                        + Add first item
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                <div className="flex gap-2 mt-3">
+                  <input
+                    value={newSection}
+                    onChange={(e) => setNewSection(e.target.value)}
+                    placeholder="New section name..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newSection.trim()) {
                         setSections((prev) => [...prev, newSection.trim()]);
                         setNewSection('');
-                      }}
-                      className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm"
-                    >
-                      + Section
-                    </button>
-                  </div>
+                      }
+                    }}
+                    className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newSection.trim()) return;
+                      setSections((prev) => [...prev, newSection.trim()]);
+                      setNewSection('');
+                    }}
+                    className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm"
+                  >
+                    + Section
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
 
             <div className="p-6 border-t flex-shrink-0 flex gap-3">
@@ -1184,93 +1178,77 @@ function AuditList({
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Template</p>
-                <div className="space-y-2">
-                  {auditTypes.length === 0 ? (
-                    <div className="p-4 border-2 border-dashed border-gray-200 rounded-xl text-center">
-                      <p className="text-sm text-gray-400">
-                        No templates yet.{' '}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowCreateModal(false);
-                            setShowSettings(true);
-                          }}
-                          className="text-[#1B6B6B] underline"
-                        >
-                          Create one in Settings
-                        </button>
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {auditTypes.map((type) => (
-                        <button
-                          key={type.id}
-                          type="button"
-                          onClick={() =>
-                            setCreateForm((prev) => ({
-                              ...prev,
-                              auditTypeId: type.id,
-                            }))
-                          }
-                          className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 text-left transition-all ${
-                            createForm.auditTypeId === type.id
-                              ? 'border-[#1B6B6B] bg-[#E8F5F5]'
-                              : 'border-gray-100 hover:border-gray-200 bg-white'
-                          }`}
-                        >
-                          <div
-                            className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center text-white font-bold text-sm"
-                            style={{ background: type.color || '#8B5CF6' }}
-                          >
-                            {type.name?.charAt(0)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className={`text-sm font-medium truncate ${
-                                createForm.auditTypeId === type.id ? 'text-[#1B6B6B]' : 'text-gray-800'
+                {auditTypes.length === 0 ? (
+                  <div className="p-4 border-2 border-dashed border-gray-200 rounded-xl text-center">
+                    <p className="text-sm text-gray-400">
+                      No templates yet.{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCreateModal(false);
+                          setShowSettings(true);
+                        }}
+                        className="text-[#1B6B6B] underline"
+                      >
+                        Create one in Settings
+                      </button>
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      value={createForm.auditTypeId}
+                      onChange={(e) =>
+                        setCreateForm((prev) => ({
+                          ...prev,
+                          auditTypeId: e.target.value,
+                        }))
+                      }
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">Select audit template...</option>
+                      {auditTypes.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} — {t.auditCategory || 'Internal'} · {t.riskLevel || 'Medium'} Risk
+                        </option>
+                      ))}
+                    </select>
+                    {createForm.auditTypeId &&
+                      (() => {
+                        const t = auditTypes.find((x) => x.id === createForm.auditTypeId);
+                        if (!t) return null;
+                        return (
+                          <div className="mt-2 flex items-center gap-2 flex-wrap">
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                t.auditCategory === 'External' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                               }`}
                             >
-                              {type.name}
-                            </p>
-                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                              <span
-                                className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                                  type.auditCategory === 'External' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
-                                }`}
-                              >
-                                {type.auditCategory === 'External' ? '🌐' : '🏢'} {type.auditCategory || 'Internal'}
-                              </span>
-                              <span
-                                className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                                  type.riskLevel === 'Critical'
-                                    ? 'bg-red-100 text-red-600'
-                                    : type.riskLevel === 'High'
-                                      ? 'bg-orange-100 text-orange-600'
-                                      : type.riskLevel === 'Medium'
-                                        ? 'bg-amber-100 text-amber-600'
-                                        : 'bg-green-100 text-green-600'
-                                }`}
-                              >
-                                {type.riskLevel === 'Critical' && '🔴 '}
-                                {type.riskLevel === 'High' && '🟠 '}
-                                {type.riskLevel === 'Medium' && '🟡 '}
-                                {type.riskLevel === 'Low' && '🟢 '}
-                                {type.riskLevel || 'Medium'}
-                              </span>
-                              <span className="text-xs text-gray-400">{(type.checklistTemplate || []).length} items</span>
-                            </div>
+                              {t.auditCategory === 'External' ? '🌐' : '🏢'} {t.auditCategory || 'Internal'}
+                            </span>
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                t.riskLevel === 'Critical'
+                                  ? 'bg-red-100 text-red-700'
+                                  : t.riskLevel === 'High'
+                                    ? 'bg-orange-100 text-orange-700'
+                                    : t.riskLevel === 'Medium'
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : 'bg-green-100 text-green-700'
+                              }`}
+                            >
+                              {t.riskLevel === 'Critical' && '🔴 '}
+                              {t.riskLevel === 'High' && '🟠 '}
+                              {t.riskLevel === 'Medium' && '🟡 '}
+                              {t.riskLevel === 'Low' && '🟢 '}
+                              {t.riskLevel || 'Medium'}
+                            </span>
+                            <span className="text-xs text-gray-400">{(t.checklistTemplate || []).length} checklist items</span>
                           </div>
-                          {createForm.auditTypeId === type.id && (
-                            <div className="w-5 h-5 bg-[#1B6B6B] rounded-full flex items-center justify-center flex-shrink-0">
-                              <span className="text-white text-xs font-bold">✓</span>
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        );
+                      })()}
+                  </>
+                )}
               </div>
 
               <div>
@@ -1328,55 +1306,33 @@ function AuditList({
 
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Auditor</p>
-                <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-100 rounded-xl p-2">
-                  {employees.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-4">No active employees found</p>
-                  ) : (
-                    [...employees]
-                      .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
-                      .map((emp) => (
-                        <button
-                          key={emp.id}
-                          type="button"
-                          onClick={() =>
-                            setCreateForm((prev) => ({
-                              ...prev,
-                              auditorId: emp.id,
-                              auditorName: emp.fullName || '',
-                              auditorEmail: emp.email || '',
-                            }))
-                          }
-                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all ${
-                            createForm.auditorId === emp.id
-                              ? 'bg-[#E8F5F5] border border-[#1B6B6B]'
-                              : 'hover:bg-gray-50 border border-transparent'
-                          }`}
-                        >
-                          <div className="w-8 h-8 rounded-full flex-shrink-0 bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
-                            {emp.fullName?.charAt(0)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className={`text-sm font-medium truncate ${
-                                createForm.auditorId === emp.id ? 'text-[#1B6B6B]' : 'text-gray-800'
-                              }`}
-                            >
-                              {emp.fullName}
-                            </p>
-                            <p className="text-xs text-gray-400 truncate">{emp.designation || emp.department || '—'}</p>
-                          </div>
-                          {createForm.auditorId === emp.id && (
-                            <div className="w-5 h-5 bg-[#1B6B6B] rounded-full flex items-center justify-center flex-shrink-0">
-                              <span className="text-white text-xs font-bold">✓</span>
-                            </div>
-                          )}
-                        </button>
-                      ))
-                  )}
-                </div>
+                <select
+                  value={createForm.auditorId}
+                  onChange={(e) => {
+                    const emp = employees.find((x) => x.id === e.target.value);
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      auditorId: e.target.value,
+                      auditorName: emp?.fullName || '',
+                      auditorEmail: emp?.email || '',
+                    }));
+                  }}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">Select auditor...</option>
+                  {employees
+                    .filter((e) => e.status === 'Active')
+                    .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
+                    .map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.fullName}
+                        {emp.designation ? ` — ${emp.designation}` : emp.department ? ` — ${emp.department}` : ''}
+                      </option>
+                    ))}
+                </select>
                 {createForm.auditorId && (
                   <div className="mt-2 flex items-center gap-2 p-2.5 bg-[#E8F5F5] rounded-xl">
-                    <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
+                    <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                       {createForm.auditorName?.charAt(0)}
                     </div>
                     <p className="text-xs text-[#1B6B6B] font-medium">{createForm.auditorName} assigned as auditor</p>
