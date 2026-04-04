@@ -20,6 +20,7 @@ const TeamMembers = lazy(() => import('./pages/TeamMembers'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Assets = lazy(() => import('./pages/Assets'));
 const Reports = lazy(() => import('./pages/Reports'));
+const Audit = lazy(() => import('./pages/Audit'));
 const Library = lazy(() => import('./pages/Library'));
 const OrgChart = lazy(() => import('./pages/OrgChart'));
 const CompanyCalendar = lazy(() => import('./pages/Calendar'));
@@ -197,6 +198,16 @@ function AppRoutes() {
                 <RoleRoute allowedRoles={['admin', 'hrmanager']}>
                   <ErrorBoundary>
                     <Reports />
+                  </ErrorBoundary>
+                </RoleRoute>
+              }
+            />
+            <Route
+              path="audit"
+              element={
+                <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                  <ErrorBoundary>
+                    <Audit />
                   </ErrorBoundary>
                 </RoleRoute>
               }

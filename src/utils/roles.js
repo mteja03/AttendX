@@ -33,6 +33,7 @@ export function getNavItems(role) {
       { to: 'policies', label: 'Library' },
       { to: 'assets', label: 'Assets' },
       { to: 'reports', label: 'Reports' },
+      { to: 'audit', label: 'Audit' },
       { to: 'team', label: 'Team Members' },
       { to: 'orgchart', label: 'Org Chart' },
       { to: 'settings', label: 'Settings' },
