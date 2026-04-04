@@ -630,7 +630,7 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
             </div>
             <div className="flex flex-col gap-0.5">
               <p className="text-xs text-gray-400">
-                {audit.branch || audit.location || '—'} · End: {audit.endDate || audit.dueDate || 'Not set'} · Lead:{' '}
+                {audit.branch || audit.location || '—'} · End: {audit.endDate || audit.dueDate || 'Not set'} · Auditor:{' '}
                 {audit.auditorName || '—'}
               </p>
               {audit.category && <span className="text-xs text-gray-400">{audit.category}</span>}
