@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   collection,
@@ -52,7 +52,7 @@ function itemFullyAnswered(item) {
 
 function normalizeChecklistItem(item) {
   const next = { ...item };
-  if (next.riskLevel == null || next.riskLevel === '') next.riskLevel = 'Medium';
+  delete next.riskLevel;
   if (next.yesNoResponse == null && ['Yes', 'No', 'N/A'].includes(next.response)) {
     next.yesNoResponse = next.response;
   }
@@ -130,7 +130,10 @@ function AuditDashboard({ audits }) {
   );
 }
 
-function AuditTemplates({ auditTypes, companyId, currentUser, saving, setSaving, showSuccess, showError }) {
+const AuditTemplates = forwardRef(function AuditTemplates(
+  { companyId, currentUser, saving, setSaving, showSuccess, showError },
+  ref,
+) {
   const [showModal, setShowModal] = useState(false);
   const [editingType, setEditingType] = useState(null);
   const [selectedColor, setSelectedColor] = useState(AUDIT_COLORS[0]);
@@ -139,13 +142,14 @@ function AuditTemplates({ auditTypes, companyId, currentUser, saving, setSaving,
     name: '',
     description: '',
     color: AUDIT_COLORS[0],
+    riskLevel: 'Medium',
   });
   const [checklist, setChecklist] = useState([]);
   const [newSection, setNewSection] = useState('');
   const [sections, setSections] = useState(['General']);
 
   const resetForm = () => {
-    setForm({ auditCategory: '', name: '', description: '', color: AUDIT_COLORS[0] });
+    setForm({ auditCategory: '', name: '', description: '', color: AUDIT_COLORS[0], riskLevel: 'Medium' });
     setChecklist([]);
     setSections(['General']);
     setSelectedColor(AUDIT_COLORS[0]);
@@ -155,17 +159,17 @@ function AuditTemplates({ auditTypes, companyId, currentUser, saving, setSaving,
   const openEdit = (type) => {
     setEditingType(type);
     setForm({
-      auditCategory: type.auditCategory || 'Internal',
+      auditCategory: type.auditCategory || '',
       name: type.name,
       description: type.description || '',
       color: type.color || AUDIT_COLORS[0],
+      riskLevel: type.riskLevel || 'Medium',
     });
     setSelectedColor(type.color || AUDIT_COLORS[0]);
     const tpl = (type.checklistTemplate || []).map((i) => {
-      const { type: _t, ...rest } = i;
+      const { type: _t, riskLevel: _rl, ...rest } = i;
       return {
         ...rest,
-        riskLevel: i.riskLevel || 'Medium',
         required: i.required !== false,
       };
     });
@@ -180,7 +184,6 @@ function AuditTemplates({ auditTypes, companyId, currentUser, saving, setSaving,
       id: `item_${Date.now()}`,
       section,
       question: '',
-      riskLevel: 'Medium',
       required: true,
       order: checklist.length,
     };
@@ -217,14 +220,15 @@ function AuditTemplates({ auditTypes, companyId, currentUser, saving, setSaving,
     try {
       setSaving(true);
       const checklistTemplate = checklist.map((item, idx) => {
-        const { type: _omit, response: _r, ...rest } = item;
-        return { ...rest, order: idx, riskLevel: item.riskLevel || 'Medium' };
+        const { type: _omit, response: _r, riskLevel: _rl, ...rest } = item;
+        return { ...rest, order: idx };
       });
       const data = {
         auditCategory: form.auditCategory,
         name: form.name.trim(),
         description: form.description.trim(),
         color: selectedColor,
+        riskLevel: form.riskLevel || 'Medium',
         checklistTemplate,
         updatedAt: serverTimestamp(),
         updatedBy: currentUser?.email || '',
@@ -260,97 +264,17 @@ function AuditTemplates({ auditTypes, companyId, currentUser, saving, setSaving,
     }
   };
 
+  useImperativeHandle(ref, () => ({
+    openNew: () => {
+      resetForm();
+      setShowModal(true);
+    },
+    openEdit,
+    deleteType: handleDelete,
+  }));
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-base font-semibold text-gray-800">Audit Templates</h2>
-          <p className="text-sm text-gray-400">Define audit templates and their checklist items</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
-        >
-          + Add Audit Template
-        </button>
-      </div>
-
-      {auditTypes.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
-          <p className="text-4xl mb-3">📋</p>
-          <p className="text-base font-medium text-gray-700 mb-1">No audit templates yet</p>
-          <p className="text-sm text-gray-400 mb-4">Create your first audit template with a checklist</p>
-          <button
-            type="button"
-            onClick={() => {
-              resetForm();
-              setShowModal(true);
-            }}
-            className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium"
-          >
-            + Create Audit Template
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {auditTypes.map((type) => (
-            <div
-              key={type.id}
-              className="bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-sm transition-shadow"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold"
-                    style={{ background: type.color || '#8B5CF6' }}
-                  >
-                    {type.name?.charAt(0)}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-gray-800">{type.name}</p>
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          type.auditCategory === 'Internal' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                        }`}
-                      >
-                        {type.auditCategory || 'Internal'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{(type.checklistTemplate || []).length} items</p>
-                  </div>
-                </div>
-                <div className="flex gap-1">
-                  <button type="button" onClick={() => openEdit(type)} className="text-xs text-[#1B6B6B] hover:underline px-2">
-                    Edit
-                  </button>
-                  <button type="button" onClick={() => handleDelete(type)} className="text-xs text-red-400 hover:text-red-600 px-2">
-                    Delete
-                  </button>
-                </div>
-              </div>
-
-              {type.description && <p className="text-xs text-gray-400 mb-3">{type.description}</p>}
-
-              {[...new Set((type.checklistTemplate || []).map((i) => i.section))]
-                .slice(0, 3)
-                .map((section) => (
-                  <div key={section} className="flex items-center justify-between py-1.5 border-t border-gray-50">
-                    <span className="text-xs text-gray-500">{section}</span>
-                    <span className="text-xs text-gray-300">
-                      {(type.checklistTemplate || []).filter((i) => i.section === section).length} items
-                    </span>
-                  </div>
-                ))}
-            </div>
-          ))}
-        </div>
-      )}
-
+    <>
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
@@ -434,13 +358,56 @@ function AuditTemplates({ auditTypes, companyId, currentUser, saving, setSaving,
                       ))}
                     </div>
                   </div>
+
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Risk Level</label>
+                    <div className="flex gap-2 flex-wrap">
+                      {[
+                        {
+                          value: 'Low',
+                          color: 'bg-green-50 border-green-200 text-green-700',
+                          active: 'bg-green-500 border-green-500 text-white',
+                          icon: '🟢',
+                        },
+                        {
+                          value: 'Medium',
+                          color: 'bg-amber-50 border-amber-200 text-amber-700',
+                          active: 'bg-amber-500 border-amber-500 text-white',
+                          icon: '🟡',
+                        },
+                        {
+                          value: 'High',
+                          color: 'bg-orange-50 border-orange-200 text-orange-700',
+                          active: 'bg-orange-500 border-orange-500 text-white',
+                          icon: '🟠',
+                        },
+                        {
+                          value: 'Critical',
+                          color: 'bg-red-50 border-red-200 text-red-700',
+                          active: 'bg-red-500 border-red-500 text-white',
+                          icon: '🔴',
+                        },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, riskLevel: opt.value }))}
+                          className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all ${
+                            form.riskLevel === opt.value ? opt.active : opt.color
+                          }`}
+                        >
+                          {opt.icon} {opt.value}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
 
               {form.auditCategory && form.name.trim() && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Checklist Template</label>
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Checklist</label>
                     <span className="text-xs text-gray-400">{checklist.length} items</span>
                   </div>
 
@@ -465,24 +432,6 @@ function AuditTemplates({ auditTypes, companyId, currentUser, saving, setSaving,
                                 className="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                               />
                               <div className="flex gap-2 items-center flex-wrap">
-                                <select
-                                  value={item.riskLevel || 'Medium'}
-                                  onChange={(e) => updateItem(item.id, 'riskLevel', e.target.value)}
-                                  className={`border rounded-lg px-2 py-1.5 text-xs font-medium ${
-                                    (item.riskLevel || 'Medium') === 'Critical'
-                                      ? 'bg-red-50 border-red-200 text-red-700'
-                                      : (item.riskLevel || 'Medium') === 'High'
-                                        ? 'bg-orange-50 border-orange-200 text-orange-700'
-                                        : (item.riskLevel || 'Medium') === 'Medium'
-                                          ? 'bg-amber-50 border-amber-200 text-amber-700'
-                                          : 'bg-green-50 border-green-200 text-green-700'
-                                  }`}
-                                >
-                                  <option value="Low">🟢 Low</option>
-                                  <option value="Medium">🟡 Medium</option>
-                                  <option value="High">🟠 High</option>
-                                  <option value="Critical">🔴 Critical</option>
-                                </select>
                                 <div className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 rounded-lg">
                                   <span className="text-xs text-gray-400">✅ Yes/No + ⭐ Rating 1-5</span>
                                 </div>
@@ -567,9 +516,9 @@ function AuditTemplates({ auditTypes, companyId, currentUser, saving, setSaving,
           </div>
         </div>
       )}
-    </div>
+    </>
   );
-}
+});
 
 function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, showError }) {
   const [checklist, setChecklist] = useState(() => (audit.checklist || []).map(normalizeChecklistItem));
@@ -737,31 +686,12 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
                           : 'bg-white border-gray-100'
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <div className="flex items-start gap-2 min-w-0">
-                          <span className="text-xs font-medium text-gray-400 mt-0.5 w-5 flex-shrink-0">{idx + 1}.</span>
-                          <p className="text-sm font-medium text-gray-800">
-                            {item.question}
-                            {item.required && <span className="text-red-400 ml-1">*</span>}
-                          </p>
-                        </div>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
-                            item.riskLevel === 'Critical'
-                              ? 'bg-red-100 text-red-700'
-                              : item.riskLevel === 'High'
-                                ? 'bg-orange-100 text-orange-700'
-                                : item.riskLevel === 'Medium'
-                                  ? 'bg-amber-100 text-amber-700'
-                                  : 'bg-green-100 text-green-700'
-                          }`}
-                        >
-                          {item.riskLevel === 'Critical' && '🔴 '}
-                          {item.riskLevel === 'High' && '🟠 '}
-                          {item.riskLevel === 'Medium' && '🟡 '}
-                          {item.riskLevel === 'Low' && '🟢 '}
-                          {item.riskLevel || 'Medium'}
-                        </span>
+                      <div className="flex items-start gap-2 min-w-0 mb-3">
+                        <span className="text-xs font-medium text-gray-400 mt-0.5 w-5 flex-shrink-0">{idx + 1}.</span>
+                        <p className="text-sm font-medium text-gray-800">
+                          {item.question}
+                          {item.required && <span className="text-red-400 ml-1">*</span>}
+                        </p>
                       </div>
 
                       <div className="ml-7 space-y-3">
@@ -1020,10 +950,9 @@ function AuditList({
       const auditType = auditTypes.find((t) => t.id === createForm.auditTypeId);
 
       const checklist = (auditType?.checklistTemplate || []).map((item) => {
-        const { type: _t, response: _r, ...rest } = item;
+        const { type: _t, response: _r, riskLevel: _rl, ...rest } = item;
         return {
           ...rest,
-          riskLevel: item.riskLevel || 'Medium',
           yesNoResponse: null,
           rating: null,
           remarks: '',
@@ -1039,6 +968,7 @@ function AuditList({
         auditTypeName: auditType?.name || '',
         auditCategory: auditType?.auditCategory || 'Internal',
         auditTypeColor: auditType?.color || '#8B5CF6',
+        templateRiskLevel: auditType?.riskLevel || 'Medium',
         title: createForm.title.trim() || auditType?.name || '',
         location: createForm.location,
         branch: createForm.branch,
@@ -1151,7 +1081,7 @@ function AuditList({
           title={auditTypes.length === 0 ? 'Create an audit template first' : ''}
           className="flex items-center gap-2 px-4 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 whitespace-nowrap"
         >
-          + New Audit
+          + Assign Audit
         </button>
       </div>
 
@@ -1235,7 +1165,7 @@ function AuditList({
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
-              <h2 className="text-lg font-semibold text-gray-800">Create New Audit</h2>
+              <h2 className="text-lg font-semibold text-gray-800">Assign Audit</h2>
               <button type="button" onClick={() => setShowCreateModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
                 ✕
               </button>
@@ -1404,7 +1334,7 @@ function AuditList({
                 disabled={saving}
                 className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
               >
-                {saving ? 'Creating...' : 'Create Audit'}
+                {saving ? 'Assigning...' : 'Assign Audit'}
               </button>
             </div>
           </div>
@@ -1430,6 +1360,7 @@ export default function Audit() {
   const { companyId } = useParams();
   const { currentUser } = useAuth();
   const { company } = useCompany();
+  const auditTemplatesRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState('audits');
   const [showSettings, setShowSettings] = useState(false);
@@ -1554,31 +1485,165 @@ export default function Audit() {
         <div className="fixed inset-0 z-50 flex justify-end">
           <div
             role="presentation"
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => setShowSettings(false)}
           />
-          <div className="relative bg-white w-full max-w-2xl h-full overflow-y-auto shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
-              <h2 className="text-lg font-semibold text-gray-800">Audit Settings</h2>
+          <div className="relative bg-white w-full max-w-2xl h-full flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-white flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-[#E8F5F5] rounded-xl flex items-center justify-center text-lg">⚙️</div>
+                <div>
+                  <h2 className="text-base font-semibold text-gray-800">Audit Settings</h2>
+                  <p className="text-xs text-gray-400">Manage audit templates and checklist configurations</p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowSettings(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-lg"
               >
                 ✕
               </button>
             </div>
-            <div className="flex-1 p-6">
-              <AuditTemplates
-                auditTypes={auditTypes}
-                companyId={companyId}
-                currentUser={currentUser}
-                saving={saving}
-                setSaving={setSaving}
-                showSuccess={showSuccess}
-                showError={showError}
-              />
+
+            <div className="px-6 pt-5 pb-3 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Audit Templates</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {auditTypes.length} template{auditTypes.length !== 1 ? 's' : ''} configured
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  auditTemplatesRef.current?.openNew();
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#1B6B6B] text-white rounded-xl text-xs font-medium hover:bg-[#155858]"
+              >
+                + Add Template
+              </button>
             </div>
+
+            <div className="flex-1 overflow-y-auto px-6 pb-6">
+              {auditTypes.length === 0 ? (
+                <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-2xl">
+                  <p className="text-3xl mb-3">📋</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">No audit templates yet</p>
+                  <p className="text-xs text-gray-400 mb-4">Create your first template to start assigning audits</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      auditTemplatesRef.current?.openNew();
+                    }}
+                    className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium"
+                  >
+                    + Create Template
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {auditTypes.map((type) => (
+                    <div
+                      key={type.id}
+                      className="bg-white border border-gray-100 rounded-2xl p-4 hover:border-gray-200 hover:shadow-sm transition-all"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div
+                            className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center text-white font-bold text-base"
+                            style={{ background: type.color || '#8B5CF6' }}
+                          >
+                            {type.name?.charAt(0)}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 truncate">{type.name}</p>
+
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                  type.auditCategory === 'External' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                }`}
+                              >
+                                {type.auditCategory === 'External' ? '🌐' : '🏢'}{' '}
+                                {type.auditCategory || 'Internal'}
+                              </span>
+
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                  type.riskLevel === 'Critical'
+                                    ? 'bg-red-100 text-red-700'
+                                    : type.riskLevel === 'High'
+                                      ? 'bg-orange-100 text-orange-700'
+                                      : type.riskLevel === 'Medium'
+                                        ? 'bg-amber-100 text-amber-700'
+                                        : 'bg-green-100 text-green-700'
+                                }`}
+                              >
+                                {type.riskLevel === 'Critical' && '🔴 '}
+                                {type.riskLevel === 'High' && '🟠 '}
+                                {type.riskLevel === 'Medium' && '🟡 '}
+                                {type.riskLevel === 'Low' && '🟢 '}
+                                {type.riskLevel || 'Medium'}
+                              </span>
+
+                              <span className="text-xs text-gray-400">
+                                {(type.checklistTemplate || []).length} items
+                              </span>
+                            </div>
+
+                            {type.description && (
+                              <p className="text-xs text-gray-400 mt-1 truncate">{type.description}</p>
+                            )}
+
+                            {[...new Set((type.checklistTemplate || []).map((i) => i.section))].length > 0 && (
+                              <div className="flex gap-1 mt-2 flex-wrap">
+                                {[...new Set((type.checklistTemplate || []).map((i) => i.section))].map((section) => (
+                                  <span
+                                    key={section}
+                                    className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full"
+                                  >
+                                    {section} (
+                                    {(type.checklistTemplate || []).filter((i) => i.section === section).length})
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-1 ml-2 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => auditTemplatesRef.current?.openEdit(type)}
+                            className="px-3 py-1.5 text-xs text-[#1B6B6B] hover:bg-[#E8F5F5] rounded-lg transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => auditTemplatesRef.current?.deleteType(type)}
+                            className="px-3 py-1.5 text-xs text-red-400 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <AuditTemplates
+              ref={auditTemplatesRef}
+              companyId={companyId}
+              currentUser={currentUser}
+              saving={saving}
+              setSaving={setSaving}
+              showSuccess={showSuccess}
+              showError={showError}
+            />
           </div>
         </div>
       )}
