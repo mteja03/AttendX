@@ -11,11 +11,38 @@ import {
   onSnapshot,
   serverTimestamp,
   getDocs,
+  runTransaction,
+  increment,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { trackPageView } from '../utils/analytics';
+
+/** Human-readable ref, e.g. AUD-2026-001 (counter resets each calendar year). */
+async function generateAuditId(companyId) {
+  const counterRef = doc(db, 'companies', companyId, 'settings', 'auditCounter');
+  const year = new Date().getFullYear();
+  const padded = await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(counterRef);
+    let num;
+    if (!snap.exists()) {
+      num = 1;
+      transaction.set(counterRef, { count: 1, year });
+    } else {
+      const data = snap.data() || {};
+      if (data.year !== year) {
+        num = 1;
+        transaction.set(counterRef, { count: 1, year });
+      } else {
+        num = (data.count || 0) + 1;
+        transaction.update(counterRef, { count: increment(1) });
+      }
+    }
+    return String(num).padStart(3, '0');
+  });
+  return `AUD-${year}-${padded}`;
+}
 
 const AUDIT_TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -523,6 +550,7 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
                         {audit.auditTypeName}
                         {audit.branch ? ` — ${audit.branch}` : ''}
                       </p>
+                      <p className="text-xs font-mono text-gray-400 truncate">{audit.auditRefId || '—'}</p>
                       <p className="text-xs text-gray-400 truncate">
                         {audit.auditorName || '—'}
                         {audit.endDate ? ` · Ends ${audit.endDate}` : ''}
@@ -1083,8 +1111,11 @@ function AuditDetail({ audit, companyId, currentUser, employees = [], onClose, s
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
         <div className="flex items-start justify-between p-6 border-b flex-shrink-0">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h2 className="text-lg font-semibold text-gray-800">{audit.title || audit.auditTypeName}</h2>
+              {audit.auditRefId ? (
+                <span className="text-xs font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{audit.auditRefId}</span>
+              ) : null}
               <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_COLORS[audit.status] || STATUS_COLORS.Assigned}`}>
                 {audit.status}
               </span>
@@ -1437,6 +1468,7 @@ function AuditDetail({ audit, companyId, currentUser, employees = [], onClose, s
                   <div className="bg-white border border-gray-100 rounded-xl p-4 space-y-3">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Audit Details</p>
                     {[
+                      { label: 'Reference', value: audit.auditRefId || '—' },
                       { label: 'Template', value: audit.auditTypeName },
                       { label: 'Category', value: audit.auditCategory },
                       { label: 'Workforce category', value: audit.category },
@@ -2002,6 +2034,9 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
                           </span>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap ml-8">
+                          {audit.auditRefId ? (
+                            <span className="text-xs font-mono text-gray-400">{audit.auditRefId}</span>
+                          ) : null}
                           {audit.branch && <span className="text-xs text-gray-400">🏢 {audit.branch}</span>}
                           {audit.auditorName && <span className="text-xs text-gray-400">· 👤 {audit.auditorName}</span>}
                           <span
@@ -2162,6 +2197,7 @@ function AuditList({
       if (search) {
         const q = search.toLowerCase();
         const match =
+          audit.auditRefId?.toLowerCase().includes(q) ||
           audit.auditTypeName?.toLowerCase().includes(q) ||
           audit.branch?.toLowerCase().includes(q) ||
           audit.location?.toLowerCase().includes(q) ||
@@ -2260,6 +2296,7 @@ function AuditList({
     try {
       setSaving(true);
 
+      const auditRefId = await generateAuditId(companyId);
       const auditType = auditTypes.find((t) => t.id === createForm.auditTypeId);
 
       const checklist = (auditType?.checklistTemplate || []).map((item) => {
@@ -2280,6 +2317,7 @@ function AuditList({
       });
 
       await addDoc(collection(db, 'companies', companyId, 'audits'), {
+        auditRefId,
         auditTypeId: createForm.auditTypeId,
         auditTypeName: auditType?.name || '',
         auditTypeColor: auditType?.color || '#8B5CF6',
@@ -2315,8 +2353,8 @@ function AuditList({
 
       showSuccess(
         createForm.teamMembers.length > 0
-          ? `Audit assigned to ${createForm.auditorName} and team (${1 + createForm.teamMembers.length} people)!`
-          : `Audit assigned to ${createForm.auditorName}!`,
+          ? `${auditRefId} assigned to ${createForm.auditorName} and team (${1 + createForm.teamMembers.length} people)!`
+          : `${auditRefId} assigned to ${createForm.auditorName}!`,
       );
       setShowCreateModal(false);
       resetForm();
@@ -2644,6 +2682,9 @@ function AuditList({
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="text-xs font-mono font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">
+                              {audit.auditRefId || '—'}
+                            </span>
                             <p className="text-sm font-semibold text-gray-800">{audit.auditTypeName}</p>
                             <span
                               className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
@@ -2809,6 +2850,7 @@ function AuditList({
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-gray-800 truncate">{audit.auditTypeName}</p>
                           {audit.branch ? <p className="text-xs text-gray-400 truncate">{audit.branch}</p> : null}
+                          <p className="text-xs font-mono text-gray-300">{audit.auditRefId || '—'}</p>
                         </div>
                       </div>
                       {audit.auditorName ? (

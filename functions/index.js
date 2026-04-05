@@ -24,6 +24,31 @@ function stringifyData(data) {
   return out;
 }
 
+/** FCM to a single user (`fcmTokens` doc id = lowercased email). */
+async function sendToUser(userEmail, notification, data = {}) {
+  try {
+    if (!userEmail) return;
+    const email = String(userEmail).toLowerCase().trim();
+    const tokenDoc = await db.collection('fcmTokens').doc(email).get();
+    if (!tokenDoc.exists || !tokenDoc.data()?.token) return;
+    const token = tokenDoc.data().token;
+    const dataPayload = stringifyData({
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+    await messaging.send({
+      notification: {
+        title: notification.title,
+        body: notification.body,
+      },
+      data: dataPayload,
+      token,
+    });
+  } catch (error) {
+    console.error('sendToUser error:', error);
+  }
+}
+
 function toJsDate(value) {
   if (!value) return null;
   if (typeof value.toDate === 'function') return value.toDate();
@@ -635,6 +660,338 @@ exports.dailyOffboardingOverdue = functions.pubsub
           url: `/company/${companyId}/employees`,
         },
       );
+    }
+
+    return null;
+  });
+
+// ─── Audit FCM notifications ───
+
+exports.onAuditAssigned = functions.firestore
+  .document('companies/{companyId}/audits/{auditId}')
+  .onCreate(async (snap, context) => {
+    const audit = snap.data();
+    const { companyId, auditId } = context.params;
+    if (!audit) return;
+
+    if (audit.auditorEmail) {
+      await sendToUser(
+        audit.auditorEmail,
+        {
+          title: '📋 Audit Assigned to You',
+          body: `${audit.auditRefId || 'Audit'}: ${audit.auditTypeName || 'Audit'}${
+            audit.branch ? ` — ${audit.branch}` : ''
+          }. Due: ${audit.endDate || 'No date set'}`,
+        },
+        {
+          type: 'audit_assigned',
+          auditId,
+          companyId,
+          url: `/company/${companyId}/audit`,
+        },
+      );
+    }
+
+    if (audit.teamMembers?.length > 0) {
+      for (const member of audit.teamMembers) {
+        if (member.email) {
+          await sendToUser(
+            member.email,
+            {
+              title: '👥 Added to Audit Team',
+              body: `${audit.auditRefId || 'Audit'}: ${audit.auditTypeName || 'Audit'}${
+                audit.branch ? ` — ${audit.branch}` : ''
+              }. Lead: ${audit.auditorName || '—'}`,
+            },
+            {
+              type: 'audit_team_added',
+              auditId,
+              companyId,
+              url: `/company/${companyId}/audit`,
+            },
+          );
+        }
+      }
+    }
+
+    await sendToCompanyHR(
+      companyId,
+      {
+        title: '🔍 New Audit Assigned',
+        body: `${audit.auditRefId || 'Audit'}: ${audit.auditTypeName || 'Audit'}${
+          audit.branch ? ` — ${audit.branch}` : ''
+        } assigned to ${audit.auditorName || 'auditor'}`,
+      },
+      {
+        type: 'audit_assigned',
+        auditId,
+        companyId,
+        url: `/company/${companyId}/audit`,
+      },
+    );
+  });
+
+exports.onAuditStatusChanged = functions.firestore
+  .document('companies/{companyId}/audits/{auditId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    const { companyId, auditId } = context.params;
+    if (!before || !after) return;
+    if (before.status === after.status) return;
+
+    const refId = after.auditRefId || 'Audit';
+    const typeName = after.auditTypeName || 'Audit';
+    const branch = after.branch || '';
+
+    if (after.status === 'Submitted') {
+      await sendToCompanyHR(
+        companyId,
+        {
+          title: '📤 Audit Submitted for Review',
+          body: `${refId}: ${typeName}${branch ? ` — ${branch}` : ''} submitted by ${after.auditorName || 'auditor'}`,
+        },
+        {
+          type: 'audit_submitted',
+          auditId,
+          companyId,
+          url: `/company/${companyId}/audit`,
+        },
+      );
+    }
+
+    if (before.status === 'Submitted' && after.status === 'In Progress') {
+      await sendToUser(
+        after.auditorEmail,
+        {
+          title: '↩ Audit Sent Back',
+          body: `${refId}: ${typeName}${branch ? ` — ${branch}` : ''} has been sent back for corrections`,
+        },
+        {
+          type: 'audit_sent_back',
+          auditId,
+          companyId,
+          url: `/company/${companyId}/audit`,
+        },
+      );
+      if (after.teamMembers?.length > 0) {
+        for (const member of after.teamMembers) {
+          if (member.email) {
+            await sendToUser(
+              member.email,
+              {
+                title: '↩ Audit Sent Back',
+                body: `${refId}: ${typeName} sent back for corrections`,
+              },
+              {
+                type: 'audit_sent_back',
+                auditId,
+                companyId,
+                url: `/company/${companyId}/audit`,
+              },
+            );
+          }
+        }
+      }
+    }
+
+    if (after.status === 'Closed') {
+      await sendToUser(
+        after.auditorEmail,
+        {
+          title: '✅ Audit Closed',
+          body: `${refId}: ${typeName}${branch ? ` — ${branch}` : ''} has been reviewed and closed`,
+        },
+        {
+          type: 'audit_closed',
+          auditId,
+          companyId,
+          url: `/company/${companyId}/audit`,
+        },
+      );
+      if (after.teamMembers?.length > 0) {
+        for (const member of after.teamMembers) {
+          if (member.email) {
+            await sendToUser(
+              member.email,
+              {
+                title: '✅ Audit Closed',
+                body: `${refId}: ${typeName} closed`,
+              },
+              {
+                type: 'audit_closed',
+                auditId,
+                companyId,
+                url: `/company/${companyId}/audit`,
+              },
+            );
+          }
+        }
+      }
+    }
+  });
+
+exports.dailyOverdueAuditAlert = functions.pubsub
+  .schedule('30 9 * * *')
+  .timeZone('Asia/Kolkata')
+  .onRun(async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const companiesSnap = await db.collection('companies').get();
+
+    for (const companyDoc of companiesSnap.docs) {
+      const companyId = companyDoc.id;
+
+      const auditsSnap = await db
+        .collection('companies')
+        .doc(companyId)
+        .collection('audits')
+        .where('status', 'in', ['Assigned', 'In Progress', 'Submitted', 'Under Review'])
+        .get();
+
+      const overdueAudits = auditsSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((a) => {
+          const end = a.endDate || a.dueDate;
+          if (!end) return false;
+          const d = toJsDate(end) || new Date(end);
+          if (!d || Number.isNaN(d.getTime())) return false;
+          d.setHours(0, 0, 0, 0);
+          return d < today;
+        });
+
+      if (overdueAudits.length === 0) continue;
+
+      const body =
+        overdueAudits.length === 1
+          ? `${overdueAudits[0].auditRefId || 'Audit'}: ${overdueAudits[0].auditTypeName || 'Audit'}${
+              overdueAudits[0].branch ? ` — ${overdueAudits[0].branch}` : ''
+            } is overdue`
+          : `${overdueAudits.length} audits are overdue and need attention`;
+
+      await sendToCompanyHR(
+        companyId,
+        {
+          title: '⚠️ Overdue Audits',
+          body,
+        },
+        {
+          type: 'audit_overdue',
+          companyId,
+          count: String(overdueAudits.length),
+          url: `/company/${companyId}/audit`,
+        },
+      );
+
+      const auditorOverdueMap = {};
+      overdueAudits.forEach((a) => {
+        if (a.auditorEmail) {
+          if (!auditorOverdueMap[a.auditorEmail]) auditorOverdueMap[a.auditorEmail] = [];
+          auditorOverdueMap[a.auditorEmail].push(a);
+        }
+      });
+
+      for (const [email, myAudits] of Object.entries(auditorOverdueMap)) {
+        const auditorBody =
+          myAudits.length === 1
+            ? `${myAudits[0].auditRefId || 'Your audit'}: ${myAudits[0].auditTypeName || 'Audit'} is overdue. Please complete and submit.`
+            : `You have ${myAudits.length} overdue audits. Please complete and submit.`;
+
+        await sendToUser(
+          email,
+          {
+            title: '⚠️ Your Audit is Overdue',
+            body: auditorBody,
+          },
+          {
+            type: 'audit_overdue_auditor',
+            companyId,
+            url: `/company/${companyId}/audit`,
+          },
+        );
+      }
+    }
+
+    return null;
+  });
+
+exports.dailyAuditActionOverdue = functions.pubsub
+  .schedule('0 10 * * *')
+  .timeZone('Asia/Kolkata')
+  .onRun(async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const companiesSnap = await db.collection('companies').get();
+
+    for (const companyDoc of companiesSnap.docs) {
+      const companyId = companyDoc.id;
+
+      const auditsSnap = await db.collection('companies').doc(companyId).collection('audits').get();
+
+      const ownerOverdueMap = {};
+
+      auditsSnap.docs.forEach((d) => {
+        const audit = { id: d.id, ...d.data() };
+        if (audit.status === 'Closed') return;
+
+        (audit.checklist || []).forEach((item) => {
+          if (!item.ownerEmail) return;
+          if (item.resolved) return;
+          if (!item.targetDate) return;
+          const td = toJsDate(item.targetDate) || new Date(item.targetDate);
+          if (!td || Number.isNaN(td.getTime())) return;
+          td.setHours(0, 0, 0, 0);
+          if (td >= today) return;
+
+          if (!ownerOverdueMap[item.ownerEmail]) ownerOverdueMap[item.ownerEmail] = [];
+          ownerOverdueMap[item.ownerEmail].push({
+            question: item.question,
+            auditRefId: audit.auditRefId,
+            auditTypeName: audit.auditTypeName,
+            branch: audit.branch,
+            targetDate: item.targetDate,
+          });
+        });
+      });
+
+      for (const [email, items] of Object.entries(ownerOverdueMap)) {
+        const body =
+          items.length === 1
+            ? `Action item from ${items[0].auditRefId || 'audit'}: "${(items[0].question || '').substring(0, 50)}..." is overdue`
+            : `You have ${items.length} overdue audit action items to resolve`;
+
+        await sendToUser(
+          email,
+          {
+            title: '🔴 Action Item Overdue',
+            body,
+          },
+          {
+            type: 'audit_action_overdue',
+            companyId,
+            url: `/company/${companyId}/audit`,
+          },
+        );
+      }
+
+      const totalOverdue = Object.values(ownerOverdueMap).reduce((sum, arr) => sum + arr.length, 0);
+
+      if (totalOverdue > 0) {
+        await sendToCompanyHR(
+          companyId,
+          {
+            title: '🔴 Overdue Audit Actions',
+            body: `${totalOverdue} audit action item${totalOverdue !== 1 ? 's' : ''} overdue across all audits`,
+          },
+          {
+            type: 'audit_action_overdue',
+            companyId,
+            url: `/company/${companyId}/audit`,
+          },
+        );
+      }
     }
 
     return null;
