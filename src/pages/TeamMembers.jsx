@@ -24,7 +24,7 @@ const ROLE_INFO_CARDS = [
   {
     role: 'HR Manager',
     badgeClass: 'bg-green-100 text-green-700',
-    desc: 'Full HR access — employees, leave, docs, assets',
+    desc: 'Full HR access — employees, leave, docs, assets, audits',
   },
   {
     role: 'Manager',
@@ -561,7 +561,7 @@ export default function TeamMembers() {
                       <p className="text-sm font-medium text-gray-800">{ROLE_LABELS[role]}</p>
                       <p className="text-xs text-gray-400">
                         {role === 'hrmanager'
-                          ? 'Full HR access — employees, leave, docs, assets'
+                          ? 'Full HR access — employees, leave, docs, assets, audits'
                           : role === 'manager'
                             ? 'Team leave and attendance only'
                             : 'View employees, manage assets'}

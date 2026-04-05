@@ -2077,6 +2077,8 @@ function AuditList({
   showError,
   setShowSettings,
   setSelectedAudit,
+  userRole,
+  selectedAuditId,
 }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -2117,6 +2119,26 @@ function AuditList({
 
   const now = new Date();
   now.setHours(0, 0, 0, 0);
+
+  const isAdmin = userRole === 'admin';
+
+  const handleDeleteAudit = async (e, audit) => {
+    e.stopPropagation();
+    if (
+      !window.confirm(
+        `Delete "${audit.auditTypeName}" audit${audit.branch ? ` for ${audit.branch}` : ''}?\n\nThis cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'companies', companyId, 'audits', audit.id));
+      if (selectedAuditId === audit.id) setSelectedAudit(null);
+      showSuccess('Audit deleted');
+    } catch (err) {
+      showError(`Failed to delete: ${err.message}`);
+    }
+  };
 
   const isOverdue = (audit) => {
     if (audit.status === 'Closed') return false;
@@ -2594,7 +2616,7 @@ function AuditList({
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
                     }}
-                    className={`bg-white rounded-2xl border cursor-pointer hover:shadow-md transition-all group overflow-hidden ${
+                    className={`relative bg-white rounded-2xl border cursor-pointer hover:shadow-md transition-all group overflow-hidden ${
                       overdueAudit ? 'border-red-200 hover:border-red-300' : 'border-gray-100 hover:border-[#4ECDC4]'
                     }`}
                   >
@@ -2602,6 +2624,16 @@ function AuditList({
                       className="h-1"
                       style={{ background: overdueAudit ? '#EF4444' : audit.auditTypeColor || '#8B5CF6' }}
                     />
+                    {isAdmin ? (
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteAudit(e, audit)}
+                        className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-300 hover:text-red-500 transition-all flex-shrink-0 absolute top-3 right-3 z-10"
+                        aria-label="Delete audit"
+                      >
+                        🗑️
+                      </button>
+                    ) : null}
                     <div className="p-5">
                       <div className="flex items-start gap-4">
                         <div
@@ -2755,8 +2787,18 @@ function AuditList({
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
                       }}
-                      className="bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:shadow-sm hover:border-gray-200 transition-all"
+                      className="relative group bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:shadow-sm hover:border-gray-200 transition-all"
                     >
+                      {isAdmin ? (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteAudit(e, audit)}
+                          className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-200 hover:text-red-500 transition-all absolute top-2 right-2 z-10"
+                          aria-label="Delete audit"
+                        >
+                          🗑️
+                        </button>
+                      ) : null}
                       <div className="flex items-start gap-2 mb-2">
                         <div
                           className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
@@ -3285,7 +3327,7 @@ function AuditList({
 
 export default function Audit() {
   const { companyId } = useParams();
-  const { currentUser } = useAuth();
+  const { currentUser, userRole } = useAuth();
   const { company } = useCompany();
   const auditTemplatesRef = useRef(null);
 
@@ -3436,6 +3478,8 @@ export default function Audit() {
             showError={showError}
             setShowSettings={setShowSettings}
             setSelectedAudit={setSelectedAudit}
+            userRole={userRole}
+            selectedAuditId={selectedAudit?.id}
           />
         )}
       </div>

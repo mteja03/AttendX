@@ -29,6 +29,7 @@ const DEFAULT_MODULE_PERMISSIONS = {
   documents: true,
   assets: true,
   reports: true,
+  audit: true,
   policies: true,
   calendar: true,
   onboarding: true,
@@ -44,6 +45,12 @@ const PERMISSION_MODULES = [
   { key: 'documents', label: 'Documents', icon: '📄' },
   { key: 'assets', label: 'Assets', icon: '📦' },
   { key: 'reports', label: 'Reports', icon: '📊' },
+  {
+    key: 'audit',
+    label: 'Audit',
+    icon: '🔍',
+    description: 'View and manage audits, assign audits, fill checklists',
+  },
   { key: 'policies', label: 'Library', icon: '📋' },
   { key: 'calendar', label: 'Calendar', icon: '🗓️' },
   { key: 'onboarding', label: 'Onboarding', icon: '🎯' },
@@ -589,9 +596,14 @@ export default function AdminUsers() {
                   key={module.key}
                   className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-gray-50"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span aria-hidden>{module.icon}</span>
-                    <span className="text-sm text-gray-800 truncate">{module.label}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span aria-hidden>{module.icon}</span>
+                      <span className="text-sm text-gray-800 truncate">{module.label}</span>
+                    </div>
+                    {module.description ? (
+                      <p className="text-xs text-gray-400 mt-0.5 pl-7 leading-snug">{module.description}</p>
+                    ) : null}
                   </div>
                   <button
                     type="button"
