@@ -62,68 +62,483 @@ function normalizeChecklistItem(item) {
   return next;
 }
 
-function AuditDashboard({ audits }) {
+function AuditDashboard({ audits, auditTypes, company: _company }) {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
   const total = audits.length;
+  const assigned = audits.filter((a) => a.status === 'Assigned').length;
   const inProgress = audits.filter((a) => a.status === 'In Progress').length;
-  const submitted = audits.filter((a) => a.status === 'Submitted' || a.status === 'Under Review').length;
+  const submitted = audits.filter((a) => a.status === 'Submitted').length;
+  const underReview = audits.filter((a) => a.status === 'Under Review').length;
   const closed = audits.filter((a) => a.status === 'Closed').length;
+
   const overdue = audits.filter((a) => {
     if (a.status === 'Closed') return false;
     const end = a.endDate || a.dueDate;
     if (!end) return false;
-    return new Date(end) < new Date();
+    return new Date(end) < now;
   }).length;
+
+  const closedAudits = audits.filter((a) => a.status === 'Closed');
+  const complianceRate =
+    closedAudits.length > 0
+      ? Math.round(
+          closedAudits.reduce((sum, a) => {
+            const items = a.checklist || [];
+            const compliant = items.filter((i) => i.yesNoResponse === 'Yes').length;
+            return sum + (items.length > 0 ? (compliant / items.length) * 100 : 0);
+          }, 0) / closedAudits.length,
+        )
+      : null;
+
+  const riskCounts = {
+    Critical: audits.filter((a) => a.riskLevel === 'Critical' && a.status !== 'Closed').length,
+    High: audits.filter((a) => a.riskLevel === 'High' && a.status !== 'Closed').length,
+    Medium: audits.filter((a) => a.riskLevel === 'Medium' && a.status !== 'Closed').length,
+    Low: audits.filter((a) => a.riskLevel === 'Low' && a.status !== 'Closed').length,
+  };
+
+  const upcomingActions = audits
+    .flatMap((a) =>
+      (a.checklist || [])
+        .filter((i) => i.yesNoResponse === 'No' && i.ownerName && !i.resolved && i.targetDate)
+        .map((i) => ({
+          ...i,
+          auditName: a.auditTypeName || a.title,
+          auditId: a.id,
+          branch: a.branch || a.location,
+          daysLeft: Math.ceil((new Date(i.targetDate) - now) / (1000 * 60 * 60 * 24)),
+        })),
+    )
+    .filter((i) => i.daysLeft <= 7)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+
+  const overdueActions = audits
+    .flatMap((a) =>
+      (a.checklist || [])
+        .filter(
+          (i) =>
+            i.yesNoResponse === 'No' &&
+            i.ownerName &&
+            !i.resolved &&
+            i.targetDate &&
+            new Date(i.targetDate) < now,
+        )
+        .map((i) => ({
+          ...i,
+          auditName: a.auditTypeName,
+          branch: a.branch || a.location,
+          daysOverdue: Math.ceil((now - new Date(i.targetDate)) / (1000 * 60 * 60 * 24)),
+        })),
+    )
+    .sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+  const auditorWorkload = {};
+  audits
+    .filter((a) => a.status !== 'Closed')
+    .forEach((a) => {
+      if (a.auditorName) {
+        auditorWorkload[a.auditorName] = (auditorWorkload[a.auditorName] || 0) + 1;
+      }
+    });
+  const workloadList = Object.entries(auditorWorkload)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  const byType = {};
+  audits.forEach((a) => {
+    const name = a.auditTypeName || 'Unknown';
+    byType[name] = (byType[name] || 0) + 1;
+  });
+
+  const pipeline = [
+    { label: 'Assigned', count: assigned, color: '#8B5CF6', bg: '#EDE9FE' },
+    { label: 'In Progress', count: inProgress, color: '#3B82F6', bg: '#DBEAFE' },
+    { label: 'Submitted', count: submitted, color: '#F97316', bg: '#FEF3C7' },
+    { label: 'Under Review', count: underReview, color: '#EC4899', bg: '#FBEAF0' },
+    { label: 'Closed', count: closed, color: '#10B981', bg: '#D1FAE5' },
+  ];
+
+  const maxPipeline = Math.max(...pipeline.map((p) => p.count), 1);
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {[
-          { label: 'Total Audits', value: total, icon: '🔍', color: 'gray' },
-          { label: 'In Progress', value: inProgress, icon: '📝', color: 'blue' },
-          { label: 'Under Review', value: submitted, icon: '👀', color: 'orange' },
-          { label: 'Closed', value: closed, icon: '✅', color: 'green' },
-          { label: 'Overdue', value: overdue, icon: '⚠️', color: 'red' },
-        ].map((card) => (
-          <div key={card.label} className="bg-white border border-gray-100 rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-gray-500">{card.label}</p>
-              <span className="text-xl">{card.icon}</span>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-gray-400">Total Audits</p>
+            <span className="text-xl">🔍</span>
+          </div>
+          <p className="text-3xl font-bold text-gray-900">{total}</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {closed} closed · {total - closed} active
+          </p>
+        </div>
+
+        <div
+          className={`border rounded-2xl p-5 ${overdue > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-gray-100'}`}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <p className={`text-xs ${overdue > 0 ? 'text-red-500' : 'text-gray-400'}`}>Overdue</p>
+            <span className="text-xl">⚠️</span>
+          </div>
+          <p className={`text-3xl font-bold ${overdue > 0 ? 'text-red-600' : 'text-gray-900'}`}>{overdue}</p>
+          <p className={`text-xs mt-1 ${overdue > 0 ? 'text-red-400' : 'text-gray-400'}`}>Past end date</p>
+        </div>
+
+        <div
+          className={`border rounded-2xl p-5 ${
+            overdueActions.length > 0 ? 'bg-amber-50 border-amber-100' : 'bg-white border-gray-100'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <p className={`text-xs ${overdueActions.length > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+              Overdue Actions
+            </p>
+            <span className="text-xl">🔴</span>
+          </div>
+          <p
+            className={`text-3xl font-bold ${overdueActions.length > 0 ? 'text-amber-700' : 'text-gray-900'}`}
+          >
+            {overdueActions.length}
+          </p>
+          <p className={`text-xs mt-1 ${overdueActions.length > 0 ? 'text-amber-500' : 'text-gray-400'}`}>
+            Need immediate fix
+          </p>
+        </div>
+
+        {complianceRate !== null ? (
+          <div
+            className={`border rounded-2xl p-5 ${
+              complianceRate >= 80
+                ? 'bg-green-50 border-green-100'
+                : complianceRate >= 60
+                  ? 'bg-amber-50 border-amber-100'
+                  : 'bg-red-50 border-red-100'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-gray-500">Compliance Rate</p>
+              <span className="text-xl">📊</span>
             </div>
             <p
-              className={`text-3xl font-bold ${card.color === 'red' && card.value > 0 ? 'text-red-600' : 'text-gray-900'}`}
+              className={`text-3xl font-bold ${
+                complianceRate >= 80 ? 'text-green-700' : complianceRate >= 60 ? 'text-amber-700' : 'text-red-700'
+              }`}
             >
-              {card.value}
+              {complianceRate}%
             </p>
+            <p className="text-xs text-gray-400 mt-1">From closed audits</p>
           </div>
-        ))}
+        ) : (
+          <div className="bg-white border border-gray-100 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-gray-400">Compliance Rate</p>
+              <span className="text-xl">📊</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-300">—</p>
+            <p className="text-xs text-gray-400 mt-1">No closed audits yet</p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">📊 Audit Pipeline</h3>
+          <div className="space-y-3">
+            {pipeline.map((stage) => (
+              <div key={stage.label}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: stage.color }} />
+                    <span className="text-xs text-gray-600">{stage.label}</span>
+                  </div>
+                  <span className="text-xs font-bold text-gray-700">{stage.count}</span>
+                </div>
+                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      background: stage.color,
+                      width: stage.count > 0 ? `${Math.max((stage.count / maxPipeline) * 100, 4)}%` : '0%',
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          {total === 0 && <p className="text-center text-xs text-gray-400 mt-4">No audits yet</p>}
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">
+            🎯 Risk Distribution
+            <span className="text-xs font-normal text-gray-400 ml-1">(active audits)</span>
+          </h3>
+          <div className="space-y-3">
+            {[
+              {
+                label: 'Critical',
+                icon: '🔴',
+                color: '#EF4444',
+                bg: 'bg-red-50',
+                border: 'border-red-100',
+                text: 'text-red-700',
+              },
+              {
+                label: 'High',
+                icon: '🟠',
+                color: '#F97316',
+                bg: 'bg-orange-50',
+                border: 'border-orange-100',
+                text: 'text-orange-700',
+              },
+              {
+                label: 'Medium',
+                icon: '🟡',
+                color: '#F59E0B',
+                bg: 'bg-amber-50',
+                border: 'border-amber-100',
+                text: 'text-amber-700',
+              },
+              {
+                label: 'Low',
+                icon: '🟢',
+                color: '#10B981',
+                bg: 'bg-green-50',
+                border: 'border-green-100',
+                text: 'text-green-700',
+              },
+            ].map((risk) => {
+              const count = riskCounts[risk.label] || 0;
+              const totalActive = Object.values(riskCounts).reduce((a, b) => a + b, 0);
+              const pct = totalActive > 0 ? Math.round((count / totalActive) * 100) : 0;
+              return (
+                <div key={risk.label} className={`flex items-center gap-3 p-3 rounded-xl border ${risk.bg} ${risk.border}`}>
+                  <span className="text-lg flex-shrink-0">{risk.icon}</span>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`text-xs font-medium ${risk.text}`}>{risk.label}</span>
+                      <span className={`text-xs font-bold ${risk.text}`}>{count} audits</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-white/60 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ background: risk.color, width: `${pct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {Object.values(riskCounts).every((v) => v === 0) && (
+            <p className="text-center text-xs text-gray-400 mt-2">No active audits</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center justify-between">
+            🔴 Overdue Action Items
+            {overdueActions.length > 0 && (
+              <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                {overdueActions.length}
+              </span>
+            )}
+          </h3>
+          {overdueActions.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-2xl mb-2">✅</p>
+              <p className="text-xs text-gray-400">No overdue action items</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {overdueActions.slice(0, 8).map((item, i) => (
+                <div key={i} className="p-3 bg-red-50 border border-red-100 rounded-xl">
+                  <p className="text-xs font-medium text-gray-800 mb-1.5 line-clamp-2">{item.question}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-red-600 font-medium">⚠️ {item.daysOverdue}d overdue</span>
+                    <span className="text-xs text-gray-500">· 👤 {item.ownerName}</span>
+                    {item.branch ? <span className="text-xs text-gray-400">· {item.branch}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center justify-between">
+            ⏰ Upcoming Action Items
+            <span className="text-xs text-gray-400 font-normal">Due in 7 days</span>
+          </h3>
+          {upcomingActions.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-2xl mb-2">🎯</p>
+              <p className="text-xs text-gray-400">No upcoming action items</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {upcomingActions.slice(0, 8).map((item, i) => (
+                <div
+                  key={i}
+                  className={`p-3 border rounded-xl ${
+                    item.daysLeft <= 0
+                      ? 'bg-red-50 border-red-100'
+                      : item.daysLeft <= 2
+                        ? 'bg-orange-50 border-orange-100'
+                        : 'bg-amber-50 border-amber-100'
+                  }`}
+                >
+                  <p className="text-xs font-medium text-gray-800 mb-1.5 line-clamp-2">{item.question}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`text-xs font-medium ${
+                        item.daysLeft <= 0 ? 'text-red-600' : item.daysLeft <= 2 ? 'text-orange-600' : 'text-amber-600'
+                      }`}
+                    >
+                      {item.daysLeft <= 0 ? 'Due today' : `${item.daysLeft}d left`}
+                    </span>
+                    <span className="text-xs text-gray-500">· 👤 {item.ownerName}</span>
+                    {item.branch ? <span className="text-xs text-gray-400">· {item.branch}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">
+            👥 Auditor Workload
+            <span className="text-xs font-normal text-gray-400 ml-1">(active audits)</span>
+          </h3>
+          {workloadList.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-2xl mb-2">👥</p>
+              <p className="text-xs text-gray-400">No active audits assigned</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {workloadList.map(([name, count]) => (
+                <div key={name} className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    {name?.charAt(0)}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-gray-700 truncate">{name}</span>
+                      <span className="text-xs font-bold text-gray-700 ml-2">{count}</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[#1B6B6B] rounded-full"
+                        style={{
+                          width: `${Math.max((count / (workloadList[0][1] || 1)) * 100, 8)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">📋 Audits by Template</h3>
+          {Object.keys(byType).length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-2xl mb-2">📋</p>
+              <p className="text-xs text-gray-400">No audits yet</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {Object.entries(byType)
+                .sort((a, b) => b[1] - a[1])
+                .map(([name, count]) => {
+                  const type = (auditTypes || []).find((t) => t.name === name);
+                  const maxCount = Math.max(...Object.values(byType), 1);
+                  return (
+                    <div key={name} className="flex items-center gap-3">
+                      <div
+                        className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                        style={{ background: type?.color || '#8B5CF6' }}
+                      >
+                        {name?.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-gray-700 truncate">{name}</span>
+                          <span className="text-xs font-bold text-gray-700 ml-2">{count}</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              background: type?.color || '#8B5CF6',
+                              width: `${Math.max((count / maxCount) * 100, 8)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="bg-white border border-gray-100 rounded-2xl p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Recent Audits</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">🕐 Recent Audits</h3>
         {audits.slice(0, 5).length === 0 ? (
-          <div className="text-center py-8 text-gray-400">
-            <p className="text-3xl mb-2">🔍</p>
-            <p className="text-sm">No audits yet</p>
+          <div className="text-center py-8">
+            <p className="text-2xl mb-2">🔍</p>
+            <p className="text-xs text-gray-400">No audits yet. Assign your first audit to get started.</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {audits.slice(0, 5).map((audit) => (
-              <div key={audit.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{audit.title || audit.auditTypeName}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {audit.branch || audit.location || '—'} · End: {audit.endDate || audit.dueDate || '—'}
-                  </p>
-                </div>
-                <span
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                    STATUS_COLORS[audit.status] || STATUS_COLORS.Assigned
-                  }`}
+          <div className="space-y-2">
+            {audits.slice(0, 5).map((audit) => {
+              const isOverdueAudit =
+                audit.status !== 'Closed' &&
+                (audit.endDate || audit.dueDate) &&
+                new Date(audit.endDate || audit.dueDate) < now;
+              return (
+                <div
+                  key={audit.id}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
                 >
-                  {audit.status}
-                </span>
-              </div>
-            ))}
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div
+                      className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                      style={{ background: audit.auditTypeColor || '#8B5CF6' }}
+                    >
+                      {audit.auditTypeName?.charAt(0) || 'A'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">
+                        {audit.auditTypeName}
+                        {audit.branch ? ` — ${audit.branch}` : ''}
+                      </p>
+                      <p className="text-xs text-gray-400 truncate">
+                        {audit.auditorName || '—'}
+                        {audit.endDate ? ` · Ends ${audit.endDate}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ml-2 ${
+                      isOverdueAudit ? 'bg-red-100 text-red-700' : STATUS_COLORS[audit.status] || STATUS_COLORS.Assigned
+                    }`}
+                  >
+                    {isOverdueAudit ? 'Overdue' : audit.status}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -533,12 +948,34 @@ function AuditDetail({ audit, companyId, currentUser, employees = [], onClose, s
   const [saving, setSaving] = useState(false);
   const [managerComment, setManagerComment] = useState(audit.managerComments || '');
   const [detailTab, setDetailTab] = useState('overview');
+  const [ownerSearch, setOwnerSearch] = useState({});
+  const [showOwnerDropdown, setShowOwnerDropdown] = useState({});
+  const ownerRefs = useRef({});
+
+  const isReadOnly =
+    audit.status === 'Submitted' || audit.status === 'Under Review' || audit.status === 'Closed';
 
   useEffect(() => {
     setChecklist((audit.checklist || []).map(normalizeChecklistItem));
     setManagerComment(audit.managerComments || '');
     setDetailTab('overview');
+    setOwnerSearch({});
+    setShowOwnerDropdown({});
   }, [audit.id]);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      Object.keys(ownerRefs.current).forEach((itemId) => {
+        const node = ownerRefs.current[itemId];
+        if (node && !node.contains(e.target)) {
+          setShowOwnerDropdown((prev) => ({ ...prev, [itemId]: false }));
+          setOwnerSearch((prev) => ({ ...prev, [itemId]: undefined }));
+        }
+      });
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const completedCount = useMemo(() => checklist.filter((i) => itemFullyAnswered(i)).length, [checklist]);
 
@@ -548,22 +985,6 @@ function AuditDetail({ audit, companyId, currentUser, employees = [], onClose, s
 
   const updateItemResponse = (id, field, value) => {
     setChecklist((prev) => prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
-  };
-
-  const updateItemOwnerFromSelect = (itemId, fullName) => {
-    const emp = fullName ? (employees || []).find((e) => e.fullName === fullName || e.id === fullName) : null;
-    setChecklist((prev) =>
-      prev.map((it) =>
-        it.id !== itemId
-          ? it
-          : {
-              ...it,
-              ownerName: fullName,
-              ownerId: emp?.id ?? '',
-              ownerEmail: emp?.email ?? '',
-            },
-      ),
-    );
   };
 
   const handleSaveDraft = async () => {
@@ -843,32 +1264,108 @@ function AuditDetail({ audit, companyId, currentUser, employees = [], onClose, s
                               <div className="p-3 bg-red-50 rounded-lg border border-red-100 space-y-2">
                                 <p className="text-xs font-medium text-red-700">⚠️ Non-compliant — assign owner</p>
                                 <div className="grid grid-cols-2 gap-2">
-                                  <div>
+                                  <div
+                                    ref={(el) => {
+                                      ownerRefs.current[item.id] = el;
+                                    }}
+                                    className="relative"
+                                  >
                                     <label className="text-xs text-gray-400 block mb-1">Owner (responsible to fix)</label>
-                                    <select
-                                      value={item.ownerName || ''}
-                                      onChange={(e) => updateItemOwnerFromSelect(item.id, e.target.value)}
-                                      className="w-full border rounded-lg px-2 py-2 text-xs bg-white focus:outline-none"
-                                    >
-                                      <option value="">Select owner...</option>
-                                      {(employees || [])
-                                        .filter((e) => e.status === 'Active')
-                                        .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
-                                        .map((emp) => (
-                                          <option key={emp.id} value={emp.fullName}>
-                                            {emp.fullName}
-                                            {emp.designation ? ` — ${emp.designation}` : ''}
-                                          </option>
-                                        ))}
-                                    </select>
+                                    <input
+                                      type="text"
+                                      value={
+                                        ownerSearch[item.id] !== undefined ? ownerSearch[item.id] : item.ownerName || ''
+                                      }
+                                      disabled={isReadOnly}
+                                      placeholder="Search employee..."
+                                      onChange={(e) => {
+                                        const v = e.target.value;
+                                        setOwnerSearch((prev) => ({ ...prev, [item.id]: v }));
+                                        setShowOwnerDropdown((prev) => ({ ...prev, [item.id]: true }));
+                                        if (!v) {
+                                          setChecklist((prev) =>
+                                            prev.map((it) =>
+                                              it.id !== item.id
+                                                ? it
+                                                : { ...it, ownerName: '', ownerId: '', ownerEmail: '' },
+                                            ),
+                                          );
+                                        }
+                                      }}
+                                      onFocus={() => setShowOwnerDropdown((prev) => ({ ...prev, [item.id]: true }))}
+                                      className="w-full border rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:border-red-300 disabled:bg-gray-50"
+                                    />
+                                    {showOwnerDropdown[item.id] && !isReadOnly && (
+                                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-40 overflow-y-auto">
+                                        {(employees || [])
+                                          .filter(
+                                            (e) =>
+                                              e.status === 'Active' &&
+                                              (!ownerSearch[item.id] ||
+                                                e.fullName?.toLowerCase().includes(ownerSearch[item.id].toLowerCase())),
+                                          )
+                                          .slice(0, 8)
+                                          .map((emp) => (
+                                            <div
+                                              key={emp.id}
+                                              role="button"
+                                              tabIndex={0}
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                setChecklist((prev) =>
+                                                  prev.map((it) =>
+                                                    it.id !== item.id
+                                                      ? it
+                                                      : {
+                                                          ...it,
+                                                          ownerName: emp.fullName || '',
+                                                          ownerId: emp.id,
+                                                          ownerEmail: emp.email || '',
+                                                        },
+                                                  ),
+                                                );
+                                                setOwnerSearch((prev) => ({ ...prev, [item.id]: undefined }));
+                                                setShowOwnerDropdown((prev) => ({ ...prev, [item.id]: false }));
+                                              }}
+                                              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                                            >
+                                              <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                                {emp.fullName?.charAt(0)}
+                                              </div>
+                                              <div className="min-w-0">
+                                                <p className="text-xs font-medium text-gray-800 truncate">{emp.fullName}</p>
+                                                {(emp.designation || emp.department) && (
+                                                  <p className="text-xs text-gray-400 truncate">
+                                                    {emp.designation || emp.department}
+                                                  </p>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        {(employees || []).filter(
+                                          (e) =>
+                                            e.status === 'Active' &&
+                                            (!ownerSearch[item.id] ||
+                                              e.fullName?.toLowerCase().includes(ownerSearch[item.id].toLowerCase())),
+                                        ).length === 0 && (
+                                          <div className="px-3 py-3 text-center text-xs text-gray-400">No employees found</div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {item.ownerName && !showOwnerDropdown[item.id] && (
+                                      <div className="mt-1 flex items-center gap-1">
+                                        <span className="text-xs text-green-600">✓ {item.ownerName}</span>
+                                      </div>
+                                    )}
                                   </div>
                                   <div>
                                     <label className="text-xs text-gray-400 block mb-1">Target Fix Date</label>
                                     <input
                                       type="date"
                                       value={item.targetDate || ''}
+                                      disabled={isReadOnly}
                                       onChange={(e) => updateItemResponse(item.id, 'targetDate', e.target.value)}
-                                      className="w-full border rounded-lg px-2 py-2 text-xs bg-white focus:outline-none"
+                                      className="w-full border rounded-lg px-2 py-2 text-xs bg-white focus:outline-none disabled:bg-gray-50"
                                     />
                                   </div>
                                 </div>
@@ -1274,6 +1771,30 @@ function AuditList({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedAudit, setSelectedAudit] = useState(null);
   const [employees, setEmployees] = useState([]);
+  const [leadSearch, setLeadSearch] = useState('');
+  const [showLeadDropdown, setShowLeadDropdown] = useState(false);
+  const [teamSearch, setTeamSearch] = useState('');
+  const [showTeamDropdown, setShowTeamDropdown] = useState(false);
+  const leadRef = useRef(null);
+  const teamRef = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (leadRef.current && !leadRef.current.contains(e.target)) setShowLeadDropdown(false);
+      if (teamRef.current && !teamRef.current.contains(e.target)) setShowTeamDropdown(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  useEffect(() => {
+    if (!showCreateModal) {
+      setLeadSearch('');
+      setShowLeadDropdown(false);
+      setTeamSearch('');
+      setShowTeamDropdown(false);
+    }
+  }, [showCreateModal]);
 
   useEffect(() => {
     if (!companyId) return undefined;
@@ -1728,36 +2249,89 @@ function AuditList({
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Team</p>
                 <div className="space-y-4">
-                  <div>
+                  <div ref={leadRef} className="relative">
                     <label className="text-xs text-gray-500 block mb-1.5">
                       Lead Auditor *
                       <span className="text-gray-400 font-normal ml-1">(responsible for submission)</span>
                     </label>
-                    <select
-                      value={createForm.auditorId}
+                    <input
+                      type="text"
+                      value={createForm.auditorId ? createForm.auditorName : leadSearch}
+                      placeholder="Search auditor..."
                       onChange={(e) => {
-                        const emp = employees.find((x) => x.id === e.target.value);
+                        setLeadSearch(e.target.value);
+                        setShowLeadDropdown(true);
+                        if (!e.target.value) {
+                          setCreateForm((prev) => ({
+                            ...prev,
+                            auditorId: '',
+                            auditorName: '',
+                            auditorEmail: '',
+                          }));
+                        }
+                      }}
+                      onFocus={() => {
+                        setLeadSearch('');
+                        setShowLeadDropdown(true);
                         setCreateForm((prev) => ({
                           ...prev,
-                          auditorId: e.target.value,
-                          auditorName: emp?.fullName || '',
-                          auditorEmail: emp?.email || '',
-                          teamMembers: prev.teamMembers.filter((m) => m.id !== e.target.value),
+                          auditorId: '',
+                          auditorName: '',
+                          auditorEmail: '',
                         }));
                       }}
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                    >
-                      <option value="">Select lead auditor...</option>
-                      {employees
-                        .filter((e) => e.status === 'Active')
-                        .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
-                        .map((emp) => (
-                          <option key={emp.id} value={emp.id}>
-                            {emp.fullName}
-                            {emp.designation ? ` — ${emp.designation}` : emp.department ? ` — ${emp.department}` : ''}
-                          </option>
-                        ))}
-                    </select>
+                    />
+                    {showLeadDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
+                        {employees
+                          .filter(
+                            (e) =>
+                              e.status === 'Active' &&
+                              !createForm.teamMembers.some((m) => m.id === e.id) &&
+                              (!leadSearch ||
+                                e.fullName?.toLowerCase().includes(leadSearch.toLowerCase()) ||
+                                e.designation?.toLowerCase().includes(leadSearch.toLowerCase())),
+                          )
+                          .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
+                          .slice(0, 8)
+                          .map((emp) => (
+                            <div
+                              key={emp.id}
+                              role="button"
+                              tabIndex={0}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setCreateForm((prev) => ({
+                                  ...prev,
+                                  auditorId: emp.id,
+                                  auditorName: emp.fullName,
+                                  auditorEmail: emp.email || '',
+                                  teamMembers: prev.teamMembers.filter((m) => m.id !== emp.id),
+                                }));
+                                setLeadSearch('');
+                                setShowLeadDropdown(false);
+                              }}
+                              className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer border-b border-gray-50 last:border-0"
+                            >
+                              <div className="w-8 h-8 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                {emp.fullName?.charAt(0)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
+                                <p className="text-xs text-gray-400 truncate">{emp.designation || emp.department || '—'}</p>
+                              </div>
+                            </div>
+                          ))}
+                        {employees.filter(
+                          (e) =>
+                            e.status === 'Active' &&
+                            (!leadSearch || e.fullName?.toLowerCase().includes(leadSearch.toLowerCase())),
+                        ).length === 0 && (
+                          <div className="px-3 py-4 text-center text-sm text-gray-400">No employees found</div>
+                        )}
+                      </div>
+                    )}
                     {createForm.auditorId && (
                       <div className="mt-2 flex items-center gap-2 p-2.5 bg-[#E8F5F5] rounded-xl">
                         <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
@@ -1767,76 +2341,116 @@ function AuditList({
                           <p className="text-xs text-[#1B6B6B] font-medium">{createForm.auditorName}</p>
                           <p className="text-xs text-[#1B6B6B]/60">Lead Auditor</p>
                         </div>
-                        <span className="text-xs bg-[#1B6B6B] text-white px-2 py-0.5 rounded-full font-medium">Lead</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCreateForm((prev) => ({
+                              ...prev,
+                              auditorId: '',
+                              auditorName: '',
+                              auditorEmail: '',
+                            }));
+                            setLeadSearch('');
+                          }}
+                          className="text-[#1B6B6B]/40 hover:text-[#1B6B6B] text-sm"
+                        >
+                          ✕
+                        </button>
                       </div>
                     )}
                   </div>
 
-                  <div>
+                  <div ref={teamRef} className="relative">
                     <label className="text-xs text-gray-500 block mb-1.5">
                       Team Members
                       <span className="text-gray-400 font-normal ml-1">(optional)</span>
                     </label>
-                    <select
-                      value=""
+                    <input
+                      type="text"
+                      value={teamSearch}
+                      placeholder="Search and add team members..."
                       onChange={(e) => {
-                        const id = e.target.value;
-                        if (!id) return;
-                        const emp = employees.find((x) => x.id === id);
-                        if (!emp) return;
-                        setCreateForm((prev) => {
-                          if (prev.teamMembers.some((m) => m.id === id)) return prev;
-                          return {
-                            ...prev,
-                            teamMembers: [
-                              ...prev.teamMembers,
-                              {
-                                id: emp.id,
-                                fullName: emp.fullName || '',
-                                email: emp.email || '',
-                                designation: emp.designation || emp.department || '',
-                              },
-                            ],
-                          };
-                        });
+                        setTeamSearch(e.target.value);
+                        setShowTeamDropdown(true);
                       }}
+                      onFocus={() => setShowTeamDropdown(true)}
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                    >
-                      <option value="">+ Add team member...</option>
-                      {employees
-                        .filter(
+                    />
+                    {showTeamDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
+                        {employees
+                          .filter(
+                            (e) =>
+                              e.status === 'Active' &&
+                              e.id !== createForm.auditorId &&
+                              !createForm.teamMembers.some((m) => m.id === e.id) &&
+                              (!teamSearch ||
+                                e.fullName?.toLowerCase().includes(teamSearch.toLowerCase()) ||
+                                e.designation?.toLowerCase().includes(teamSearch.toLowerCase())),
+                          )
+                          .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
+                          .slice(0, 8)
+                          .map((emp) => (
+                            <div
+                              key={emp.id}
+                              role="button"
+                              tabIndex={0}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setCreateForm((prev) => ({
+                                  ...prev,
+                                  teamMembers: [
+                                    ...prev.teamMembers,
+                                    {
+                                      id: emp.id,
+                                      fullName: emp.fullName,
+                                      email: emp.email || '',
+                                      designation: emp.designation || emp.department || '',
+                                    },
+                                  ],
+                                }));
+                                setTeamSearch('');
+                                setShowTeamDropdown(false);
+                              }}
+                              className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer border-b border-gray-50 last:border-0"
+                            >
+                              <div className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                {emp.fullName?.charAt(0)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
+                                <p className="text-xs text-gray-400 truncate">{emp.designation || emp.department || '—'}</p>
+                              </div>
+                              <span className="text-xs text-[#1B6B6B]">+ Add</span>
+                            </div>
+                          ))}
+                        {employees.filter(
                           (e) =>
                             e.status === 'Active' &&
                             e.id !== createForm.auditorId &&
-                            !createForm.teamMembers.some((m) => m.id === e.id),
-                        )
-                        .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
-                        .map((emp) => (
-                          <option key={emp.id} value={emp.id}>
-                            {emp.fullName}
-                            {emp.designation ? ` — ${emp.designation}` : emp.department ? ` — ${emp.department}` : ''}
-                          </option>
-                        ))}
-                    </select>
+                            !createForm.teamMembers.some((m) => m.id === e.id) &&
+                            (!teamSearch || e.fullName?.toLowerCase().includes(teamSearch.toLowerCase())),
+                        ).length === 0 && (
+                          <div className="px-3 py-4 text-center text-sm text-gray-400">
+                            {teamSearch ? 'No employees found' : 'All employees added'}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {createForm.teamMembers.length > 0 && (
-                      <div className="mt-2 space-y-2">
+                      <div className="mt-2 space-y-1.5">
                         {createForm.teamMembers.map((member) => (
                           <div
                             key={member.id}
-                            className="flex items-center gap-2 p-2.5 bg-gray-50 border border-gray-100 rounded-xl"
+                            className="flex items-center gap-2 p-2 bg-gray-50 border border-gray-100 rounded-xl"
                           >
                             <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                               {member.fullName?.charAt(0)}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-medium text-gray-700 truncate">{member.fullName}</p>
-                              {member.designation ? (
-                                <p className="text-xs text-gray-400 truncate">{member.designation}</p>
-                              ) : null}
                             </div>
-                            <span className="text-xs text-gray-400 bg-white border border-gray-200 px-2 py-0.5 rounded-full">
-                              Member
-                            </span>
+                            <span className="text-xs text-gray-400">Member</span>
                             <button
                               type="button"
                               onClick={() =>
@@ -1845,7 +2459,7 @@ function AuditList({
                                   teamMembers: prev.teamMembers.filter((m) => m.id !== member.id),
                                 }))
                               }
-                              className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-red-100 text-gray-300 hover:text-red-500 flex-shrink-0 transition-colors text-sm"
+                              className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-red-100 text-gray-300 hover:text-red-500 transition-colors text-sm flex-shrink-0"
                             >
                               ✕
                             </button>
@@ -2064,7 +2678,9 @@ export default function Audit() {
       </div>
 
       <div className="p-6">
-        {activeTab === 'dashboard' && <AuditDashboard audits={audits} />}
+        {activeTab === 'dashboard' && (
+          <AuditDashboard audits={audits} auditTypes={auditTypes} company={company} />
+        )}
 
         {activeTab === 'audits' && (
           <AuditList
