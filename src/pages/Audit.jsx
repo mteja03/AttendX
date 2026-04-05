@@ -515,32 +515,71 @@ const AuditTemplates = forwardRef(function AuditTemplates(
   );
 });
 
-function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, showError }) {
+function formatAuditTimestamp(val) {
+  if (val == null) return null;
+  if (typeof val.toDate === 'function') {
+    try {
+      return val.toDate().toLocaleDateString('en-IN');
+    } catch {
+      return null;
+    }
+  }
+  const d = new Date(val);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-IN');
+}
+
+function AuditDetail({ audit, companyId, currentUser, employees = [], onClose, showSuccess, showError }) {
   const [checklist, setChecklist] = useState(() => (audit.checklist || []).map(normalizeChecklistItem));
   const [saving, setSaving] = useState(false);
   const [managerComment, setManagerComment] = useState(audit.managerComments || '');
+  const [detailTab, setDetailTab] = useState('overview');
 
   useEffect(() => {
     setChecklist((audit.checklist || []).map(normalizeChecklistItem));
     setManagerComment(audit.managerComments || '');
+    setDetailTab('overview');
   }, [audit.id]);
 
   const completedCount = useMemo(() => checklist.filter((i) => itemFullyAnswered(i)).length, [checklist]);
+
+  const findings = useMemo(() => checklist.filter((i) => i.yesNoResponse === 'No'), [checklist]);
+  const actionItems = useMemo(() => findings.filter((i) => i.ownerName), [findings]);
+  const resolvedItems = useMemo(() => actionItems.filter((i) => i.resolved === true), [actionItems]);
 
   const updateItemResponse = (id, field, value) => {
     setChecklist((prev) => prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
   };
 
+  const updateItemOwnerFromSelect = (itemId, fullName) => {
+    const emp = fullName ? (employees || []).find((e) => e.fullName === fullName || e.id === fullName) : null;
+    setChecklist((prev) =>
+      prev.map((it) =>
+        it.id !== itemId
+          ? it
+          : {
+              ...it,
+              ownerName: fullName,
+              ownerId: emp?.id ?? '',
+              ownerEmail: emp?.email ?? '',
+            },
+      ),
+    );
+  };
+
   const handleSaveDraft = async () => {
     try {
       setSaving(true);
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+      const payload = {
         checklist,
         completedItems: completedCount,
         status: audit.status === 'Assigned' ? 'In Progress' : audit.status,
         lastSavedAt: serverTimestamp(),
         lastSavedBy: currentUser?.email || '',
-      });
+      };
+      if (audit.status === 'Submitted' || audit.status === 'Under Review' || audit.status === 'Closed') {
+        payload.managerComments = managerComment;
+      }
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), payload);
       showSuccess('Draft saved!');
     } catch (e) {
       showError(`Save failed: ${e.message}`);
@@ -580,12 +619,15 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
     try {
       setSaving(true);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+        checklist,
         status: 'Closed',
         closedAt: serverTimestamp(),
         closedBy: currentUser?.email || '',
         managerComments: managerComment,
+        resolvedCount: resolvedItems.length,
+        totalActionItems: actionItems.length,
       });
-      showSuccess('Audit closed!');
+      showSuccess('Audit closed successfully!');
       onClose();
     } catch (e) {
       showError(`Failed: ${e.message}`);
@@ -598,6 +640,7 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
     try {
       setSaving(true);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+        checklist,
         status: 'In Progress',
         managerComments: managerComment,
         sentBackAt: serverTimestamp(),
@@ -613,9 +656,6 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
   };
 
   const sections = [...new Set(checklist.map((i) => i.section))];
-
-  const isReadOnly =
-    audit.status === 'Submitted' || audit.status === 'Under Review' || audit.status === 'Closed';
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -683,152 +723,448 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {isReadOnly && (
-            <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl flex items-center gap-2">
-              <span>🔒</span>
-              <p className="text-sm text-gray-500">This audit has been submitted — checklist is read-only.</p>
+        {(audit.status === 'Submitted' || audit.status === 'Under Review' || audit.status === 'Closed') && (
+          <div className="px-6 pt-4 pb-0 border-b border-gray-100 flex-shrink-0">
+            <div className="flex gap-1">
+              {[
+                { id: 'overview', label: '📊 Overview' },
+                { id: 'findings', label: `⚠️ Findings (${findings.length})` },
+                { id: 'actions', label: `✅ Action Items (${actionItems.length})` },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setDetailTab(tab.id)}
+                  className={`px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${
+                    detailTab === tab.id
+                      ? 'border-[#1B6B6B] text-[#1B6B6B] bg-[#E8F5F5]'
+                      : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {sections.map((section) => (
-            <div key={section}>
-              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 pb-2 border-b border-gray-100">{section}</h4>
-              <div className="space-y-4">
-                {checklist
-                  .filter((i) => i.section === section)
-                  .map((item, idx) => (
-                    <div
-                      key={item.id}
-                      className={`p-4 rounded-xl border transition-colors ${
-                        item.yesNoResponse != null &&
-                        item.yesNoResponse !== '' &&
-                        typeof item.rating === 'number' &&
-                        item.rating >= 1 &&
-                        item.rating <= 5
-                          ? 'bg-green-50 border-green-100'
-                          : 'bg-white border-gray-100'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2 min-w-0 mb-3">
-                        <span className="text-xs font-medium text-gray-400 mt-0.5 w-5 flex-shrink-0">{idx + 1}.</span>
-                        <p className="text-sm font-medium text-gray-800">
-                          {item.question}
-                          {item.required && <span className="text-red-400 ml-1">*</span>}
-                        </p>
-                      </div>
-
-                      <div className="ml-7 space-y-3">
-                        <div>
-                          <p className="text-xs text-gray-400 mb-1.5 font-medium">Compliance Check</p>
-                          <div className="flex gap-2">
-                            {['Yes', 'No', 'N/A'].map((opt) => (
-                              <button
-                                key={opt}
-                                type="button"
-                                disabled={isReadOnly}
-                                onClick={() => updateItemResponse(item.id, 'yesNoResponse', opt)}
-                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                                  item.yesNoResponse === opt
-                                    ? opt === 'Yes'
-                                      ? 'bg-green-500 text-white'
-                                      : opt === 'No'
-                                        ? 'bg-red-500 text-white'
-                                        : 'bg-gray-500 text-white'
-                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                } ${isReadOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
-                              >
-                                {opt}
-                              </button>
-                            ))}
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {(audit.status === 'Assigned' || audit.status === 'In Progress') && (
+            <div className="space-y-6">
+              {sections.map((section) => (
+                <div key={section}>
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 pb-2 border-b border-gray-100">{section}</h4>
+                  <div className="space-y-4">
+                    {checklist
+                      .filter((i) => i.section === section)
+                      .map((item, idx) => (
+                        <div
+                          key={item.id}
+                          className={`p-4 rounded-xl border transition-colors ${
+                            item.yesNoResponse != null &&
+                            item.yesNoResponse !== '' &&
+                            typeof item.rating === 'number' &&
+                            item.rating >= 1 &&
+                            item.rating <= 5
+                              ? 'bg-green-50 border-green-100'
+                              : 'bg-white border-gray-100'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2 min-w-0 mb-3">
+                            <span className="text-xs font-medium text-gray-400 mt-0.5 w-5 flex-shrink-0">{idx + 1}.</span>
+                            <p className="text-sm font-medium text-gray-800">
+                              {item.question}
+                              {item.required && <span className="text-red-400 ml-1">*</span>}
+                            </p>
                           </div>
-                        </div>
 
-                        <div>
-                          <p className="text-xs text-gray-400 mb-1.5 font-medium">Quality Rating</p>
-                          <div className="flex gap-2 items-center flex-wrap">
-                            {[1, 2, 3, 4, 5].map((n) => (
-                              <button
-                                key={n}
-                                type="button"
-                                disabled={isReadOnly}
-                                onClick={() => updateItemResponse(item.id, 'rating', n)}
-                                className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors ${
-                                  item.rating === n ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                } ${isReadOnly ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                              >
-                                {n}
-                              </button>
-                            ))}
-                            {item.rating != null && (
-                              <span className="text-xs text-gray-400 ml-1">
-                                {item.rating === 1 && 'Poor'}
-                                {item.rating === 2 && 'Fair'}
-                                {item.rating === 3 && 'Good'}
-                                {item.rating === 4 && 'Very Good'}
-                                {item.rating === 5 && 'Excellent'}
-                              </span>
+                          <div className="ml-7 space-y-3">
+                            <div>
+                              <p className="text-xs text-gray-400 mb-1.5 font-medium">Compliance Check</p>
+                              <div className="flex gap-2">
+                                {['Yes', 'No', 'N/A'].map((opt) => (
+                                  <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => updateItemResponse(item.id, 'yesNoResponse', opt)}
+                                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                                      item.yesNoResponse === opt
+                                        ? opt === 'Yes'
+                                          ? 'bg-green-500 text-white'
+                                          : opt === 'No'
+                                            ? 'bg-red-500 text-white'
+                                            : 'bg-gray-500 text-white'
+                                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    {opt}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <p className="text-xs text-gray-400 mb-1.5 font-medium">Quality Rating</p>
+                              <div className="flex gap-2 items-center flex-wrap">
+                                {[1, 2, 3, 4, 5].map((n) => (
+                                  <button
+                                    key={n}
+                                    type="button"
+                                    onClick={() => updateItemResponse(item.id, 'rating', n)}
+                                    className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors cursor-pointer ${
+                                      item.rating === n ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    {n}
+                                  </button>
+                                ))}
+                                {item.rating != null && (
+                                  <span className="text-xs text-gray-400 ml-1">
+                                    {item.rating === 1 && 'Poor'}
+                                    {item.rating === 2 && 'Fair'}
+                                    {item.rating === 3 && 'Good'}
+                                    {item.rating === 4 && 'Very Good'}
+                                    {item.rating === 5 && 'Excellent'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div>
+                              <input
+                                value={item.remarks || ''}
+                                onChange={(e) => updateItemResponse(item.id, 'remarks', e.target.value)}
+                                placeholder="Remarks / observations..."
+                                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                              />
+                            </div>
+
+                            {item.yesNoResponse === 'No' && (
+                              <div className="p-3 bg-red-50 rounded-lg border border-red-100 space-y-2">
+                                <p className="text-xs font-medium text-red-700">⚠️ Non-compliant — assign owner</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-xs text-gray-400 block mb-1">Owner (responsible to fix)</label>
+                                    <select
+                                      value={item.ownerName || ''}
+                                      onChange={(e) => updateItemOwnerFromSelect(item.id, e.target.value)}
+                                      className="w-full border rounded-lg px-2 py-2 text-xs bg-white focus:outline-none"
+                                    >
+                                      <option value="">Select owner...</option>
+                                      {(employees || [])
+                                        .filter((e) => e.status === 'Active')
+                                        .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
+                                        .map((emp) => (
+                                          <option key={emp.id} value={emp.fullName}>
+                                            {emp.fullName}
+                                            {emp.designation ? ` — ${emp.designation}` : ''}
+                                          </option>
+                                        ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="text-xs text-gray-400 block mb-1">Target Fix Date</label>
+                                    <input
+                                      type="date"
+                                      value={item.targetDate || ''}
+                                      onChange={(e) => updateItemResponse(item.id, 'targetDate', e.target.value)}
+                                      className="w-full border rounded-lg px-2 py-2 text-xs bg-white focus:outline-none"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
                             )}
                           </div>
                         </div>
-
-                        <div>
-                          <input
-                            value={item.remarks || ''}
-                            disabled={isReadOnly}
-                            onChange={(e) => updateItemResponse(item.id, 'remarks', e.target.value)}
-                            placeholder="Remarks / observations..."
-                            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50"
-                          />
-                        </div>
-
-                        {item.yesNoResponse === 'No' && (
-                          <div className="p-3 bg-red-50 rounded-lg border border-red-100 space-y-2">
-                            <p className="text-xs font-medium text-red-700">⚠️ Non-compliant — assign owner to fix</p>
-                            <div className="grid grid-cols-2 gap-2">
-                              <input
-                                value={item.ownerName || ''}
-                                disabled={isReadOnly}
-                                onChange={(e) => updateItemResponse(item.id, 'ownerName', e.target.value)}
-                                placeholder="Owner name"
-                                className="border rounded-lg px-3 py-2 text-xs bg-white focus:outline-none"
-                              />
-                              <input
-                                type="date"
-                                value={item.targetDate || ''}
-                                disabled={isReadOnly}
-                                onChange={(e) => updateItemResponse(item.id, 'targetDate', e.target.value)}
-                                className="border rounded-lg px-3 py-2 text-xs bg-white focus:outline-none"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-              </div>
+                      ))}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
 
           {(audit.status === 'Submitted' || audit.status === 'Under Review' || audit.status === 'Closed') && (
-            <div className="pt-4 border-t border-gray-100">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-2">Manager Comments</label>
-              <textarea
-                value={managerComment}
-                onChange={(e) => setManagerComment(e.target.value)}
-                disabled={audit.status === 'Closed'}
-                rows={3}
-                placeholder="Add review comments..."
-                className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50"
-              />
-            </div>
+            <>
+              {detailTab === 'overview' && (
+                <div className="space-y-5">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-white border border-gray-100 rounded-xl p-4 text-center">
+                      <p className="text-2xl font-bold text-gray-800">{checklist.length}</p>
+                      <p className="text-xs text-gray-400 mt-1">Total Items</p>
+                    </div>
+                    <div className="bg-green-50 border border-green-100 rounded-xl p-4 text-center">
+                      <p className="text-2xl font-bold text-green-700">
+                        {checklist.filter((i) => i.yesNoResponse === 'Yes').length}
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">Compliant</p>
+                    </div>
+                    <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-center">
+                      <p className="text-2xl font-bold text-red-700">{findings.length}</p>
+                      <p className="text-xs text-red-600 mt-1">Non-compliant</p>
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const rated = checklist.filter((i) => i.rating != null && typeof i.rating === 'number');
+                    const avg =
+                      rated.length > 0
+                        ? (rated.reduce((sum, i) => sum + i.rating, 0) / rated.length).toFixed(1)
+                        : null;
+                    if (!avg) return null;
+                    const rounded = Math.round(Number(avg));
+                    return (
+                      <div className="bg-white border border-gray-100 rounded-xl p-4">
+                        <p className="text-xs text-gray-400 mb-2">Average Quality Rating</p>
+                        <div className="flex items-center gap-3">
+                          <p className="text-3xl font-bold text-gray-800">{avg}</p>
+                          <div>
+                            <div className="flex gap-0.5">
+                              {[1, 2, 3, 4, 5].map((n) => (
+                                <div
+                                  key={n}
+                                  className={`w-6 h-6 rounded text-center text-xs leading-6 font-bold ${
+                                    n <= rounded ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-300'
+                                  }`}
+                                >
+                                  {n}
+                                </div>
+                              ))}
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1">out of 5.0</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="bg-white border border-gray-100 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Audit Details</p>
+                    {[
+                      { label: 'Template', value: audit.auditTypeName },
+                      { label: 'Category', value: audit.auditCategory },
+                      { label: 'Workforce category', value: audit.category },
+                      { label: 'Risk Level', value: audit.riskLevel },
+                      { label: 'Branch', value: audit.branch },
+                      { label: 'Location', value: audit.location },
+                      { label: 'Department', value: audit.department },
+                      { label: 'Lead Auditor', value: audit.auditorName },
+                      { label: 'Start Date', value: audit.startDate },
+                      { label: 'End Date', value: audit.endDate || audit.dueDate },
+                      { label: 'Submitted', value: formatAuditTimestamp(audit.submittedAt) },
+                    ]
+                      .filter((r) => r.value)
+                      .map((row) => (
+                        <div key={row.label} className="flex items-center justify-between">
+                          <p className="text-xs text-gray-400">{row.label}</p>
+                          <p className="text-xs font-medium text-gray-700">{row.value}</p>
+                        </div>
+                      ))}
+                  </div>
+
+                  {(audit.teamMembers?.length ?? 0) > 0 && (
+                    <div className="bg-white border border-gray-100 rounded-xl p-4">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Team</p>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
+                            {audit.auditorName?.charAt(0)}
+                          </div>
+                          <p className="text-sm text-gray-700 flex-1">{audit.auditorName}</p>
+                          <span className="text-xs bg-[#E8F5F5] text-[#1B6B6B] px-2 py-0.5 rounded-full font-medium">Lead</span>
+                        </div>
+                        {(audit.teamMembers || []).map((m) => (
+                          <div key={m.id} className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-white text-xs font-bold">
+                              {m.fullName?.charAt(0)}
+                            </div>
+                            <p className="text-sm text-gray-700 flex-1">{m.fullName}</p>
+                            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Member</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-2">Manager Comments</label>
+                    <textarea
+                      value={managerComment}
+                      onChange={(e) => setManagerComment(e.target.value)}
+                      disabled={audit.status === 'Closed'}
+                      rows={3}
+                      placeholder="Add review comments or instructions..."
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {detailTab === 'findings' && (
+                <div className="space-y-3">
+                  {findings.length === 0 ? (
+                    <div className="text-center py-12">
+                      <p className="text-3xl mb-2">✅</p>
+                      <p className="text-sm font-medium text-gray-700">No findings</p>
+                      <p className="text-xs text-gray-400">All checklist items passed</p>
+                    </div>
+                  ) : (
+                    findings.map((item) => (
+                      <div key={item.id} className="bg-red-50 border border-red-100 rounded-xl p-4">
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <p className="text-sm font-medium text-gray-800">{item.question}</p>
+                          <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
+                            ❌ Non-compliant
+                          </span>
+                        </div>
+                        {item.remarks ? (
+                          <div className="mb-3">
+                            <p className="text-xs text-gray-400 mb-1">Auditor remarks</p>
+                            <p className="text-sm text-gray-700 bg-white rounded-lg px-3 py-2 border border-red-100">{item.remarks}</p>
+                          </div>
+                        ) : null}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {item.ownerName ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-gray-400">Owner:</span>
+                              <span className="text-xs font-medium text-gray-700 bg-white px-2 py-0.5 rounded-full border border-gray-200">
+                                👤 {item.ownerName}
+                              </span>
+                            </div>
+                          ) : null}
+                          {item.targetDate ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-gray-400">Fix by:</span>
+                              <span
+                                className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                                  new Date(item.targetDate) < new Date()
+                                    ? 'bg-red-100 text-red-700 border-red-200'
+                                    : 'bg-white text-gray-700 border-gray-200'
+                                }`}
+                              >
+                                📅 {item.targetDate}
+                              </span>
+                            </div>
+                          ) : null}
+                          {item.rating != null ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-gray-400">Rating:</span>
+                              <span className="text-xs font-medium text-gray-700 bg-white px-2 py-0.5 rounded-full border border-gray-200">
+                                ⭐ {item.rating}/5
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {detailTab === 'actions' && (
+                <div className="space-y-3">
+                  {actionItems.length > 0 && (
+                    <div className="bg-white border border-gray-100 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs text-gray-500">Resolution Progress</p>
+                        <p className="text-xs font-medium text-gray-700">
+                          {resolvedItems.length} / {actionItems.length} resolved
+                        </p>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-green-500 rounded-full transition-all"
+                          style={{
+                            width:
+                              actionItems.length > 0
+                                ? `${Math.round((resolvedItems.length / actionItems.length) * 100)}%`
+                                : '0%',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {actionItems.length === 0 ? (
+                    <div className="text-center py-12">
+                      <p className="text-3xl mb-2">📋</p>
+                      <p className="text-sm font-medium text-gray-700">No action items</p>
+                      <p className="text-xs text-gray-400">No non-compliant items with owners assigned</p>
+                    </div>
+                  ) : (
+                    actionItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`border rounded-xl p-4 transition-all ${
+                          item.resolved ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <p className="text-sm font-medium text-gray-800 flex-1">{item.question}</p>
+                          {audit.status !== 'Closed' ? (
+                            <button
+                              type="button"
+                              onClick={() => updateItemResponse(item.id, 'resolved', !item.resolved)}
+                              className={`text-xs px-3 py-1 rounded-full font-medium flex-shrink-0 transition-colors ${
+                                item.resolved
+                                  ? 'bg-green-500 text-white'
+                                  : 'bg-gray-100 text-gray-500 hover:bg-green-50 hover:text-green-700'
+                              }`}
+                            >
+                              {item.resolved ? '✅ Resolved' : 'Mark Resolved'}
+                            </button>
+                          ) : (
+                            <span
+                              className={`text-xs px-3 py-1 rounded-full font-medium ${
+                                item.resolved ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              }`}
+                            >
+                              {item.resolved ? '✅ Resolved' : '⏳ Pending'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-gray-400">Owner:</span>
+                            <span className="text-xs font-medium text-gray-700">👤 {item.ownerName}</span>
+                          </div>
+                          {item.targetDate ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-gray-400">Fix by:</span>
+                              <span
+                                className={`text-xs font-medium ${
+                                  !item.resolved && new Date(item.targetDate) < new Date() ? 'text-red-600' : 'text-gray-700'
+                                }`}
+                              >
+                                {!item.resolved && new Date(item.targetDate) < new Date() ? '⚠️ ' : ''}
+                                {item.targetDate}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))
+                  )}
+
+                  {audit.status !== 'Closed' && actionItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleSaveDraft}
+                      disabled={saving}
+                      className="w-full py-2.5 border border-[#1B6B6B] text-[#1B6B6B] rounded-xl text-sm font-medium hover:bg-[#E8F5F5] disabled:opacity-50"
+                    >
+                      {saving ? 'Saving...' : '💾 Save Progress'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
 
         <div className="p-6 border-t flex-shrink-0">
           {(audit.status === 'Assigned' || audit.status === 'In Progress') && (
             <div className="flex gap-3">
-              <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
+              <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
                 Close
               </button>
               <button
@@ -845,39 +1181,62 @@ function AuditDetail({ audit, companyId, currentUser, onClose, showSuccess, show
                 disabled={saving}
                 className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
               >
-                {saving ? 'Submitting...' : '✅ Submit'}
+                {saving ? 'Submitting...' : '📤 Submit'}
               </button>
             </div>
           )}
 
           {(audit.status === 'Submitted' || audit.status === 'Under Review') && (
-            <div className="flex gap-3">
-              <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={handleSendBack}
-                disabled={saving}
-                className="flex-1 py-2.5 border border-amber-400 text-amber-600 rounded-xl text-sm font-medium disabled:opacity-50"
-              >
-                ↩ Send Back
-              </button>
-              <button
-                type="button"
-                onClick={handleClose}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
-              >
-                {saving ? 'Closing...' : '✅ Close Audit'}
-              </button>
+            <div className="space-y-2">
+              {actionItems.length > 0 && resolvedItems.length < actionItems.length && (
+                <p className="text-xs text-amber-600 text-center">
+                  ⚠️ {actionItems.length - resolvedItems.length} action item
+                  {actionItems.length - resolvedItems.length !== 1 ? 's' : ''} pending resolution before closing
+                </p>
+              )}
+              <div className="flex gap-3">
+                <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendBack}
+                  disabled={saving}
+                  className="flex-1 py-2.5 border border-amber-400 text-amber-600 rounded-xl text-sm font-medium disabled:opacity-50"
+                >
+                  ↩ Send Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  disabled={
+                    saving ||
+                    (actionItems.length > 0 && resolvedItems.length < actionItems.length)
+                  }
+                  title={
+                    actionItems.length > 0 && resolvedItems.length < actionItems.length
+                      ? 'Resolve all action items first'
+                      : ''
+                  }
+                  className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {saving ? 'Closing...' : '✅ Close Audit'}
+                </button>
+              </div>
             </div>
           )}
 
           {audit.status === 'Closed' && (
-            <button type="button" onClick={onClose} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
-              Close
-            </button>
+            <div className="space-y-2">
+              <div className="p-3 bg-green-50 border border-green-100 rounded-xl text-center">
+                <p className="text-xs font-medium text-green-700">
+                  ✅ Audit closed by {audit.closedBy || 'manager'}
+                </p>
+              </div>
+              <button type="button" onClick={onClose} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
+                Close
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -1587,6 +1946,7 @@ function AuditList({
           audit={selectedAudit}
           companyId={companyId}
           currentUser={currentUser}
+          employees={employees}
           onClose={() => setSelectedAudit(null)}
           showSuccess={showSuccess}
           showError={showError}
