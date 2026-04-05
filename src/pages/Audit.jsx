@@ -1756,21 +1756,340 @@ const EMPTY_ASSIGN_AUDIT_FORM = {
   notes: '',
 };
 
+function AuditCalendar({ audits, onClose, onSelectAudit }) {
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const auditsByDate = {};
+  audits.forEach((audit) => {
+    if (audit.startDate) {
+      const key = audit.startDate;
+      if (!auditsByDate[key]) auditsByDate[key] = [];
+      auditsByDate[key].push({ ...audit, dateType: 'start' });
+    }
+    const endKey = audit.endDate || audit.dueDate;
+    if (endKey) {
+      if (!auditsByDate[endKey]) auditsByDate[endKey] = [];
+      if (!auditsByDate[endKey].find((a) => a.id === audit.id)) {
+        auditsByDate[endKey].push({ ...audit, dateType: 'end' });
+      }
+    }
+  });
+
+  const getDayKey = (day) => {
+    const m = String(month + 1).padStart(2, '0');
+    const d = String(day).padStart(2, '0');
+    return `${year}-${m}-${d}`;
+  };
+
+  const selectedDayAudits = selectedDay ? auditsByDate[getDayKey(selectedDay)] || [] : [];
+
+  const prevMonth = () => {
+    setCurrentDate(new Date(year, month - 1));
+    setSelectedDay(null);
+  };
+
+  const nextMonth = () => {
+    setCurrentDate(new Date(year, month + 1));
+    setSelectedDay(null);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} role="presentation" />
+      <div className="relative bg-white w-full max-w-lg h-full flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-[#E8F5F5] rounded-xl flex items-center justify-center text-lg">📅</div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-800">Audit Calendar</h2>
+              <p className="text-xs text-gray-400">{audits.length} audits scheduled</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-lg"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex items-center justify-between mb-5">
+            <button
+              type="button"
+              onClick={prevMonth}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-600"
+            >
+              ←
+            </button>
+            <h3 className="text-sm font-semibold text-gray-800">
+              {monthNames[month]} {year}
+            </h3>
+            <button
+              type="button"
+              onClick={nextMonth}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-600"
+            >
+              →
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 mb-2">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+              <div key={d} className="text-center text-xs font-medium text-gray-400 py-1">
+                {d}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {Array.from({ length: firstDay }).map((_, i) => (
+              <div key={`empty-${i}`} />
+            ))}
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const day = i + 1;
+              const key = getDayKey(day);
+              const dayAudits = auditsByDate[key] || [];
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const isToday = today.getTime() === new Date(year, month, day).setHours(0, 0, 0, 0);
+              const isSelected = selectedDay === day;
+              const hasOverdue = dayAudits.some((a) => {
+                const t = new Date();
+                t.setHours(0, 0, 0, 0);
+                return a.dateType === 'end' && a.status !== 'Closed' && new Date(key) < t;
+              });
+
+              return (
+                <div
+                  key={day}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedDay(selectedDay === day ? null : day)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') setSelectedDay(selectedDay === day ? null : day);
+                  }}
+                  className={`relative aspect-square flex flex-col items-center justify-start pt-1.5 rounded-xl cursor-pointer transition-all ${
+                    isSelected
+                      ? 'bg-[#1B6B6B] text-white'
+                      : isToday
+                        ? 'bg-[#E8F5F5] text-[#1B6B6B]'
+                        : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <span
+                    className={`text-xs font-medium ${
+                      isSelected ? 'text-white' : isToday ? 'text-[#1B6B6B]' : 'text-gray-700'
+                    }`}
+                  >
+                    {day}
+                  </span>
+                  {dayAudits.length > 0 && (
+                    <div className="flex gap-0.5 mt-1 flex-wrap justify-center max-w-full px-1">
+                      {dayAudits.slice(0, 3).map((a, idx) => (
+                        <div
+                          key={idx}
+                          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                          style={{
+                            background: isSelected
+                              ? 'white'
+                              : hasOverdue && a.dateType === 'end'
+                                ? '#EF4444'
+                                : a.auditTypeColor || '#8B5CF6',
+                          }}
+                        />
+                      ))}
+                      {dayAudits.length > 3 && (
+                        <span
+                          className={`text-xs leading-none ${isSelected ? 'text-white/70' : 'text-gray-400'}`}
+                        >
+                          +{dayAudits.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-[#1B6B6B]" />
+              <span className="text-xs text-gray-400">Start date</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-[#8B5CF6]" />
+              <span className="text-xs text-gray-400">End date</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-red-500" />
+              <span className="text-xs text-gray-400">Overdue</span>
+            </div>
+          </div>
+
+          {selectedDay && (
+            <div className="mt-5 pt-5 border-t border-gray-100">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                {monthNames[month]} {selectedDay}
+                {selectedDayAudits.length === 0
+                  ? ' — No audits'
+                  : ` — ${selectedDayAudits.length} audit${selectedDayAudits.length !== 1 ? 's' : ''}`}
+              </h4>
+              {selectedDayAudits.length === 0 ? (
+                <div className="text-center py-6 border-2 border-dashed border-gray-100 rounded-xl">
+                  <p className="text-xs text-gray-400">No audits on this date</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {selectedDayAudits.map((audit, idx) => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const overdueAudit =
+                      audit.dateType === 'end' && audit.status !== 'Closed' && new Date(getDayKey(selectedDay)) < today;
+                    return (
+                      <div
+                        key={`${audit.id}-${audit.dateType}-${idx}`}
+                        role="button"
+                        tabIndex={0}
+                        className={`p-3 rounded-xl border cursor-pointer hover:shadow-sm transition-all ${
+                          overdueAudit ? 'bg-red-50 border-red-100' : 'bg-white border-gray-100 hover:border-gray-200'
+                        }`}
+                        onClick={() => onSelectAudit(audit)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') onSelectAudit(audit);
+                        }}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <div
+                            className="w-6 h-6 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                            style={{ background: audit.auditTypeColor || '#8B5CF6' }}
+                          >
+                            {audit.auditTypeName?.charAt(0)}
+                          </div>
+                          <p className="text-sm font-medium text-gray-800 flex-1 truncate">{audit.auditTypeName}</p>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              overdueAudit
+                                ? 'bg-red-100 text-red-700'
+                                : STATUS_COLORS[audit.status] || STATUS_COLORS.Assigned
+                            }`}
+                          >
+                            {overdueAudit ? 'Overdue' : audit.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap ml-8">
+                          {audit.branch && <span className="text-xs text-gray-400">🏢 {audit.branch}</span>}
+                          {audit.auditorName && <span className="text-xs text-gray-400">· 👤 {audit.auditorName}</span>}
+                          <span
+                            className={`text-xs font-medium ${
+                              audit.dateType === 'start'
+                                ? 'text-[#1B6B6B]'
+                                : overdueAudit
+                                  ? 'text-red-600'
+                                  : 'text-gray-500'
+                            }`}
+                          >
+                            ·{' '}
+                            {audit.dateType === 'start'
+                              ? '▶ Starts'
+                              : overdueAudit
+                                ? '⚠️ Was due'
+                                : '⏹ Ends'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-5 pt-5 border-t border-gray-100">
+            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">This Month</h4>
+            {(() => {
+              const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+              const monthAudits = audits.filter(
+                (a) =>
+                  (a.startDate || '').startsWith(monthKey) ||
+                  (a.endDate || '').startsWith(monthKey) ||
+                  (a.dueDate || '').startsWith(monthKey),
+              );
+              if (monthAudits.length === 0) {
+                return <p className="text-xs text-gray-400 text-center py-3">No audits this month</p>;
+              }
+              return (
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: 'Scheduled', value: monthAudits.length, color: 'text-gray-700' },
+                    { label: 'Active', value: monthAudits.filter((a) => a.status !== 'Closed').length, color: 'text-blue-600' },
+                    { label: 'Closed', value: monthAudits.filter((a) => a.status === 'Closed').length, color: 'text-green-600' },
+                  ].map((stat) => (
+                    <div key={stat.label} className="bg-gray-50 rounded-xl p-3 text-center">
+                      <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AuditList({
   audits,
   auditTypes,
   company,
   companyId,
   currentUser,
+  employees,
   saving,
   setSaving,
   showSuccess,
   showError,
   setShowSettings,
+  setSelectedAudit,
 }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedAudit, setSelectedAudit] = useState(null);
-  const [employees, setEmployees] = useState([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState({
+    status: '',
+    type: '',
+    branch: '',
+    location: '',
+    riskLevel: '',
+    auditor: '',
+    category: '',
+  });
   const [leadSearch, setLeadSearch] = useState('');
   const [showLeadDropdown, setShowLeadDropdown] = useState(false);
   const [teamSearch, setTeamSearch] = useState('');
@@ -1796,48 +2115,111 @@ function AuditList({
     }
   }, [showCreateModal]);
 
-  useEffect(() => {
-    if (!companyId) return undefined;
-    getDocs(collection(db, 'companies', companyId, 'employees'))
-      .then((snap) => {
-        setEmployees(
-          snap.docs
-            .filter((d) => d.data().status === 'Active')
-            .map((d) => ({ id: d.id, ...d.data() })),
-        );
-      })
-      .catch(() => setEmployees([]));
-    return undefined;
-  }, [companyId]);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
 
-  const [filters, setFilters] = useState({
-    status: '',
-    type: '',
-    branch: '',
-    search: '',
-  });
+  const isOverdue = (audit) => {
+    if (audit.status === 'Closed') return false;
+    const end = audit.endDate || audit.dueDate;
+    if (!end) return false;
+    return new Date(end) < now;
+  };
 
-  const [createForm, setCreateForm] = useState(() => ({ ...EMPTY_ASSIGN_AUDIT_FORM }));
-
-  const branchOptions = company?.branches?.length ? company.branches : [];
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
   const filteredAudits = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const auditOverdue = (audit) => {
+      if (audit.status === 'Closed') return false;
+      const end = audit.endDate || audit.dueDate;
+      if (!end) return false;
+      return new Date(end) < today;
+    };
     return audits.filter((audit) => {
-      if (filters.status && audit.status !== filters.status) return false;
-      if (filters.type && audit.auditTypeId !== filters.type) return false;
-      if (filters.branch && audit.branch !== filters.branch) return false;
-      if (filters.search) {
-        const q = filters.search.toLowerCase();
-        return (
-          audit.title?.toLowerCase().includes(q) ||
+      if (search) {
+        const q = search.toLowerCase();
+        const match =
           audit.auditTypeName?.toLowerCase().includes(q) ||
           audit.branch?.toLowerCase().includes(q) ||
-          audit.auditorName?.toLowerCase().includes(q)
-        );
+          audit.location?.toLowerCase().includes(q) ||
+          audit.auditorName?.toLowerCase().includes(q) ||
+          audit.department?.toLowerCase().includes(q);
+        if (!match) return false;
       }
+      if (filters.status) {
+        const effectiveStatus = auditOverdue(audit) ? 'Overdue' : audit.status;
+        if (effectiveStatus !== filters.status) return false;
+      }
+      if (filters.type && audit.auditTypeId !== filters.type) return false;
+      if (filters.branch && audit.branch !== filters.branch) return false;
+      if (filters.location && audit.location !== filters.location) return false;
+      if (filters.riskLevel && audit.riskLevel !== filters.riskLevel) return false;
+      if (filters.auditor && audit.auditorName !== filters.auditor) return false;
+      if (filters.category && audit.auditCategory !== filters.category) return false;
       return true;
     });
-  }, [audits, filters]);
+  }, [audits, search, filters]);
+
+  const STATUSES = [
+    {
+      key: 'Overdue',
+      color: '#EF4444',
+      bg: 'bg-red-50',
+      border: 'border-red-100',
+      badge: 'bg-red-100 text-red-700',
+      icon: '⚠️',
+    },
+    {
+      key: 'Assigned',
+      color: '#8B5CF6',
+      bg: 'bg-purple-50',
+      border: 'border-purple-100',
+      badge: 'bg-purple-100 text-purple-700',
+      icon: '📋',
+    },
+    {
+      key: 'In Progress',
+      color: '#3B82F6',
+      bg: 'bg-blue-50',
+      border: 'border-blue-100',
+      badge: 'bg-blue-100 text-blue-700',
+      icon: '✍️',
+    },
+    {
+      key: 'Submitted',
+      color: '#F97316',
+      bg: 'bg-orange-50',
+      border: 'border-orange-100',
+      badge: 'bg-orange-100 text-orange-700',
+      icon: '📤',
+    },
+    {
+      key: 'Under Review',
+      color: '#EC4899',
+      bg: 'bg-pink-50',
+      border: 'border-pink-100',
+      badge: 'bg-pink-100 text-pink-700',
+      icon: '👀',
+    },
+    {
+      key: 'Closed',
+      color: '#10B981',
+      bg: 'bg-green-50',
+      border: 'border-green-100',
+      badge: 'bg-green-100 text-green-700',
+      icon: '✅',
+    },
+  ];
+
+  const [createForm, setCreateForm] = useState(() => ({ ...EMPTY_ASSIGN_AUDIT_FORM }));
+  const [viewMode, setViewMode] = useState('list');
+
+  const resetForm = () => {
+    setCreateForm({ ...EMPTY_ASSIGN_AUDIT_FORM });
+    setLeadSearch('');
+    setTeamSearch('');
+  };
 
   const handleCreate = async () => {
     if (!createForm.auditTypeId) {
@@ -1867,7 +2249,10 @@ function AuditList({
           remarks: '',
           isCompliant: null,
           ownerName: '',
+          ownerId: '',
+          ownerEmail: '',
           targetDate: '',
+          resolved: false,
           managerComment: '',
         };
       });
@@ -1912,7 +2297,7 @@ function AuditList({
           : `Audit assigned to ${createForm.auditorName}!`,
       );
       setShowCreateModal(false);
-      setCreateForm({ ...EMPTY_ASSIGN_AUDIT_FORM });
+      resetForm();
     } catch (e) {
       showError(`Failed: ${e.message}`);
     } finally {
@@ -1920,162 +2305,503 @@ function AuditList({
     }
   };
 
-  const isOverdue = (audit) => {
-    if (audit.status === 'Closed') return false;
-    const end = audit.endDate || audit.dueDate;
-    if (!end) return false;
-    return new Date(end) < new Date();
-  };
+  const progressRingC = 2 * Math.PI * 15.915;
 
   return (
     <div>
-      <div className="flex flex-col md:flex-row gap-3 mb-6 flex-wrap">
-        <input
-          value={filters.search}
-          onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-          placeholder="Search audits..."
-          className="flex-1 min-w-[160px] border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] bg-white"
-        />
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex-1 min-w-48 relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by template, branch, auditor..."
+              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"
+              >
+                ✕
+              </button>
+            ) : null}
+          </div>
 
-        <select
-          value={filters.status}
-          onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-          className="border rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-        >
-          <option value="">All Statuses</option>
-          {Object.keys(STATUS_COLORS).map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={filters.type}
-          onChange={(e) => setFilters((prev) => ({ ...prev, type: e.target.value }))}
-          className="border rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-        >
-          <option value="">All Templates</option>
-          {auditTypes.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-
-        {branchOptions.length > 0 && (
-          <select
-            value={filters.branch}
-            onChange={(e) => setFilters((prev) => ({ ...prev, branch: e.target.value }))}
-            className="border rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-          >
-            <option value="">All Branches</option>
-            {branchOptions.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setShowCreateModal(true)}
-          disabled={auditTypes.length === 0}
-          title={auditTypes.length === 0 ? 'Create an audit template first' : ''}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 whitespace-nowrap"
-        >
-          + Assign Audit
-        </button>
-      </div>
-
-      <p className="text-sm text-gray-400 mb-4">
-        Showing {filteredAudits.length} of {audits.length} audits
-      </p>
-
-      {filteredAudits.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
-          <p className="text-4xl mb-3">🔍</p>
-          <p className="text-base font-medium text-gray-700 mb-1">
-            {audits.length === 0 ? 'No audits yet' : 'No audits match filters'}
-          </p>
-          {audits.length === 0 && <p className="text-sm text-gray-400 mb-4">Create your first audit to get started</p>}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredAudits.map((audit) => (
-            <div
-              key={audit.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => setSelectedAudit(audit)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
-              }}
-              className="bg-white border border-gray-100 rounded-2xl p-5 hover:border-[#4ECDC4] hover:shadow-sm transition-all cursor-pointer"
+          <div className="flex border border-gray-200 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-2.5 text-sm transition-colors ${
+                viewMode === 'list' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
             >
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3 flex-1">
-                  <div
-                    className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center text-white font-bold text-sm"
-                    style={{ background: audit.auditTypeColor || '#8B5CF6' }}
-                  >
-                    {audit.auditTypeName?.charAt(0) || 'A'}
-                  </div>
+              ☰ List
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('kanban')}
+              className={`px-3 py-2.5 text-sm transition-colors ${
+                viewMode === 'kanban' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              ⊞ Board
+            </button>
+          </div>
 
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-gray-800">{audit.title || audit.auditTypeName}</p>
-                      <span
-                        className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
-                          isOverdue(audit) ? STATUS_COLORS.Overdue : STATUS_COLORS[audit.status] || STATUS_COLORS.Assigned
-                        }`}
-                      >
-                        {isOverdue(audit) ? 'Overdue' : audit.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      <p className="text-xs text-gray-400">{audit.auditTypeName}</p>
-                      {audit.category && (
-                        <p className="text-xs text-gray-400">
-                          · {audit.category}
-                        </p>
-                      )}
-                      {audit.branch && <p className="text-xs text-gray-400">· {audit.branch}</p>}
-                      {audit.auditorName && <p className="text-xs text-gray-400">· {audit.auditorName}</p>}
-                      {(audit.teamMembers?.length ?? 0) > 0 && (
-                        <span className="text-xs text-gray-400">
-                          · 👥 Team of {1 + audit.teamMembers.length}
-                        </span>
-                      )}
-                      <p className="text-xs text-gray-400">
-                        · End: {audit.endDate || audit.dueDate || 'Not set'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-3 py-2.5 border rounded-xl text-sm transition-colors ${
+              showFilters || activeFilterCount > 0
+                ? 'border-[#1B6B6B] text-[#1B6B6B] bg-[#E8F5F5]'
+                : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50'
+            }`}
+          >
+            ⚙️ Filters
+            {activeFilterCount > 0 ? (
+              <span className="bg-[#1B6B6B] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                {activeFilterCount}
+              </span>
+            ) : null}
+          </button>
 
-                {audit.totalItems > 0 && (
-                  <div className="text-right flex-shrink-0 ml-4">
-                    <p className="text-sm font-bold text-gray-700">
-                      {audit.completedItems || 0}/{audit.totalItems}
-                    </p>
-                    <p className="text-xs text-gray-400">items done</p>
-                    <div className="w-20 h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden">
-                      <div
-                        className="h-full bg-[#1B6B6B] rounded-full"
-                        style={{
-                          width: `${Math.round(((audit.completedItems || 0) / audit.totalItems) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
+          <button
+            type="button"
+            onClick={() => {
+              resetForm();
+              setShowCreateModal(true);
+            }}
+            disabled={auditTypes.length === 0}
+            title={auditTypes.length === 0 ? 'Create an audit template first' : ''}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 whitespace-nowrap"
+          >
+            + Assign Audit
+          </button>
+        </div>
+
+        {showFilters ? (
+          <div className="bg-white border border-gray-100 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-semibold text-gray-700">Filter Audits</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setFilters({
+                    status: '',
+                    type: '',
+                    branch: '',
+                    location: '',
+                    riskLevel: '',
+                    auditor: '',
+                    category: '',
+                  });
+                }}
+                className="text-xs text-[#1B6B6B] hover:underline"
+              >
+                Clear all
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Status</label>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Statuses</option>
+                  {['Assigned', 'In Progress', 'Submitted', 'Under Review', 'Closed', 'Overdue'].map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Template</label>
+                <select
+                  value={filters.type}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, type: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Templates</option>
+                  {auditTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Category</label>
+                <select
+                  value={filters.category}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Categories</option>
+                  <option value="Internal">🏢 Internal</option>
+                  <option value="External">🌐 External</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Risk Level</label>
+                <select
+                  value={filters.riskLevel}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, riskLevel: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Risk Levels</option>
+                  <option value="Critical">🔴 Critical</option>
+                  <option value="High">🟠 High</option>
+                  <option value="Medium">🟡 Medium</option>
+                  <option value="Low">🟢 Low</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Branch</label>
+                <select
+                  value={filters.branch}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, branch: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Branches</option>
+                  {(company?.branches || []).map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Location</label>
+                <select
+                  value={filters.location}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, location: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Locations</option>
+                  {(company?.locations || []).map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Lead Auditor</label>
+                <select
+                  value={filters.auditor}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, auditor: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">All Auditors</option>
+                  {[...new Set(audits.map((a) => a.auditorName).filter(Boolean))]
+                    .sort()
+                    .map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                </select>
               </div>
             </div>
-          ))}
+            {activeFilterCount > 0 ? (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-[#1B6B6B]">
+                  {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active · {filteredAudits.length} result
+                  {filteredAudits.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-400">
+            {filteredAudits.length} audit{filteredAudits.length !== 1 ? 's' : ''}
+            {activeFilterCount > 0 || search ? ` (filtered from ${audits.length})` : ''}
+          </p>
+          {activeFilterCount > 0 || search ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('');
+                setFilters({
+                  status: '',
+                  type: '',
+                  branch: '',
+                  location: '',
+                  riskLevel: '',
+                  auditor: '',
+                  category: '',
+                });
+              }}
+              className="text-xs text-[#1B6B6B] hover:underline"
+            >
+              Clear all filters
+            </button>
+          ) : null}
         </div>
-      )}
+      </div>
+
+      {viewMode === 'list' ? (
+        <div>
+          {filteredAudits.length === 0 ? (
+            <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
+              <p className="text-5xl mb-4">🔍</p>
+              <p className="text-base font-semibold text-gray-700 mb-2">
+                {audits.length === 0 ? 'No audits yet' : 'No audits match filters'}
+              </p>
+              <p className="text-sm text-gray-400 mb-6">
+                {audits.length === 0 ? 'Assign your first audit to get started' : 'Try adjusting your search or filters'}
+              </p>
+              {audits.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetForm();
+                    setShowCreateModal(true);
+                  }}
+                  disabled={auditTypes.length === 0}
+                  className="px-5 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium disabled:opacity-50"
+                >
+                  + Assign First Audit
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredAudits.map((audit) => {
+                const overdueAudit = isOverdue(audit);
+                const findings = (audit.checklist || []).filter((i) => i.yesNoResponse === 'No');
+                const openActions = findings.filter((i) => i.ownerName && !i.resolved);
+                const progress =
+                  audit.totalItems > 0
+                    ? Math.round(((audit.completedItems || 0) / audit.totalItems) * 100)
+                    : 0;
+                const strokeColor =
+                  audit.status === 'Closed' ? '#10B981' : overdueAudit ? '#EF4444' : '#1B6B6B';
+                return (
+                  <div
+                    key={audit.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedAudit(audit)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
+                    }}
+                    className={`bg-white rounded-2xl border cursor-pointer hover:shadow-md transition-all group overflow-hidden ${
+                      overdueAudit ? 'border-red-200 hover:border-red-300' : 'border-gray-100 hover:border-[#4ECDC4]'
+                    }`}
+                  >
+                    <div
+                      className="h-1"
+                      style={{ background: overdueAudit ? '#EF4444' : audit.auditTypeColor || '#8B5CF6' }}
+                    />
+                    <div className="p-5">
+                      <div className="flex items-start gap-4">
+                        <div
+                          className="w-11 h-11 rounded-xl flex-shrink-0 flex items-center justify-center text-white font-bold text-base shadow-sm"
+                          style={{ background: audit.auditTypeColor || '#8B5CF6' }}
+                        >
+                          {audit.auditTypeName?.charAt(0) || 'A'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <p className="text-sm font-semibold text-gray-800">{audit.auditTypeName}</p>
+                            <span
+                              className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                                overdueAudit
+                                  ? 'bg-red-100 text-red-700'
+                                  : STATUS_COLORS[audit.status] || STATUS_COLORS.Assigned
+                              }`}
+                            >
+                              {overdueAudit ? '⚠️ Overdue' : audit.status}
+                            </span>
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                audit.riskLevel === 'Critical'
+                                  ? 'bg-red-100 text-red-600'
+                                  : audit.riskLevel === 'High'
+                                    ? 'bg-orange-100 text-orange-600'
+                                    : audit.riskLevel === 'Medium'
+                                      ? 'bg-amber-100 text-amber-600'
+                                      : 'bg-green-100 text-green-600'
+                              }`}
+                            >
+                              {audit.riskLevel === 'Critical' && '🔴 '}
+                              {audit.riskLevel === 'High' && '🟠 '}
+                              {audit.riskLevel === 'Medium' && '🟡 '}
+                              {audit.riskLevel === 'Low' && '🟢 '}
+                              {audit.riskLevel || 'Medium'}
+                            </span>
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full ${
+                                audit.auditCategory === 'External'
+                                  ? 'bg-purple-100 text-purple-600'
+                                  : 'bg-blue-100 text-blue-600'
+                              }`}
+                            >
+                              {audit.auditCategory === 'External' ? '🌐' : '🏢'} {audit.auditCategory || 'Internal'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 flex-wrap mt-1">
+                            {audit.branch ? (
+                              <span className="text-xs text-gray-500 flex items-center gap-1">🏢 {audit.branch}</span>
+                            ) : null}
+                            {audit.location ? (
+                              <span className="text-xs text-gray-500 flex items-center gap-1">📍 {audit.location}</span>
+                            ) : null}
+                            {audit.department ? <span className="text-xs text-gray-500">· {audit.department}</span> : null}
+                            {audit.auditorName ? (
+                              <span className="text-xs text-gray-500 flex items-center gap-1">
+                                👤 {audit.auditorName}
+                                {(audit.teamMembers?.length || 0) > 0 ? (
+                                  <span className="text-gray-400">+{audit.teamMembers.length}</span>
+                                ) : null}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="flex items-center gap-3 flex-wrap mt-2">
+                            {audit.startDate ? (
+                              <span className="text-xs text-gray-400">📅 {audit.startDate}</span>
+                            ) : null}
+                            {audit.endDate ? (
+                              <span
+                                className={`text-xs font-medium ${overdueAudit ? 'text-red-600' : 'text-gray-400'}`}
+                              >
+                                {overdueAudit ? '⚠️' : '→'} {audit.endDate}
+                              </span>
+                            ) : null}
+                            {findings.length > 0 ? (
+                              <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full">
+                                {findings.length} finding{findings.length !== 1 ? 's' : ''}
+                              </span>
+                            ) : null}
+                            {openActions.length > 0 ? (
+                              <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">
+                                {openActions.length} action{openActions.length !== 1 ? 's' : ''} open
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="flex-shrink-0 text-right">
+                          {audit.totalItems > 0 ? (
+                            <>
+                              <div className="relative w-12 h-12 mb-1">
+                                <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
+                                  <circle cx="18" cy="18" r="15.915" fill="none" stroke="#F3F4F6" strokeWidth="3" />
+                                  <circle
+                                    cx="18"
+                                    cy="18"
+                                    r="15.915"
+                                    fill="none"
+                                    stroke={strokeColor}
+                                    strokeWidth="3"
+                                    strokeLinecap="round"
+                                    strokeDasharray={progressRingC}
+                                    strokeDashoffset={progressRingC * (1 - progress / 100)}
+                                  />
+                                </svg>
+                                <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-700">
+                                  {progress}%
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-400">
+                                {audit.completedItems || 0}/{audit.totalItems}
+                              </p>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {viewMode === 'kanban' ? (
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {STATUSES.map((status) => {
+            const statusAudits = filteredAudits.filter((a) => {
+              if (status.key === 'Overdue') return isOverdue(a);
+              return a.status === status.key && !isOverdue(a);
+            });
+            return (
+              <div key={status.key} className="flex-shrink-0 w-72">
+                <div
+                  className={`flex items-center justify-between p-3 rounded-xl mb-3 ${status.bg} border ${status.border}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span>{status.icon}</span>
+                    <span className="text-xs font-semibold text-gray-700">{status.key}</span>
+                  </div>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${status.badge}`}>{statusAudits.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {statusAudits.map((audit) => (
+                    <div
+                      key={audit.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedAudit(audit)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
+                      }}
+                      className="bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:shadow-sm hover:border-gray-200 transition-all"
+                    >
+                      <div className="flex items-start gap-2 mb-2">
+                        <div
+                          className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                          style={{ background: audit.auditTypeColor || '#8B5CF6' }}
+                        >
+                          {audit.auditTypeName?.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-800 truncate">{audit.auditTypeName}</p>
+                          {audit.branch ? <p className="text-xs text-gray-400 truncate">{audit.branch}</p> : null}
+                        </div>
+                      </div>
+                      {audit.auditorName ? (
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <div className="w-4 h-4 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
+                            {audit.auditorName.charAt(0)}
+                          </div>
+                          <p className="text-xs text-gray-500 truncate">{audit.auditorName}</p>
+                        </div>
+                      ) : null}
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`text-xs ${isOverdue(audit) ? 'text-red-500 font-medium' : 'text-gray-400'}`}
+                        >
+                          {audit.endDate ? `Due ${audit.endDate}` : 'No date'}
+                        </span>
+                        {audit.totalItems > 0 ? (
+                          <span className="text-xs text-gray-400">
+                            {Math.round(((audit.completedItems || 0) / audit.totalItems) * 100)}%
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                  {statusAudits.length === 0 ? (
+                    <div className="text-center py-6 text-xs text-gray-300 border-2 border-dashed border-gray-100 rounded-xl">
+                      No audits
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -2093,7 +2819,7 @@ function AuditList({
                   type="button"
                   onClick={() => {
                     setShowCreateModal(false);
-                    setCreateForm({ ...EMPTY_ASSIGN_AUDIT_FORM });
+                    resetForm();
                   }}
                   className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
                 >
@@ -2534,7 +3260,7 @@ function AuditList({
                   type="button"
                   onClick={() => {
                     setShowCreateModal(false);
-                    setCreateForm({ ...EMPTY_ASSIGN_AUDIT_FORM });
+                    resetForm();
                   }}
                   className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 bg-white hover:bg-gray-50"
                 >
@@ -2553,19 +3279,6 @@ function AuditList({
           </div>
         </div>
       )}
-
-      {selectedAudit && (
-        <AuditDetail
-          key={selectedAudit.id}
-          audit={selectedAudit}
-          companyId={companyId}
-          currentUser={currentUser}
-          employees={employees}
-          onClose={() => setSelectedAudit(null)}
-          showSuccess={showSuccess}
-          showError={showError}
-        />
-      )}
     </div>
   );
 }
@@ -2578,6 +3291,9 @@ export default function Audit() {
 
   const [activeTab, setActiveTab] = useState('audits');
   const [showSettings, setShowSettings] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedAudit, setSelectedAudit] = useState(null);
+  const [employees, setEmployees] = useState([]);
   const [auditTypes, setAuditTypes] = useState([]);
   const [audits, setAudits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2621,6 +3337,20 @@ export default function Audit() {
     return unsub;
   }, [companyId]);
 
+  useEffect(() => {
+    if (!companyId) return undefined;
+    getDocs(collection(db, 'companies', companyId, 'employees'))
+      .then((snap) => {
+        setEmployees(
+          snap.docs
+            .filter((d) => d.data().status === 'Active')
+            .map((d) => ({ id: d.id, ...d.data() })),
+        );
+      })
+      .catch(() => setEmployees([]));
+    return undefined;
+  }, [companyId]);
+
   if (!companyId) {
     return <p className="p-6 text-sm text-gray-500">Missing company.</p>;
   }
@@ -2646,34 +3376,44 @@ export default function Audit() {
       )}
 
       <div className="bg-white border-b border-gray-100 px-6 py-4">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-800">Audit</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Manage audits and compliance tracking</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowSettings(true)}
-            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 flex-shrink-0"
-          >
-            ⚙️ Settings
-          </button>
+        <div>
+          <h1 className="text-xl font-semibold text-gray-800">Audit</h1>
+          <p className="text-sm text-gray-400 mt-0.5">Manage audits and compliance tracking</p>
         </div>
 
-        <div className="flex gap-1 mt-4 flex-wrap">
-          {AUDIT_TABS.map((tab) => (
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+          <div className="flex gap-1 flex-wrap">
+            {AUDIT_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                  activeTab === tab.id ? 'bg-[#E8F5F5] text-[#1B6B6B]' : 'text-gray-500 hover:bg-gray-100'
+                }`}
+              >
+                <span>{tab.icon}</span>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                activeTab === tab.id ? 'bg-[#E8F5F5] text-[#1B6B6B]' : 'text-gray-500 hover:bg-gray-100'
-              }`}
+              onClick={() => setShowCalendar(true)}
+              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              title="Audit Calendar"
             >
-              <span>{tab.icon}</span>
-              {tab.label}
+              📅
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+            >
+              ⚙️ Settings
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2689,14 +3429,42 @@ export default function Audit() {
             company={company}
             companyId={companyId}
             currentUser={currentUser}
+            employees={employees}
             saving={saving}
             setSaving={setSaving}
             showSuccess={showSuccess}
             showError={showError}
             setShowSettings={setShowSettings}
+            setSelectedAudit={setSelectedAudit}
           />
         )}
       </div>
+
+      {showCalendar && (
+        <AuditCalendar
+          audits={audits}
+          onClose={() => setShowCalendar(false)}
+          onSelectAudit={(audit) => {
+            setShowCalendar(false);
+            setActiveTab('audits');
+            const fresh = audits.find((a) => a.id === audit.id);
+            setSelectedAudit(fresh || audit);
+          }}
+        />
+      )}
+
+      {selectedAudit && (
+        <AuditDetail
+          key={selectedAudit.id}
+          audit={selectedAudit}
+          companyId={companyId}
+          currentUser={currentUser}
+          employees={employees}
+          onClose={() => setSelectedAudit(null)}
+          showSuccess={showSuccess}
+          showError={showError}
+        />
+      )}
 
       {showSettings && (
         <div className="fixed inset-0 z-50 flex justify-end">
