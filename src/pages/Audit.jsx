@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   collection,
+  getDocs,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -9,9 +10,9 @@ import {
   query,
   orderBy,
   onSnapshot,
-  serverTimestamp,
-  getDocs,
-  runTransaction,
+  where,
+  getDoc,
+  setDoc,
   increment,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -19,84 +20,39 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { trackPageView } from '../utils/analytics';
 
-/** Human-readable ref, e.g. AUD-2026-001 (counter resets each calendar year). */
-async function generateAuditId(companyId) {
-  const counterRef = doc(db, 'companies', companyId, 'settings', 'auditCounter');
-  const year = new Date().getFullYear();
-  const padded = await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(counterRef);
-    let num;
-    if (!snap.exists()) {
-      num = 1;
-      transaction.set(counterRef, { count: 1, year });
-    } else {
-      const data = snap.data() || {};
-      if (data.year !== year) {
-        num = 1;
-        transaction.set(counterRef, { count: 1, year });
-      } else {
-        num = (data.count || 0) + 1;
-        transaction.update(counterRef, { count: increment(1) });
-      }
-    }
-    return String(num).padStart(3, '0');
-  });
-  return `AUD-${year}-${padded}`;
-}
-
-const AUDIT_TABS = [
-  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-  { id: 'audits', label: 'Audits', icon: '🔍' },
+const AUDIT_STATUSES = [
+  { key: 'Scheduled', color: '#8B5CF6', bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700', icon: '📅' },
+  { key: 'In Progress', color: '#3B82F6', bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: '🔄' },
+  { key: 'Under Review', color: '#F97316', bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-700', icon: '👀' },
+  { key: 'Closed', color: '#10B981', bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-100 text-green-700', icon: '✅' },
 ];
 
+const OVERALL_RESULTS = [
+  { value: 'Pass', icon: '✅', color: 'bg-green-100 text-green-700 border-green-200', active: 'bg-green-500 text-white border-green-500' },
+  { value: 'Partial', icon: '⚠️', color: 'bg-amber-100 text-amber-700 border-amber-200', active: 'bg-amber-500 text-white border-amber-500' },
+  { value: 'Fail', icon: '❌', color: 'bg-red-100 text-red-700 border-red-200', active: 'bg-red-500 text-white border-red-500' },
+];
+
+const AUDIT_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#1B6B6B', '#6366F1', '#14B8A6'];
+
+/** Used by AuditCalendar (unchanged); includes legacy keys for older documents */
 const STATUS_COLORS = {
+  Scheduled: 'bg-purple-100 text-purple-700',
   Assigned: 'bg-purple-100 text-purple-700',
   'In Progress': 'bg-blue-100 text-blue-700',
   Submitted: 'bg-orange-100 text-orange-700',
-  'Under Review': 'bg-pink-100 text-pink-700',
+  'Under Review': 'bg-orange-100 text-orange-700',
   Closed: 'bg-green-100 text-green-700',
   Overdue: 'bg-red-100 text-red-700',
 };
 
-const AUDIT_COLORS = [
-  '#8B5CF6',
-  '#3B82F6',
-  '#10B981',
-  '#F59E0B',
-  '#EF4444',
-  '#EC4899',
-  '#1B6B6B',
-  '#6366F1',
-  '#14B8A6',
-];
-
-function itemFullyAnswered(item) {
-  const yn = item.yesNoResponse;
-  const hasYn = yn === 'Yes' || yn === 'No' || yn === 'N/A';
-  const hasRating = typeof item.rating === 'number' && item.rating >= 1 && item.rating <= 5;
-  return hasYn && hasRating;
-}
-
-function normalizeChecklistItem(item) {
-  const next = { ...item };
-  delete next.riskLevel;
-  if (next.yesNoResponse == null && ['Yes', 'No', 'N/A'].includes(next.response)) {
-    next.yesNoResponse = next.response;
-  }
-  if (next.rating == null && typeof next.response === 'number' && next.response >= 1 && next.response <= 5) {
-    next.rating = next.response;
-  }
-  return next;
-}
-
-function AuditDashboard({ audits, auditTypes, company: _company }) {
+function AuditDashboard({ audits, auditTypes }) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
 
   const total = audits.length;
-  const assigned = audits.filter((a) => a.status === 'Assigned').length;
+  const scheduled = audits.filter((a) => a.status === 'Scheduled').length;
   const inProgress = audits.filter((a) => a.status === 'In Progress').length;
-  const submitted = audits.filter((a) => a.status === 'Submitted').length;
   const underReview = audits.filter((a) => a.status === 'Under Review').length;
   const closed = audits.filter((a) => a.status === 'Closed').length;
 
@@ -108,15 +64,10 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
   }).length;
 
   const closedAudits = audits.filter((a) => a.status === 'Closed');
+  const closedWithOverall = closedAudits.filter((a) => a.overallResult === 'Pass' || a.overallResult === 'Partial' || a.overallResult === 'Fail');
   const complianceRate =
-    closedAudits.length > 0
-      ? Math.round(
-          closedAudits.reduce((sum, a) => {
-            const items = a.checklist || [];
-            const compliant = items.filter((i) => i.yesNoResponse === 'Yes').length;
-            return sum + (items.length > 0 ? (compliant / items.length) * 100 : 0);
-          }, 0) / closedAudits.length,
-        )
+    closedWithOverall.length > 0
+      ? Math.round((closedWithOverall.filter((a) => a.overallResult === 'Pass').length / closedWithOverall.length) * 100)
       : null;
 
   const riskCounts = {
@@ -128,35 +79,36 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
 
   const upcomingActions = audits
     .flatMap((a) =>
-      (a.checklist || [])
-        .filter((i) => i.yesNoResponse === 'No' && i.ownerName && !i.resolved && i.targetDate)
-        .map((i) => ({
-          ...i,
+      (a.findings || [])
+        .filter(
+          (f) =>
+            f.status !== 'Resolved' &&
+            f.targetDate &&
+            f.ownerName &&
+            new Date(f.targetDate) >= now &&
+            Math.ceil((new Date(f.targetDate) - now) / (1000 * 60 * 60 * 24)) <= 7,
+        )
+        .map((f) => ({
+          ...f,
           auditName: a.auditTypeName || a.title,
           auditId: a.id,
           branch: a.branch || a.location,
-          daysLeft: Math.ceil((new Date(i.targetDate) - now) / (1000 * 60 * 60 * 24)),
+          daysLeft: Math.ceil((new Date(f.targetDate) - now) / (1000 * 60 * 60 * 24)),
         })),
     )
-    .filter((i) => i.daysLeft <= 7)
     .sort((a, b) => a.daysLeft - b.daysLeft);
 
   const overdueActions = audits
     .flatMap((a) =>
-      (a.checklist || [])
+      (a.findings || [])
         .filter(
-          (i) =>
-            i.yesNoResponse === 'No' &&
-            i.ownerName &&
-            !i.resolved &&
-            i.targetDate &&
-            new Date(i.targetDate) < now,
+          (f) => f.status !== 'Resolved' && f.ownerName && f.targetDate && new Date(f.targetDate) < now,
         )
-        .map((i) => ({
-          ...i,
+        .map((f) => ({
+          ...f,
           auditName: a.auditTypeName,
           branch: a.branch || a.location,
-          daysOverdue: Math.ceil((now - new Date(i.targetDate)) / (1000 * 60 * 60 * 24)),
+          daysOverdue: Math.ceil((now - new Date(f.targetDate)) / (1000 * 60 * 60 * 24)),
         })),
     )
     .sort((a, b) => b.daysOverdue - a.daysOverdue);
@@ -180,14 +132,18 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
   });
 
   const pipeline = [
-    { label: 'Assigned', count: assigned, color: '#8B5CF6', bg: '#EDE9FE' },
+    { label: 'Scheduled', count: scheduled, color: '#8B5CF6', bg: '#EDE9FE' },
     { label: 'In Progress', count: inProgress, color: '#3B82F6', bg: '#DBEAFE' },
-    { label: 'Submitted', count: submitted, color: '#F97316', bg: '#FEF3C7' },
-    { label: 'Under Review', count: underReview, color: '#EC4899', bg: '#FBEAF0' },
+    { label: 'Under Review', count: underReview, color: '#F97316', bg: '#FFEDD5' },
     { label: 'Closed', count: closed, color: '#10B981', bg: '#D1FAE5' },
   ];
 
   const maxPipeline = Math.max(...pipeline.map((p) => p.count), 1);
+
+  const statusBadge = (audit, isOverdueAudit) => {
+    if (isOverdueAudit) return 'bg-red-100 text-red-700';
+    return AUDIT_STATUSES.find((s) => s.key === audit.status)?.badge || 'bg-gray-100 text-gray-700';
+  };
 
   return (
     <div className="space-y-6">
@@ -203,9 +159,7 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
           </p>
         </div>
 
-        <div
-          className={`border rounded-2xl p-5 ${overdue > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-gray-100'}`}
-        >
+        <div className={`border rounded-2xl p-5 ${overdue > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-gray-100'}`}>
           <div className="flex items-center justify-between mb-3">
             <p className={`text-xs ${overdue > 0 ? 'text-red-500' : 'text-gray-400'}`}>Overdue</p>
             <span className="text-xl">⚠️</span>
@@ -214,58 +168,38 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
           <p className={`text-xs mt-1 ${overdue > 0 ? 'text-red-400' : 'text-gray-400'}`}>Past end date</p>
         </div>
 
-        <div
-          className={`border rounded-2xl p-5 ${
-            overdueActions.length > 0 ? 'bg-amber-50 border-amber-100' : 'bg-white border-gray-100'
-          }`}
-        >
+        <div className={`border rounded-2xl p-5 ${overdueActions.length > 0 ? 'bg-amber-50 border-amber-100' : 'bg-white border-gray-100'}`}>
           <div className="flex items-center justify-between mb-3">
-            <p className={`text-xs ${overdueActions.length > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-              Overdue Actions
-            </p>
+            <p className={`text-xs ${overdueActions.length > 0 ? 'text-amber-600' : 'text-gray-400'}`}>Overdue Actions</p>
             <span className="text-xl">🔴</span>
           </div>
-          <p
-            className={`text-3xl font-bold ${overdueActions.length > 0 ? 'text-amber-700' : 'text-gray-900'}`}
-          >
-            {overdueActions.length}
-          </p>
-          <p className={`text-xs mt-1 ${overdueActions.length > 0 ? 'text-amber-500' : 'text-gray-400'}`}>
-            Need immediate fix
-          </p>
+          <p className={`text-3xl font-bold ${overdueActions.length > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{overdueActions.length}</p>
+          <p className={`text-xs mt-1 ${overdueActions.length > 0 ? 'text-amber-500' : 'text-gray-400'}`}>Findings past target date</p>
         </div>
 
         {complianceRate !== null ? (
           <div
             className={`border rounded-2xl p-5 ${
-              complianceRate >= 80
-                ? 'bg-green-50 border-green-100'
-                : complianceRate >= 60
-                  ? 'bg-amber-50 border-amber-100'
-                  : 'bg-red-50 border-red-100'
+              complianceRate >= 80 ? 'bg-green-50 border-green-100' : complianceRate >= 60 ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-100'
             }`}
           >
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-gray-500">Compliance Rate</p>
+              <p className="text-xs text-gray-500">Pass rate (closed)</p>
               <span className="text-xl">📊</span>
             </div>
-            <p
-              className={`text-3xl font-bold ${
-                complianceRate >= 80 ? 'text-green-700' : complianceRate >= 60 ? 'text-amber-700' : 'text-red-700'
-              }`}
-            >
+            <p className={`text-3xl font-bold ${complianceRate >= 80 ? 'text-green-700' : complianceRate >= 60 ? 'text-amber-700' : 'text-red-700'}`}>
               {complianceRate}%
             </p>
-            <p className="text-xs text-gray-400 mt-1">From closed audits</p>
+            <p className="text-xs text-gray-400 mt-1">Audits with overall Pass</p>
           </div>
         ) : (
           <div className="bg-white border border-gray-100 rounded-2xl p-5">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-gray-400">Compliance Rate</p>
+              <p className="text-xs text-gray-400">Pass rate (closed)</p>
               <span className="text-xl">📊</span>
             </div>
             <p className="text-3xl font-bold text-gray-300">—</p>
-            <p className="text-xs text-gray-400 mt-1">No closed audits yet</p>
+            <p className="text-xs text-gray-400 mt-1">Set overall result on closed audits</p>
           </div>
         )}
       </div>
@@ -305,38 +239,10 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
           </h3>
           <div className="space-y-3">
             {[
-              {
-                label: 'Critical',
-                icon: '🔴',
-                color: '#EF4444',
-                bg: 'bg-red-50',
-                border: 'border-red-100',
-                text: 'text-red-700',
-              },
-              {
-                label: 'High',
-                icon: '🟠',
-                color: '#F97316',
-                bg: 'bg-orange-50',
-                border: 'border-orange-100',
-                text: 'text-orange-700',
-              },
-              {
-                label: 'Medium',
-                icon: '🟡',
-                color: '#F59E0B',
-                bg: 'bg-amber-50',
-                border: 'border-amber-100',
-                text: 'text-amber-700',
-              },
-              {
-                label: 'Low',
-                icon: '🟢',
-                color: '#10B981',
-                bg: 'bg-green-50',
-                border: 'border-green-100',
-                text: 'text-green-700',
-              },
+              { label: 'Critical', icon: '🔴', color: '#EF4444', bg: 'bg-red-50', border: 'border-red-100', text: 'text-red-700' },
+              { label: 'High', icon: '🟠', color: '#F97316', bg: 'bg-orange-50', border: 'border-orange-100', text: 'text-orange-700' },
+              { label: 'Medium', icon: '🟡', color: '#F59E0B', bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-700' },
+              { label: 'Low', icon: '🟢', color: '#10B981', bg: 'bg-green-50', border: 'border-green-100', text: 'text-green-700' },
             ].map((risk) => {
               const count = riskCounts[risk.label] || 0;
               const totalActive = Object.values(riskCounts).reduce((a, b) => a + b, 0);
@@ -357,9 +263,7 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
               );
             })}
           </div>
-          {Object.values(riskCounts).every((v) => v === 0) && (
-            <p className="text-center text-xs text-gray-400 mt-2">No active audits</p>
-          )}
+          {Object.values(riskCounts).every((v) => v === 0) && <p className="text-center text-xs text-gray-400 mt-2">No active audits</p>}
         </div>
       </div>
 
@@ -368,9 +272,7 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
           <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center justify-between">
             🔴 Overdue Action Items
             {overdueActions.length > 0 && (
-              <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
-                {overdueActions.length}
-              </span>
+              <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{overdueActions.length}</span>
             )}
           </h3>
           {overdueActions.length === 0 ? (
@@ -382,7 +284,7 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {overdueActions.slice(0, 8).map((item, i) => (
                 <div key={i} className="p-3 bg-red-50 border border-red-100 rounded-xl">
-                  <p className="text-xs font-medium text-gray-800 mb-1.5 line-clamp-2">{item.question}</p>
+                  <p className="text-xs font-medium text-gray-800 mb-1.5 line-clamp-2">{item.description}</p>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs text-red-600 font-medium">⚠️ {item.daysOverdue}d overdue</span>
                     <span className="text-xs text-gray-500">· 👤 {item.ownerName}</span>
@@ -410,14 +312,10 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
                 <div
                   key={i}
                   className={`p-3 border rounded-xl ${
-                    item.daysLeft <= 0
-                      ? 'bg-red-50 border-red-100'
-                      : item.daysLeft <= 2
-                        ? 'bg-orange-50 border-orange-100'
-                        : 'bg-amber-50 border-amber-100'
+                    item.daysLeft <= 0 ? 'bg-red-50 border-red-100' : item.daysLeft <= 2 ? 'bg-orange-50 border-orange-100' : 'bg-amber-50 border-amber-100'
                   }`}
                 >
-                  <p className="text-xs font-medium text-gray-800 mb-1.5 line-clamp-2">{item.question}</p>
+                  <p className="text-xs font-medium text-gray-800 mb-1.5 line-clamp-2">{item.description}</p>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span
                       className={`text-xs font-medium ${
@@ -451,9 +349,7 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
             <div className="space-y-3">
               {workloadList.map(([name, count]) => (
                 <div key={name} className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                    {name?.charAt(0)}
-                  </div>
+                  <div className="w-7 h-7 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{name?.charAt(0)}</div>
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-gray-700 truncate">{name}</span>
@@ -462,9 +358,7 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
                     <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-[#1B6B6B] rounded-full"
-                        style={{
-                          width: `${Math.max((count / (workloadList[0][1] || 1)) * 100, 8)}%`,
-                        }}
+                        style={{ width: `${Math.max((count / (workloadList[0][1] || 1)) * 100, 8)}%` }}
                       />
                     </div>
                   </div>
@@ -529,15 +423,9 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
         ) : (
           <div className="space-y-2">
             {audits.slice(0, 5).map((audit) => {
-              const isOverdueAudit =
-                audit.status !== 'Closed' &&
-                (audit.endDate || audit.dueDate) &&
-                new Date(audit.endDate || audit.dueDate) < now;
+              const isOverdueAudit = audit.status !== 'Closed' && (audit.endDate || audit.dueDate) && new Date(audit.endDate || audit.dueDate) < now;
               return (
-                <div
-                  key={audit.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                >
+                <div key={audit.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div
                       className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
@@ -557,11 +445,7 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
                       </p>
                     </div>
                   </div>
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ml-2 ${
-                      isOverdueAudit ? 'bg-red-100 text-red-700' : STATUS_COLORS[audit.status] || STATUS_COLORS.Assigned
-                    }`}
-                  >
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ml-2 ${statusBadge(audit, isOverdueAudit)}`}>
                     {isOverdueAudit ? 'Overdue' : audit.status}
                   </span>
                 </div>
@@ -573,1220 +457,6 @@ function AuditDashboard({ audits, auditTypes, company: _company }) {
     </div>
   );
 }
-
-const AuditTemplates = forwardRef(function AuditTemplates(
-  { companyId, currentUser, saving, setSaving, showSuccess, showError },
-  ref,
-) {
-  const [showModal, setShowModal] = useState(false);
-  const [editingType, setEditingType] = useState(null);
-  const [selectedColor, setSelectedColor] = useState(AUDIT_COLORS[0]);
-  const [form, setForm] = useState({
-    auditCategory: '',
-    name: '',
-    description: '',
-    color: AUDIT_COLORS[0],
-    riskLevel: 'Medium',
-  });
-  const [checklist, setChecklist] = useState([]);
-  const [newSection, setNewSection] = useState('');
-  const [sections, setSections] = useState(['General']);
-
-  const resetForm = () => {
-    setForm({ auditCategory: '', name: '', description: '', color: AUDIT_COLORS[0], riskLevel: 'Medium' });
-    setChecklist([]);
-    setSections(['General']);
-    setSelectedColor(AUDIT_COLORS[0]);
-    setEditingType(null);
-  };
-
-  const openEdit = (type) => {
-    setEditingType(type);
-    setForm({
-      auditCategory: type.auditCategory || '',
-      name: type.name,
-      description: type.description || '',
-      color: type.color || AUDIT_COLORS[0],
-      riskLevel: type.riskLevel || 'Medium',
-    });
-    setSelectedColor(type.color || AUDIT_COLORS[0]);
-    const tpl = (type.checklistTemplate || []).map((i) => {
-      const { type: _t, riskLevel: _rl, ...rest } = i;
-      return {
-        ...rest,
-        required: i.required !== false,
-      };
-    });
-    setChecklist(tpl);
-    const uniqueSections = [...new Set(tpl.map((x) => x.section))];
-    setSections(uniqueSections.length > 0 ? uniqueSections : ['General']);
-    setShowModal(true);
-  };
-
-  const addChecklistItem = (section) => {
-    const newItem = {
-      id: `item_${Date.now()}`,
-      section,
-      question: '',
-      required: true,
-      order: checklist.length,
-    };
-    setChecklist((prev) => [...prev, newItem]);
-  };
-
-  const updateItem = (id, field, value) => {
-    setChecklist((prev) => prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
-  };
-
-  const removeItem = (id) => {
-    setChecklist((prev) => prev.filter((item) => item.id !== id));
-  };
-
-  const handleSave = async () => {
-    if (!form.auditCategory) {
-      showError('Select Internal or External audit');
-      return;
-    }
-    if (!form.name.trim()) {
-      showError('Enter template name');
-      return;
-    }
-    if (checklist.length === 0) {
-      showError('Add at least one checklist item');
-      return;
-    }
-    const emptyItems = checklist.filter((i) => !i.question.trim());
-    if (emptyItems.length > 0) {
-      showError('All checklist items need a question');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      const checklistTemplate = checklist.map((item, idx) => {
-        const { type: _omit, response: _r, riskLevel: _rl, ...rest } = item;
-        return { ...rest, order: idx };
-      });
-      const data = {
-        auditCategory: form.auditCategory,
-        name: form.name.trim(),
-        description: form.description.trim(),
-        color: selectedColor,
-        riskLevel: form.riskLevel || 'Medium',
-        checklistTemplate,
-        updatedAt: serverTimestamp(),
-        updatedBy: currentUser?.email || '',
-      };
-
-      if (editingType) {
-        await updateDoc(doc(db, 'companies', companyId, 'auditTypes', editingType.id), data);
-        showSuccess('Audit template updated!');
-      } else {
-        await addDoc(collection(db, 'companies', companyId, 'auditTypes'), {
-          ...data,
-          createdAt: serverTimestamp(),
-          createdBy: currentUser?.email || '',
-        });
-        showSuccess('Audit template created!');
-      }
-      setShowModal(false);
-      resetForm();
-    } catch (e) {
-      showError(`Failed to save: ${e.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (type) => {
-    if (!window.confirm(`Delete audit template "${type.name}"? This cannot be undone.`)) return;
-    try {
-      await deleteDoc(doc(db, 'companies', companyId, 'auditTypes', type.id));
-      showSuccess(`"${type.name}" deleted`);
-    } catch (e) {
-      showError('Failed to delete');
-    }
-  };
-
-  useImperativeHandle(ref, () => ({
-    openNew: () => {
-      resetForm();
-      setShowModal(true);
-    },
-    openEdit,
-    deleteType: handleDelete,
-  }));
-
-  return (
-    <>
-      {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
-              <h2 className="text-lg font-semibold text-gray-800">{editingType ? 'Edit Audit Template' : 'New Audit Template'}</h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowModal(false);
-                  resetForm();
-                }}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Audit Category *</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {['Internal', 'External'].map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, auditCategory: cat }))}
-                      className={`py-3 px-4 rounded-xl border-2 text-sm font-medium transition-all ${
-                        form.auditCategory === cat
-                          ? 'border-[#1B6B6B] bg-[#E8F5F5] text-[#1B6B6B]'
-                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                      }`}
-                    >
-                      {cat === 'Internal' ? '🏢 Internal' : '🌐 External'}
-                    </button>
-                  ))}
-                </div>
-                {form.auditCategory && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    {form.auditCategory === 'Internal'
-                      ? 'Conducted by internal team members'
-                      : 'Conducted by external auditors'}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Template Name *</label>
-                <input
-                  value={form.name}
-                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g. Cash Handling Audit, Compliance Audit, Safety Audit"
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Description (optional)</label>
-                <input
-                  value={form.description}
-                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="Brief description..."
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Color</label>
-                <div className="flex gap-2 flex-wrap">
-                  {AUDIT_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => setSelectedColor(color)}
-                      className={`w-8 h-8 rounded-full transition-transform ${
-                        selectedColor === color ? 'scale-125 ring-2 ring-offset-2 ring-gray-400' : 'hover:scale-110'
-                      }`}
-                      style={{ background: color }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Risk Level</label>
-                <div className="flex gap-2 flex-wrap">
-                  {[
-                    {
-                      value: 'Low',
-                      color: 'bg-green-50 border-green-200 text-green-700',
-                      active: 'bg-green-500 border-green-500 text-white',
-                      icon: '🟢',
-                    },
-                    {
-                      value: 'Medium',
-                      color: 'bg-amber-50 border-amber-200 text-amber-700',
-                      active: 'bg-amber-500 border-amber-500 text-white',
-                      icon: '🟡',
-                    },
-                    {
-                      value: 'High',
-                      color: 'bg-orange-50 border-orange-200 text-orange-700',
-                      active: 'bg-orange-500 border-orange-500 text-white',
-                      icon: '🟠',
-                    },
-                    {
-                      value: 'Critical',
-                      color: 'bg-red-50 border-red-200 text-red-700',
-                      active: 'bg-red-500 border-red-500 text-white',
-                      icon: '🔴',
-                    },
-                  ].map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, riskLevel: opt.value }))}
-                      className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all ${
-                        form.riskLevel === opt.value ? opt.active : opt.color
-                      }`}
-                    >
-                      {opt.icon} {opt.value}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Checklist</label>
-                  <span className="text-xs text-gray-400">{checklist.length} items</span>
-                </div>
-
-                {sections.map((section) => (
-                  <div key={section} className="mb-4">
-                    <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-2">
-                      <h4 className="text-sm font-semibold text-gray-700">{section}</h4>
-                      <button type="button" onClick={() => addChecklistItem(section)} className="text-xs text-[#1B6B6B] hover:underline">
-                        + Add item
-                      </button>
-                    </div>
-
-                    {checklist
-                      .filter((i) => i.section === section)
-                      .map((item) => (
-                        <div key={item.id} className="flex gap-2 mb-3 p-3 bg-gray-50 rounded-xl">
-                          <div className="flex-1 space-y-2">
-                            <input
-                              value={item.question}
-                              onChange={(e) => updateItem(item.id, 'question', e.target.value)}
-                              placeholder="Checklist item question..."
-                              className="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                            />
-                            <div className="flex gap-2 items-center flex-wrap">
-                              <div className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 rounded-lg">
-                                <span className="text-xs text-gray-400">✅ Yes/No + ⭐ Rating 1-5</span>
-                              </div>
-                              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={item.required}
-                                  onChange={(e) => updateItem(item.id, 'required', e.target.checked)}
-                                  className="accent-[#1B6B6B]"
-                                />
-                                Required
-                              </label>
-                            </div>
-                          </div>
-                          <button type="button" onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 px-1 flex-shrink-0 self-start mt-2">
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-
-                    {checklist.filter((i) => i.section === section).length === 0 && (
-                      <button
-                        type="button"
-                        onClick={() => addChecklistItem(section)}
-                        className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors"
-                      >
-                        + Add first item
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-                <div className="flex gap-2 mt-3">
-                  <input
-                    value={newSection}
-                    onChange={(e) => setNewSection(e.target.value)}
-                    placeholder="New section name..."
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newSection.trim()) {
-                        setSections((prev) => [...prev, newSection.trim()]);
-                        setNewSection('');
-                      }
-                    }}
-                    className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!newSection.trim()) return;
-                      setSections((prev) => [...prev, newSection.trim()]);
-                      setNewSection('');
-                    }}
-                    className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm"
-                  >
-                    + Section
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 border-t flex-shrink-0 flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowModal(false);
-                  resetForm();
-                }}
-                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : editingType ? 'Update Template' : 'Create Template'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-});
-
-function formatAuditTimestamp(val) {
-  if (val == null) return null;
-  if (typeof val.toDate === 'function') {
-    try {
-      return val.toDate().toLocaleDateString('en-IN');
-    } catch {
-      return null;
-    }
-  }
-  const d = new Date(val);
-  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-IN');
-}
-
-function AuditDetail({ audit, companyId, currentUser, employees = [], onClose, showSuccess, showError }) {
-  const [checklist, setChecklist] = useState(() => (audit.checklist || []).map(normalizeChecklistItem));
-  const [saving, setSaving] = useState(false);
-  const [managerComment, setManagerComment] = useState(audit.managerComments || '');
-  const [detailTab, setDetailTab] = useState('overview');
-  const [ownerSearch, setOwnerSearch] = useState({});
-  const [showOwnerDropdown, setShowOwnerDropdown] = useState({});
-  const ownerRefs = useRef({});
-
-  const isReadOnly =
-    audit.status === 'Submitted' || audit.status === 'Under Review' || audit.status === 'Closed';
-
-  useEffect(() => {
-    setChecklist((audit.checklist || []).map(normalizeChecklistItem));
-    setManagerComment(audit.managerComments || '');
-    setDetailTab('overview');
-    setOwnerSearch({});
-    setShowOwnerDropdown({});
-  }, [audit.id]);
-
-  useEffect(() => {
-    const handleClick = (e) => {
-      Object.keys(ownerRefs.current).forEach((itemId) => {
-        const node = ownerRefs.current[itemId];
-        if (node && !node.contains(e.target)) {
-          setShowOwnerDropdown((prev) => ({ ...prev, [itemId]: false }));
-          setOwnerSearch((prev) => ({ ...prev, [itemId]: undefined }));
-        }
-      });
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
-  const completedCount = useMemo(() => checklist.filter((i) => itemFullyAnswered(i)).length, [checklist]);
-
-  const findings = useMemo(() => checklist.filter((i) => i.yesNoResponse === 'No'), [checklist]);
-  const actionItems = useMemo(() => findings.filter((i) => i.ownerName), [findings]);
-  const resolvedItems = useMemo(() => actionItems.filter((i) => i.resolved === true), [actionItems]);
-
-  const updateItemResponse = (id, field, value) => {
-    setChecklist((prev) => prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
-  };
-
-  const handleSaveDraft = async () => {
-    try {
-      setSaving(true);
-      const payload = {
-        checklist,
-        completedItems: completedCount,
-        status: audit.status === 'Assigned' ? 'In Progress' : audit.status,
-        lastSavedAt: serverTimestamp(),
-        lastSavedBy: currentUser?.email || '',
-      };
-      if (audit.status === 'Submitted' || audit.status === 'Under Review' || audit.status === 'Closed') {
-        payload.managerComments = managerComment;
-      }
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), payload);
-      showSuccess('Draft saved!');
-    } catch (e) {
-      showError(`Save failed: ${e.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSubmit = async () => {
-    const requiredIncomplete = checklist.filter((i) => i.required && !itemFullyAnswered(i));
-    if (requiredIncomplete.length > 0) {
-      showError(
-        `Complete all required items. ${requiredIncomplete.length} items need both Yes/No and Rating.`,
-      );
-      return;
-    }
-    try {
-      setSaving(true);
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
-        checklist,
-        completedItems: completedCount,
-        status: 'Submitted',
-        submittedAt: serverTimestamp(),
-        submittedBy: currentUser?.email || '',
-        auditorSignature: currentUser?.email || '',
-      });
-      showSuccess('Audit submitted!');
-      onClose();
-    } catch (e) {
-      showError(`Submit failed: ${e.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleClose = async () => {
-    try {
-      setSaving(true);
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
-        checklist,
-        status: 'Closed',
-        closedAt: serverTimestamp(),
-        closedBy: currentUser?.email || '',
-        managerComments: managerComment,
-        resolvedCount: resolvedItems.length,
-        totalActionItems: actionItems.length,
-      });
-      showSuccess('Audit closed successfully!');
-      onClose();
-    } catch (e) {
-      showError(`Failed: ${e.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSendBack = async () => {
-    try {
-      setSaving(true);
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
-        checklist,
-        status: 'In Progress',
-        managerComments: managerComment,
-        sentBackAt: serverTimestamp(),
-        sentBackBy: currentUser?.email || '',
-      });
-      showSuccess('Sent back to auditor');
-      onClose();
-    } catch (e) {
-      showError(`Failed: ${e.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const sections = [...new Set(checklist.map((i) => i.section))];
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
-        <div className="flex items-start justify-between p-6 border-b flex-shrink-0">
-          <div>
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <h2 className="text-lg font-semibold text-gray-800">{audit.title || audit.auditTypeName}</h2>
-              {audit.auditRefId ? (
-                <span className="text-xs font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{audit.auditRefId}</span>
-              ) : null}
-              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_COLORS[audit.status] || STATUS_COLORS.Assigned}`}>
-                {audit.status}
-              </span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <p className="text-xs text-gray-400">
-                {audit.branch || audit.location || '—'} · End: {audit.endDate || audit.dueDate || 'Not set'} · Auditor:{' '}
-                {audit.auditorName || '—'}
-              </p>
-              {audit.category && <span className="text-xs text-gray-400">{audit.category}</span>}
-            </div>
-            <div className="mt-2">
-              <p className="text-xs text-gray-400 mb-1.5">Audit Team</p>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {audit.auditorName && (
-                  <div className="flex items-center gap-1.5 bg-[#E8F5F5] px-2.5 py-1 rounded-full">
-                    <div className="w-4 h-4 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
-                      {audit.auditorName?.charAt(0)}
-                    </div>
-                    <span className="text-xs text-[#1B6B6B] font-medium">{audit.auditorName}</span>
-                    <span className="text-xs text-[#1B6B6B]/60">Lead</span>
-                  </div>
-                )}
-                {(audit.teamMembers || []).map((m) => (
-                  <div
-                    key={m.id}
-                    className="flex items-center gap-1.5 bg-gray-100 px-2.5 py-1 rounded-full"
-                  >
-                    <div className="w-4 h-4 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold">
-                      {m.fullName?.charAt(0)}
-                    </div>
-                    <span className="text-xs text-gray-600">{m.fullName}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
-            ✕
-          </button>
-        </div>
-
-        <div className="px-6 py-3 border-b border-gray-50 flex-shrink-0">
-          <div className="flex items-center justify-between mb-1.5">
-            <p className="text-xs text-gray-500">Progress</p>
-            <p className="text-xs font-medium text-gray-700">
-              {completedCount} / {checklist.length} items
-            </p>
-          </div>
-          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[#1B6B6B] rounded-full transition-all"
-              style={{
-                width: checklist.length > 0 ? `${Math.round((completedCount / checklist.length) * 100)}%` : '0%',
-              }}
-            />
-          </div>
-        </div>
-
-        {(audit.status === 'Submitted' || audit.status === 'Under Review' || audit.status === 'Closed') && (
-          <div className="px-6 pt-4 pb-0 border-b border-gray-100 flex-shrink-0">
-            <div className="flex gap-1">
-              {[
-                { id: 'overview', label: '📊 Overview' },
-                { id: 'findings', label: `⚠️ Findings (${findings.length})` },
-                { id: 'actions', label: `✅ Action Items (${actionItems.length})` },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setDetailTab(tab.id)}
-                  className={`px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${
-                    detailTab === tab.id
-                      ? 'border-[#1B6B6B] text-[#1B6B6B] bg-[#E8F5F5]'
-                      : 'border-transparent text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {(audit.status === 'Assigned' || audit.status === 'In Progress') && (
-            <div className="space-y-6">
-              {sections.map((section) => (
-                <div key={section}>
-                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 pb-2 border-b border-gray-100">{section}</h4>
-                  <div className="space-y-4">
-                    {checklist
-                      .filter((i) => i.section === section)
-                      .map((item, idx) => (
-                        <div
-                          key={item.id}
-                          className={`p-4 rounded-xl border transition-colors ${
-                            item.yesNoResponse != null &&
-                            item.yesNoResponse !== '' &&
-                            typeof item.rating === 'number' &&
-                            item.rating >= 1 &&
-                            item.rating <= 5
-                              ? 'bg-green-50 border-green-100'
-                              : 'bg-white border-gray-100'
-                          }`}
-                        >
-                          <div className="flex items-start gap-2 min-w-0 mb-3">
-                            <span className="text-xs font-medium text-gray-400 mt-0.5 w-5 flex-shrink-0">{idx + 1}.</span>
-                            <p className="text-sm font-medium text-gray-800">
-                              {item.question}
-                              {item.required && <span className="text-red-400 ml-1">*</span>}
-                            </p>
-                          </div>
-
-                          <div className="ml-7 space-y-3">
-                            <div>
-                              <p className="text-xs text-gray-400 mb-1.5 font-medium">Compliance Check</p>
-                              <div className="flex gap-2">
-                                {['Yes', 'No', 'N/A'].map((opt) => (
-                                  <button
-                                    key={opt}
-                                    type="button"
-                                    onClick={() => updateItemResponse(item.id, 'yesNoResponse', opt)}
-                                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                                      item.yesNoResponse === opt
-                                        ? opt === 'Yes'
-                                          ? 'bg-green-500 text-white'
-                                          : opt === 'No'
-                                            ? 'bg-red-500 text-white'
-                                            : 'bg-gray-500 text-white'
-                                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                    }`}
-                                  >
-                                    {opt}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div>
-                              <p className="text-xs text-gray-400 mb-1.5 font-medium">Quality Rating</p>
-                              <div className="flex gap-2 items-center flex-wrap">
-                                {[1, 2, 3, 4, 5].map((n) => (
-                                  <button
-                                    key={n}
-                                    type="button"
-                                    onClick={() => updateItemResponse(item.id, 'rating', n)}
-                                    className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors cursor-pointer ${
-                                      item.rating === n ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                    }`}
-                                  >
-                                    {n}
-                                  </button>
-                                ))}
-                                {item.rating != null && (
-                                  <span className="text-xs text-gray-400 ml-1">
-                                    {item.rating === 1 && 'Poor'}
-                                    {item.rating === 2 && 'Fair'}
-                                    {item.rating === 3 && 'Good'}
-                                    {item.rating === 4 && 'Very Good'}
-                                    {item.rating === 5 && 'Excellent'}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div>
-                              <input
-                                value={item.remarks || ''}
-                                onChange={(e) => updateItemResponse(item.id, 'remarks', e.target.value)}
-                                placeholder="Remarks / observations..."
-                                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                              />
-                            </div>
-
-                            {item.yesNoResponse === 'No' && (
-                              <div className="p-3 bg-red-50 rounded-lg border border-red-100 space-y-2">
-                                <p className="text-xs font-medium text-red-700">⚠️ Non-compliant — assign owner</p>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div
-                                    ref={(el) => {
-                                      ownerRefs.current[item.id] = el;
-                                    }}
-                                    className="relative"
-                                  >
-                                    <label className="text-xs text-gray-400 block mb-1">Owner (responsible to fix)</label>
-                                    <input
-                                      type="text"
-                                      value={
-                                        ownerSearch[item.id] !== undefined ? ownerSearch[item.id] : item.ownerName || ''
-                                      }
-                                      disabled={isReadOnly}
-                                      placeholder="Search employee..."
-                                      onChange={(e) => {
-                                        const v = e.target.value;
-                                        setOwnerSearch((prev) => ({ ...prev, [item.id]: v }));
-                                        setShowOwnerDropdown((prev) => ({ ...prev, [item.id]: true }));
-                                        if (!v) {
-                                          setChecklist((prev) =>
-                                            prev.map((it) =>
-                                              it.id !== item.id
-                                                ? it
-                                                : { ...it, ownerName: '', ownerId: '', ownerEmail: '' },
-                                            ),
-                                          );
-                                        }
-                                      }}
-                                      onFocus={() => setShowOwnerDropdown((prev) => ({ ...prev, [item.id]: true }))}
-                                      className="w-full border rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:border-red-300 disabled:bg-gray-50"
-                                    />
-                                    {showOwnerDropdown[item.id] && !isReadOnly && (
-                                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-40 overflow-y-auto">
-                                        {(employees || [])
-                                          .filter(
-                                            (e) =>
-                                              e.status === 'Active' &&
-                                              (!ownerSearch[item.id] ||
-                                                e.fullName?.toLowerCase().includes(ownerSearch[item.id].toLowerCase())),
-                                          )
-                                          .slice(0, 8)
-                                          .map((emp) => (
-                                            <div
-                                              key={emp.id}
-                                              role="button"
-                                              tabIndex={0}
-                                              onMouseDown={(e) => {
-                                                e.preventDefault();
-                                                setChecklist((prev) =>
-                                                  prev.map((it) =>
-                                                    it.id !== item.id
-                                                      ? it
-                                                      : {
-                                                          ...it,
-                                                          ownerName: emp.fullName || '',
-                                                          ownerId: emp.id,
-                                                          ownerEmail: emp.email || '',
-                                                        },
-                                                  ),
-                                                );
-                                                setOwnerSearch((prev) => ({ ...prev, [item.id]: undefined }));
-                                                setShowOwnerDropdown((prev) => ({ ...prev, [item.id]: false }));
-                                              }}
-                                              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
-                                            >
-                                              <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                                                {emp.fullName?.charAt(0)}
-                                              </div>
-                                              <div className="min-w-0">
-                                                <p className="text-xs font-medium text-gray-800 truncate">{emp.fullName}</p>
-                                                {(emp.designation || emp.department) && (
-                                                  <p className="text-xs text-gray-400 truncate">
-                                                    {emp.designation || emp.department}
-                                                  </p>
-                                                )}
-                                              </div>
-                                            </div>
-                                          ))}
-                                        {(employees || []).filter(
-                                          (e) =>
-                                            e.status === 'Active' &&
-                                            (!ownerSearch[item.id] ||
-                                              e.fullName?.toLowerCase().includes(ownerSearch[item.id].toLowerCase())),
-                                        ).length === 0 && (
-                                          <div className="px-3 py-3 text-center text-xs text-gray-400">No employees found</div>
-                                        )}
-                                      </div>
-                                    )}
-                                    {item.ownerName && !showOwnerDropdown[item.id] && (
-                                      <div className="mt-1 flex items-center gap-1">
-                                        <span className="text-xs text-green-600">✓ {item.ownerName}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div>
-                                    <label className="text-xs text-gray-400 block mb-1">Target Fix Date</label>
-                                    <input
-                                      type="date"
-                                      value={item.targetDate || ''}
-                                      disabled={isReadOnly}
-                                      onChange={(e) => updateItemResponse(item.id, 'targetDate', e.target.value)}
-                                      className="w-full border rounded-lg px-2 py-2 text-xs bg-white focus:outline-none disabled:bg-gray-50"
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {(audit.status === 'Submitted' || audit.status === 'Under Review' || audit.status === 'Closed') && (
-            <>
-              {detailTab === 'overview' && (
-                <div className="space-y-5">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-white border border-gray-100 rounded-xl p-4 text-center">
-                      <p className="text-2xl font-bold text-gray-800">{checklist.length}</p>
-                      <p className="text-xs text-gray-400 mt-1">Total Items</p>
-                    </div>
-                    <div className="bg-green-50 border border-green-100 rounded-xl p-4 text-center">
-                      <p className="text-2xl font-bold text-green-700">
-                        {checklist.filter((i) => i.yesNoResponse === 'Yes').length}
-                      </p>
-                      <p className="text-xs text-green-600 mt-1">Compliant</p>
-                    </div>
-                    <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-center">
-                      <p className="text-2xl font-bold text-red-700">{findings.length}</p>
-                      <p className="text-xs text-red-600 mt-1">Non-compliant</p>
-                    </div>
-                  </div>
-
-                  {(() => {
-                    const rated = checklist.filter((i) => i.rating != null && typeof i.rating === 'number');
-                    const avg =
-                      rated.length > 0
-                        ? (rated.reduce((sum, i) => sum + i.rating, 0) / rated.length).toFixed(1)
-                        : null;
-                    if (!avg) return null;
-                    const rounded = Math.round(Number(avg));
-                    return (
-                      <div className="bg-white border border-gray-100 rounded-xl p-4">
-                        <p className="text-xs text-gray-400 mb-2">Average Quality Rating</p>
-                        <div className="flex items-center gap-3">
-                          <p className="text-3xl font-bold text-gray-800">{avg}</p>
-                          <div>
-                            <div className="flex gap-0.5">
-                              {[1, 2, 3, 4, 5].map((n) => (
-                                <div
-                                  key={n}
-                                  className={`w-6 h-6 rounded text-center text-xs leading-6 font-bold ${
-                                    n <= rounded ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-300'
-                                  }`}
-                                >
-                                  {n}
-                                </div>
-                              ))}
-                            </div>
-                            <p className="text-xs text-gray-400 mt-1">out of 5.0</p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  <div className="bg-white border border-gray-100 rounded-xl p-4 space-y-3">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Audit Details</p>
-                    {[
-                      { label: 'Reference', value: audit.auditRefId || '—' },
-                      { label: 'Template', value: audit.auditTypeName },
-                      { label: 'Category', value: audit.auditCategory },
-                      { label: 'Workforce category', value: audit.category },
-                      { label: 'Risk Level', value: audit.riskLevel },
-                      { label: 'Branch', value: audit.branch },
-                      { label: 'Location', value: audit.location },
-                      { label: 'Department', value: audit.department },
-                      { label: 'Lead Auditor', value: audit.auditorName },
-                      { label: 'Start Date', value: audit.startDate },
-                      { label: 'End Date', value: audit.endDate || audit.dueDate },
-                      { label: 'Submitted', value: formatAuditTimestamp(audit.submittedAt) },
-                    ]
-                      .filter((r) => r.value)
-                      .map((row) => (
-                        <div key={row.label} className="flex items-center justify-between">
-                          <p className="text-xs text-gray-400">{row.label}</p>
-                          <p className="text-xs font-medium text-gray-700">{row.value}</p>
-                        </div>
-                      ))}
-                  </div>
-
-                  {(audit.teamMembers?.length ?? 0) > 0 && (
-                    <div className="bg-white border border-gray-100 rounded-xl p-4">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Team</p>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
-                            {audit.auditorName?.charAt(0)}
-                          </div>
-                          <p className="text-sm text-gray-700 flex-1">{audit.auditorName}</p>
-                          <span className="text-xs bg-[#E8F5F5] text-[#1B6B6B] px-2 py-0.5 rounded-full font-medium">Lead</span>
-                        </div>
-                        {(audit.teamMembers || []).map((m) => (
-                          <div key={m.id} className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-white text-xs font-bold">
-                              {m.fullName?.charAt(0)}
-                            </div>
-                            <p className="text-sm text-gray-700 flex-1">{m.fullName}</p>
-                            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Member</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-2">Manager Comments</label>
-                    <textarea
-                      value={managerComment}
-                      onChange={(e) => setManagerComment(e.target.value)}
-                      disabled={audit.status === 'Closed'}
-                      rows={3}
-                      placeholder="Add review comments or instructions..."
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {detailTab === 'findings' && (
-                <div className="space-y-3">
-                  {findings.length === 0 ? (
-                    <div className="text-center py-12">
-                      <p className="text-3xl mb-2">✅</p>
-                      <p className="text-sm font-medium text-gray-700">No findings</p>
-                      <p className="text-xs text-gray-400">All checklist items passed</p>
-                    </div>
-                  ) : (
-                    findings.map((item) => (
-                      <div key={item.id} className="bg-red-50 border border-red-100 rounded-xl p-4">
-                        <div className="flex items-start justify-between gap-2 mb-3">
-                          <p className="text-sm font-medium text-gray-800">{item.question}</p>
-                          <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
-                            ❌ Non-compliant
-                          </span>
-                        </div>
-                        {item.remarks ? (
-                          <div className="mb-3">
-                            <p className="text-xs text-gray-400 mb-1">Auditor remarks</p>
-                            <p className="text-sm text-gray-700 bg-white rounded-lg px-3 py-2 border border-red-100">{item.remarks}</p>
-                          </div>
-                        ) : null}
-                        <div className="flex items-center gap-3 flex-wrap">
-                          {item.ownerName ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-gray-400">Owner:</span>
-                              <span className="text-xs font-medium text-gray-700 bg-white px-2 py-0.5 rounded-full border border-gray-200">
-                                👤 {item.ownerName}
-                              </span>
-                            </div>
-                          ) : null}
-                          {item.targetDate ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-gray-400">Fix by:</span>
-                              <span
-                                className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                                  new Date(item.targetDate) < new Date()
-                                    ? 'bg-red-100 text-red-700 border-red-200'
-                                    : 'bg-white text-gray-700 border-gray-200'
-                                }`}
-                              >
-                                📅 {item.targetDate}
-                              </span>
-                            </div>
-                          ) : null}
-                          {item.rating != null ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-gray-400">Rating:</span>
-                              <span className="text-xs font-medium text-gray-700 bg-white px-2 py-0.5 rounded-full border border-gray-200">
-                                ⭐ {item.rating}/5
-                              </span>
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-
-              {detailTab === 'actions' && (
-                <div className="space-y-3">
-                  {actionItems.length > 0 && (
-                    <div className="bg-white border border-gray-100 rounded-xl p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs text-gray-500">Resolution Progress</p>
-                        <p className="text-xs font-medium text-gray-700">
-                          {resolvedItems.length} / {actionItems.length} resolved
-                        </p>
-                      </div>
-                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-green-500 rounded-full transition-all"
-                          style={{
-                            width:
-                              actionItems.length > 0
-                                ? `${Math.round((resolvedItems.length / actionItems.length) * 100)}%`
-                                : '0%',
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {actionItems.length === 0 ? (
-                    <div className="text-center py-12">
-                      <p className="text-3xl mb-2">📋</p>
-                      <p className="text-sm font-medium text-gray-700">No action items</p>
-                      <p className="text-xs text-gray-400">No non-compliant items with owners assigned</p>
-                    </div>
-                  ) : (
-                    actionItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className={`border rounded-xl p-4 transition-all ${
-                          item.resolved ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <p className="text-sm font-medium text-gray-800 flex-1">{item.question}</p>
-                          {audit.status !== 'Closed' ? (
-                            <button
-                              type="button"
-                              onClick={() => updateItemResponse(item.id, 'resolved', !item.resolved)}
-                              className={`text-xs px-3 py-1 rounded-full font-medium flex-shrink-0 transition-colors ${
-                                item.resolved
-                                  ? 'bg-green-500 text-white'
-                                  : 'bg-gray-100 text-gray-500 hover:bg-green-50 hover:text-green-700'
-                              }`}
-                            >
-                              {item.resolved ? '✅ Resolved' : 'Mark Resolved'}
-                            </button>
-                          ) : (
-                            <span
-                              className={`text-xs px-3 py-1 rounded-full font-medium ${
-                                item.resolved ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                              }`}
-                            >
-                              {item.resolved ? '✅ Resolved' : '⏳ Pending'}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-gray-400">Owner:</span>
-                            <span className="text-xs font-medium text-gray-700">👤 {item.ownerName}</span>
-                          </div>
-                          {item.targetDate ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-gray-400">Fix by:</span>
-                              <span
-                                className={`text-xs font-medium ${
-                                  !item.resolved && new Date(item.targetDate) < new Date() ? 'text-red-600' : 'text-gray-700'
-                                }`}
-                              >
-                                {!item.resolved && new Date(item.targetDate) < new Date() ? '⚠️ ' : ''}
-                                {item.targetDate}
-                              </span>
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))
-                  )}
-
-                  {audit.status !== 'Closed' && actionItems.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleSaveDraft}
-                      disabled={saving}
-                      className="w-full py-2.5 border border-[#1B6B6B] text-[#1B6B6B] rounded-xl text-sm font-medium hover:bg-[#E8F5F5] disabled:opacity-50"
-                    >
-                      {saving ? 'Saving...' : '💾 Save Progress'}
-                    </button>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="p-6 border-t flex-shrink-0">
-          {(audit.status === 'Assigned' || audit.status === 'In Progress') && (
-            <div className="flex gap-3">
-              <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                disabled={saving}
-                className="flex-1 py-2.5 border border-[#1B6B6B] text-[#1B6B6B] rounded-xl text-sm font-medium disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : '💾 Save Draft'}
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
-              >
-                {saving ? 'Submitting...' : '📤 Submit'}
-              </button>
-            </div>
-          )}
-
-          {(audit.status === 'Submitted' || audit.status === 'Under Review') && (
-            <div className="space-y-2">
-              {actionItems.length > 0 && resolvedItems.length < actionItems.length && (
-                <p className="text-xs text-amber-600 text-center">
-                  ⚠️ {actionItems.length - resolvedItems.length} action item
-                  {actionItems.length - resolvedItems.length !== 1 ? 's' : ''} pending resolution before closing
-                </p>
-              )}
-              <div className="flex gap-3">
-                <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSendBack}
-                  disabled={saving}
-                  className="flex-1 py-2.5 border border-amber-400 text-amber-600 rounded-xl text-sm font-medium disabled:opacity-50"
-                >
-                  ↩ Send Back
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  disabled={
-                    saving ||
-                    (actionItems.length > 0 && resolvedItems.length < actionItems.length)
-                  }
-                  title={
-                    actionItems.length > 0 && resolvedItems.length < actionItems.length
-                      ? 'Resolve all action items first'
-                      : ''
-                  }
-                  className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Closing...' : '✅ Close Audit'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {audit.status === 'Closed' && (
-            <div className="space-y-2">
-              <div className="p-3 bg-green-50 border border-green-100 rounded-xl text-center">
-                <p className="text-xs font-medium text-green-700">
-                  ✅ Audit closed by {audit.closedBy || 'manager'}
-                </p>
-              </div>
-              <button type="button" onClick={onClose} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
-                Close
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const EMPTY_ASSIGN_AUDIT_FORM = {
-  auditTypeId: '',
-  category: '',
-  location: '',
-  branch: '',
-  department: '',
-  auditorId: '',
-  auditorName: '',
-  auditorEmail: '',
-  teamMembers: [],
-  startDate: '',
-  endDate: '',
-  notes: '',
-};
 
 function AuditCalendar({ audits, onClose, onSelectAudit }) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -2099,25 +769,1498 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
   );
 }
 
-function AuditList({
-  audits,
+function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSuccess, showError }) {
+  const [showModal, setShowModal] = useState(false);
+  const [editingType, setEditingType] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    auditCategory: '',
+    name: '',
+    description: '',
+    color: AUDIT_COLORS[0],
+    riskLevel: 'Medium',
+  });
+  const [checklistItems, setChecklistItems] = useState([]);
+  const [sections, setSections] = useState(['General']);
+  const [newSection, setNewSection] = useState('');
+
+  const resetForm = () => {
+    setForm({ auditCategory: '', name: '', description: '', color: AUDIT_COLORS[0], riskLevel: 'Medium' });
+    setChecklistItems([]);
+    setSections(['General']);
+    setNewSection('');
+    setEditingType(null);
+  };
+
+  const openEdit = (type) => {
+    setEditingType(type);
+    setForm({
+      auditCategory: type.auditCategory || '',
+      name: type.name || '',
+      description: type.description || '',
+      color: type.color || AUDIT_COLORS[0],
+      riskLevel: type.riskLevel || 'Medium',
+    });
+    setChecklistItems(type.checklistItems || []);
+    const sects = [...new Set((type.checklistItems || []).map((i) => i.section))];
+    setSections(sects.length > 0 ? sects : ['General']);
+    setShowModal(true);
+  };
+
+  const addItem = (section) => {
+    setChecklistItems((prev) => [
+      ...prev,
+      { id: 'item_' + Date.now(), section, question: '', riskLevel: 'Medium', order: prev.length },
+    ]);
+  };
+
+  const updateItem = (id, field, value) => {
+    setChecklistItems((prev) => prev.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
+  };
+
+  const removeItem = (id) => {
+    setChecklistItems((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const handleSave = async () => {
+    if (!form.auditCategory) {
+      showError('Select Internal or External');
+      return;
+    }
+    if (!form.name.trim()) {
+      showError('Enter template name');
+      return;
+    }
+    try {
+      setSaving(true);
+      const data = {
+        auditCategory: form.auditCategory,
+        name: form.name.trim(),
+        description: form.description.trim(),
+        color: form.color,
+        riskLevel: form.riskLevel,
+        checklistItems,
+        updatedAt: new Date(),
+        updatedBy: currentUser?.email || '',
+      };
+      if (editingType) {
+        await updateDoc(doc(db, 'companies', companyId, 'auditTypes', editingType.id), data);
+        showSuccess('Template updated!');
+      } else {
+        await addDoc(collection(db, 'companies', companyId, 'auditTypes'), {
+          ...data,
+          createdAt: new Date(),
+          createdBy: currentUser?.email || '',
+        });
+        showSuccess('Template created!');
+      }
+      setShowModal(false);
+      resetForm();
+    } catch (e) {
+      showError('Failed: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (type) => {
+    if (!window.confirm(`Delete "${type.name}"?`)) return;
+    try {
+      await deleteDoc(doc(db, 'companies', companyId, 'auditTypes', type.id));
+      showSuccess('Template deleted');
+    } catch (e) {
+      showError('Failed to delete');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} role="presentation" />
+      <div className="relative bg-white w-full max-w-2xl h-full flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-[#E8F5F5] rounded-xl flex items-center justify-center text-lg">⚙️</div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-800">Audit Settings</h2>
+              <p className="text-xs text-gray-400">
+                {auditTypes.length} template{auditTypes.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
+            ✕
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold text-gray-700">Audit Templates</p>
+            <button
+              type="button"
+              onClick={() => {
+                resetForm();
+                setShowModal(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#1B6B6B] text-white rounded-xl text-xs font-medium hover:bg-[#155858]"
+            >
+              + Add Template
+            </button>
+          </div>
+
+          {auditTypes.length === 0 ? (
+            <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-2xl">
+              <p className="text-3xl mb-3">📋</p>
+              <p className="text-sm font-medium text-gray-600 mb-1">No templates yet</p>
+              <p className="text-xs text-gray-400 mb-4">Create your first audit template to get started</p>
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  setShowModal(true);
+                }}
+                className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium"
+              >
+                + Create Template
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {auditTypes.map((type) => (
+                <div key={type.id} className="bg-white border border-gray-100 rounded-2xl p-4 hover:shadow-sm transition-all">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div
+                        className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center text-white font-bold text-base"
+                        style={{ background: type.color || '#8B5CF6' }}
+                      >
+                        {type.name?.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800">{type.name}</p>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              type.auditCategory === 'External' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                            }`}
+                          >
+                            {type.auditCategory === 'External' ? '🌐' : '🏢'} {type.auditCategory}
+                          </span>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              type.riskLevel === 'Critical'
+                                ? 'bg-red-100 text-red-700'
+                                : type.riskLevel === 'High'
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : type.riskLevel === 'Medium'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-green-100 text-green-700'
+                            }`}
+                          >
+                            {type.riskLevel === 'Critical' && '🔴 '}
+                            {type.riskLevel === 'High' && '🟠 '}
+                            {type.riskLevel === 'Medium' && '🟡 '}
+                            {type.riskLevel === 'Low' && '🟢 '}
+                            {type.riskLevel || 'Medium'}
+                          </span>
+                          <span className="text-xs text-gray-400">{(type.checklistItems || []).length} items</span>
+                        </div>
+                        {type.description && <p className="text-xs text-gray-400 mt-1 truncate">{type.description}</p>}
+                        <div className="flex gap-1 mt-2 flex-wrap">
+                          {[...new Set((type.checklistItems || []).map((i) => i.section))].map((s) => (
+                            <span key={s} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">
+                              {s} ({(type.checklistItems || []).filter((i) => i.section === s).length})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-1 ml-2">
+                      <button type="button" onClick={() => openEdit(type)} className="px-3 py-1.5 text-xs text-[#1B6B6B] hover:bg-[#E8F5F5] rounded-lg">
+                        Edit
+                      </button>
+                      <button type="button" onClick={() => handleDelete(type)} className="px-3 py-1.5 text-xs text-red-400 hover:bg-red-50 rounded-lg">
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { setShowModal(false); resetForm(); }} role="presentation" />
+          <div className="relative bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
+              <h2 className="text-lg font-semibold text-gray-800">{editingType ? 'Edit Template' : 'New Audit Template'}</h2>
+              <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Audit Category *</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {['Internal', 'External'].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, auditCategory: cat }))}
+                      className={`py-3 px-4 rounded-xl border-2 text-sm font-medium transition-all ${
+                        form.auditCategory === cat
+                          ? 'border-[#1B6B6B] bg-[#E8F5F5] text-[#1B6B6B]'
+                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      {cat === 'Internal' ? '🏢 Internal' : '🌐 External'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Template Name *</label>
+                <input
+                  value={form.name}
+                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. Cash Handling Audit"
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Description (optional)</label>
+                <input
+                  value={form.description}
+                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                  placeholder="Brief description..."
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Color</label>
+                <div className="flex gap-2 flex-wrap">
+                  {AUDIT_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, color }))}
+                      className={`w-8 h-8 rounded-full transition-all ${
+                        form.color === color ? 'scale-125 ring-2 ring-offset-2 ring-gray-400' : 'hover:scale-110'
+                      }`}
+                      style={{ background: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Risk Level</label>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { value: 'Low', icon: '🟢', cls: 'border-green-200 text-green-700', active: 'bg-green-500 border-green-500 text-white' },
+                    { value: 'Medium', icon: '🟡', cls: 'border-amber-200 text-amber-700', active: 'bg-amber-500 border-amber-500 text-white' },
+                    { value: 'High', icon: '🟠', cls: 'border-orange-200 text-orange-700', active: 'bg-orange-500 border-orange-500 text-white' },
+                    { value: 'Critical', icon: '🔴', cls: 'border-red-200 text-red-700', active: 'bg-red-500 border-red-500 text-white' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, riskLevel: opt.value }))}
+                      className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all ${
+                        form.riskLevel === opt.value ? opt.active : `bg-white ${opt.cls} hover:opacity-80`
+                      }`}
+                    >
+                      {opt.icon} {opt.value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Checklist</label>
+                  <span className="text-xs text-gray-400">{checklistItems.length} items</span>
+                </div>
+
+                {sections.map((section) => (
+                  <div key={section} className="mb-5">
+                    <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
+                      <h4 className="text-sm font-semibold text-gray-700">{section}</h4>
+                      <button type="button" onClick={() => addItem(section)} className="text-xs text-[#1B6B6B] hover:underline">
+                        + Add item
+                      </button>
+                    </div>
+
+                    {checklistItems
+                      .filter((i) => i.section === section)
+                      .map((item) => (
+                        <div key={item.id} className="flex gap-2 mb-2 p-3 bg-gray-50 rounded-xl items-start">
+                          <div className="flex-1 space-y-2">
+                            <input
+                              value={item.question}
+                              onChange={(e) => updateItem(item.id, 'question', e.target.value)}
+                              placeholder="Checklist item..."
+                              className="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                            />
+                            <select
+                              value={item.riskLevel || 'Medium'}
+                              onChange={(e) => updateItem(item.id, 'riskLevel', e.target.value)}
+                              className={`text-xs border rounded-lg px-2 py-1.5 font-medium ${
+                                item.riskLevel === 'Critical'
+                                  ? 'bg-red-50 border-red-200 text-red-700'
+                                  : item.riskLevel === 'High'
+                                    ? 'bg-orange-50 border-orange-200 text-orange-700'
+                                    : item.riskLevel === 'Medium'
+                                      ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                      : 'bg-green-50 border-green-200 text-green-700'
+                              }`}
+                            >
+                              <option value="Low">🟢 Low</option>
+                              <option value="Medium">🟡 Medium</option>
+                              <option value="High">🟠 High</option>
+                              <option value="Critical">🔴 Critical</option>
+                            </select>
+                          </div>
+                          <button type="button" onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 mt-2 flex-shrink-0">
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+
+                    {checklistItems.filter((i) => i.section === section).length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => addItem(section)}
+                        className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors"
+                      >
+                        + Add first item
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                <div className="flex gap-2">
+                  <input
+                    value={newSection}
+                    onChange={(e) => setNewSection(e.target.value)}
+                    placeholder="New section name..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newSection.trim()) {
+                        setSections((prev) => [...prev, newSection.trim()]);
+                        setNewSection('');
+                      }
+                    }}
+                    className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newSection.trim()) return;
+                      setSections((prev) => [...prev, newSection.trim()]);
+                      setNewSection('');
+                    }}
+                    className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm"
+                  >
+                    + Section
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t flex-shrink-0 flex gap-3">
+              <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : editingType ? 'Update Template' : 'Create Template'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function AssignAuditModal({
   auditTypes,
   company,
-  companyId,
-  currentUser,
   employees,
+  assignForm,
+  setAssignForm,
+  leadSearch,
+  setLeadSearch,
+  showLeadDrop,
+  setShowLeadDrop,
+  teamSearch,
+  setTeamSearch,
+  showTeamDrop,
+  setShowTeamDrop,
+  leadRef,
+  teamRef,
   saving,
-  setSaving,
-  showSuccess,
-  showError,
-  setShowSettings,
-  setSelectedAudit,
-  userRole,
-  selectedAuditId,
+  onClose,
+  onSubmit,
 }) {
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+        <div className="px-6 py-5 border-b flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-[#E8F5F5] rounded-xl flex items-center justify-center text-lg">🔍</div>
+              <div>
+                <h2 className="text-base font-semibold text-gray-800">Assign Audit</h2>
+                <p className="text-xs text-gray-400">Schedule an audit for an auditor</p>
+              </div>
+            </div>
+            <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Template</p>
+            <select
+              value={assignForm.auditTypeId}
+              onChange={(e) => setAssignForm((prev) => ({ ...prev, auditTypeId: e.target.value }))}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+            >
+              <option value="">Select template...</option>
+              {auditTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} — {t.auditCategory || 'Internal'} · {t.riskLevel || 'Medium'} Risk
+                </option>
+              ))}
+            </select>
+            {assignForm.auditTypeId &&
+              (() => {
+                const t = auditTypes.find((x) => x.id === assignForm.auditTypeId);
+                if (!t) return null;
+                return (
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        t.auditCategory === 'External' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                      }`}
+                    >
+                      {t.auditCategory === 'External' ? '🌐' : '🏢'} {t.auditCategory}
+                    </span>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        t.riskLevel === 'Critical'
+                          ? 'bg-red-100 text-red-700'
+                          : t.riskLevel === 'High'
+                            ? 'bg-orange-100 text-orange-700'
+                            : t.riskLevel === 'Medium'
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-green-100 text-green-700'
+                      }`}
+                    >
+                      {t.riskLevel || 'Medium'}
+                    </span>
+                    <span className="text-xs text-gray-400">{(t.checklistItems || []).length} checklist items</span>
+                  </div>
+                );
+              })()}
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Location</p>
+            <div className="space-y-3">
+              <select
+                value={assignForm.category}
+                onChange={(e) => setAssignForm((p) => ({ ...p, category: e.target.value }))}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+              >
+                <option value="">Select category...</option>
+                {(company?.categories || []).map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={assignForm.location}
+                onChange={(e) => setAssignForm((p) => ({ ...p, location: e.target.value }))}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+              >
+                <option value="">Select location...</option>
+                {(company?.locations || []).map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              <div className="grid grid-cols-2 gap-3">
+                <select
+                  value={assignForm.branch}
+                  onChange={(e) => setAssignForm((p) => ({ ...p, branch: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">Select branch...</option>
+                  {(company?.branches || []).map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={assignForm.department}
+                  onChange={(e) => setAssignForm((p) => ({ ...p, department: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="">Select dept...</option>
+                  {(company?.departments || []).map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Team</p>
+            <div className="space-y-3">
+              <div ref={leadRef} className="relative">
+                <label className="text-xs text-gray-500 block mb-1.5">Lead Auditor *</label>
+                <input
+                  type="text"
+                  value={assignForm.auditorId ? assignForm.auditorName : leadSearch}
+                  placeholder="Search auditor..."
+                  onChange={(e) => {
+                    setLeadSearch(e.target.value);
+                    setShowLeadDrop(true);
+                    if (!e.target.value) {
+                      setAssignForm((p) => ({ ...p, auditorId: '', auditorName: '', auditorEmail: '' }));
+                    }
+                  }}
+                  onFocus={() => {
+                    setLeadSearch('');
+                    setShowLeadDrop(true);
+                    setAssignForm((p) => ({ ...p, auditorId: '', auditorName: '', auditorEmail: '' }));
+                  }}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+                {showLeadDrop && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
+                    {employees
+                      .filter(
+                        (e) =>
+                          e.status === 'Active' &&
+                          !assignForm.teamMembers.some((m) => m.id === e.id) &&
+                          (!leadSearch || e.fullName?.toLowerCase().includes(leadSearch.toLowerCase())),
+                      )
+                      .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''))
+                      .slice(0, 8)
+                      .map((emp) => (
+                        <div
+                          key={emp.id}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setAssignForm((p) => ({
+                              ...p,
+                              auditorId: emp.id,
+                              auditorName: emp.fullName,
+                              auditorEmail: emp.email || '',
+                              teamMembers: p.teamMembers.filter((m) => m.id !== emp.id),
+                            }));
+                            setLeadSearch('');
+                            setShowLeadDrop(false);
+                          }}
+                          className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer border-b border-gray-50 last:border-0"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            {emp.fullName?.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
+                            <p className="text-xs text-gray-400 truncate">{emp.designation || emp.department || '—'}</p>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+                {assignForm.auditorId && (
+                  <div className="mt-2 flex items-center gap-2 p-2.5 bg-[#E8F5F5] rounded-xl">
+                    <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                      {assignForm.auditorName?.charAt(0)}
+                    </div>
+                    <p className="text-xs text-[#1B6B6B] font-medium flex-1">{assignForm.auditorName} — Lead Auditor</p>
+                    <button
+                      type="button"
+                      onClick={() => setAssignForm((p) => ({ ...p, auditorId: '', auditorName: '', auditorEmail: '' }))}
+                      className="text-[#1B6B6B]/40 hover:text-[#1B6B6B]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div ref={teamRef} className="relative">
+                <label className="text-xs text-gray-500 block mb-1.5">Team Members (optional)</label>
+                <input
+                  type="text"
+                  value={teamSearch}
+                  placeholder="Add team members..."
+                  onChange={(e) => {
+                    setTeamSearch(e.target.value);
+                    setShowTeamDrop(true);
+                  }}
+                  onFocus={() => setShowTeamDrop(true)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+                {showTeamDrop && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
+                    {employees
+                      .filter(
+                        (e) =>
+                          e.status === 'Active' &&
+                          e.id !== assignForm.auditorId &&
+                          !assignForm.teamMembers.some((m) => m.id === e.id) &&
+                          (!teamSearch || e.fullName?.toLowerCase().includes(teamSearch.toLowerCase())),
+                      )
+                      .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''))
+                      .slice(0, 8)
+                      .map((emp) => (
+                        <div
+                          key={emp.id}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setAssignForm((p) => ({
+                              ...p,
+                              teamMembers: [
+                                ...p.teamMembers,
+                                {
+                                  id: emp.id,
+                                  fullName: emp.fullName,
+                                  email: emp.email || '',
+                                  designation: emp.designation || emp.department || '',
+                                },
+                              ],
+                            }));
+                            setTeamSearch('');
+                            setShowTeamDrop(false);
+                          }}
+                          className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer border-b border-gray-50 last:border-0"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            {emp.fullName?.charAt(0)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
+                            <p className="text-xs text-gray-400 truncate">{emp.designation || emp.department || '—'}</p>
+                          </div>
+                          <span className="text-xs text-[#1B6B6B]">+ Add</span>
+                        </div>
+                      ))}
+                  </div>
+                )}
+                {assignForm.teamMembers.length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    {assignForm.teamMembers.map((m) => (
+                      <div key={m.id} className="flex items-center gap-2 p-2 bg-gray-50 border border-gray-100 rounded-xl">
+                        <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          {m.fullName?.charAt(0)}
+                        </div>
+                        <p className="text-xs font-medium text-gray-700 flex-1 truncate">{m.fullName}</p>
+                        <span className="text-xs text-gray-400">Member</span>
+                        <button
+                          type="button"
+                          onClick={() => setAssignForm((p) => ({ ...p, teamMembers: p.teamMembers.filter((x) => x.id !== m.id) }))}
+                          className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-red-100 text-gray-300 hover:text-red-500"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(assignForm.auditorId || assignForm.teamMembers.length > 0) && (
+                  <div className="mt-2 p-2.5 bg-gray-50 rounded-xl">
+                    <p className="text-xs text-gray-500">
+                      👥 Team of <strong>{1 + assignForm.teamMembers.length}</strong> — {assignForm.auditorName}
+                      {assignForm.teamMembers.length > 0 &&
+                        ` + ${assignForm.teamMembers.map((m) => m.fullName.split(' ')[0]).join(', ')}`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Schedule</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Start Date</label>
+                <input
+                  type="date"
+                  value={assignForm.startDate}
+                  onChange={(e) => setAssignForm((p) => ({ ...p, startDate: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">End Date *</label>
+                <input
+                  type="date"
+                  value={assignForm.endDate}
+                  onChange={(e) => setAssignForm((p) => ({ ...p, endDate: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500 block mb-1.5">Notes for Auditor (optional)</label>
+            <textarea
+              value={assignForm.notes}
+              onChange={(e) => setAssignForm((p) => ({ ...p, notes: e.target.value }))}
+              rows={2}
+              placeholder="Special instructions..."
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]"
+            />
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t bg-gray-50/50 flex-shrink-0">
+          {assignForm.auditTypeId && assignForm.auditorId && (
+            <div className="mb-3 p-3 bg-[#E8F5F5] rounded-xl">
+              <p className="text-xs text-[#1B6B6B] font-medium">
+                📋 {auditTypes.find((t) => t.id === assignForm.auditTypeId)?.name} → {assignForm.auditorName}
+                {assignForm.branch && ` · ${assignForm.branch}`}
+                {assignForm.endDate && ` · Ends ${assignForm.endDate}`}
+              </p>
+            </div>
+          )}
+          <div className="flex gap-3">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 bg-white hover:bg-gray-50">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={saving || !assignForm.auditTypeId || !assignForm.auditorId || !assignForm.endDate}
+              className="flex-[2] min-w-0 px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-40"
+            >
+              {saving ? 'Assigning...' : '+ Assign Audit'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSuccess, showError }) {
+  const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('checklist');
+  const [status, setStatus] = useState(audit.status);
+  const [overallResult, setOverallResult] = useState(audit.overallResult || null);
+  const [checklistReview, setChecklistReview] = useState(audit.checklistReview || []);
+  const [findings, setFindings] = useState(audit.findings || []);
+  const [adminNotes, setAdminNotes] = useState(audit.adminNotes || '');
+  const [newFinding, setNewFinding] = useState({
+    description: '',
+    severity: 'Medium',
+    ownerName: '',
+    ownerId: '',
+    ownerEmail: '',
+    targetDate: '',
+  });
+  const [showAddFinding, setShowAddFinding] = useState(false);
+  const [ownerSearch, setOwnerSearch] = useState('');
+  const [showOwnerDrop, setShowOwnerDrop] = useState(false);
+  const ownerRef = useRef(null);
+
+  useEffect(() => {
+    const h = (e) => {
+      if (ownerRef.current && !ownerRef.current.contains(e.target)) setShowOwnerDrop(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  useEffect(() => {
+    setStatus(audit.status || 'Scheduled');
+    setOverallResult(audit.overallResult ?? null);
+    setChecklistReview(Array.isArray(audit.checklistReview) ? audit.checklistReview : []);
+    setFindings(Array.isArray(audit.findings) ? audit.findings : []);
+    setAdminNotes(audit.adminNotes || '');
+    setActiveTab('checklist');
+  }, [audit.id]);
+
+  const isClosed = status === 'Closed';
+  const openFindings = findings.filter((f) => f.status !== 'Resolved');
+  const resolvedFindings = findings.filter((f) => f.status === 'Resolved');
+
+  const passCount = checklistReview.filter((i) => i.result === 'pass').length;
+  const failCount = checklistReview.filter((i) => i.result === 'fail').length;
+  const naCount = checklistReview.filter((i) => i.result === 'na').length;
+  const totalItems = checklistReview.length;
+  const reviewedCount = passCount + failCount + naCount;
+
+  const TABS = [
+    { id: 'checklist', label: 'Checklist', count: totalItems },
+    { id: 'findings', label: 'Findings', count: findings.length },
+    { id: 'overview', label: 'Overview' },
+  ];
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+        status,
+        overallResult,
+        checklistReview,
+        findings,
+        adminNotes,
+        updatedAt: new Date(),
+        updatedBy: currentUser?.email || '',
+        ...(status === 'Closed' && !audit.closedAt && { closedAt: new Date(), closedBy: currentUser?.email || '' }),
+      });
+      showSuccess('Audit saved!');
+    } catch (e) {
+      showError('Save failed: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateChecklistItem = (id, result) => {
+    setChecklistReview((prev) => prev.map((i) => (i.id === id ? { ...i, result } : i)));
+  };
+
+  const updateChecklistNote = (id, note) => {
+    setChecklistReview((prev) => prev.map((i) => (i.id === id ? { ...i, note } : i)));
+  };
+
+  const addFinding = () => {
+    if (!newFinding.description.trim()) {
+      showError('Enter finding description');
+      return;
+    }
+    const finding = {
+      id: 'finding_' + Date.now(),
+      description: newFinding.description.trim(),
+      severity: newFinding.severity,
+      ownerName: newFinding.ownerName,
+      ownerId: newFinding.ownerId,
+      ownerEmail: newFinding.ownerEmail || '',
+      targetDate: newFinding.targetDate,
+      status: 'Open',
+      resolvedAt: null,
+      resolvedNote: '',
+      createdAt: new Date().toISOString(),
+    };
+    setFindings((prev) => [...prev, finding]);
+    setNewFinding({ description: '', severity: 'Medium', ownerName: '', ownerId: '', ownerEmail: '', targetDate: '' });
+    setOwnerSearch('');
+    setShowAddFinding(false);
+  };
+
+  const updateFindingStatus = (id, newStatus) => {
+    setFindings((prev) =>
+      prev.map((f) =>
+        f.id === id
+          ? {
+              ...f,
+              status: newStatus,
+              ...(newStatus === 'Resolved' && { resolvedAt: new Date().toISOString() }),
+            }
+          : f,
+      ),
+    );
+  };
+
+  const deleteFinding = (id) => {
+    setFindings((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  const sections = [...new Set(checklistReview.map((i) => i.section))];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[94vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="px-6 py-4 border-b flex-shrink-0">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="text-xs font-mono font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{audit.auditRefId}</span>
+                <h2 className="text-base font-semibold text-gray-800">{audit.auditTypeName}</h2>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap text-xs text-gray-400">
+                {audit.branch && <span>🏢 {audit.branch}</span>}
+                {audit.location && <span>📍 {audit.location}</span>}
+                {audit.auditorName && (
+                  <span>
+                    👤 {audit.auditorName}
+                    {(audit.teamMembers?.length || 0) > 0 && ` +${audit.teamMembers.length}`}
+                  </span>
+                )}
+                {audit.endDate && <span>📅 Due {audit.endDate}</span>}
+              </div>
+            </div>
+            <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 ml-2 flex-shrink-0">
+              ✕
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">Status:</span>
+              <select
+                value={status}
+                disabled={isClosed}
+                onChange={(e) => setStatus(e.target.value)}
+                className={`text-xs font-medium border rounded-lg px-2 py-1.5 focus:outline-none ${
+                  isClosed ? 'cursor-not-allowed opacity-60 bg-gray-50' : 'cursor-pointer'
+                } ${AUDIT_STATUSES.find((s) => s.key === status)?.badge || 'bg-gray-100 text-gray-700 border-gray-200'}`}
+              >
+                {AUDIT_STATUSES.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.icon} {s.key}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-gray-400">Result:</span>
+              <div className="flex gap-1 flex-wrap">
+                {OVERALL_RESULTS.map((r) => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    disabled={isClosed}
+                    onClick={() => setOverallResult(overallResult === r.value ? null : r.value)}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
+                      overallResult === r.value ? r.active : `${r.color} hover:opacity-80`
+                    } ${isClosed ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+                  >
+                    {r.icon} {r.value}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {totalItems > 0 && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs text-gray-400">Checklist review</p>
+                <p className="text-xs font-medium text-gray-600">
+                  {reviewedCount}/{totalItems} reviewed
+                  {passCount > 0 && ` · ${passCount} pass`}
+                  {failCount > 0 && ` · ${failCount} fail`}
+                </p>
+              </div>
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                <div className="h-full bg-green-400 transition-all" style={{ width: totalItems > 0 ? `${(passCount / totalItems) * 100}%` : '0%' }} />
+                <div className="h-full bg-red-400 transition-all" style={{ width: totalItems > 0 ? `${(failCount / totalItems) * 100}%` : '0%' }} />
+                <div className="h-full bg-gray-300 transition-all" style={{ width: totalItems > 0 ? `${(naCount / totalItems) * 100}%` : '0%' }} />
+              </div>
+              <div className="flex gap-3 mt-1 flex-wrap">
+                {passCount > 0 && <span className="text-xs text-green-600">● {passCount} Pass</span>}
+                {failCount > 0 && <span className="text-xs text-red-500">● {failCount} Fail</span>}
+                {naCount > 0 && <span className="text-xs text-gray-400">● {naCount} N/A</span>}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-1 mt-3 flex-wrap">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-colors ${
+                  activeTab === tab.id ? 'bg-[#E8F5F5] text-[#1B6B6B]' : 'text-gray-500 hover:bg-gray-100'
+                }`}
+              >
+                {tab.label}
+                {tab.count !== undefined && (
+                  <span
+                    className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                      activeTab === tab.id ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {activeTab === 'checklist' && (
+            <div className="space-y-5">
+              {checklistReview.length === 0 ? (
+                <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-2xl">
+                  <p className="text-3xl mb-2">📋</p>
+                  <p className="text-sm text-gray-500">No checklist items in this template</p>
+                </div>
+              ) : (
+                sections.map((section) => (
+                  <div key={section}>
+                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 pb-2 border-b border-gray-100">{section}</h4>
+                    <div className="space-y-3">
+                      {checklistReview
+                        .filter((i) => i.section === section)
+                        .map((item) => (
+                          <div
+                            key={item.id}
+                            className={`p-4 rounded-xl border transition-all ${
+                              item.result === 'pass'
+                                ? 'bg-green-50 border-green-100'
+                                : item.result === 'fail'
+                                  ? 'bg-red-50 border-red-100'
+                                  : item.result === 'na'
+                                    ? 'bg-gray-50 border-gray-100'
+                                    : 'bg-white border-gray-100'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2 mb-3">
+                              <p className="text-sm font-medium text-gray-800 flex-1">{item.question}</p>
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                                  item.riskLevel === 'Critical'
+                                    ? 'bg-red-100 text-red-700'
+                                    : item.riskLevel === 'High'
+                                      ? 'bg-orange-100 text-orange-700'
+                                      : item.riskLevel === 'Medium'
+                                        ? 'bg-amber-100 text-amber-700'
+                                        : 'bg-green-100 text-green-700'
+                                }`}
+                              >
+                                {item.riskLevel || 'Medium'}
+                              </span>
+                            </div>
+                            <div className="flex gap-2 mb-2 flex-wrap">
+                              {[
+                                { val: 'pass', label: '✅ Pass', active: 'bg-green-500 text-white border-green-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-green-50 hover:border-green-200' },
+                                { val: 'fail', label: '❌ Fail', active: 'bg-red-500 text-white border-red-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-200' },
+                                { val: 'na', label: '⏭ N/A', active: 'bg-gray-500 text-white border-gray-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-gray-100' },
+                              ].map((opt) => (
+                                <button
+                                  key={opt.val}
+                                  type="button"
+                                  disabled={isClosed}
+                                  onClick={() => updateChecklistItem(item.id, item.result === opt.val ? null : opt.val)}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                    item.result === opt.val ? opt.active : opt.def
+                                  } ${isClosed ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </div>
+                            <input
+                              value={item.note || ''}
+                              disabled={isClosed}
+                              onChange={(e) => updateChecklistNote(item.id, e.target.value)}
+                              placeholder="Note or observation (optional)..."
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50 bg-white/80"
+                            />
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'findings' && (
+            <div className="space-y-4">
+              {!isClosed && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddFinding(true)}
+                  className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors"
+                >
+                  + Add Finding
+                </button>
+              )}
+
+              {showAddFinding && (
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl space-y-3">
+                  <p className="text-sm font-semibold text-gray-700">New Finding</p>
+                  <textarea
+                    value={newFinding.description}
+                    onChange={(e) => setNewFinding((p) => ({ ...p, description: e.target.value }))}
+                    rows={2}
+                    placeholder="Describe the finding / non-compliance..."
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B] bg-white"
+                  />
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1.5">Severity</label>
+                    <div className="flex gap-2 flex-wrap">
+                      {[
+                        { v: 'Low', c: 'bg-green-50 border-green-200 text-green-700', a: 'bg-green-500 border-green-500 text-white' },
+                        { v: 'Medium', c: 'bg-amber-50 border-amber-200 text-amber-700', a: 'bg-amber-500 border-amber-500 text-white' },
+                        { v: 'High', c: 'bg-orange-50 border-orange-200 text-orange-700', a: 'bg-orange-500 border-orange-500 text-white' },
+                        { v: 'Critical', c: 'bg-red-50 border-red-200 text-red-700', a: 'bg-red-500 border-red-500 text-white' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.v}
+                          type="button"
+                          onClick={() => setNewFinding((p) => ({ ...p, severity: opt.v }))}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                            newFinding.severity === opt.v ? opt.a : `${opt.c} hover:opacity-80`
+                          }`}
+                        >
+                          {opt.v}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div ref={ownerRef} className="relative">
+                    <label className="text-xs text-gray-400 block mb-1">Assign Owner to Fix</label>
+                    <input
+                      type="text"
+                      value={newFinding.ownerName || ownerSearch}
+                      placeholder="Search employee..."
+                      onChange={(e) => {
+                        setOwnerSearch(e.target.value);
+                        setShowOwnerDrop(true);
+                        if (!e.target.value) {
+                          setNewFinding((p) => ({ ...p, ownerName: '', ownerId: '', ownerEmail: '' }));
+                        }
+                      }}
+                      onFocus={() => {
+                        setOwnerSearch('');
+                        setShowOwnerDrop(true);
+                        setNewFinding((p) => ({ ...p, ownerName: '', ownerId: '', ownerEmail: '' }));
+                      }}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] bg-white"
+                    />
+                    {showOwnerDrop && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-40 overflow-y-auto">
+                        {(employees || [])
+                          .filter((e) => e.status === 'Active' && (!ownerSearch || e.fullName?.toLowerCase().includes(ownerSearch.toLowerCase())))
+                          .slice(0, 6)
+                          .map((emp) => (
+                            <div
+                              key={emp.id}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setNewFinding((p) => ({
+                                  ...p,
+                                  ownerName: emp.fullName,
+                                  ownerId: emp.id,
+                                  ownerEmail: emp.email || '',
+                                }));
+                                setOwnerSearch('');
+                                setShowOwnerDrop(false);
+                              }}
+                              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0"
+                            >
+                              <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                {emp.fullName?.charAt(0)}
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-gray-800">{emp.fullName}</p>
+                                {emp.designation && <p className="text-xs text-gray-400">{emp.designation}</p>}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                    {newFinding.ownerName && <p className="text-xs text-green-600 mt-1">✓ {newFinding.ownerName}</p>}
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Target Fix Date</label>
+                    <input
+                      type="date"
+                      value={newFinding.targetDate}
+                      onChange={(e) => setNewFinding((p) => ({ ...p, targetDate: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] bg-white"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddFinding(false);
+                        setNewFinding({ description: '', severity: 'Medium', ownerName: '', ownerId: '', ownerEmail: '', targetDate: '' });
+                        setOwnerSearch('');
+                      }}
+                      className="flex-1 py-2 border border-gray-200 rounded-xl text-sm text-gray-600"
+                    >
+                      Cancel
+                    </button>
+                    <button type="button" onClick={addFinding} className="flex-1 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]">
+                      Add Finding
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {findings.length === 0 && !showAddFinding ? (
+                <div className="text-center py-12 border-2 border-dashed border-gray-100 rounded-2xl">
+                  <p className="text-3xl mb-2">✅</p>
+                  <p className="text-sm font-medium text-gray-600">No findings</p>
+                  <p className="text-xs text-gray-400 mt-1">Add findings from the audit report</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {findings.map((finding) => {
+                    const now = new Date();
+                    const isOverdueFinding =
+                      finding.targetDate && finding.status !== 'Resolved' && new Date(finding.targetDate) < now;
+                    return (
+                      <div
+                        key={finding.id}
+                        className={`border rounded-xl p-4 transition-all ${
+                          finding.status === 'Resolved'
+                            ? 'bg-green-50 border-green-100'
+                            : isOverdueFinding
+                              ? 'bg-red-50 border-red-200'
+                              : 'bg-white border-gray-100'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <p className="text-sm font-medium text-gray-800 flex-1">{finding.description}</p>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                finding.severity === 'Critical'
+                                  ? 'bg-red-100 text-red-700'
+                                  : finding.severity === 'High'
+                                    ? 'bg-orange-100 text-orange-700'
+                                    : finding.severity === 'Medium'
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : 'bg-green-100 text-green-700'
+                              }`}
+                            >
+                              {finding.severity}
+                            </span>
+                            {!isClosed && (
+                              <button
+                                type="button"
+                                onClick={() => deleteFinding(finding.id)}
+                                className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-100 text-gray-300 hover:text-red-500"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap mb-3">
+                          {finding.ownerName && <span className="text-xs text-gray-500">👤 {finding.ownerName}</span>}
+                          {finding.targetDate && (
+                            <span className={`text-xs font-medium ${isOverdueFinding ? 'text-red-600' : 'text-gray-500'}`}>
+                              {isOverdueFinding ? '⚠️ ' : '📅 '}
+                              {finding.targetDate}
+                            </span>
+                          )}
+                        </div>
+                        {!isClosed && (
+                          <div className="flex gap-2 flex-wrap">
+                            {['Open', 'In Progress', 'Resolved'].map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => updateFindingStatus(finding.id, s)}
+                                className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
+                                  finding.status === s
+                                    ? s === 'Resolved'
+                                      ? 'bg-green-500 text-white border-green-500'
+                                      : s === 'In Progress'
+                                        ? 'bg-blue-500 text-white border-blue-500'
+                                        : 'bg-gray-700 text-white border-gray-700'
+                                    : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                }`}
+                              >
+                                {s === 'Resolved' ? '✅ Resolved' : s === 'In Progress' ? '🔄 In Progress' : '⭕ Open'}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {isClosed && (
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              finding.status === 'Resolved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}
+                          >
+                            {finding.status}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'overview' && (
+            <div className="space-y-4">
+              {totalItems > 0 && (
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: 'Pass', count: passCount, color: 'bg-green-50 border-green-100', text: 'text-green-700', icon: '✅' },
+                    { label: 'Fail', count: failCount, color: 'bg-red-50 border-red-100', text: 'text-red-700', icon: '❌' },
+                    { label: 'N/A', count: naCount, color: 'bg-gray-50 border-gray-100', text: 'text-gray-600', icon: '⏭' },
+                  ].map((s) => (
+                    <div key={s.label} className={`border rounded-xl p-4 text-center ${s.color}`}>
+                      <p className="text-xl mb-1">{s.icon}</p>
+                      <p className={`text-2xl font-bold ${s.text}`}>{s.count}</p>
+                      <p className={`text-xs mt-0.5 ${s.text}`}>{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="bg-white border border-gray-100 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Audit Details</p>
+                {[
+                  { l: 'Reference', v: audit.auditRefId },
+                  { l: 'Template', v: audit.auditTypeName },
+                  { l: 'Category', v: audit.auditCategory },
+                  { l: 'Risk Level', v: audit.riskLevel },
+                  { l: 'Branch', v: audit.branch },
+                  { l: 'Location', v: audit.location },
+                  { l: 'Department', v: audit.department },
+                  { l: 'Lead Auditor', v: audit.auditorName },
+                  { l: 'Start Date', v: audit.startDate },
+                  { l: 'End Date', v: audit.endDate },
+                ]
+                  .filter((r) => r.v)
+                  .map((row) => (
+                    <div key={row.l} className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-gray-400">{row.l}</p>
+                      <p className="text-xs font-medium text-gray-700 text-right">{row.v}</p>
+                    </div>
+                  ))}
+              </div>
+
+              {(audit.teamMembers?.length > 0) && (
+                <div className="bg-white border border-gray-100 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Team</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
+                        {audit.auditorName?.charAt(0)}
+                      </div>
+                      <p className="text-sm text-gray-700 flex-1">{audit.auditorName}</p>
+                      <span className="text-xs bg-[#E8F5F5] text-[#1B6B6B] px-2 py-0.5 rounded-full font-medium">Lead</span>
+                    </div>
+                    {audit.teamMembers.map((m) => (
+                      <div key={m.id} className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-white text-xs font-bold">{m.fullName?.charAt(0)}</div>
+                        <p className="text-sm text-gray-700 flex-1">{m.fullName}</p>
+                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Member</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {findings.length > 0 && (
+                <div className="bg-white border border-gray-100 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Findings Summary</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { l: 'Total', v: findings.length, c: 'text-gray-700' },
+                      { l: 'Open', v: openFindings.length, c: openFindings.length > 0 ? 'text-red-600' : 'text-gray-700' },
+                      { l: 'Resolved', v: resolvedFindings.length, c: 'text-green-600' },
+                    ].map((s) => (
+                      <div key={s.l} className="text-center bg-gray-50 rounded-xl p-3">
+                        <p className={`text-xl font-bold ${s.c}`}>{s.v}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{s.l}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Admin Notes</label>
+                <textarea
+                  value={adminNotes}
+                  disabled={isClosed}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  rows={3}
+                  placeholder="Internal notes about this audit..."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t flex-shrink-0">
+          {isClosed ? (
+            <div className="space-y-2">
+              <div className="p-3 bg-green-50 border border-green-100 rounded-xl text-center">
+                <p className="text-xs font-medium text-green-700">
+                  ✅ Audit closed{audit.closedBy && ` by ${audit.closedBy}`}
+                </p>
+              </div>
+              <button type="button" onClick={onClose} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
+                Close
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {status === 'Closed' && openFindings.length > 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="text-xs text-amber-700">
+                    ⚠️ {openFindings.length} finding{openFindings.length !== 1 ? 's' : ''} still open. Resolve before closing.
+                  </p>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : status === 'Closed' ? '✅ Save & Close Audit' : '💾 Save Changes'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function AuditList({ audits, auditTypes, company, companyId, currentUser, userRole, employees, showSuccess, showError, setSelectedAudit }) {
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [viewMode, setViewMode] = useState('list');
   const [search, setSearch] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
     status: '',
     type: '',
@@ -2128,52 +2271,38 @@ function AuditList({
     category: '',
   });
   const [leadSearch, setLeadSearch] = useState('');
-  const [showLeadDropdown, setShowLeadDropdown] = useState(false);
+  const [showLeadDrop, setShowLeadDrop] = useState(false);
   const [teamSearch, setTeamSearch] = useState('');
-  const [showTeamDropdown, setShowTeamDropdown] = useState(false);
+  const [showTeamDrop, setShowTeamDrop] = useState(false);
   const leadRef = useRef(null);
   const teamRef = useRef(null);
 
+  const [assignForm, setAssignForm] = useState({
+    auditTypeId: '',
+    category: '',
+    location: '',
+    branch: '',
+    department: '',
+    auditorId: '',
+    auditorName: '',
+    auditorEmail: '',
+    teamMembers: [],
+    startDate: '',
+    endDate: '',
+    notes: '',
+  });
+
   useEffect(() => {
     const handleClick = (e) => {
-      if (leadRef.current && !leadRef.current.contains(e.target)) setShowLeadDropdown(false);
-      if (teamRef.current && !teamRef.current.contains(e.target)) setShowTeamDropdown(false);
+      if (leadRef.current && !leadRef.current.contains(e.target)) setShowLeadDrop(false);
+      if (teamRef.current && !teamRef.current.contains(e.target)) setShowTeamDrop(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  useEffect(() => {
-    if (!showCreateModal) {
-      setLeadSearch('');
-      setShowLeadDropdown(false);
-      setTeamSearch('');
-      setShowTeamDropdown(false);
-    }
-  }, [showCreateModal]);
-
   const now = new Date();
   now.setHours(0, 0, 0, 0);
-
-  const isAdmin = userRole === 'admin';
-
-  const handleDeleteAudit = async (e, audit) => {
-    e.stopPropagation();
-    if (
-      !window.confirm(
-        `Delete "${audit.auditTypeName}" audit${audit.branch ? ` for ${audit.branch}` : ''}?\n\nThis cannot be undone.`,
-      )
-    ) {
-      return;
-    }
-    try {
-      await deleteDoc(doc(db, 'companies', companyId, 'audits', audit.id));
-      if (selectedAuditId === audit.id) setSelectedAudit(null);
-      showSuccess('Audit deleted');
-    } catch (err) {
-      showError(`Failed to delete: ${err.message}`);
-    }
-  };
 
   const isOverdue = (audit) => {
     if (audit.status === 'Closed') return false;
@@ -2184,188 +2313,151 @@ function AuditList({
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
-  const filteredAudits = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const auditOverdue = (audit) => {
-      if (audit.status === 'Closed') return false;
-      const end = audit.endDate || audit.dueDate;
-      if (!end) return false;
-      return new Date(end) < today;
-    };
-    return audits.filter((audit) => {
+  const filtered = useMemo(() => {
+    return audits.filter((a) => {
       if (search) {
         const q = search.toLowerCase();
-        const match =
-          audit.auditRefId?.toLowerCase().includes(q) ||
-          audit.auditTypeName?.toLowerCase().includes(q) ||
-          audit.branch?.toLowerCase().includes(q) ||
-          audit.location?.toLowerCase().includes(q) ||
-          audit.auditorName?.toLowerCase().includes(q) ||
-          audit.department?.toLowerCase().includes(q);
-        if (!match) return false;
+        if (
+          !(
+            a.auditRefId?.toLowerCase().includes(q) ||
+            a.auditTypeName?.toLowerCase().includes(q) ||
+            a.branch?.toLowerCase().includes(q) ||
+            a.auditorName?.toLowerCase().includes(q) ||
+            a.location?.toLowerCase().includes(q)
+          )
+        )
+          return false;
       }
       if (filters.status) {
-        const effectiveStatus = auditOverdue(audit) ? 'Overdue' : audit.status;
-        if (effectiveStatus !== filters.status) return false;
+        const eff = isOverdue(a) ? 'Overdue' : a.status;
+        if (eff !== filters.status) return false;
       }
-      if (filters.type && audit.auditTypeId !== filters.type) return false;
-      if (filters.branch && audit.branch !== filters.branch) return false;
-      if (filters.location && audit.location !== filters.location) return false;
-      if (filters.riskLevel && audit.riskLevel !== filters.riskLevel) return false;
-      if (filters.auditor && audit.auditorName !== filters.auditor) return false;
-      if (filters.category && audit.auditCategory !== filters.category) return false;
+      if (filters.type && a.auditTypeId !== filters.type) return false;
+      if (filters.branch && a.branch !== filters.branch) return false;
+      if (filters.location && a.location !== filters.location) return false;
+      if (filters.riskLevel && a.riskLevel !== filters.riskLevel) return false;
+      if (filters.auditor && a.auditorName !== filters.auditor) return false;
+      if (filters.category && a.auditCategory !== filters.category) return false;
       return true;
     });
   }, [audits, search, filters]);
 
-  const STATUSES = [
-    {
-      key: 'Overdue',
-      color: '#EF4444',
-      bg: 'bg-red-50',
-      border: 'border-red-100',
-      badge: 'bg-red-100 text-red-700',
-      icon: '⚠️',
-    },
-    {
-      key: 'Assigned',
-      color: '#8B5CF6',
-      bg: 'bg-purple-50',
-      border: 'border-purple-100',
-      badge: 'bg-purple-100 text-purple-700',
-      icon: '📋',
-    },
-    {
-      key: 'In Progress',
-      color: '#3B82F6',
-      bg: 'bg-blue-50',
-      border: 'border-blue-100',
-      badge: 'bg-blue-100 text-blue-700',
-      icon: '✍️',
-    },
-    {
-      key: 'Submitted',
-      color: '#F97316',
-      bg: 'bg-orange-50',
-      border: 'border-orange-100',
-      badge: 'bg-orange-100 text-orange-700',
-      icon: '📤',
-    },
-    {
-      key: 'Under Review',
-      color: '#EC4899',
-      bg: 'bg-pink-50',
-      border: 'border-pink-100',
-      badge: 'bg-pink-100 text-pink-700',
-      icon: '👀',
-    },
-    {
-      key: 'Closed',
-      color: '#10B981',
-      bg: 'bg-green-50',
-      border: 'border-green-100',
-      badge: 'bg-green-100 text-green-700',
-      icon: '✅',
-    },
-  ];
+  const generateAuditId = async () => {
+    const counterRef = doc(db, 'companies', companyId, 'settings', 'auditCounter');
+    const snap = await getDoc(counterRef);
+    let next = 1;
+    if (snap.exists()) {
+      next = (snap.data().count || 0) + 1;
+      await updateDoc(counterRef, { count: increment(1) });
+    } else {
+      await setDoc(counterRef, { count: 1 });
+    }
+    const yr = new Date().getFullYear();
+    return `AUD-${yr}-${String(next).padStart(3, '0')}`;
+  };
 
-  const [createForm, setCreateForm] = useState(() => ({ ...EMPTY_ASSIGN_AUDIT_FORM }));
-  const [viewMode, setViewMode] = useState('list');
-
-  const resetForm = () => {
-    setCreateForm({ ...EMPTY_ASSIGN_AUDIT_FORM });
+  const resetAssignForm = () => {
+    setAssignForm({
+      auditTypeId: '',
+      category: '',
+      location: '',
+      branch: '',
+      department: '',
+      auditorId: '',
+      auditorName: '',
+      auditorEmail: '',
+      teamMembers: [],
+      startDate: '',
+      endDate: '',
+      notes: '',
+    });
     setLeadSearch('');
     setTeamSearch('');
   };
 
-  const handleCreate = async () => {
-    if (!createForm.auditTypeId) {
+  const handleAssign = async () => {
+    if (!assignForm.auditTypeId) {
       showError('Select an audit template');
       return;
     }
-    if (!createForm.auditorId) {
+    if (!assignForm.auditorId) {
       showError('Select a lead auditor');
       return;
     }
-    if (!createForm.endDate) {
+    if (!assignForm.endDate) {
       showError('Set an end date');
       return;
     }
-
     try {
       setSaving(true);
-
-      const auditRefId = await generateAuditId(companyId);
-      const auditType = auditTypes.find((t) => t.id === createForm.auditTypeId);
-
-      const checklist = (auditType?.checklistTemplate || []).map((item) => {
-        const { type: _t, response: _r, riskLevel: _rl, ...rest } = item;
-        return {
-          ...rest,
-          yesNoResponse: null,
-          rating: null,
-          remarks: '',
-          isCompliant: null,
-          ownerName: '',
-          ownerId: '',
-          ownerEmail: '',
-          targetDate: '',
-          resolved: false,
-          managerComment: '',
-        };
-      });
-
+      const type = auditTypes.find((t) => t.id === assignForm.auditTypeId);
+      const refId = await generateAuditId();
+      const checklistReview = (type?.checklistItems || []).map((item) => ({
+        ...item,
+        result: null,
+        note: '',
+      }));
       await addDoc(collection(db, 'companies', companyId, 'audits'), {
-        auditRefId,
-        auditTypeId: createForm.auditTypeId,
-        auditTypeName: auditType?.name || '',
-        auditTypeColor: auditType?.color || '#8B5CF6',
-        auditCategory: auditType?.auditCategory || 'Internal',
-        riskLevel: auditType?.riskLevel || 'Medium',
-        title: auditType?.name || '',
-        category: createForm.category,
-        location: createForm.location,
-        branch: createForm.branch,
-        department: createForm.department,
-        auditorId: createForm.auditorId,
-        auditorName: createForm.auditorName.trim(),
-        auditorEmail: (createForm.auditorEmail || '').trim().toLowerCase(),
-        teamMembers: createForm.teamMembers,
-        teamSize: 1 + createForm.teamMembers.length,
-        startDate: createForm.startDate,
-        endDate: createForm.endDate,
-        dueDate: createForm.endDate,
-        notes: createForm.notes,
-        status: 'Assigned',
-        checklist,
-        totalItems: checklist.length,
-        completedItems: 0,
-        createdAt: serverTimestamp(),
+        auditRefId: refId,
+        auditTypeId: assignForm.auditTypeId,
+        auditTypeName: type?.name || '',
+        auditTypeColor: type?.color || '#8B5CF6',
+        auditCategory: type?.auditCategory || 'Internal',
+        riskLevel: type?.riskLevel || 'Medium',
+        category: assignForm.category,
+        location: assignForm.location,
+        branch: assignForm.branch,
+        department: assignForm.department,
+        auditorId: assignForm.auditorId,
+        auditorName: assignForm.auditorName,
+        auditorEmail: assignForm.auditorEmail,
+        teamMembers: assignForm.teamMembers,
+        startDate: assignForm.startDate,
+        endDate: assignForm.endDate,
+        notes: assignForm.notes,
+        status: 'Scheduled',
+        overallResult: null,
+        checklistReview,
+        findings: [],
+        adminNotes: '',
+        createdAt: new Date(),
         createdBy: currentUser?.email || '',
-        submittedAt: null,
-        submittedBy: null,
-        closedAt: null,
-        closedBy: null,
-        managerComments: '',
-        overallScore: null,
       });
-
-      showSuccess(
-        createForm.teamMembers.length > 0
-          ? `${auditRefId} assigned to ${createForm.auditorName} and team (${1 + createForm.teamMembers.length} people)!`
-          : `${auditRefId} assigned to ${createForm.auditorName}!`,
-      );
-      setShowCreateModal(false);
-      resetForm();
+      showSuccess(`${refId} assigned to ${assignForm.auditorName}!`);
+      setShowAssignModal(false);
+      resetAssignForm();
     } catch (e) {
-      showError(`Failed: ${e.message}`);
+      showError('Failed: ' + e.message);
     } finally {
       setSaving(false);
     }
   };
 
-  const progressRingC = 2 * Math.PI * 15.915;
+  const handleDelete = async (e, audit) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete ${audit.auditRefId}?`)) return;
+    try {
+      await deleteDoc(doc(db, 'companies', companyId, 'audits', audit.id));
+      showSuccess('Audit deleted');
+    } catch (err) {
+      showError('Failed to delete');
+    }
+  };
+
+  const emptyAssign = {
+    auditTypeId: '',
+    category: '',
+    location: '',
+    branch: '',
+    department: '',
+    auditorId: '',
+    auditorName: '',
+    auditorEmail: '',
+    teamMembers: [],
+    startDate: '',
+    endDate: '',
+    notes: '',
+  };
 
   return (
     <div>
@@ -2376,89 +2468,62 @@ function AuditList({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by template, branch, auditor..."
+              placeholder="Search by ID, template, branch, auditor..."
               className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
             />
-            {search ? (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"
-              >
+            {search && (
+              <button type="button" onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
                 ✕
               </button>
-            ) : null}
+            )}
           </div>
 
           <div className="flex border border-gray-200 rounded-xl overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              className={`px-3 py-2.5 text-sm transition-colors ${
-                viewMode === 'list' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              ☰ List
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('kanban')}
-              className={`px-3 py-2.5 text-sm transition-colors ${
-                viewMode === 'kanban' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              ⊞ Board
-            </button>
+            {[
+              { id: 'list', icon: '☰' },
+              { id: 'kanban', icon: '⊞' },
+            ].map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => setViewMode(v.id)}
+                className={`px-3 py-2.5 text-sm transition-colors ${viewMode === v.id ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+              >
+                {v.icon}
+              </button>
+            ))}
           </div>
 
           <button
             type="button"
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-3 py-2.5 border rounded-xl text-sm transition-colors ${
-              showFilters || activeFilterCount > 0
-                ? 'border-[#1B6B6B] text-[#1B6B6B] bg-[#E8F5F5]'
-                : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50'
+              showFilters || activeFilterCount > 0 ? 'border-[#1B6B6B] text-[#1B6B6B] bg-[#E8F5F5]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
             }`}
           >
             ⚙️ Filters
-            {activeFilterCount > 0 ? (
-              <span className="bg-[#1B6B6B] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
-                {activeFilterCount}
-              </span>
-            ) : null}
+            {activeFilterCount > 0 && (
+              <span className="bg-[#1B6B6B] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">{activeFilterCount}</span>
+            )}
           </button>
 
           <button
             type="button"
-            onClick={() => {
-              resetForm();
-              setShowCreateModal(true);
-            }}
+            onClick={() => setShowAssignModal(true)}
             disabled={auditTypes.length === 0}
-            title={auditTypes.length === 0 ? 'Create an audit template first' : ''}
             className="flex items-center gap-2 px-4 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 whitespace-nowrap"
           >
             + Assign Audit
           </button>
         </div>
 
-        {showFilters ? (
+        {showFilters && (
           <div className="bg-white border border-gray-100 rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm font-semibold text-gray-700">Filter Audits</p>
               <button
                 type="button"
-                onClick={() => {
-                  setFilters({
-                    status: '',
-                    type: '',
-                    branch: '',
-                    location: '',
-                    riskLevel: '',
-                    auditor: '',
-                    category: '',
-                  });
-                }}
+                onClick={() => setFilters({ status: '', type: '', branch: '', location: '', riskLevel: '', auditor: '', category: '' })}
                 className="text-xs text-[#1B6B6B] hover:underline"
               >
                 Clear all
@@ -2469,11 +2534,11 @@ function AuditList({
                 <label className="text-xs text-gray-400 block mb-1">Status</label>
                 <select
                   value={filters.status}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  onChange={(e) => setFilters((p) => ({ ...p, status: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">All Statuses</option>
-                  {['Assigned', 'In Progress', 'Submitted', 'Under Review', 'Closed', 'Overdue'].map((s) => (
+                  {['Scheduled', 'In Progress', 'Under Review', 'Closed', 'Overdue'].map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
@@ -2484,8 +2549,8 @@ function AuditList({
                 <label className="text-xs text-gray-400 block mb-1">Template</label>
                 <select
                   value={filters.type}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, type: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  onChange={(e) => setFilters((p) => ({ ...p, type: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">All Templates</option>
                   {auditTypes.map((t) => (
@@ -2499,10 +2564,10 @@ function AuditList({
                 <label className="text-xs text-gray-400 block mb-1">Category</label>
                 <select
                   value={filters.category}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  onChange={(e) => setFilters((p) => ({ ...p, category: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 >
-                  <option value="">All Categories</option>
+                  <option value="">All</option>
                   <option value="Internal">🏢 Internal</option>
                   <option value="External">🌐 External</option>
                 </select>
@@ -2511,10 +2576,10 @@ function AuditList({
                 <label className="text-xs text-gray-400 block mb-1">Risk Level</label>
                 <select
                   value={filters.riskLevel}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, riskLevel: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  onChange={(e) => setFilters((p) => ({ ...p, riskLevel: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 >
-                  <option value="">All Risk Levels</option>
+                  <option value="">All</option>
                   <option value="Critical">🔴 Critical</option>
                   <option value="High">🟠 High</option>
                   <option value="Medium">🟡 Medium</option>
@@ -2525,8 +2590,8 @@ function AuditList({
                 <label className="text-xs text-gray-400 block mb-1">Branch</label>
                 <select
                   value={filters.branch}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, branch: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  onChange={(e) => setFilters((p) => ({ ...p, branch: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">All Branches</option>
                   {(company?.branches || []).map((b) => (
@@ -2540,8 +2605,8 @@ function AuditList({
                 <label className="text-xs text-gray-400 block mb-1">Location</label>
                 <select
                   value={filters.location}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, location: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  onChange={(e) => setFilters((p) => ({ ...p, location: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">All Locations</option>
                   {(company?.locations || []).map((l) => (
@@ -2552,99 +2617,77 @@ function AuditList({
                 </select>
               </div>
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Lead Auditor</label>
+                <label className="text-xs text-gray-400 block mb-1">Auditor</label>
                 <select
                   value={filters.auditor}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, auditor: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  onChange={(e) => setFilters((p) => ({ ...p, auditor: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">All Auditors</option>
                   {[...new Set(audits.map((a) => a.auditorName).filter(Boolean))]
                     .sort()
-                    .map((name) => (
-                      <option key={name} value={name}>
-                        {name}
+                    .map((n) => (
+                      <option key={n} value={n}>
+                        {n}
                       </option>
                     ))}
                 </select>
               </div>
             </div>
-            {activeFilterCount > 0 ? (
+            {activeFilterCount > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-100">
                 <p className="text-xs text-[#1B6B6B]">
-                  {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active · {filteredAudits.length} result
-                  {filteredAudits.length !== 1 ? 's' : ''}
+                  {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active · {filtered.length} result{filtered.length !== 1 ? 's' : ''}
                 </p>
               </div>
-            ) : null}
+            )}
           </div>
-        ) : null}
+        )}
 
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-400">
-            {filteredAudits.length} audit{filteredAudits.length !== 1 ? 's' : ''}
-            {activeFilterCount > 0 || search ? ` (filtered from ${audits.length})` : ''}
+            {filtered.length} audit{filtered.length !== 1 ? 's' : ''}
+            {(activeFilterCount > 0 || search) && ` of ${audits.length}`}
           </p>
-          {activeFilterCount > 0 || search ? (
+          {(activeFilterCount > 0 || search) && (
             <button
               type="button"
               onClick={() => {
                 setSearch('');
-                setFilters({
-                  status: '',
-                  type: '',
-                  branch: '',
-                  location: '',
-                  riskLevel: '',
-                  auditor: '',
-                  category: '',
-                });
+                setFilters({ status: '', type: '', branch: '', location: '', riskLevel: '', auditor: '', category: '' });
               }}
               className="text-xs text-[#1B6B6B] hover:underline"
             >
-              Clear all filters
+              Clear all
             </button>
-          ) : null}
+          )}
         </div>
       </div>
 
-      {viewMode === 'list' ? (
+      {viewMode === 'list' && (
         <div>
-          {filteredAudits.length === 0 ? (
+          {filtered.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
               <p className="text-5xl mb-4">🔍</p>
-              <p className="text-base font-semibold text-gray-700 mb-2">
-                {audits.length === 0 ? 'No audits yet' : 'No audits match filters'}
-              </p>
-              <p className="text-sm text-gray-400 mb-6">
-                {audits.length === 0 ? 'Assign your first audit to get started' : 'Try adjusting your search or filters'}
-              </p>
-              {audits.length === 0 ? (
+              <p className="text-base font-semibold text-gray-700 mb-2">{audits.length === 0 ? 'No audits yet' : 'No audits match filters'}</p>
+              <p className="text-sm text-gray-400 mb-6">{audits.length === 0 ? 'Assign your first audit to get started' : 'Try adjusting filters'}</p>
+              {audits.length === 0 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    resetForm();
-                    setShowCreateModal(true);
-                  }}
+                  onClick={() => setShowAssignModal(true)}
                   disabled={auditTypes.length === 0}
                   className="px-5 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium disabled:opacity-50"
                 >
                   + Assign First Audit
                 </button>
-              ) : null}
+              )}
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredAudits.map((audit) => {
+              {filtered.map((audit) => {
                 const overdueAudit = isOverdue(audit);
-                const findings = (audit.checklist || []).filter((i) => i.yesNoResponse === 'No');
-                const openActions = findings.filter((i) => i.ownerName && !i.resolved);
-                const progress =
-                  audit.totalItems > 0
-                    ? Math.round(((audit.completedItems || 0) / audit.totalItems) * 100)
-                    : 0;
-                const strokeColor =
-                  audit.status === 'Closed' ? '#10B981' : overdueAudit ? '#EF4444' : '#1B6B6B';
+                const openFindings = (audit.findings || []).filter((f) => f.status !== 'Resolved');
+                const totalFindings = (audit.findings || []).length;
                 return (
                   <div
                     key={audit.id}
@@ -2654,24 +2697,20 @@ function AuditList({
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
                     }}
-                    className={`relative bg-white rounded-2xl border cursor-pointer hover:shadow-md transition-all group overflow-hidden ${
+                    className={`bg-white rounded-2xl border cursor-pointer hover:shadow-md transition-all group relative overflow-hidden ${
                       overdueAudit ? 'border-red-200 hover:border-red-300' : 'border-gray-100 hover:border-[#4ECDC4]'
                     }`}
                   >
-                    <div
-                      className="h-1"
-                      style={{ background: overdueAudit ? '#EF4444' : audit.auditTypeColor || '#8B5CF6' }}
-                    />
-                    {isAdmin ? (
+                    <div className="h-1" style={{ background: overdueAudit ? '#EF4444' : audit.auditTypeColor || '#8B5CF6' }} />
+                    {userRole === 'admin' && (
                       <button
                         type="button"
-                        onClick={(e) => handleDeleteAudit(e, audit)}
-                        className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-300 hover:text-red-500 transition-all flex-shrink-0 absolute top-3 right-3 z-10"
-                        aria-label="Delete audit"
+                        onClick={(e) => handleDelete(e, audit)}
+                        className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-300 hover:text-red-500 transition-all z-10"
                       >
                         🗑️
                       </button>
-                    ) : null}
+                    )}
                     <div className="p-5">
                       <div className="flex items-start gap-4">
                         <div
@@ -2682,19 +2721,31 @@ function AuditList({
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="text-xs font-mono font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">
-                              {audit.auditRefId || '—'}
-                            </span>
+                            <span className="text-xs font-mono font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{audit.auditRefId || '—'}</span>
                             <p className="text-sm font-semibold text-gray-800">{audit.auditTypeName}</p>
                             <span
                               className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
-                                overdueAudit
-                                  ? 'bg-red-100 text-red-700'
-                                  : STATUS_COLORS[audit.status] || STATUS_COLORS.Assigned
+                                overdueAudit ? 'bg-red-100 text-red-700' : AUDIT_STATUSES.find((s) => s.key === audit.status)?.badge || 'bg-gray-100 text-gray-700'
                               }`}
                             >
                               {overdueAudit ? '⚠️ Overdue' : audit.status}
                             </span>
+                            {audit.overallResult && (
+                              <span
+                                className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                                  audit.overallResult === 'Pass'
+                                    ? 'bg-green-100 text-green-700'
+                                    : audit.overallResult === 'Fail'
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-amber-100 text-amber-700'
+                                }`}
+                              >
+                                {audit.overallResult === 'Pass' && '✅ '}
+                                {audit.overallResult === 'Fail' && '❌ '}
+                                {audit.overallResult === 'Partial' && '⚠️ '}
+                                {audit.overallResult}
+                              </span>
+                            )}
                             <span
                               className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                                 audit.riskLevel === 'Critical'
@@ -2712,83 +2763,32 @@ function AuditList({
                               {audit.riskLevel === 'Low' && '🟢 '}
                               {audit.riskLevel || 'Medium'}
                             </span>
-                            <span
-                              className={`text-xs px-2 py-0.5 rounded-full ${
-                                audit.auditCategory === 'External'
-                                  ? 'bg-purple-100 text-purple-600'
-                                  : 'bg-blue-100 text-blue-600'
-                              }`}
-                            >
-                              {audit.auditCategory === 'External' ? '🌐' : '🏢'} {audit.auditCategory || 'Internal'}
-                            </span>
                           </div>
                           <div className="flex items-center gap-3 flex-wrap mt-1">
-                            {audit.branch ? (
-                              <span className="text-xs text-gray-500 flex items-center gap-1">🏢 {audit.branch}</span>
-                            ) : null}
-                            {audit.location ? (
-                              <span className="text-xs text-gray-500 flex items-center gap-1">📍 {audit.location}</span>
-                            ) : null}
-                            {audit.department ? <span className="text-xs text-gray-500">· {audit.department}</span> : null}
-                            {audit.auditorName ? (
-                              <span className="text-xs text-gray-500 flex items-center gap-1">
+                            {audit.branch && <span className="text-xs text-gray-500">🏢 {audit.branch}</span>}
+                            {audit.location && <span className="text-xs text-gray-500">📍 {audit.location}</span>}
+                            {audit.department && <span className="text-xs text-gray-400">· {audit.department}</span>}
+                            {audit.auditorName && (
+                              <span className="text-xs text-gray-500">
                                 👤 {audit.auditorName}
-                                {(audit.teamMembers?.length || 0) > 0 ? (
-                                  <span className="text-gray-400">+{audit.teamMembers.length}</span>
-                                ) : null}
+                                {(audit.teamMembers?.length || 0) > 0 && <span className="text-gray-400"> +{audit.teamMembers.length}</span>}
                               </span>
-                            ) : null}
+                            )}
                           </div>
-                          <div className="flex items-center gap-3 flex-wrap mt-2">
-                            {audit.startDate ? (
-                              <span className="text-xs text-gray-400">📅 {audit.startDate}</span>
-                            ) : null}
-                            {audit.endDate ? (
-                              <span
-                                className={`text-xs font-medium ${overdueAudit ? 'text-red-600' : 'text-gray-400'}`}
-                              >
-                                {overdueAudit ? '⚠️' : '→'} {audit.endDate}
-                              </span>
-                            ) : null}
-                            {findings.length > 0 ? (
+                          <div className="flex items-center gap-3 flex-wrap mt-1.5">
+                            {audit.startDate && <span className="text-xs text-gray-400">📅 {audit.startDate}</span>}
+                            {audit.endDate && (
+                              <span className={`text-xs font-medium ${overdueAudit ? 'text-red-600' : 'text-gray-400'}`}>→ {audit.endDate}</span>
+                            )}
+                            {openFindings.length > 0 && (
                               <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full">
-                                {findings.length} finding{findings.length !== 1 ? 's' : ''}
+                                {openFindings.length} open finding{openFindings.length !== 1 ? 's' : ''}
                               </span>
-                            ) : null}
-                            {openActions.length > 0 ? (
-                              <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">
-                                {openActions.length} action{openActions.length !== 1 ? 's' : ''} open
-                              </span>
-                            ) : null}
+                            )}
+                            {totalFindings > 0 && openFindings.length === 0 && (
+                              <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full">✅ All findings resolved</span>
+                            )}
                           </div>
-                        </div>
-                        <div className="flex-shrink-0 text-right">
-                          {audit.totalItems > 0 ? (
-                            <>
-                              <div className="relative w-12 h-12 mb-1">
-                                <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
-                                  <circle cx="18" cy="18" r="15.915" fill="none" stroke="#F3F4F6" strokeWidth="3" />
-                                  <circle
-                                    cx="18"
-                                    cy="18"
-                                    r="15.915"
-                                    fill="none"
-                                    stroke={strokeColor}
-                                    strokeWidth="3"
-                                    strokeLinecap="round"
-                                    strokeDasharray={progressRingC}
-                                    strokeDashoffset={progressRingC * (1 - progress / 100)}
-                                  />
-                                </svg>
-                                <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-700">
-                                  {progress}%
-                                </span>
-                              </div>
-                              <p className="text-xs text-gray-400">
-                                {audit.completedItems || 0}/{audit.totalItems}
-                              </p>
-                            </>
-                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -2798,28 +2798,23 @@ function AuditList({
             </div>
           )}
         </div>
-      ) : null}
+      )}
 
-      {viewMode === 'kanban' ? (
+      {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {STATUSES.map((status) => {
-            const statusAudits = filteredAudits.filter((a) => {
-              if (status.key === 'Overdue') return isOverdue(a);
-              return a.status === status.key && !isOverdue(a);
-            });
+          {AUDIT_STATUSES.map((status) => {
+            const cols = filtered.filter((a) => a.status === status.key && !isOverdue(a));
             return (
               <div key={status.key} className="flex-shrink-0 w-72">
-                <div
-                  className={`flex items-center justify-between p-3 rounded-xl mb-3 ${status.bg} border ${status.border}`}
-                >
+                <div className={`flex items-center justify-between p-3 rounded-xl mb-3 ${status.bg} border ${status.border}`}>
                   <div className="flex items-center gap-2">
                     <span>{status.icon}</span>
                     <span className="text-xs font-semibold text-gray-700">{status.key}</span>
                   </div>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${status.badge}`}>{statusAudits.length}</span>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${status.badge}`}>{cols.length}</span>
                 </div>
                 <div className="space-y-2">
-                  {statusAudits.map((audit) => (
+                  {cols.map((audit) => (
                     <div
                       key={audit.id}
                       role="button"
@@ -2828,18 +2823,17 @@ function AuditList({
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
                       }}
-                      className="relative group bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:shadow-sm hover:border-gray-200 transition-all"
+                      className="bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:shadow-sm hover:border-gray-200 transition-all relative group"
                     >
-                      {isAdmin ? (
+                      {userRole === 'admin' && (
                         <button
                           type="button"
-                          onClick={(e) => handleDeleteAudit(e, audit)}
-                          className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-200 hover:text-red-500 transition-all absolute top-2 right-2 z-10"
-                          aria-label="Delete audit"
+                          onClick={(e) => handleDelete(e, audit)}
+                          className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-200 hover:text-red-500 transition-all"
                         >
                           🗑️
                         </button>
-                      ) : null}
+                      )}
                       <div className="flex items-start gap-2 mb-2">
                         <div
                           className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
@@ -2848,550 +2842,103 @@ function AuditList({
                           {audit.auditTypeName?.charAt(0)}
                         </div>
                         <div className="flex-1 min-w-0">
+                          <p className="text-xs font-mono text-gray-400 mb-0.5">{audit.auditRefId}</p>
                           <p className="text-xs font-semibold text-gray-800 truncate">{audit.auditTypeName}</p>
-                          {audit.branch ? <p className="text-xs text-gray-400 truncate">{audit.branch}</p> : null}
-                          <p className="text-xs font-mono text-gray-300">{audit.auditRefId || '—'}</p>
+                          {audit.branch && <p className="text-xs text-gray-400 truncate">{audit.branch}</p>}
                         </div>
                       </div>
-                      {audit.auditorName ? (
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-4 h-4 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
-                            {audit.auditorName.charAt(0)}
-                          </div>
-                          <p className="text-xs text-gray-500 truncate">{audit.auditorName}</p>
-                        </div>
-                      ) : null}
-                      <div className="flex items-center justify-between">
+                      {audit.overallResult && (
                         <span
-                          className={`text-xs ${isOverdue(audit) ? 'text-red-500 font-medium' : 'text-gray-400'}`}
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium mb-1 inline-block ${
+                            audit.overallResult === 'Pass'
+                              ? 'bg-green-100 text-green-700'
+                              : audit.overallResult === 'Fail'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-amber-100 text-amber-700'
+                          }`}
                         >
-                          {audit.endDate ? `Due ${audit.endDate}` : 'No date'}
+                          {audit.overallResult}
                         </span>
-                        {audit.totalItems > 0 ? (
-                          <span className="text-xs text-gray-400">
-                            {Math.round(((audit.completedItems || 0) / audit.totalItems) * 100)}%
-                          </span>
-                        ) : null}
+                      )}
+                      <div className="flex items-center justify-between mt-2">
+                        {audit.auditorName && (
+                          <div className="flex items-center gap-1">
+                            <div className="w-4 h-4 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
+                              {audit.auditorName?.charAt(0)}
+                            </div>
+                            <p className="text-xs text-gray-500 truncate max-w-24">{audit.auditorName}</p>
+                          </div>
+                        )}
+                        {audit.endDate && <span className="text-xs text-gray-400">{audit.endDate}</span>}
                       </div>
                     </div>
                   ))}
-                  {statusAudits.length === 0 ? (
-                    <div className="text-center py-6 text-xs text-gray-300 border-2 border-dashed border-gray-100 rounded-xl">
-                      No audits
-                    </div>
-                  ) : null}
+                  {cols.length === 0 && (
+                    <div className="text-center py-6 text-xs text-gray-300 border-2 border-dashed border-gray-100 rounded-xl">No audits</div>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
-      ) : null}
-
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100 flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-[#E8F5F5] rounded-xl flex items-center justify-center text-lg">🔍</div>
-                  <div>
-                    <h2 className="text-base font-semibold text-gray-800">Assign Audit</h2>
-                    <p className="text-xs text-gray-400">Assign an audit to an auditor for a location</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    resetForm();
-                  }}
-                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Template</p>
-                {auditTypes.length === 0 ? (
-                  <div className="p-4 border-2 border-dashed border-gray-200 rounded-xl text-center">
-                    <p className="text-sm text-gray-400">
-                      No templates yet.{' '}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowCreateModal(false);
-                          setShowSettings(true);
-                        }}
-                        className="text-[#1B6B6B] underline"
-                      >
-                        Create one in Settings
-                      </button>
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <select
-                      value={createForm.auditTypeId}
-                      onChange={(e) =>
-                        setCreateForm((prev) => ({
-                          ...prev,
-                          auditTypeId: e.target.value,
-                        }))
-                      }
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                    >
-                      <option value="">Select audit template...</option>
-                      {auditTypes.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} — {t.auditCategory || 'Internal'} · {t.riskLevel || 'Medium'} Risk
-                        </option>
-                      ))}
-                    </select>
-                    {createForm.auditTypeId &&
-                      (() => {
-                        const t = auditTypes.find((x) => x.id === createForm.auditTypeId);
-                        if (!t) return null;
-                        return (
-                          <div className="mt-2 flex items-center gap-2 flex-wrap">
-                            <span
-                              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                t.auditCategory === 'External' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                              }`}
-                            >
-                              {t.auditCategory === 'External' ? '🌐' : '🏢'} {t.auditCategory || 'Internal'}
-                            </span>
-                            <span
-                              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                t.riskLevel === 'Critical'
-                                  ? 'bg-red-100 text-red-700'
-                                  : t.riskLevel === 'High'
-                                    ? 'bg-orange-100 text-orange-700'
-                                    : t.riskLevel === 'Medium'
-                                      ? 'bg-amber-100 text-amber-700'
-                                      : 'bg-green-100 text-green-700'
-                              }`}
-                            >
-                              {t.riskLevel === 'Critical' && '🔴 '}
-                              {t.riskLevel === 'High' && '🟠 '}
-                              {t.riskLevel === 'Medium' && '🟡 '}
-                              {t.riskLevel === 'Low' && '🟢 '}
-                              {t.riskLevel || 'Medium'}
-                            </span>
-                            <span className="text-xs text-gray-400">{(t.checklistTemplate || []).length} checklist items</span>
-                          </div>
-                        );
-                      })()}
-                  </>
-                )}
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Location</p>
-                <div className="grid grid-cols-1 gap-3">
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1.5">Category</label>
-                    <select
-                      value={createForm.category}
-                      onChange={(e) => setCreateForm((prev) => ({ ...prev, category: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                    >
-                      <option value="">Select category...</option>
-                      {(company?.categories || []).map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1.5">Location</label>
-                    <select
-                      value={createForm.location}
-                      onChange={(e) => setCreateForm((prev) => ({ ...prev, location: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                    >
-                      <option value="">Select location...</option>
-                      {(company?.locations || []).map((l) => (
-                        <option key={l} value={l}>
-                          {l}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1.5">Branch</label>
-                      <select
-                        value={createForm.branch}
-                        onChange={(e) => setCreateForm((prev) => ({ ...prev, branch: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                      >
-                        <option value="">Select branch...</option>
-                        {(company?.branches || []).map((b) => (
-                          <option key={b} value={b}>
-                            {b}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1.5">Department</label>
-                      <select
-                        value={createForm.department}
-                        onChange={(e) => setCreateForm((prev) => ({ ...prev, department: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                      >
-                        <option value="">Select department...</option>
-                        {(company?.departments || []).map((d) => (
-                          <option key={d} value={d}>
-                            {d}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Team</p>
-                <div className="space-y-4">
-                  <div ref={leadRef} className="relative">
-                    <label className="text-xs text-gray-500 block mb-1.5">
-                      Lead Auditor *
-                      <span className="text-gray-400 font-normal ml-1">(responsible for submission)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={createForm.auditorId ? createForm.auditorName : leadSearch}
-                      placeholder="Search auditor..."
-                      onChange={(e) => {
-                        setLeadSearch(e.target.value);
-                        setShowLeadDropdown(true);
-                        if (!e.target.value) {
-                          setCreateForm((prev) => ({
-                            ...prev,
-                            auditorId: '',
-                            auditorName: '',
-                            auditorEmail: '',
-                          }));
-                        }
-                      }}
-                      onFocus={() => {
-                        setLeadSearch('');
-                        setShowLeadDropdown(true);
-                        setCreateForm((prev) => ({
-                          ...prev,
-                          auditorId: '',
-                          auditorName: '',
-                          auditorEmail: '',
-                        }));
-                      }}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                    />
-                    {showLeadDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
-                        {employees
-                          .filter(
-                            (e) =>
-                              e.status === 'Active' &&
-                              !createForm.teamMembers.some((m) => m.id === e.id) &&
-                              (!leadSearch ||
-                                e.fullName?.toLowerCase().includes(leadSearch.toLowerCase()) ||
-                                e.designation?.toLowerCase().includes(leadSearch.toLowerCase())),
-                          )
-                          .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
-                          .slice(0, 8)
-                          .map((emp) => (
-                            <div
-                              key={emp.id}
-                              role="button"
-                              tabIndex={0}
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setCreateForm((prev) => ({
-                                  ...prev,
-                                  auditorId: emp.id,
-                                  auditorName: emp.fullName,
-                                  auditorEmail: emp.email || '',
-                                  teamMembers: prev.teamMembers.filter((m) => m.id !== emp.id),
-                                }));
-                                setLeadSearch('');
-                                setShowLeadDropdown(false);
-                              }}
-                              className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer border-b border-gray-50 last:border-0"
-                            >
-                              <div className="w-8 h-8 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                                {emp.fullName?.charAt(0)}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
-                                <p className="text-xs text-gray-400 truncate">{emp.designation || emp.department || '—'}</p>
-                              </div>
-                            </div>
-                          ))}
-                        {employees.filter(
-                          (e) =>
-                            e.status === 'Active' &&
-                            (!leadSearch || e.fullName?.toLowerCase().includes(leadSearch.toLowerCase())),
-                        ).length === 0 && (
-                          <div className="px-3 py-4 text-center text-sm text-gray-400">No employees found</div>
-                        )}
-                      </div>
-                    )}
-                    {createForm.auditorId && (
-                      <div className="mt-2 flex items-center gap-2 p-2.5 bg-[#E8F5F5] rounded-xl">
-                        <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                          {createForm.auditorName?.charAt(0)}
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-xs text-[#1B6B6B] font-medium">{createForm.auditorName}</p>
-                          <p className="text-xs text-[#1B6B6B]/60">Lead Auditor</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCreateForm((prev) => ({
-                              ...prev,
-                              auditorId: '',
-                              auditorName: '',
-                              auditorEmail: '',
-                            }));
-                            setLeadSearch('');
-                          }}
-                          className="text-[#1B6B6B]/40 hover:text-[#1B6B6B] text-sm"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div ref={teamRef} className="relative">
-                    <label className="text-xs text-gray-500 block mb-1.5">
-                      Team Members
-                      <span className="text-gray-400 font-normal ml-1">(optional)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={teamSearch}
-                      placeholder="Search and add team members..."
-                      onChange={(e) => {
-                        setTeamSearch(e.target.value);
-                        setShowTeamDropdown(true);
-                      }}
-                      onFocus={() => setShowTeamDropdown(true)}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                    />
-                    {showTeamDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
-                        {employees
-                          .filter(
-                            (e) =>
-                              e.status === 'Active' &&
-                              e.id !== createForm.auditorId &&
-                              !createForm.teamMembers.some((m) => m.id === e.id) &&
-                              (!teamSearch ||
-                                e.fullName?.toLowerCase().includes(teamSearch.toLowerCase()) ||
-                                e.designation?.toLowerCase().includes(teamSearch.toLowerCase())),
-                          )
-                          .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', undefined, { sensitivity: 'base' }))
-                          .slice(0, 8)
-                          .map((emp) => (
-                            <div
-                              key={emp.id}
-                              role="button"
-                              tabIndex={0}
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setCreateForm((prev) => ({
-                                  ...prev,
-                                  teamMembers: [
-                                    ...prev.teamMembers,
-                                    {
-                                      id: emp.id,
-                                      fullName: emp.fullName,
-                                      email: emp.email || '',
-                                      designation: emp.designation || emp.department || '',
-                                    },
-                                  ],
-                                }));
-                                setTeamSearch('');
-                                setShowTeamDropdown(false);
-                              }}
-                              className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer border-b border-gray-50 last:border-0"
-                            >
-                              <div className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                                {emp.fullName?.charAt(0)}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
-                                <p className="text-xs text-gray-400 truncate">{emp.designation || emp.department || '—'}</p>
-                              </div>
-                              <span className="text-xs text-[#1B6B6B]">+ Add</span>
-                            </div>
-                          ))}
-                        {employees.filter(
-                          (e) =>
-                            e.status === 'Active' &&
-                            e.id !== createForm.auditorId &&
-                            !createForm.teamMembers.some((m) => m.id === e.id) &&
-                            (!teamSearch || e.fullName?.toLowerCase().includes(teamSearch.toLowerCase())),
-                        ).length === 0 && (
-                          <div className="px-3 py-4 text-center text-sm text-gray-400">
-                            {teamSearch ? 'No employees found' : 'All employees added'}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {createForm.teamMembers.length > 0 && (
-                      <div className="mt-2 space-y-1.5">
-                        {createForm.teamMembers.map((member) => (
-                          <div
-                            key={member.id}
-                            className="flex items-center gap-2 p-2 bg-gray-50 border border-gray-100 rounded-xl"
-                          >
-                            <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                              {member.fullName?.charAt(0)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-gray-700 truncate">{member.fullName}</p>
-                            </div>
-                            <span className="text-xs text-gray-400">Member</span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setCreateForm((prev) => ({
-                                  ...prev,
-                                  teamMembers: prev.teamMembers.filter((m) => m.id !== member.id),
-                                }))
-                              }
-                              className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-red-100 text-gray-300 hover:text-red-500 transition-colors text-sm flex-shrink-0"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {(createForm.auditorId || createForm.teamMembers.length > 0) && (
-                      <div className="mt-2 p-2.5 bg-gray-50 rounded-xl">
-                        <p className="text-xs text-gray-500">
-                          👥 Team of <strong>{1 + createForm.teamMembers.length}</strong> — {createForm.auditorName || '—'}
-                          {createForm.teamMembers.length > 0
-                            ? ` + ${createForm.teamMembers.map((m) => (m.fullName || '').split(' ')[0]).join(', ')}`
-                            : ''}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Schedule</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1.5">Start Date</label>
-                    <input
-                      type="date"
-                      value={createForm.startDate}
-                      onChange={(e) => setCreateForm((prev) => ({ ...prev, startDate: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1.5">End Date *</label>
-                    <input
-                      type="date"
-                      value={createForm.endDate}
-                      onChange={(e) => setCreateForm((prev) => ({ ...prev, endDate: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Notes for Auditor (optional)</label>
-                <textarea
-                  value={createForm.notes}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, notes: e.target.value }))}
-                  rows={2}
-                  placeholder="Any special instructions or context for the auditor..."
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-            </div>
-
-            <div className="px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-gray-50/50">
-              {createForm.auditTypeId && createForm.auditorId && (
-                <div className="mb-3 p-3 bg-[#E8F5F5] rounded-xl">
-                  <p className="text-xs text-[#1B6B6B] font-medium">
-                    📋 {auditTypes.find((t) => t.id === createForm.auditTypeId)?.name}
-                    {' → '}
-                    👥 Team of {1 + createForm.teamMembers.length}
-                    {createForm.branch && ` · ${createForm.branch}`}
-                    {createForm.endDate && ` · Ends ${createForm.endDate}`}
-                  </p>
-                </div>
-              )}
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    resetForm();
-                  }}
-                  className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 bg-white hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  disabled={saving || !createForm.auditTypeId || !createForm.auditorId}
-                  className="flex-[2] px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Assigning...' : '+ Assign Audit'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
+
+      {showAssignModal && (
+        <AssignAuditModal
+          auditTypes={auditTypes}
+          company={company}
+          employees={employees}
+          assignForm={assignForm}
+          setAssignForm={setAssignForm}
+          leadSearch={leadSearch}
+          setLeadSearch={setLeadSearch}
+          showLeadDrop={showLeadDrop}
+          setShowLeadDrop={setShowLeadDrop}
+          teamSearch={teamSearch}
+          setTeamSearch={setTeamSearch}
+          showTeamDrop={showTeamDrop}
+          setShowTeamDrop={setShowTeamDrop}
+          leadRef={leadRef}
+          teamRef={teamRef}
+          saving={saving}
+          onClose={() => {
+            setShowAssignModal(false);
+            setAssignForm(emptyAssign);
+            setLeadSearch('');
+            setTeamSearch('');
+          }}
+          onSubmit={handleAssign}
+        />
+      )}
+
     </div>
   );
 }
 
 export default function Audit() {
-  const { companyId } = useParams();
-  const { currentUser, userRole } = useAuth();
+  const { companyId: routeCompanyId } = useParams();
+  const { companyId: authCompanyId, currentUser, userRole } = useAuth();
+  const companyId = routeCompanyId || authCompanyId;
   const { company } = useCompany();
-  const auditTemplatesRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState('audits');
+  const [auditTypes, setAuditTypes] = useState([]);
+  const [audits, setAudits] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedAudit, setSelectedAudit] = useState(null);
-  const [employees, setEmployees] = useState([]);
-  const [auditTypes, setAuditTypes] = useState([]);
-  const [audits, setAudits] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
   const [toast, setToast] = useState(null);
-  const showSuccess = useCallback((msg) => {
+
+  const showSuccess = (msg) => {
     setToast({ type: 'success', msg });
     setTimeout(() => setToast(null), 3000);
-  }, []);
-  const showError = useCallback((msg) => {
+  };
+  const showError = (msg) => {
     setToast({ type: 'error', msg });
     setTimeout(() => setToast(null), 4000);
-  }, []);
+  };
 
   useEffect(() => {
     trackPageView('Audit');
@@ -3422,18 +2969,18 @@ export default function Audit() {
   }, [companyId]);
 
   useEffect(() => {
-    if (!companyId) return undefined;
-    getDocs(collection(db, 'companies', companyId, 'employees'))
+    if (!companyId) return;
+    getDocs(query(collection(db, 'companies', companyId, 'employees'), where('status', '==', 'Active')))
       .then((snap) => {
-        setEmployees(
-          snap.docs
-            .filter((d) => d.data().status === 'Active')
-            .map((d) => ({ id: d.id, ...d.data() })),
-        );
+        setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       })
       .catch(() => setEmployees([]));
-    return undefined;
   }, [companyId]);
+
+  const TABS = [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'audits', label: 'Audits', icon: '🔍' },
+  ];
 
   if (!companyId) {
     return <p className="p-6 text-sm text-gray-500">Missing company.</p>;
@@ -3451,7 +2998,7 @@ export default function Audit() {
     <div className="min-h-screen bg-gray-50">
       {toast && (
         <div
-          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${
+          className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white transition-all ${
             toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
           }`}
         >
@@ -3459,33 +3006,17 @@ export default function Audit() {
         </div>
       )}
 
-      <div className="bg-white border-b border-gray-100 px-6 py-4">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-800">Audit</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Manage audits and compliance tracking</p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
-          <div className="flex gap-1 flex-wrap">
-            {AUDIT_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                  activeTab === tab.id ? 'bg-[#E8F5F5] text-[#1B6B6B]' : 'text-gray-500 hover:bg-gray-100'
-                }`}
-              >
-                <span>{tab.icon}</span>
-                {tab.label}
-              </button>
-            ))}
+      <div className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-800">Audit</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Schedule, track and close audits</p>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setShowCalendar(true)}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              className="w-9 h-9 flex items-center justify-center border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
               title="Audit Calendar"
             >
               📅
@@ -3493,19 +3024,32 @@ export default function Audit() {
             <button
               type="button"
               onClick={() => setShowSettings(true)}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
             >
               ⚙️ Settings
             </button>
           </div>
         </div>
+
+        <div className="flex gap-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === tab.id ? 'bg-[#E8F5F5] text-[#1B6B6B]' : 'text-gray-500 hover:bg-gray-100'
+              }`}
+            >
+              <span>{tab.icon}</span>
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="p-6">
-        {activeTab === 'dashboard' && (
-          <AuditDashboard audits={audits} auditTypes={auditTypes} company={company} />
-        )}
-
+        {activeTab === 'dashboard' && <AuditDashboard audits={audits} auditTypes={auditTypes} />}
         {activeTab === 'audits' && (
           <AuditList
             audits={audits}
@@ -3513,31 +3057,14 @@ export default function Audit() {
             company={company}
             companyId={companyId}
             currentUser={currentUser}
+            userRole={userRole}
             employees={employees}
-            saving={saving}
-            setSaving={setSaving}
             showSuccess={showSuccess}
             showError={showError}
-            setShowSettings={setShowSettings}
             setSelectedAudit={setSelectedAudit}
-            userRole={userRole}
-            selectedAuditId={selectedAudit?.id}
           />
         )}
       </div>
-
-      {showCalendar && (
-        <AuditCalendar
-          audits={audits}
-          onClose={() => setShowCalendar(false)}
-          onSelectAudit={(audit) => {
-            setShowCalendar(false);
-            setActiveTab('audits');
-            const fresh = audits.find((a) => a.id === audit.id);
-            setSelectedAudit(fresh || audit);
-          }}
-        />
-      )}
 
       {selectedAudit && (
         <AuditDetail
@@ -3553,171 +3080,29 @@ export default function Audit() {
       )}
 
       {showSettings && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div
-            role="presentation"
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setShowSettings(false)}
-          />
-          <div className="relative bg-white w-full max-w-2xl h-full flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-white flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-[#E8F5F5] rounded-xl flex items-center justify-center text-lg">⚙️</div>
-                <div>
-                  <h2 className="text-base font-semibold text-gray-800">Audit Settings</h2>
-                  <p className="text-xs text-gray-400">Manage audit templates and checklist configurations</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowSettings(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-lg"
-              >
-                ✕
-              </button>
-            </div>
+        <AuditSettings
+          auditTypes={auditTypes}
+          companyId={companyId}
+          currentUser={currentUser}
+          onClose={() => setShowSettings(false)}
+          showSuccess={showSuccess}
+          showError={showError}
+        />
+      )}
 
-            <div className="px-6 pt-5 pb-3 flex items-center justify-between flex-shrink-0">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700">Audit Templates</h3>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {auditTypes.length} template{auditTypes.length !== 1 ? 's' : ''} configured
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  auditTemplatesRef.current?.openNew();
-                }}
-                className="flex items-center gap-1.5 px-3 py-2 bg-[#1B6B6B] text-white rounded-xl text-xs font-medium hover:bg-[#155858]"
-              >
-                + Add Template
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 pb-6">
-              {auditTypes.length === 0 ? (
-                <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-2xl">
-                  <p className="text-3xl mb-3">📋</p>
-                  <p className="text-sm font-medium text-gray-600 mb-1">No audit templates yet</p>
-                  <p className="text-xs text-gray-400 mb-4">Create your first template to start assigning audits</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      auditTemplatesRef.current?.openNew();
-                    }}
-                    className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium"
-                  >
-                    + Create Template
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {auditTypes.map((type) => (
-                    <div
-                      key={type.id}
-                      className="bg-white border border-gray-100 rounded-2xl p-4 hover:border-gray-200 hover:shadow-sm transition-all"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div
-                            className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center text-white font-bold text-base"
-                            style={{ background: type.color || '#8B5CF6' }}
-                          >
-                            {type.name?.charAt(0)}
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-800 truncate">{type.name}</p>
-
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              <span
-                                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                  type.auditCategory === 'External' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                }`}
-                              >
-                                {type.auditCategory === 'External' ? '🌐' : '🏢'}{' '}
-                                {type.auditCategory || 'Internal'}
-                              </span>
-
-                              <span
-                                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                  type.riskLevel === 'Critical'
-                                    ? 'bg-red-100 text-red-700'
-                                    : type.riskLevel === 'High'
-                                      ? 'bg-orange-100 text-orange-700'
-                                      : type.riskLevel === 'Medium'
-                                        ? 'bg-amber-100 text-amber-700'
-                                        : 'bg-green-100 text-green-700'
-                                }`}
-                              >
-                                {type.riskLevel === 'Critical' && '🔴 '}
-                                {type.riskLevel === 'High' && '🟠 '}
-                                {type.riskLevel === 'Medium' && '🟡 '}
-                                {type.riskLevel === 'Low' && '🟢 '}
-                                {type.riskLevel || 'Medium'}
-                              </span>
-
-                              <span className="text-xs text-gray-400">
-                                {(type.checklistTemplate || []).length} items
-                              </span>
-                            </div>
-
-                            {type.description && (
-                              <p className="text-xs text-gray-400 mt-1 truncate">{type.description}</p>
-                            )}
-
-                            {[...new Set((type.checklistTemplate || []).map((i) => i.section))].length > 0 && (
-                              <div className="flex gap-1 mt-2 flex-wrap">
-                                {[...new Set((type.checklistTemplate || []).map((i) => i.section))].map((section) => (
-                                  <span
-                                    key={section}
-                                    className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full"
-                                  >
-                                    {section} (
-                                    {(type.checklistTemplate || []).filter((i) => i.section === section).length})
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex gap-1 ml-2 flex-shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => auditTemplatesRef.current?.openEdit(type)}
-                            className="px-3 py-1.5 text-xs text-[#1B6B6B] hover:bg-[#E8F5F5] rounded-lg transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => auditTemplatesRef.current?.deleteType(type)}
-                            className="px-3 py-1.5 text-xs text-red-400 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <AuditTemplates
-              ref={auditTemplatesRef}
-              companyId={companyId}
-              currentUser={currentUser}
-              saving={saving}
-              setSaving={setSaving}
-              showSuccess={showSuccess}
-              showError={showError}
-            />
-          </div>
-        </div>
+      {showCalendar && (
+        <AuditCalendar
+          audits={audits}
+          onClose={() => setShowCalendar(false)}
+          onSelectAudit={(a) => {
+            setShowCalendar(false);
+            setActiveTab('audits');
+            const fresh = audits.find((x) => x.id === a.id);
+            setSelectedAudit(fresh || a);
+          }}
+        />
       )}
     </div>
   );
 }
+
