@@ -2254,6 +2254,219 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   );
 }
 
+function AuditTableRow({
+  audit,
+  overdueAudit,
+  openFindings,
+  totalFindings,
+  companyId,
+  currentUser,
+  userRole,
+  onOpen,
+  onDelete,
+  showError,
+}) {
+  const [status, setStatus] = useState(audit.status);
+  const [result, setResult] = useState(audit.overallResult || null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setStatus(audit.status);
+    setResult(audit.overallResult || null);
+  }, [audit.id, audit.status, audit.overallResult]);
+
+  const saveChanges = async (newStatus, newResult) => {
+    try {
+      setSaving(true);
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+        status: newStatus,
+        overallResult: newResult,
+        updatedAt: new Date(),
+        updatedBy: currentUser?.email || '',
+        ...(newStatus === 'Closed' &&
+          !audit.closedAt && {
+            closedAt: new Date(),
+            closedBy: currentUser?.email || '',
+          }),
+      });
+    } catch (e) {
+      showError('Failed to save');
+      setStatus(audit.status);
+      setResult(audit.overallResult || null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleStatusChange = async (newStatus) => {
+    setStatus(newStatus);
+    await saveChanges(newStatus, result);
+  };
+
+  const handleResultChange = async (newResult) => {
+    const updated = result === newResult ? null : newResult;
+    setResult(updated);
+    await saveChanges(status, updated);
+  };
+
+  return (
+    <div
+      className={`grid grid-cols-[2fr_1fr_1fr_1fr_140px_160px_80px_40px] gap-3 px-4 py-3.5 items-center hover:bg-gray-50/60 transition-colors group ${
+        overdueAudit ? 'bg-red-50/30 hover:bg-red-50/50' : ''
+      }`}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div
+          className="w-2 h-8 rounded-full flex-shrink-0"
+          style={{
+            background: overdueAudit ? '#EF4444' : audit.auditTypeColor || '#8B5CF6',
+          }}
+        />
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-xs font-mono text-gray-400 flex-shrink-0">{audit.auditRefId}</span>
+            {overdueAudit && (
+              <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full flex-shrink-0">Overdue</span>
+            )}
+          </div>
+          <p className="text-sm font-semibold text-gray-800 truncate">{audit.auditTypeName}</p>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <span
+              className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                audit.auditCategory === 'External' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+              }`}
+            >
+              {audit.auditCategory === 'External' ? '🌐' : '🏢'} {audit.auditCategory || 'Internal'}
+            </span>
+            <span
+              className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                audit.riskLevel === 'Critical'
+                  ? 'bg-red-100 text-red-600'
+                  : audit.riskLevel === 'High'
+                    ? 'bg-orange-100 text-orange-600'
+                    : audit.riskLevel === 'Medium'
+                      ? 'bg-amber-100 text-amber-600'
+                      : 'bg-green-100 text-green-600'
+              }`}
+            >
+              {audit.riskLevel || 'Medium'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="min-w-0">
+        {audit.branch && <p className="text-sm text-gray-700 truncate">{audit.branch}</p>}
+        {audit.location && <p className="text-xs text-gray-400 truncate mt-0.5">{audit.location}</p>}
+        {audit.department && <p className="text-xs text-gray-400 truncate">{audit.department}</p>}
+        {!audit.branch && !audit.location && !audit.department && <p className="text-sm text-gray-300">—</p>}
+      </div>
+
+      <div className="min-w-0">
+        {audit.auditorName ? (
+          <>
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                {audit.auditorName?.charAt(0)}
+              </div>
+              <p className="text-sm text-gray-700 truncate">{audit.auditorName}</p>
+            </div>
+            {(audit.teamMembers?.length || 0) > 0 && (
+              <p className="text-xs text-gray-400 mt-0.5 ml-8">
+                +{audit.teamMembers.length} member{audit.teamMembers.length !== 1 ? 's' : ''}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-gray-300">—</p>
+        )}
+      </div>
+
+      <div className="min-w-0">
+        {audit.startDate && <p className="text-xs text-gray-500">{audit.startDate}</p>}
+        {audit.endDate && (
+          <p className={`text-xs font-medium ${overdueAudit ? 'text-red-600' : 'text-gray-500'}`}>→ {audit.endDate}</p>
+        )}
+        {!audit.startDate && !audit.endDate && <p className="text-sm text-gray-300">—</p>}
+      </div>
+
+      <div onClick={(e) => e.stopPropagation()}>
+        <select
+          value={status}
+          disabled={saving || status === 'Closed'}
+          onChange={(e) => handleStatusChange(e.target.value)}
+          className={`w-full text-xs font-medium border rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none transition-colors ${
+            saving ? 'opacity-50 cursor-wait' : ''
+          } ${status === 'Closed' ? 'cursor-not-allowed opacity-70 bg-gray-50' : ''} ${
+            AUDIT_STATUSES.find((s) => s.key === status)?.badge || 'bg-gray-100 text-gray-600 border-gray-200'
+          }`}
+        >
+          {AUDIT_STATUSES.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.icon} {s.key}
+            </option>
+          ))}
+        </select>
+        {saving && (
+          <p className="text-xs text-gray-400 mt-0.5 text-center">Saving...</p>
+        )}
+      </div>
+
+      <div onClick={(e) => e.stopPropagation()} className="flex gap-1">
+        {OVERALL_RESULTS.map((r) => (
+          <button
+            key={r.value}
+            type="button"
+            disabled={saving || status === 'Closed'}
+            onClick={() => handleResultChange(r.value)}
+            title={r.value}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              result === r.value ? r.active : `${r.color} hover:opacity-80`
+            } ${saving || status === 'Closed' ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+          >
+            {r.icon}
+            <span className="hidden xl:inline ml-1">{r.value}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="text-center">
+        {totalFindings > 0 ? (
+          <span
+            className={`text-xs px-2 py-1 rounded-full font-medium ${
+              openFindings > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+            }`}
+          >
+            {openFindings > 0 ? `${openFindings} open` : '✅ done'}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-300">—</span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-end gap-1">
+        <button
+          type="button"
+          onClick={onOpen}
+          title="Open audit detail"
+          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#E8F5F5] text-gray-400 hover:text-[#1B6B6B] transition-colors text-sm"
+        >
+          →
+        </button>
+        {userRole === 'admin' && (
+          <button
+            type="button"
+            onClick={onDelete}
+            title="Delete audit"
+            className="w-7 h-7 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-300 hover:text-red-500 transition-all text-sm"
+          >
+            🗑️
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function AuditList({ audits, auditTypes, company, companyId, currentUser, userRole, employees, showSuccess, showError, setSelectedAudit }) {
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -2665,12 +2878,14 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
       </div>
 
       {viewMode === 'list' && (
-        <div>
+        <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
           {filtered.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
+            <div className="text-center py-20">
               <p className="text-5xl mb-4">🔍</p>
               <p className="text-base font-semibold text-gray-700 mb-2">{audits.length === 0 ? 'No audits yet' : 'No audits match filters'}</p>
-              <p className="text-sm text-gray-400 mb-6">{audits.length === 0 ? 'Assign your first audit to get started' : 'Try adjusting filters'}</p>
+              <p className="text-sm text-gray-400 mb-6">
+                {audits.length === 0 ? 'Assign your first audit to get started' : 'Try adjusting your filters'}
+              </p>
               {audits.length === 0 && (
                 <button
                   type="button"
@@ -2683,119 +2898,37 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
               )}
             </div>
           ) : (
-            <div className="space-y-3">
-              {filtered.map((audit) => {
-                const overdueAudit = isOverdue(audit);
-                const openFindings = (audit.findings || []).filter((f) => f.status !== 'Resolved');
-                const totalFindings = (audit.findings || []).length;
-                return (
-                  <div
-                    key={audit.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setSelectedAudit(audit)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
-                    }}
-                    className={`bg-white rounded-2xl border cursor-pointer hover:shadow-md transition-all group relative overflow-hidden ${
-                      overdueAudit ? 'border-red-200 hover:border-red-300' : 'border-gray-100 hover:border-[#4ECDC4]'
-                    }`}
-                  >
-                    <div className="h-1" style={{ background: overdueAudit ? '#EF4444' : audit.auditTypeColor || '#8B5CF6' }} />
-                    {userRole === 'admin' && (
-                      <button
-                        type="button"
-                        onClick={(e) => handleDelete(e, audit)}
-                        className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-300 hover:text-red-500 transition-all z-10"
-                      >
-                        🗑️
-                      </button>
-                    )}
-                    <div className="p-5">
-                      <div className="flex items-start gap-4">
-                        <div
-                          className="w-11 h-11 rounded-xl flex-shrink-0 flex items-center justify-center text-white font-bold text-base shadow-sm"
-                          style={{ background: audit.auditTypeColor || '#8B5CF6' }}
-                        >
-                          {audit.auditTypeName?.charAt(0) || 'A'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="text-xs font-mono font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{audit.auditRefId || '—'}</span>
-                            <p className="text-sm font-semibold text-gray-800">{audit.auditTypeName}</p>
-                            <span
-                              className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
-                                overdueAudit ? 'bg-red-100 text-red-700' : AUDIT_STATUSES.find((s) => s.key === audit.status)?.badge || 'bg-gray-100 text-gray-700'
-                              }`}
-                            >
-                              {overdueAudit ? '⚠️ Overdue' : audit.status}
-                            </span>
-                            {audit.overallResult && (
-                              <span
-                                className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
-                                  audit.overallResult === 'Pass'
-                                    ? 'bg-green-100 text-green-700'
-                                    : audit.overallResult === 'Fail'
-                                      ? 'bg-red-100 text-red-700'
-                                      : 'bg-amber-100 text-amber-700'
-                                }`}
-                              >
-                                {audit.overallResult === 'Pass' && '✅ '}
-                                {audit.overallResult === 'Fail' && '❌ '}
-                                {audit.overallResult === 'Partial' && '⚠️ '}
-                                {audit.overallResult}
-                              </span>
-                            )}
-                            <span
-                              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                audit.riskLevel === 'Critical'
-                                  ? 'bg-red-100 text-red-600'
-                                  : audit.riskLevel === 'High'
-                                    ? 'bg-orange-100 text-orange-600'
-                                    : audit.riskLevel === 'Medium'
-                                      ? 'bg-amber-100 text-amber-600'
-                                      : 'bg-green-100 text-green-600'
-                              }`}
-                            >
-                              {audit.riskLevel === 'Critical' && '🔴 '}
-                              {audit.riskLevel === 'High' && '🟠 '}
-                              {audit.riskLevel === 'Medium' && '🟡 '}
-                              {audit.riskLevel === 'Low' && '🟢 '}
-                              {audit.riskLevel || 'Medium'}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 flex-wrap mt-1">
-                            {audit.branch && <span className="text-xs text-gray-500">🏢 {audit.branch}</span>}
-                            {audit.location && <span className="text-xs text-gray-500">📍 {audit.location}</span>}
-                            {audit.department && <span className="text-xs text-gray-400">· {audit.department}</span>}
-                            {audit.auditorName && (
-                              <span className="text-xs text-gray-500">
-                                👤 {audit.auditorName}
-                                {(audit.teamMembers?.length || 0) > 0 && <span className="text-gray-400"> +{audit.teamMembers.length}</span>}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 flex-wrap mt-1.5">
-                            {audit.startDate && <span className="text-xs text-gray-400">📅 {audit.startDate}</span>}
-                            {audit.endDate && (
-                              <span className={`text-xs font-medium ${overdueAudit ? 'text-red-600' : 'text-gray-400'}`}>→ {audit.endDate}</span>
-                            )}
-                            {openFindings.length > 0 && (
-                              <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full">
-                                {openFindings.length} open finding{openFindings.length !== 1 ? 's' : ''}
-                              </span>
-                            )}
-                            {totalFindings > 0 && openFindings.length === 0 && (
-                              <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full">✅ All findings resolved</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <>
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_140px_160px_80px_40px] gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
+                {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Result', 'Findings', ''].map((h) => (
+                  <p key={h || 'actions'} className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate">
+                    {h}
+                  </p>
+                ))}
+              </div>
+              <div className="divide-y divide-gray-50">
+                {filtered.map((audit) => {
+                  const overdueAudit = isOverdue(audit);
+                  const openFindings = (audit.findings || []).filter((f) => f.status !== 'Resolved').length;
+                  const totalFindings = (audit.findings || []).length;
+                  return (
+                    <AuditTableRow
+                      key={audit.id}
+                      audit={audit}
+                      overdueAudit={overdueAudit}
+                      openFindings={openFindings}
+                      totalFindings={totalFindings}
+                      companyId={companyId}
+                      currentUser={currentUser}
+                      userRole={userRole}
+                      onOpen={() => setSelectedAudit(audit)}
+                      onDelete={(e) => handleDelete(e, audit)}
+                      showError={showError}
+                    />
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -2847,19 +2980,32 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
                           {audit.branch && <p className="text-xs text-gray-400 truncate">{audit.branch}</p>}
                         </div>
                       </div>
-                      {audit.overallResult && (
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium mb-1 inline-block ${
-                            audit.overallResult === 'Pass'
-                              ? 'bg-green-100 text-green-700'
-                              : audit.overallResult === 'Fail'
-                                ? 'bg-red-100 text-red-700'
-                                : 'bg-amber-100 text-amber-700'
-                          }`}
-                        >
-                          {audit.overallResult}
-                        </span>
-                      )}
+                      <div onClick={(e) => e.stopPropagation()} className="flex gap-1 mt-2">
+                        {OVERALL_RESULTS.map((r) => (
+                          <button
+                            key={r.value}
+                            type="button"
+                            disabled={audit.status === 'Closed'}
+                            onClick={async () => {
+                              const newResult = audit.overallResult === r.value ? null : r.value;
+                              try {
+                                await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+                                  overallResult: newResult,
+                                  updatedAt: new Date(),
+                                  updatedBy: currentUser?.email || '',
+                                });
+                              } catch (e) {
+                                showError('Failed to save');
+                              }
+                            }}
+                            className={`flex-1 py-1 rounded-lg text-xs font-medium border transition-all ${
+                              audit.overallResult === r.value ? r.active : `${r.color} hover:opacity-80`
+                            } ${audit.status === 'Closed' ? 'cursor-not-allowed opacity-60' : ''}`}
+                          >
+                            {r.icon}
+                          </button>
+                        ))}
+                      </div>
                       <div className="flex items-center justify-between mt-2">
                         {audit.auditorName && (
                           <div className="flex items-center gap-1">
