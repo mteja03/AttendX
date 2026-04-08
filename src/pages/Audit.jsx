@@ -32,6 +32,14 @@ function formatDate(dateStr) {
   }
 }
 
+function getAuditScore(audit) {
+  const items = audit?.checklistReview || [];
+  const reviewed = items.filter((i) => i.result === 'pass' || i.result === 'fail');
+  if (reviewed.length === 0) return null;
+  const passed = items.filter((i) => i.result === 'pass').length;
+  return Math.round((passed / reviewed.length) * 100);
+}
+
 const AUDIT_STATUSES = [
   { key: 'Scheduled', color: '#8B5CF6', bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700', icon: '📅' },
   { key: 'In Progress', color: '#3B82F6', bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: '🔄' },
@@ -76,11 +84,11 @@ function AuditDashboard({ audits, auditTypes }) {
   }).length;
 
   const closedAudits = audits.filter((a) => a.status === 'Closed');
-  const closedWithOverall = closedAudits.filter((a) => a.overallResult === 'Pass' || a.overallResult === 'Partial' || a.overallResult === 'Fail');
-  const complianceRate =
-    closedWithOverall.length > 0
-      ? Math.round((closedWithOverall.filter((a) => a.overallResult === 'Pass').length / closedWithOverall.length) * 100)
-      : null;
+  const complianceRate = (() => {
+    const scores = closedAudits.map((a) => getAuditScore(a)).filter((s) => s !== null);
+    if (scores.length === 0) return null;
+    return Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length);
+  })();
 
   const riskCounts = {
     Critical: audits.filter((a) => a.riskLevel === 'Critical' && a.status !== 'Closed').length,
@@ -875,6 +883,28 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
     }
   };
 
+  const handlePrint = () => {
+    const score = getAuditScore({ checklistReview });
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html><head><title>Audit Report — ${audit.auditRefId || ''}</title></head>
+      <body style="font-family:Arial,sans-serif;padding:24px">
+        <h2>${audit.auditTypeName || 'Audit'} — ${audit.auditRefId || ''}</h2>
+        <p><b>Branch:</b> ${audit.branch || '—'} | <b>Location:</b> ${audit.location || '—'} | <b>Auditor:</b> ${audit.auditorName || '—'}</p>
+        <p><b>Dates:</b> ${formatDate(audit.startDate)} → ${formatDate(audit.endDate)} | <b>Result:</b> ${audit.overallResult || '—'} | <b>Score:</b> ${score === null ? '—' : `${score}%`}</p>
+        <h3>Checklist</h3>
+        <ul>${checklistReview.map((i) => `<li>${i.section || ''} — ${i.question || ''} — ${i.result || '—'} ${i.note ? `(${i.note})` : ''}</li>`).join('')}</ul>
+        <h3>Findings</h3>
+        <ul>${findings.map((f) => `<li>${f.description || ''} — ${f.severity || ''} — ${f.status || ''} ${f.targetDate ? `(${formatDate(f.targetDate)})` : ''}</li>`).join('')}</ul>
+        ${adminNotes ? `<h3>Admin Notes</h3><p>${adminNotes}</p>` : ''}
+      </body></html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 400);
+  };
+
   const handleDelete = async (type) => {
     if (!window.confirm(`Delete "${type.name}"?`)) return;
     try {
@@ -905,6 +935,26 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
+          {isClosed && (
+            <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-100 rounded-xl mb-4">
+              <span className="text-green-500 text-lg">🔒</span>
+              <div>
+                <p className="text-sm font-medium text-green-700">Audit Closed</p>
+                <p className="text-xs text-green-600">This audit is locked. View only.</p>
+              </div>
+              {audit.overallResult && (
+                <span className={`ml-auto text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${
+                  audit.overallResult === 'Pass'
+                    ? 'bg-green-200 text-green-800'
+                    : audit.overallResult === 'Fail'
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {audit.overallResult}
+                </span>
+              )}
+            </div>
+          )}
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm font-semibold text-gray-700">Audit Templates</p>
             <button
@@ -1627,6 +1677,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const naCount = checklistReview.filter((i) => i.result === 'na').length;
   const totalItems = checklistReview.length;
   const reviewedCount = passCount + failCount + naCount;
+  const complianceScore = getAuditScore({ checklistReview });
 
   const TABS = [
     { id: 'checklist', label: 'Checklist', count: totalItems },
@@ -2122,6 +2173,14 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   ))}
                 </div>
               )}
+              {complianceScore !== null && (
+                <div className={`p-4 border rounded-xl text-center ${
+                  complianceScore >= 80 ? 'bg-green-50 border-green-100' : complianceScore >= 60 ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-100'
+                }`}>
+                  <p className={`text-4xl font-bold ${complianceScore >= 80 ? 'text-green-600' : complianceScore >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{complianceScore}%</p>
+                  <p className="text-xs text-gray-400 mt-1">Compliance Score</p>
+                </div>
+              )}
 
               <div className="bg-white border border-gray-100 rounded-xl p-4 space-y-3">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Audit Details</p>
@@ -2209,9 +2268,14 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   ✅ Audit closed{audit.closedBy && ` by ${audit.closedBy}`}
                 </p>
               </div>
-              <button type="button" onClick={onClose} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
-                Close
-              </button>
+              <div className="flex gap-3">
+                <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
+                  Close
+                </button>
+                <button type="button" onClick={handlePrint} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858]">
+                  🖨️ Print Report
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-2">
@@ -2313,7 +2377,7 @@ function AuditTableRow({
   return (
     <div
       onClick={onOpen}
-      className={`grid grid-cols-[2fr_1fr_1fr_1fr_140px_140px_80px_40px] gap-3 px-4 py-3.5 items-center hover:bg-gray-50/80 transition-colors group cursor-pointer ${
+      className={`grid grid-cols-[2fr_1fr_1fr_1fr_140px_140px_70px_70px_40px] gap-3 px-4 py-3.5 items-center hover:bg-gray-50/80 transition-colors group cursor-pointer ${
         overdueAudit ? 'bg-red-50/30 hover:bg-red-50/60' : ''
       }`}
     >
@@ -2423,25 +2487,31 @@ function AuditTableRow({
       <div onClick={(e) => e.stopPropagation()}>
         <select
           value={result || ''}
-          disabled={saving || status === 'Closed'}
+          disabled={saving || status !== 'Closed'}
           onChange={(e) => handleResultChange(e.target.value || null)}
-          className={`w-full text-xs font-medium border rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none transition-colors ${
-            saving ? 'opacity-50 cursor-wait' : ''
-          } ${
-            result === 'Pass'
-              ? 'bg-green-100 text-green-700 border-green-200'
+          title={status !== 'Closed' ? 'Close the audit first to set result' : 'Set overall result'}
+          className={`w-full text-xs font-medium border rounded-lg px-2 py-1.5 focus:outline-none transition-colors ${
+            status !== 'Closed'
+              ? 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'
+              : result === 'Pass'
+              ? 'bg-green-100 text-green-700 border-green-200 cursor-pointer'
               : result === 'Fail'
-                ? 'bg-red-100 text-red-700 border-red-200'
-                : result === 'Partial'
-                  ? 'bg-amber-100 text-amber-700 border-amber-200'
-                  : 'bg-white text-gray-400 border-gray-200'
-          } ${status === 'Closed' ? 'cursor-not-allowed opacity-70' : ''}`}
+              ? 'bg-red-100 text-red-700 border-red-200 cursor-pointer'
+              : result === 'Partial'
+              ? 'bg-amber-100 text-amber-700 border-amber-200 cursor-pointer'
+              : 'bg-white text-gray-500 border-gray-200 cursor-pointer'
+          }`}
         >
           <option value="">— Result</option>
           <option value="Pass">✅ Pass</option>
           <option value="Partial">⚠️ Partial</option>
           <option value="Fail">❌ Fail</option>
         </select>
+        {status !== 'Closed' && (
+          <p className="text-xs text-gray-300 mt-0.5 text-center">
+            Close first
+          </p>
+        )}
       </div>
 
       <div className="text-center">
@@ -2456,6 +2526,26 @@ function AuditTableRow({
         ) : (
           <span className="text-xs text-gray-300">—</span>
         )}
+      </div>
+
+      <div className="text-center">
+        {(() => {
+          const score = getAuditScore(audit);
+          if (score === null) return <p className="text-xs text-gray-300 text-center">—</p>;
+          return (
+            <div className="text-center">
+              <div className={`text-sm font-bold ${score >= 80 ? 'text-green-600' : score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                {score}%
+              </div>
+              <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1">
+                <div
+                  className={`h-full rounded-full ${score >= 80 ? 'bg-green-500' : score >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                  style={{ width: `${score}%` }}
+                />
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
@@ -2488,6 +2578,8 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
     riskLevel: '',
     auditor: '',
     category: '',
+    dateFrom: '',
+    dateTo: '',
   });
   const [leadSearch, setLeadSearch] = useState('');
   const [showLeadDrop, setShowLeadDrop] = useState(false);
@@ -2557,6 +2649,16 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
       if (filters.riskLevel && a.riskLevel !== filters.riskLevel) return false;
       if (filters.auditor && a.auditorName !== filters.auditor) return false;
       if (filters.category && a.auditCategory !== filters.category) return false;
+      if (filters.dateFrom) {
+        const from = new Date(filters.dateFrom);
+        const end = new Date(a.endDate || a.dueDate || '9999-12-31');
+        if (end < from) return false;
+      }
+      if (filters.dateTo) {
+        const to = new Date(filters.dateTo);
+        const end = new Date(a.endDate || a.dueDate || '0000-01-01');
+        if (end > to) return false;
+      }
       return true;
     });
   }, [audits, search, filters]);
@@ -2742,7 +2844,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
               <p className="text-sm font-semibold text-gray-700">Filter Audits</p>
               <button
                 type="button"
-                onClick={() => setFilters({ status: '', type: '', branch: '', location: '', riskLevel: '', auditor: '', category: '' })}
+                onClick={() => setFilters({ status: '', type: '', branch: '', location: '', riskLevel: '', auditor: '', category: '', dateFrom: '', dateTo: '' })}
                 className="text-xs text-[#1B6B6B] hover:underline"
               >
                 Clear all
@@ -2852,6 +2954,24 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
                     ))}
                 </select>
               </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">End Date From</label>
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters((p) => ({ ...p, dateFrom: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">End Date To</label>
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters((p) => ({ ...p, dateTo: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                />
+              </div>
             </div>
             {activeFilterCount > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-100">
@@ -2873,7 +2993,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
               type="button"
               onClick={() => {
                 setSearch('');
-                setFilters({ status: '', type: '', branch: '', location: '', riskLevel: '', auditor: '', category: '' });
+                setFilters({ status: '', type: '', branch: '', location: '', riskLevel: '', auditor: '', category: '', dateFrom: '', dateTo: '' });
               }}
               className="text-xs text-[#1B6B6B] hover:underline"
             >
@@ -2905,8 +3025,8 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_140px_140px_80px_40px] gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
-                {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Result', 'Findings', ''].map((h) => (
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_140px_140px_70px_70px_40px] gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
+                {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Result', 'Findings', 'Score', ''].map((h) => (
                   <p key={h || 'actions'} className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate">
                     {h}
                   </p>
@@ -2991,7 +3111,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
                           <button
                             key={r.value}
                             type="button"
-                            disabled={audit.status === 'Closed'}
+                            disabled={audit.status !== 'Closed'}
                             onClick={async () => {
                               const newResult = audit.overallResult === r.value ? null : r.value;
                               try {
@@ -3006,12 +3126,29 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
                             }}
                             className={`flex-1 py-1 rounded-lg text-xs font-medium border transition-all ${
                               audit.overallResult === r.value ? r.active : `${r.color} hover:opacity-80`
-                            } ${audit.status === 'Closed' ? 'cursor-not-allowed opacity-60' : ''}`}
+                            } ${audit.status !== 'Closed' ? 'cursor-not-allowed opacity-60' : ''}`}
                           >
                             {r.icon}
                           </button>
                         ))}
                       </div>
+                      {(() => {
+                        const score = getAuditScore(audit);
+                        if (score === null) return null;
+                        return (
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${score >= 80 ? 'bg-green-500' : score >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                style={{ width: `${score}%` }}
+                              />
+                            </div>
+                            <span className={`text-xs font-bold ${score >= 80 ? 'text-green-600' : score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                              {score}%
+                            </span>
+                          </div>
+                        );
+                      })()}
                       <div className="flex items-center justify-between mt-2">
                         {audit.auditorName && (
                           <div className="flex items-center gap-1">
@@ -3063,6 +3200,99 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
         />
       )}
 
+    </div>
+  );
+}
+
+function AuditHistory({ audits, company }) {
+  const [selectedBranch, setSelectedBranch] = useState('');
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 6);
+    return d.toISOString().split('T')[0];
+  });
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
+
+  const filteredAudits = useMemo(() => {
+    return audits
+      .filter((a) => {
+        if (selectedBranch && a.branch !== selectedBranch) return false;
+        const end = a.endDate || a.dueDate;
+        if (!end) return false;
+        if (dateFrom && new Date(end) < new Date(dateFrom)) return false;
+        if (dateTo && new Date(end) > new Date(dateTo)) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(b.endDate || b.dueDate || 0) - new Date(a.endDate || a.dueDate || 0));
+  }, [audits, selectedBranch, dateFrom, dateTo]);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-100 rounded-2xl p-4 flex items-center gap-2 flex-wrap">
+        <select value={selectedBranch} onChange={(e) => setSelectedBranch(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          <option value="">All Branches</option>
+          {(company?.branches || []).map((b) => (
+            <option key={b} value={b}>{b}</option>
+          ))}
+        </select>
+        <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+        <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+      </div>
+      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+        <div className="grid grid-cols-[1fr_1fr_1fr_100px_120px_100px_80px] gap-3 px-5 py-3 border-b border-gray-100 bg-gray-50">
+          {['Audit', 'Branch', 'Auditor', 'End Date', 'Status', 'Score', 'Findings'].map((h) => (
+            <p key={h} className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{h}</p>
+          ))}
+        </div>
+        <div className="divide-y divide-gray-50">
+          {filteredAudits.map((audit) => {
+            const score = getAuditScore(audit);
+            const openF = (audit.findings || []).filter((f) => f.status !== 'Resolved').length;
+            return (
+              <div key={audit.id} className="grid grid-cols-[1fr_1fr_1fr_100px_120px_100px_80px] gap-3 px-5 py-3.5 items-center">
+                <div className="min-w-0"><p className="text-xs font-mono text-gray-400">{audit.auditRefId}</p><p className="text-sm font-medium truncate">{audit.auditTypeName}</p></div>
+                <p className="text-sm text-gray-600 truncate">{audit.branch || '—'}</p>
+                <p className="text-sm text-gray-600 truncate">{audit.auditorName || '—'}</p>
+                <p className="text-sm text-gray-600">{formatDate(audit.endDate)}</p>
+                <p className="text-sm text-gray-600">{audit.status}</p>
+                <p className="text-sm text-gray-600">{score === null ? '—' : `${score}%`}</p>
+                <p className="text-sm text-gray-600">{openF || '—'}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuditReports({ audits }) {
+  const closedAudits = audits.filter((a) => a.status === 'Closed');
+  const overallScores = closedAudits.map((a) => getAuditScore(a)).filter((s) => s !== null);
+  const overallRate = overallScores.length > 0 ? Math.round(overallScores.reduce((sum, s) => sum + s, 0) / overallScores.length) : null;
+  const passCount = closedAudits.filter((a) => a.overallResult === 'Pass').length;
+  const failCount = closedAudits.filter((a) => a.overallResult === 'Fail').length;
+  const partialCount = closedAudits.filter((a) => a.overallResult === 'Partial').length;
+
+  if (closedAudits.length === 0) {
+    return (
+      <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
+        <p className="text-5xl mb-4">📈</p>
+        <p className="text-base font-semibold text-gray-700 mb-2">No closed audits yet</p>
+        <p className="text-sm text-gray-400">Reports are generated from closed audits</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="bg-white border border-gray-100 rounded-2xl p-5">
+        <p className="text-xs text-gray-500 mb-2">Overall Compliance</p>
+        <p className="text-4xl font-bold">{overallRate !== null ? `${overallRate}%` : '—'}</p>
+      </div>
+      <div className="bg-green-50 border border-green-100 rounded-2xl p-5"><p className="text-xs text-green-600 mb-2">✅ Pass</p><p className="text-4xl font-bold text-green-700">{passCount}</p></div>
+      <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5"><p className="text-xs text-amber-600 mb-2">⚠️ Partial</p><p className="text-4xl font-bold text-amber-700">{partialCount}</p></div>
+      <div className="bg-red-50 border border-red-100 rounded-2xl p-5"><p className="text-xs text-red-600 mb-2">❌ Fail</p><p className="text-4xl font-bold text-red-700">{failCount}</p></div>
     </div>
   );
 }
@@ -3132,6 +3362,8 @@ export default function Audit() {
   const TABS = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'audits', label: 'Audits', icon: '🔍' },
+    { id: 'history', label: 'History', icon: '📅' },
+    { id: 'reports', label: 'Reports', icon: '📈' },
   ];
 
   if (!companyId) {
@@ -3216,6 +3448,8 @@ export default function Audit() {
             setSelectedAudit={setSelectedAudit}
           />
         )}
+        {activeTab === 'history' && <AuditHistory audits={audits} auditTypes={auditTypes} company={company} employees={employees} />}
+        {activeTab === 'reports' && <AuditReports audits={audits} auditTypes={auditTypes} company={company} />}
       </div>
 
       {selectedAudit && (
