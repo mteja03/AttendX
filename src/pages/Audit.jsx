@@ -20,6 +20,18 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { trackPageView } from '../utils/analytics';
 
+/** Format YYYY-MM-DD (from inputs / Firestore) as DD/MM/YYYY */
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  try {
+    const [year, month, day] = dateStr.split('-');
+    if (!year || !month || !day) return dateStr;
+    return `${day}/${month}/${year}`;
+  } catch {
+    return dateStr;
+  }
+}
+
 const AUDIT_STATUSES = [
   { key: 'Scheduled', color: '#8B5CF6', bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700', icon: '📅' },
   { key: 'In Progress', color: '#3B82F6', bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: '🔄' },
@@ -441,7 +453,7 @@ function AuditDashboard({ audits, auditTypes }) {
                       <p className="text-xs font-mono text-gray-400 truncate">{audit.auditRefId || '—'}</p>
                       <p className="text-xs text-gray-400 truncate">
                         {audit.auditorName || '—'}
-                        {audit.endDate ? ` · Ends ${audit.endDate}` : ''}
+                        {audit.endDate ? ` · Ends ${formatDate(audit.endDate)}` : ''}
                       </p>
                     </div>
                   </div>
@@ -1548,7 +1560,7 @@ function AssignAuditModal({
               <p className="text-xs text-[#1B6B6B] font-medium">
                 📋 {auditTypes.find((t) => t.id === assignForm.auditTypeId)?.name} → {assignForm.auditorName}
                 {assignForm.branch && ` · ${assignForm.branch}`}
-                {assignForm.endDate && ` · Ends ${assignForm.endDate}`}
+                {assignForm.endDate && ` · Ends ${formatDate(assignForm.endDate)}`}
               </p>
             </div>
           )}
@@ -1575,8 +1587,6 @@ function AssignAuditModal({
 function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSuccess, showError }) {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('checklist');
-  const [status, setStatus] = useState(audit.status);
-  const [overallResult, setOverallResult] = useState(audit.overallResult || null);
   const [checklistReview, setChecklistReview] = useState(audit.checklistReview || []);
   const [findings, setFindings] = useState(audit.findings || []);
   const [adminNotes, setAdminNotes] = useState(audit.adminNotes || '');
@@ -1602,15 +1612,13 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   }, []);
 
   useEffect(() => {
-    setStatus(audit.status || 'Scheduled');
-    setOverallResult(audit.overallResult ?? null);
     setChecklistReview(Array.isArray(audit.checklistReview) ? audit.checklistReview : []);
     setFindings(Array.isArray(audit.findings) ? audit.findings : []);
     setAdminNotes(audit.adminNotes || '');
     setActiveTab('checklist');
   }, [audit.id]);
 
-  const isClosed = status === 'Closed';
+  const isClosed = audit.status === 'Closed';
   const openFindings = findings.filter((f) => f.status !== 'Resolved');
   const resolvedFindings = findings.filter((f) => f.status === 'Resolved');
 
@@ -1630,14 +1638,11 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     try {
       setSaving(true);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
-        status,
-        overallResult,
         checklistReview,
         findings,
         adminNotes,
         updatedAt: new Date(),
         updatedBy: currentUser?.email || '',
-        ...(status === 'Closed' && !audit.closedAt && { closedAt: new Date(), closedBy: currentUser?.email || '' }),
       });
       showSuccess('Audit saved!');
     } catch (e) {
@@ -1708,6 +1713,29 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <span className="text-xs font-mono font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{audit.auditRefId}</span>
                 <h2 className="text-base font-semibold text-gray-800">{audit.auditTypeName}</h2>
+                <span
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${
+                    AUDIT_STATUSES.find((s) => s.key === audit.status)?.badge || 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {AUDIT_STATUSES.find((s) => s.key === audit.status)?.icon} {audit.status}
+                </span>
+                {audit.overallResult && (
+                  <span
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${
+                      audit.overallResult === 'Pass'
+                        ? 'bg-green-100 text-green-700'
+                        : audit.overallResult === 'Fail'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    {audit.overallResult === 'Pass' && '✅ '}
+                    {audit.overallResult === 'Fail' && '❌ '}
+                    {audit.overallResult === 'Partial' && '⚠️ '}
+                    {audit.overallResult}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 flex-wrap text-xs text-gray-400">
                 {audit.branch && <span>🏢 {audit.branch}</span>}
@@ -1718,51 +1746,12 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                     {(audit.teamMembers?.length || 0) > 0 && ` +${audit.teamMembers.length}`}
                   </span>
                 )}
-                {audit.endDate && <span>📅 Due {audit.endDate}</span>}
+                {audit.endDate && <span>📅 Due {formatDate(audit.endDate)}</span>}
               </div>
             </div>
             <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 ml-2 flex-shrink-0">
               ✕
             </button>
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400">Status:</span>
-              <select
-                value={status}
-                disabled={isClosed}
-                onChange={(e) => setStatus(e.target.value)}
-                className={`text-xs font-medium border rounded-lg px-2 py-1.5 focus:outline-none ${
-                  isClosed ? 'cursor-not-allowed opacity-60 bg-gray-50' : 'cursor-pointer'
-                } ${AUDIT_STATUSES.find((s) => s.key === status)?.badge || 'bg-gray-100 text-gray-700 border-gray-200'}`}
-              >
-                {AUDIT_STATUSES.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.icon} {s.key}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-gray-400">Result:</span>
-              <div className="flex gap-1 flex-wrap">
-                {OVERALL_RESULTS.map((r) => (
-                  <button
-                    key={r.value}
-                    type="button"
-                    disabled={isClosed}
-                    onClick={() => setOverallResult(overallResult === r.value ? null : r.value)}
-                    className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
-                      overallResult === r.value ? r.active : `${r.color} hover:opacity-80`
-                    } ${isClosed ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
-                  >
-                    {r.icon} {r.value}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
           {totalItems > 0 && (
@@ -2073,7 +2062,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                           {finding.targetDate && (
                             <span className={`text-xs font-medium ${isOverdueFinding ? 'text-red-600' : 'text-gray-500'}`}>
                               {isOverdueFinding ? '⚠️ ' : '📅 '}
-                              {finding.targetDate}
+                              {formatDate(finding.targetDate)}
                             </span>
                           )}
                         </div>
@@ -2145,8 +2134,8 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   { l: 'Location', v: audit.location },
                   { l: 'Department', v: audit.department },
                   { l: 'Lead Auditor', v: audit.auditorName },
-                  { l: 'Start Date', v: audit.startDate },
-                  { l: 'End Date', v: audit.endDate },
+                  { l: 'Start Date', v: audit.startDate ? formatDate(audit.startDate) : '' },
+                  { l: 'End Date', v: audit.endDate ? formatDate(audit.endDate) : '' },
                 ]
                   .filter((r) => r.v)
                   .map((row) => (
@@ -2226,13 +2215,6 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
             </div>
           ) : (
             <div className="space-y-2">
-              {status === 'Closed' && openFindings.length > 0 && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                  <p className="text-xs text-amber-700">
-                    ⚠️ {openFindings.length} finding{openFindings.length !== 1 ? 's' : ''} still open. Resolve before closing.
-                  </p>
-                </div>
-              )}
               <div className="flex gap-3">
                 <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
                   Cancel
@@ -2243,7 +2225,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   disabled={saving}
                   className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : status === 'Closed' ? '✅ Save & Close Audit' : '💾 Save Changes'}
+                  {saving ? 'Saving...' : '💾 Save Changes'}
                 </button>
               </div>
             </div>
@@ -2299,20 +2281,40 @@ function AuditTableRow({
   };
 
   const handleStatusChange = async (newStatus) => {
+    if (newStatus === 'Closed') {
+      const openOrInProgress = (audit.findings || []).filter((f) => f.status === 'Open' || f.status === 'In Progress');
+      if (openOrInProgress.length > 0) {
+        const hasOpen = openOrInProgress.some((f) => f.status === 'Open');
+        const hasIP = openOrInProgress.some((f) => f.status === 'In Progress');
+        let suffix = 'in progress';
+        if (hasOpen && hasIP) suffix = 'open or in progress';
+        else if (hasOpen) suffix = 'open';
+        else if (hasIP) suffix = 'in progress';
+        showError(
+          `Cannot close audit — ${openOrInProgress.length} finding${openOrInProgress.length !== 1 ? 's' : ''} still ${suffix}. Resolve all findings first.`,
+        );
+        return;
+      }
+    }
     setStatus(newStatus);
     await saveChanges(newStatus, result);
   };
 
   const handleResultChange = async (newResult) => {
-    const updated = result === newResult ? null : newResult;
-    setResult(updated);
-    await saveChanges(status, updated);
+    const next = newResult || null;
+    setResult(next);
+    await saveChanges(status, next);
   };
+
+  const unresolvedCount = (audit.findings || []).filter((f) => f.status !== 'Resolved').length;
+  const selectCloseBlocked =
+    audit.status !== 'Closed' && (audit.findings || []).length > 0 && (audit.findings || []).some((f) => f.status !== 'Resolved');
 
   return (
     <div
-      className={`grid grid-cols-[2fr_1fr_1fr_1fr_140px_160px_80px_40px] gap-3 px-4 py-3.5 items-center hover:bg-gray-50/60 transition-colors group ${
-        overdueAudit ? 'bg-red-50/30 hover:bg-red-50/50' : ''
+      onClick={onOpen}
+      className={`grid grid-cols-[2fr_1fr_1fr_1fr_140px_140px_80px_40px] gap-3 px-4 py-3.5 items-center hover:bg-gray-50/80 transition-colors group cursor-pointer ${
+        overdueAudit ? 'bg-red-50/30 hover:bg-red-50/60' : ''
       }`}
     >
       <div className="flex items-center gap-3 min-w-0">
@@ -2383,9 +2385,9 @@ function AuditTableRow({
       </div>
 
       <div className="min-w-0">
-        {audit.startDate && <p className="text-xs text-gray-500">{audit.startDate}</p>}
+        {audit.startDate && <p className="text-xs text-gray-500">{formatDate(audit.startDate)}</p>}
         {audit.endDate && (
-          <p className={`text-xs font-medium ${overdueAudit ? 'text-red-600' : 'text-gray-500'}`}>→ {audit.endDate}</p>
+          <p className={`text-xs font-medium ${overdueAudit ? 'text-red-600' : 'text-gray-500'}`}>→ {formatDate(audit.endDate)}</p>
         )}
         {!audit.startDate && !audit.endDate && <p className="text-sm text-gray-300">—</p>}
       </div>
@@ -2394,6 +2396,9 @@ function AuditTableRow({
         <select
           value={status}
           disabled={saving || status === 'Closed'}
+          title={
+            selectCloseBlocked ? 'Resolve all open or in-progress findings before you can close this audit' : undefined
+          }
           onChange={(e) => handleStatusChange(e.target.value)}
           className={`w-full text-xs font-medium border rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none transition-colors ${
             saving ? 'opacity-50 cursor-wait' : ''
@@ -2402,32 +2407,41 @@ function AuditTableRow({
           }`}
         >
           {AUDIT_STATUSES.map((s) => (
-            <option key={s.key} value={s.key}>
+            <option key={s.key} value={s.key} title={s.key === 'Closed' && selectCloseBlocked ? 'Resolve all findings first' : undefined}>
               {s.icon} {s.key}
             </option>
           ))}
         </select>
-        {saving && (
-          <p className="text-xs text-gray-400 mt-0.5 text-center">Saving...</p>
+        {saving && <p className="text-xs text-gray-400 mt-0.5 text-center">Saving...</p>}
+        {selectCloseBlocked && (
+          <p className="text-xs text-amber-600 mt-0.5">
+            {unresolvedCount} finding{unresolvedCount !== 1 ? 's' : ''} open
+          </p>
         )}
       </div>
 
-      <div onClick={(e) => e.stopPropagation()} className="flex gap-1">
-        {OVERALL_RESULTS.map((r) => (
-          <button
-            key={r.value}
-            type="button"
-            disabled={saving || status === 'Closed'}
-            onClick={() => handleResultChange(r.value)}
-            title={r.value}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-              result === r.value ? r.active : `${r.color} hover:opacity-80`
-            } ${saving || status === 'Closed' ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-          >
-            {r.icon}
-            <span className="hidden xl:inline ml-1">{r.value}</span>
-          </button>
-        ))}
+      <div onClick={(e) => e.stopPropagation()}>
+        <select
+          value={result || ''}
+          disabled={saving || status === 'Closed'}
+          onChange={(e) => handleResultChange(e.target.value || null)}
+          className={`w-full text-xs font-medium border rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none transition-colors ${
+            saving ? 'opacity-50 cursor-wait' : ''
+          } ${
+            result === 'Pass'
+              ? 'bg-green-100 text-green-700 border-green-200'
+              : result === 'Fail'
+                ? 'bg-red-100 text-red-700 border-red-200'
+                : result === 'Partial'
+                  ? 'bg-amber-100 text-amber-700 border-amber-200'
+                  : 'bg-white text-gray-400 border-gray-200'
+          } ${status === 'Closed' ? 'cursor-not-allowed opacity-70' : ''}`}
+        >
+          <option value="">— Result</option>
+          <option value="Pass">✅ Pass</option>
+          <option value="Partial">⚠️ Partial</option>
+          <option value="Fail">❌ Fail</option>
+        </select>
       </div>
 
       <div className="text-center">
@@ -2444,15 +2458,7 @@ function AuditTableRow({
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-1">
-        <button
-          type="button"
-          onClick={onOpen}
-          title="Open audit detail"
-          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#E8F5F5] text-gray-400 hover:text-[#1B6B6B] transition-colors text-sm"
-        >
-          →
-        </button>
+      <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
         {userRole === 'admin' && (
           <button
             type="button"
@@ -2899,7 +2905,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_140px_160px_80px_40px] gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_140px_140px_80px_40px] gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
                 {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Result', 'Findings', ''].map((h) => (
                   <p key={h || 'actions'} className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate">
                     {h}
@@ -3015,7 +3021,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
                             <p className="text-xs text-gray-500 truncate max-w-24">{audit.auditorName}</p>
                           </div>
                         )}
-                        {audit.endDate && <span className="text-xs text-gray-400">{audit.endDate}</span>}
+                        {audit.endDate && <span className="text-xs text-gray-400">{formatDate(audit.endDate)}</span>}
                       </div>
                     </div>
                   ))}
