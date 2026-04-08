@@ -1727,7 +1727,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const sections = [...new Set(checklistReview.map((i) => i.section))];
   const handlePrint = () => {
     const currentChecklist = checklistReview;
-    const currentFindings = findingsData;
+    const currentFindings = findings;
     const currentNotes = adminNotes;
     const score = getAuditScore({ checklistReview: currentChecklist });
     const passItems = currentChecklist.filter((i) => i.result === 'pass');
