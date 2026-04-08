@@ -47,12 +47,6 @@ const AUDIT_STATUSES = [
   { key: 'Closed', color: '#10B981', bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-100 text-green-700', icon: '✅' },
 ];
 
-const OVERALL_RESULTS = [
-  { value: 'Pass', icon: '✅', color: 'bg-green-100 text-green-700 border-green-200', active: 'bg-green-500 text-white border-green-500' },
-  { value: 'Partial', icon: '⚠️', color: 'bg-amber-100 text-amber-700 border-amber-200', active: 'bg-amber-500 text-white border-amber-500' },
-  { value: 'Fail', icon: '❌', color: 'bg-red-100 text-red-700 border-red-200', active: 'bg-red-500 text-white border-red-500' },
-];
-
 const AUDIT_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#1B6B6B', '#6366F1', '#14B8A6'];
 
 /** Used by AuditCalendar (unchanged); includes legacy keys for older documents */
@@ -883,28 +877,6 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
     }
   };
 
-  const handlePrint = (auditDoc = audit) => {
-    const score = getAuditScore({ checklistReview });
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html><head><title>Audit Report — ${auditDoc.auditRefId || ''}</title></head>
-      <body style="font-family:Arial,sans-serif;padding:24px">
-        <h2>${auditDoc.auditTypeName || 'Audit'} — ${auditDoc.auditRefId || ''}</h2>
-        <p><b>Branch:</b> ${auditDoc.branch || '—'} | <b>Location:</b> ${auditDoc.location || '—'} | <b>Auditor:</b> ${auditDoc.auditorName || '—'}</p>
-        <p><b>Dates:</b> ${formatDate(auditDoc.startDate)} → ${formatDate(auditDoc.endDate)} | <b>Result:</b> ${auditDoc.overallResult || '—'} | <b>Score:</b> ${score === null ? '—' : `${score}%`}</p>
-        <h3>Checklist</h3>
-        <ul>${checklistReview.map((i) => `<li>${i.section || ''} — ${i.question || ''} — ${i.result || '—'} ${i.note ? `(${i.note})` : ''}</li>`).join('')}</ul>
-        <h3>Findings</h3>
-        <ul>${findings.map((f) => `<li>${f.description || ''} — ${f.severity || ''} — ${f.status || ''} ${f.targetDate ? `(${formatDate(f.targetDate)})` : ''}</li>`).join('')}</ul>
-        ${adminNotes ? `<h3>Admin Notes</h3><p>${adminNotes}</p>` : ''}
-      </body></html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 400);
-  };
-
   const handleDelete = async (type) => {
     if (!window.confirm(`Delete "${type.name}"?`)) return;
     try {
@@ -935,26 +907,6 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
-          {isClosed && (
-            <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-100 rounded-xl mb-4">
-              <span className="text-green-500 text-lg">🔒</span>
-              <div>
-                <p className="text-sm font-medium text-green-700">Audit Closed</p>
-                <p className="text-xs text-green-600">This audit is locked. View only.</p>
-              </div>
-              {audit.overallResult && (
-                <span className={`ml-auto text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${
-                  audit.overallResult === 'Pass'
-                    ? 'bg-green-200 text-green-800'
-                    : audit.overallResult === 'Fail'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-amber-100 text-amber-700'
-                }`}>
-                  {audit.overallResult}
-                </span>
-              )}
-            </div>
-          )}
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm font-semibold text-gray-700">Audit Templates</p>
             <button
@@ -1773,6 +1725,35 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   };
 
   const sections = [...new Set(checklistReview.map((i) => i.section))];
+  const handlePrint = () => {
+    const currentChecklist = checklistReview;
+    const currentFindings = findingsData;
+    const currentNotes = adminNotes;
+    const score = getAuditScore({ checklistReview: currentChecklist });
+    const passItems = currentChecklist.filter((i) => i.result === 'pass');
+    const failItems = currentChecklist.filter((i) => i.result === 'fail');
+    const naItems = currentChecklist.filter((i) => i.result === 'na');
+    const sectionsForPrint = [...new Set(currentChecklist.map((i) => i.section))];
+    const html = `<!DOCTYPE html><html><head><title>Audit Report — ${audit.auditRefId}</title></head><body>
+    <h2>${audit.auditTypeName}</h2><p>${audit.auditRefId || '—'}</p>
+    <p>${formatDate(audit.startDate)} - ${formatDate(audit.endDate)}</p>
+    <p>Score: ${score !== null ? `${score}%` : '—'} | Pass: ${passItems.length} | Fail: ${failItems.length} | N/A: ${naItems.length}</p>
+    ${sectionsForPrint.map((section) => `<h3>${section}</h3>${currentChecklist.filter((i) => i.section === section).map((item) => `<p>${item.question} — ${item.result || '—'} ${item.note || ''}</p>`).join('')}`).join('')}
+    ${currentFindings.length > 0 ? `<h3>Findings</h3>${currentFindings.map((f) => `<p>${f.description} (${f.severity || 'Medium'}) - ${f.status || 'Open'}</p>`).join('')}` : ''}
+    ${currentNotes ? `<h3>Admin Notes</h3><p>${currentNotes}</p>` : ''}
+    </body></html>`;
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+      showError('Popup blocked. Allow popups for this site to print.');
+      return;
+    }
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 800);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1790,22 +1771,6 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 >
                   {AUDIT_STATUSES.find((s) => s.key === audit.status)?.icon} {audit.status}
                 </span>
-                {audit.overallResult && (
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${
-                      audit.overallResult === 'Pass'
-                        ? 'bg-green-100 text-green-700'
-                        : audit.overallResult === 'Fail'
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    {audit.overallResult === 'Pass' && '✅ '}
-                    {audit.overallResult === 'Fail' && '❌ '}
-                    {audit.overallResult === 'Partial' && '⚠️ '}
-                    {audit.overallResult}
-                  </span>
-                )}
               </div>
               <div className="flex items-center gap-2 flex-wrap text-xs text-gray-400">
                 {audit.branch && <span>🏢 {audit.branch}</span>}
@@ -2307,7 +2272,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
                   Close
                 </button>
-                <button type="button" onClick={() => handlePrint(audit)} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858]">
+                <button type="button" onClick={handlePrint} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858]">
                   🖨️ Print Report
                 </button>
               </div>
@@ -2331,39 +2296,32 @@ function AuditTableRow({
   openFindings,
   totalFindings,
   companyId,
-  currentUser,
   userRole,
   onOpen,
   onDelete,
   showError,
 }) {
   const [status, setStatus] = useState(audit.status);
-  const [result, setResult] = useState(audit.overallResult || null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setStatus(audit.status);
-    setResult(audit.overallResult || null);
-  }, [audit.id, audit.status, audit.overallResult]);
+  }, [audit.id, audit.status]);
 
-  const saveChanges = async (newStatus, newResult) => {
+  const saveChanges = async (newStatus) => {
     try {
       setSaving(true);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
         status: newStatus,
-        overallResult: newResult,
         updatedAt: new Date(),
-        updatedBy: currentUser?.email || '',
         ...(newStatus === 'Closed' &&
           !audit.closedAt && {
             closedAt: new Date(),
-            closedBy: currentUser?.email || '',
           }),
       });
     } catch (e) {
       showError('Failed to save');
       setStatus(audit.status);
-      setResult(audit.overallResult || null);
     } finally {
       setSaving(false);
     }
@@ -2392,19 +2350,13 @@ function AuditTableRow({
       }
     }
     setStatus(newStatus);
-    await saveChanges(newStatus, result);
-  };
-
-  const handleResultChange = async (newResult) => {
-    const next = newResult || null;
-    setResult(next);
-    await saveChanges(status, next);
+    await saveChanges(newStatus);
   };
 
   return (
     <div
       onClick={onOpen}
-      className={`grid grid-cols-[2fr_1fr_1fr_1fr_140px_140px_70px_70px_40px] gap-3 px-4 py-3.5 items-center hover:bg-gray-50/80 transition-colors group cursor-pointer ${
+      className={`grid grid-cols-[2fr_1fr_1fr_1fr_160px_80px_80px_40px] gap-3 px-4 py-3.5 items-center hover:bg-gray-50/80 transition-colors group cursor-pointer ${
         overdueAudit ? 'bg-red-50/30 hover:bg-red-50/60' : ''
       }`}
     >
@@ -2502,45 +2454,6 @@ function AuditTableRow({
         </select>
       </div>
 
-      <div onClick={(e) => e.stopPropagation()}>
-        <select
-          value={result || ''}
-          disabled={saving || status !== 'Closed'}
-          onChange={(e) => handleResultChange(e.target.value || null)}
-          title={status !== 'Closed' ? 'Close the audit first to set result' : 'Set overall result'}
-          className={`w-full text-xs font-medium border rounded-lg px-2 py-1.5 focus:outline-none transition-colors ${
-            status !== 'Closed'
-              ? 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'
-              : result === 'Pass'
-              ? 'bg-green-100 text-green-700 border-green-200 cursor-pointer'
-              : result === 'Fail'
-              ? 'bg-red-100 text-red-700 border-red-200 cursor-pointer'
-              : result === 'Partial'
-              ? 'bg-amber-100 text-amber-700 border-amber-200 cursor-pointer'
-              : 'bg-white text-gray-500 border-gray-200 cursor-pointer'
-          }`}
-        >
-          <option value="">— Result</option>
-          <option value="Pass">✅ Pass</option>
-          <option value="Partial">⚠️ Partial</option>
-          <option value="Fail">❌ Fail</option>
-        </select>
-      </div>
-
-      <div className="text-center">
-        {totalFindings > 0 ? (
-          <span
-            className={`text-xs px-2 py-1 rounded-full font-medium ${
-              openFindings > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-            }`}
-          >
-            {openFindings > 0 ? `${openFindings} open` : '✅ done'}
-          </span>
-        ) : (
-          <span className="text-xs text-gray-300">—</span>
-        )}
-      </div>
-
       <div className="text-center">
         {(() => {
           const score = getAuditScore(audit);
@@ -2559,6 +2472,20 @@ function AuditTableRow({
             </div>
           );
         })()}
+      </div>
+
+      <div className="text-center">
+        {totalFindings > 0 ? (
+          <span
+            className={`text-xs px-2 py-1 rounded-full font-medium ${
+              openFindings > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+            }`}
+          >
+            {openFindings > 0 ? `${openFindings} open` : '✅ done'}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-300">—</span>
+        )}
       </div>
 
       <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
@@ -2750,7 +2677,6 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
         endDate: assignForm.endDate,
         notes: assignForm.notes,
         status: 'Scheduled',
-        overallResult: null,
         checklistReview,
         findings: [],
         adminNotes: '',
@@ -3038,8 +2964,8 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_140px_140px_70px_70px_40px] gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
-                {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Result', 'Findings', 'Score', ''].map((h) => (
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_160px_80px_80px_40px] gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
+                {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Score', 'Findings', ''].map((h) => (
                   <p key={h || 'actions'} className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate">
                     {h}
                   </p>
@@ -3058,7 +2984,6 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
                       openFindings={openFindings}
                       totalFindings={totalFindings}
                       companyId={companyId}
-                      currentUser={currentUser}
                       userRole={userRole}
                       onOpen={() => setSelectedAudit(audit)}
                       onDelete={(e) => handleDelete(e, audit)}
@@ -3118,32 +3043,6 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
                           <p className="text-xs font-semibold text-gray-800 truncate">{audit.auditTypeName}</p>
                           {audit.branch && <p className="text-xs text-gray-400 truncate">{audit.branch}</p>}
                         </div>
-                      </div>
-                      <div onClick={(e) => e.stopPropagation()} className="flex gap-1 mt-2">
-                        {OVERALL_RESULTS.map((r) => (
-                          <button
-                            key={r.value}
-                            type="button"
-                            disabled={audit.status !== 'Closed'}
-                            onClick={async () => {
-                              const newResult = audit.overallResult === r.value ? null : r.value;
-                              try {
-                                await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
-                                  overallResult: newResult,
-                                  updatedAt: new Date(),
-                                  updatedBy: currentUser?.email || '',
-                                });
-                              } catch (e) {
-                                showError('Failed to save');
-                              }
-                            }}
-                            className={`flex-1 py-1 rounded-lg text-xs font-medium border transition-all ${
-                              audit.overallResult === r.value ? r.active : `${r.color} hover:opacity-80`
-                            } ${audit.status !== 'Closed' ? 'cursor-not-allowed opacity-60' : ''}`}
-                          >
-                            {r.icon}
-                          </button>
-                        ))}
                       </div>
                       {(() => {
                         const score = getAuditScore(audit);
@@ -3279,33 +3178,169 @@ function AuditHistory({ audits, company }) {
   );
 }
 
-function AuditReports({ audits }) {
+function AuditReports({ audits, employees }) {
   const closedAudits = audits.filter((a) => a.status === 'Closed');
   const overallScores = closedAudits.map((a) => getAuditScore(a)).filter((s) => s !== null);
   const overallRate = overallScores.length > 0 ? Math.round(overallScores.reduce((sum, s) => sum + s, 0) / overallScores.length) : null;
-  const passCount = closedAudits.filter((a) => a.overallResult === 'Pass').length;
-  const failCount = closedAudits.filter((a) => a.overallResult === 'Fail').length;
-  const partialCount = closedAudits.filter((a) => a.overallResult === 'Partial').length;
 
-  if (closedAudits.length === 0) {
+  const findingsTotal = audits.reduce((sum, a) => sum + (a.findings || []).length, 0);
+  const findingsResolved = audits.reduce((sum, a) => sum + (a.findings || []).filter((f) => f.status === 'Resolved').length, 0);
+  const findingsOpen = findingsTotal - findingsResolved;
+
+  const auditorPerf = useMemo(() => {
+    const map = {};
+    audits.forEach((a) => {
+      if (!a.auditorName) return;
+      if (!map[a.auditorName]) {
+        map[a.auditorName] = {
+          name: a.auditorName,
+          email: a.auditorEmail || '',
+          totalAssigned: 0,
+          closed: 0,
+          inProgress: 0,
+          overdue: 0,
+          scores: [],
+          findings: 0,
+          resolvedFindings: 0,
+          avgScore: null,
+          onTime: 0,
+          late: 0,
+        };
+      }
+      const p = map[a.auditorName];
+      p.totalAssigned++;
+
+      if (a.status === 'Closed') {
+        p.closed++;
+        const score = getAuditScore(a);
+        if (score !== null) p.scores.push(score);
+        if (a.endDate && a.closedAt) {
+          const endDate = new Date(a.endDate);
+          const closedDate = a.closedAt?.toDate ? a.closedAt.toDate() : new Date(a.closedAt);
+          if (closedDate <= endDate) p.onTime++;
+          else p.late++;
+        }
+      }
+      if (a.status === 'In Progress') p.inProgress++;
+
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      if (a.status !== 'Closed' && a.endDate && new Date(a.endDate) < now) p.overdue++;
+
+      const f = a.findings || [];
+      p.findings += f.length;
+      p.resolvedFindings += f.filter((x) => x.status === 'Resolved').length;
+    });
+
+    return Object.values(map)
+      .map((a) => ({
+        ...a,
+        avgScore: a.scores.length > 0 ? Math.round(a.scores.reduce((s, v) => s + v, 0) / a.scores.length) : null,
+        closedRate: a.totalAssigned > 0 ? Math.round((a.closed / a.totalAssigned) * 100) : 0,
+      }))
+      .sort((a, b) => b.totalAssigned - a.totalAssigned);
+  }, [audits]);
+
+  if (audits.length === 0) {
     return (
       <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
         <p className="text-5xl mb-4">📈</p>
-        <p className="text-base font-semibold text-gray-700 mb-2">No closed audits yet</p>
-        <p className="text-sm text-gray-400">Reports are generated from closed audits</p>
+        <p className="text-base font-semibold text-gray-700 mb-2">No audits yet</p>
+        <p className="text-sm text-gray-400">Reports appear when audits are available</p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div className="bg-white border border-gray-100 rounded-2xl p-5">
-        <p className="text-xs text-gray-500 mb-2">Overall Compliance</p>
-        <p className="text-4xl font-bold">{overallRate !== null ? `${overallRate}%` : '—'}</p>
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <p className="text-xs text-gray-500 mb-2">Overall Compliance</p>
+          <p className="text-4xl font-bold">{overallRate !== null ? `${overallRate}%` : '—'}</p>
+          <p className="text-xs text-gray-400 mt-1">From {closedAudits.length} closed audits</p>
+        </div>
+        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5">
+          <p className="text-xs text-blue-600 mb-2">Total Audits</p>
+          <p className="text-4xl font-bold text-blue-700">{audits.length}</p>
+        </div>
+        <div className="bg-green-50 border border-green-100 rounded-2xl p-5">
+          <p className="text-xs text-green-600 mb-2">Closed Audits</p>
+          <p className="text-4xl font-bold text-green-700">{closedAudits.length}</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5">
+          <p className="text-xs text-amber-600 mb-2">Open Findings</p>
+          <p className="text-4xl font-bold text-amber-700">{findingsOpen}</p>
+        </div>
       </div>
-      <div className="bg-green-50 border border-green-100 rounded-2xl p-5"><p className="text-xs text-green-600 mb-2">✅ Pass</p><p className="text-4xl font-bold text-green-700">{passCount}</p></div>
-      <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5"><p className="text-xs text-amber-600 mb-2">⚠️ Partial</p><p className="text-4xl font-bold text-amber-700">{partialCount}</p></div>
-      <div className="bg-red-50 border border-red-100 rounded-2xl p-5"><p className="text-xs text-red-600 mb-2">❌ Fail</p><p className="text-4xl font-bold text-red-700">{failCount}</p></div>
+
+      <div className="bg-white border border-gray-100 rounded-2xl p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">👤 Auditor Performance</h3>
+        {auditorPerf.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">No data</p>
+        ) : (
+          <div className="space-y-4">
+            {auditorPerf.map((ap) => (
+              <div key={ap.name} className="border border-gray-100 rounded-xl p-4 hover:border-gray-200 transition-colors">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                      {ap.name?.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{ap.name}</p>
+                      <p className="text-xs text-gray-400">{ap.totalAssigned} total audits assigned</p>
+                    </div>
+                  </div>
+                  {ap.avgScore !== null && (
+                    <div className="text-right">
+                      <p className={`text-2xl font-bold ${ap.avgScore >= 80 ? 'text-green-600' : ap.avgScore >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{ap.avgScore}%</p>
+                      <p className="text-xs text-gray-400">avg score</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  {[
+                    { label: 'Closed', value: ap.closed, color: 'bg-green-50 text-green-700' },
+                    { label: 'In Progress', value: ap.inProgress, color: 'bg-blue-50 text-blue-700' },
+                    { label: 'Overdue', value: ap.overdue, color: ap.overdue > 0 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500' },
+                    { label: 'Findings', value: ap.findings, color: ap.findings > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-gray-500' },
+                  ].map((s) => (
+                    <div key={s.label} className={`rounded-lg p-2.5 text-center ${s.color}`}>
+                      <p className="text-lg font-bold">{s.value}</p>
+                      <p className="text-xs mt-0.5">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-gray-400">Completion Rate</span>
+                      <span className="text-xs font-medium text-gray-600">{ap.closedRate}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${ap.closedRate >= 80 ? 'bg-green-500' : ap.closedRate >= 60 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${ap.closedRate}%` }} />
+                    </div>
+                  </div>
+
+                  {ap.findings > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-gray-400">Finding Resolution</span>
+                        <span className="text-xs font-medium text-gray-600">{ap.resolvedFindings}/{ap.findings}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-[#1B6B6B] rounded-full" style={{ width: `${Math.round((ap.resolvedFindings / ap.findings) * 100)}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -3462,7 +3497,7 @@ export default function Audit() {
           />
         )}
         {activeTab === 'history' && <AuditHistory audits={audits} auditTypes={auditTypes} company={company} employees={employees} />}
-        {activeTab === 'reports' && <AuditReports audits={audits} auditTypes={auditTypes} company={company} />}
+        {activeTab === 'reports' && <AuditReports audits={audits} auditTypes={auditTypes} company={company} employees={employees} />}
       </div>
 
       {selectedAudit && (() => {
