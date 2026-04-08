@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   collection,
@@ -883,16 +883,16 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = (auditDoc = audit) => {
     const score = getAuditScore({ checklistReview });
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
     printWindow.document.write(`
-      <html><head><title>Audit Report — ${audit.auditRefId || ''}</title></head>
+      <html><head><title>Audit Report — ${auditDoc.auditRefId || ''}</title></head>
       <body style="font-family:Arial,sans-serif;padding:24px">
-        <h2>${audit.auditTypeName || 'Audit'} — ${audit.auditRefId || ''}</h2>
-        <p><b>Branch:</b> ${audit.branch || '—'} | <b>Location:</b> ${audit.location || '—'} | <b>Auditor:</b> ${audit.auditorName || '—'}</p>
-        <p><b>Dates:</b> ${formatDate(audit.startDate)} → ${formatDate(audit.endDate)} | <b>Result:</b> ${audit.overallResult || '—'} | <b>Score:</b> ${score === null ? '—' : `${score}%`}</p>
+        <h2>${auditDoc.auditTypeName || 'Audit'} — ${auditDoc.auditRefId || ''}</h2>
+        <p><b>Branch:</b> ${auditDoc.branch || '—'} | <b>Location:</b> ${auditDoc.location || '—'} | <b>Auditor:</b> ${auditDoc.auditorName || '—'}</p>
+        <p><b>Dates:</b> ${formatDate(auditDoc.startDate)} → ${formatDate(auditDoc.endDate)} | <b>Result:</b> ${auditDoc.overallResult || '—'} | <b>Score:</b> ${score === null ? '—' : `${score}%`}</p>
         <h3>Checklist</h3>
         <ul>${checklistReview.map((i) => `<li>${i.section || ''} — ${i.question || ''} — ${i.result || '—'} ${i.note ? `(${i.note})` : ''}</li>`).join('')}</ul>
         <h3>Findings</h3>
@@ -1635,11 +1635,14 @@ function AssignAuditModal({
 
 
 function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSuccess, showError }) {
-  const [saving, setSaving] = useState(false);
+  if (!audit || !audit.id) return null;
   const [activeTab, setActiveTab] = useState('checklist');
-  const [checklistReview, setChecklistReview] = useState(audit.checklistReview || []);
-  const [findings, setFindings] = useState(audit.findings || []);
-  const [adminNotes, setAdminNotes] = useState(audit.adminNotes || '');
+  const [checklistReview, setChecklistReview] = useState(() => audit.checklistReview || []);
+  const [findings, setFindings] = useState(() => audit.findings || []);
+  const [adminNotes, setAdminNotes] = useState(() => audit.adminNotes || '');
+  const saveTimeoutRef = useRef(null);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
   const [newFinding, setNewFinding] = useState({
     description: '',
     severity: 'Medium',
@@ -1669,8 +1672,10 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   }, [audit.id]);
 
   const isClosed = audit.status === 'Closed';
-  const openFindings = findings.filter((f) => f.status !== 'Resolved');
-  const resolvedFindings = findings.filter((f) => f.status === 'Resolved');
+  const findingsData = findings || [];
+  const teamMembers = audit.teamMembers || [];
+  const openFindings = findingsData.filter((f) => f.status !== 'Resolved');
+  const resolvedFindings = findingsData.filter((f) => f.status === 'Resolved');
 
   const passCount = checklistReview.filter((i) => i.result === 'pass').length;
   const failCount = checklistReview.filter((i) => i.result === 'fail').length;
@@ -1685,30 +1690,40 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     { id: 'overview', label: 'Overview' },
   ];
 
-  const handleSave = async () => {
-    try {
-      setSaving(true);
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
-        checklistReview,
-        findings,
-        adminNotes,
-        updatedAt: new Date(),
-        updatedBy: currentUser?.email || '',
-      });
-      showSuccess('Audit saved!');
-    } catch (e) {
-      showError('Save failed: ' + e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
+  const autoSave = useCallback(async (newChecklistReview, newFindings, newAdminNotes) => {
+    if (isClosed) return;
+    clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        setAutoSaving(true);
+        await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+          checklistReview: newChecklistReview,
+          findings: newFindings,
+          adminNotes: newAdminNotes,
+          updatedAt: new Date(),
+          updatedBy: currentUser?.email || '',
+        });
+        setLastSaved(new Date());
+      } catch (e) {
+        console.error('Auto-save failed:', e);
+      } finally {
+        setAutoSaving(false);
+      }
+    }, 1000);
+  }, [audit.id, companyId, currentUser, isClosed]);
+
+  useEffect(() => () => clearTimeout(saveTimeoutRef.current), []);
 
   const updateChecklistItem = (id, result) => {
-    setChecklistReview((prev) => prev.map((i) => (i.id === id ? { ...i, result } : i)));
+    const updated = checklistReview.map((i) => (i.id === id ? { ...i, result } : i));
+    setChecklistReview(updated);
+    autoSave(updated, findingsData, adminNotes);
   };
 
   const updateChecklistNote = (id, note) => {
-    setChecklistReview((prev) => prev.map((i) => (i.id === id ? { ...i, note } : i)));
+    const updated = checklistReview.map((i) => (i.id === id ? { ...i, note } : i));
+    setChecklistReview(updated);
+    autoSave(updated, findingsData, adminNotes);
   };
 
   const addFinding = () => {
@@ -1729,15 +1744,16 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       resolvedNote: '',
       createdAt: new Date().toISOString(),
     };
-    setFindings((prev) => [...prev, finding]);
+    const newFindings = [...findingsData, finding];
+    setFindings(newFindings);
+    autoSave(checklistReview, newFindings, adminNotes);
     setNewFinding({ description: '', severity: 'Medium', ownerName: '', ownerId: '', ownerEmail: '', targetDate: '' });
     setOwnerSearch('');
     setShowAddFinding(false);
   };
 
   const updateFindingStatus = (id, newStatus) => {
-    setFindings((prev) =>
-      prev.map((f) =>
+    const updated = findingsData.map((f) =>
         f.id === id
           ? {
               ...f,
@@ -1745,12 +1761,15 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
               ...(newStatus === 'Resolved' && { resolvedAt: new Date().toISOString() }),
             }
           : f,
-      ),
-    );
+      );
+    setFindings(updated);
+    autoSave(checklistReview, updated, adminNotes);
   };
 
   const deleteFinding = (id) => {
-    setFindings((prev) => prev.filter((f) => f.id !== id));
+    const updated = findingsData.filter((f) => f.id !== id);
+    setFindings(updated);
+    autoSave(checklistReview, updated, adminNotes);
   };
 
   const sections = [...new Set(checklistReview.map((i) => i.section))];
@@ -1794,15 +1813,28 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 {audit.auditorName && (
                   <span>
                     👤 {audit.auditorName}
-                    {(audit.teamMembers?.length || 0) > 0 && ` +${audit.teamMembers.length}`}
+                    {(teamMembers.length || 0) > 0 && ` +${teamMembers.length}`}
                   </span>
                 )}
                 {audit.endDate && <span>📅 Due {formatDate(audit.endDate)}</span>}
               </div>
             </div>
-            <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 ml-2 flex-shrink-0">
-              ✕
-            </button>
+            <div className="flex items-center gap-2 ml-2">
+              <div className="flex items-center gap-2">
+                {autoSaving && (
+                  <span className="text-xs text-gray-400 flex items-center gap-1">
+                    <span className="w-3 h-3 border border-gray-300 border-t-[#1B6B6B] rounded-full animate-spin inline-block" />
+                    Saving...
+                  </span>
+                )}
+                {!autoSaving && lastSaved && !isClosed && (
+                  <span className="text-xs text-gray-400">✓ Saved</span>
+                )}
+              </div>
+              <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 flex-shrink-0">
+                ✕
+              </button>
+            </div>
           </div>
 
           {totalItems > 0 && (
@@ -2058,7 +2090,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 </div>
               )}
 
-              {findings.length === 0 && !showAddFinding ? (
+              {findingsData.length === 0 && !showAddFinding ? (
                 <div className="text-center py-12 border-2 border-dashed border-gray-100 rounded-2xl">
                   <p className="text-3xl mb-2">✅</p>
                   <p className="text-sm font-medium text-gray-600">No findings</p>
@@ -2066,7 +2098,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {findings.map((finding) => {
+                  {findingsData.map((finding) => {
                     const now = new Date();
                     const isOverdueFinding =
                       finding.targetDate && finding.status !== 'Resolved' && new Date(finding.targetDate) < now;
@@ -2205,7 +2237,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   ))}
               </div>
 
-              {(audit.teamMembers?.length > 0) && (
+              {(teamMembers.length > 0) && (
                 <div className="bg-white border border-gray-100 rounded-xl p-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Team</p>
                   <div className="space-y-2">
@@ -2216,7 +2248,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                       <p className="text-sm text-gray-700 flex-1">{audit.auditorName}</p>
                       <span className="text-xs bg-[#E8F5F5] text-[#1B6B6B] px-2 py-0.5 rounded-full font-medium">Lead</span>
                     </div>
-                    {audit.teamMembers.map((m) => (
+                    {teamMembers.map((m) => (
                       <div key={m.id} className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-white text-xs font-bold">{m.fullName?.charAt(0)}</div>
                         <p className="text-sm text-gray-700 flex-1">{m.fullName}</p>
@@ -2227,12 +2259,12 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 </div>
               )}
 
-              {findings.length > 0 && (
+              {findingsData.length > 0 && (
                 <div className="bg-white border border-gray-100 rounded-xl p-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Findings Summary</p>
                   <div className="grid grid-cols-3 gap-2">
                     {[
-                      { l: 'Total', v: findings.length, c: 'text-gray-700' },
+                      { l: 'Total', v: findingsData.length, c: 'text-gray-700' },
                       { l: 'Open', v: openFindings.length, c: openFindings.length > 0 ? 'text-red-600' : 'text-gray-700' },
                       { l: 'Resolved', v: resolvedFindings.length, c: 'text-green-600' },
                     ].map((s) => (
@@ -2250,7 +2282,10 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 <textarea
                   value={adminNotes}
                   disabled={isClosed}
-                  onChange={(e) => setAdminNotes(e.target.value)}
+                  onChange={(e) => {
+                    setAdminNotes(e.target.value);
+                    autoSave(checklistReview, findingsData, e.target.value);
+                  }}
                   rows={3}
                   placeholder="Internal notes about this audit..."
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50"
@@ -2272,26 +2307,16 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
                   Close
                 </button>
-                <button type="button" onClick={handlePrint} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858]">
+                <button type="button" onClick={() => handlePrint(audit)} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858]">
                   🖨️ Print Report
                 </button>
               </div>
             </div>
           ) : (
-            <div className="space-y-2">
-              <div className="flex gap-3">
-                <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
-                >
-                  {saving ? 'Saving...' : '💾 Save Changes'}
-                </button>
-              </div>
+            <div className="flex gap-3">
+              <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                Close
+              </button>
             </div>
           )}
         </div>
@@ -2346,16 +2371,22 @@ function AuditTableRow({
 
   const handleStatusChange = async (newStatus) => {
     if (newStatus === 'Closed') {
+      const checklist = audit.checklistReview || [];
+      if (checklist.length > 0) {
+        const unfilled = checklist.filter((i) => !i.result);
+        if (unfilled.length > 0) {
+          showError(
+            `Cannot close — ${unfilled.length} checklist item${unfilled.length !== 1 ? 's' : ''} not reviewed. Open the audit and mark each item Pass, Fail, or N/A.`,
+          );
+          return;
+        }
+      }
       const openOrInProgress = (audit.findings || []).filter((f) => f.status === 'Open' || f.status === 'In Progress');
       if (openOrInProgress.length > 0) {
         const hasOpen = openOrInProgress.some((f) => f.status === 'Open');
-        const hasIP = openOrInProgress.some((f) => f.status === 'In Progress');
-        let suffix = 'in progress';
-        if (hasOpen && hasIP) suffix = 'open or in progress';
-        else if (hasOpen) suffix = 'open';
-        else if (hasIP) suffix = 'in progress';
+        const suffix = hasOpen ? 'open' : 'in progress';
         showError(
-          `Cannot close audit — ${openOrInProgress.length} finding${openOrInProgress.length !== 1 ? 's' : ''} still ${suffix}. Resolve all findings first.`,
+          `Cannot close — ${openOrInProgress.length} finding${openOrInProgress.length !== 1 ? 's' : ''} still ${suffix}. Resolve all findings first.`,
         );
         return;
       }
@@ -2369,10 +2400,6 @@ function AuditTableRow({
     setResult(next);
     await saveChanges(status, next);
   };
-
-  const unresolvedCount = (audit.findings || []).filter((f) => f.status !== 'Resolved').length;
-  const selectCloseBlocked =
-    audit.status !== 'Closed' && (audit.findings || []).length > 0 && (audit.findings || []).some((f) => f.status !== 'Resolved');
 
   return (
     <div
@@ -2460,9 +2487,6 @@ function AuditTableRow({
         <select
           value={status}
           disabled={saving || status === 'Closed'}
-          title={
-            selectCloseBlocked ? 'Resolve all open or in-progress findings before you can close this audit' : undefined
-          }
           onChange={(e) => handleStatusChange(e.target.value)}
           className={`w-full text-xs font-medium border rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none transition-colors ${
             saving ? 'opacity-50 cursor-wait' : ''
@@ -2471,17 +2495,11 @@ function AuditTableRow({
           }`}
         >
           {AUDIT_STATUSES.map((s) => (
-            <option key={s.key} value={s.key} title={s.key === 'Closed' && selectCloseBlocked ? 'Resolve all findings first' : undefined}>
+            <option key={s.key} value={s.key}>
               {s.icon} {s.key}
             </option>
           ))}
         </select>
-        {saving && <p className="text-xs text-gray-400 mt-0.5 text-center">Saving...</p>}
-        {selectCloseBlocked && (
-          <p className="text-xs text-amber-600 mt-0.5">
-            {unresolvedCount} finding{unresolvedCount !== 1 ? 's' : ''} open
-          </p>
-        )}
       </div>
 
       <div onClick={(e) => e.stopPropagation()}>
@@ -2507,11 +2525,6 @@ function AuditTableRow({
           <option value="Partial">⚠️ Partial</option>
           <option value="Fail">❌ Fail</option>
         </select>
-        {status !== 'Closed' && (
-          <p className="text-xs text-gray-300 mt-0.5 text-center">
-            Close first
-          </p>
-        )}
       </div>
 
       <div className="text-center">
@@ -3452,18 +3465,21 @@ export default function Audit() {
         {activeTab === 'reports' && <AuditReports audits={audits} auditTypes={auditTypes} company={company} />}
       </div>
 
-      {selectedAudit && (
-        <AuditDetail
-          key={selectedAudit.id}
-          audit={selectedAudit}
-          companyId={companyId}
-          currentUser={currentUser}
-          employees={employees}
-          onClose={() => setSelectedAudit(null)}
-          showSuccess={showSuccess}
-          showError={showError}
-        />
-      )}
+      {selectedAudit && (() => {
+        const liveAudit = audits.find((a) => a.id === selectedAudit.id) || selectedAudit;
+        return (
+          <AuditDetail
+            key={liveAudit.id + liveAudit.status}
+            audit={liveAudit}
+            companyId={companyId}
+            currentUser={currentUser}
+            employees={employees}
+            onClose={() => setSelectedAudit(null)}
+            showSuccess={showSuccess}
+            showError={showError}
+          />
+        );
+      })()}
 
       {showSettings && (
         <AuditSettings
