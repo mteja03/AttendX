@@ -48,9 +48,11 @@ const ROLE_INFO_CARDS = [
   },
 ];
 
+const TEAM_MEMBER_ROLES = ['hrmanager', 'manager', 'itmanager', 'auditmanager', 'auditor'];
+
 function availableRolesToAdd(viewerRole) {
-  if (viewerRole === 'admin') return ['hrmanager', 'manager', 'itmanager', 'auditmanager', 'auditor'];
-  if (viewerRole === 'hrmanager') return ['manager', 'itmanager', 'auditmanager', 'auditor'];
+  if (viewerRole === 'admin') return TEAM_MEMBER_ROLES;
+  if (viewerRole === 'hrmanager') return TEAM_MEMBER_ROLES.filter((r) => r !== 'hrmanager');
   return [];
 }
 
@@ -664,7 +666,7 @@ export default function TeamMembers() {
               onChange={(e) => setNewRoleValue(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm mb-4"
             >
-              {['hrmanager', 'manager', 'itmanager', 'auditmanager', 'auditor'].map((r) => (
+              {TEAM_MEMBER_ROLES.map((r) => (
                 <option key={r} value={r}>
                   {ROLE_LABELS[r]}
                 </option>

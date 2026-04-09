@@ -2,10 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   collection,
-  doc,
   getDocs,
   addDoc,
-  updateDoc,
   query,
   orderBy,
   where,
@@ -723,7 +721,6 @@ export default function Employees() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / TABLE_PAGE_SIZE));
 
   const handleCloseAddModal = () => {
-    if (newEmpPhotoSrc) URL.revokeObjectURL(newEmpPhotoSrc);
     setNewEmpPhoto(null);
     setNewEmpPhotoSrc(null);
     setNewEmpRawSrc(null);
@@ -880,13 +877,13 @@ export default function Employees() {
 
       if (newEmpPhoto) {
         try {
-          const { getStorage, ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
+          const { getStorage, ref: storageRef, uploadString, getDownloadURL } = await import('firebase/storage');
           const { app } = await import('../firebase/config');
           const { doc: firestoreDoc, updateDoc: firestoreUpdateDoc } = await import('firebase/firestore');
 
           const storage = getStorage(app);
           const photoRef = storageRef(storage, `companies/${companyId}/employees/${newEmpId}/profile.jpg`);
-          const snapshot = await uploadBytes(photoRef, newEmpPhoto, { contentType: 'image/jpeg' });
+          const snapshot = await uploadString(photoRef, newEmpPhoto, 'data_url');
           const photoURL = await getDownloadURL(snapshot.ref);
           await firestoreUpdateDoc(firestoreDoc(db, 'companies', companyId, 'employees', newEmpId), { photoURL });
         } catch (photoErr) {
@@ -1724,7 +1721,6 @@ export default function Employees() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (newEmpPhotoSrc) URL.revokeObjectURL(newEmpPhotoSrc);
                         setNewEmpPhoto(null);
                         setNewEmpPhotoSrc(null);
                         setNewEmpRawSrc(null);
@@ -2995,12 +2991,13 @@ export default function Employees() {
                   if (!newEmpCroppedPixels) return;
                   try {
                     const blob = await getCroppedBlob(newEmpRawSrc, newEmpCroppedPixels);
-                    setNewEmpPhoto(blob);
-                    const previewUrl = URL.createObjectURL(blob);
-                    setNewEmpPhotoSrc((prev) => {
-                      if (prev) URL.revokeObjectURL(prev);
-                      return previewUrl;
-                    });
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      const base64 = reader.result;
+                      setNewEmpPhoto(base64);
+                      setNewEmpPhotoSrc(base64);
+                    };
+                    reader.readAsDataURL(blob);
                     setNewEmpCropOpen(false);
                     setNewEmpRawSrc(null);
                   } catch (err) {

@@ -52,6 +52,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (id.includes('/src/pages/audit/') || id.includes('\\src\\pages\\audit\\')) return 'audit';
           if (!id.includes('node_modules')) return undefined;
           if (id.includes('recharts')) return 'charts';
           if (id.includes('xlsx') || id.includes('file-saver')) return 'file-export';
@@ -66,7 +67,7 @@ export default defineConfig({
           }
           if (id.includes('react-router')) return 'react-router';
           if (id.includes('react-dom') || /node_modules[/\\]react[/\\]/.test(id)) {
-            return 'react-core';
+            return 'vendor';
           }
           return undefined;
         },

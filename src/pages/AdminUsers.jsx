@@ -3,7 +3,6 @@ import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, 
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import PageLoader from '../components/PageLoader';
 import { canAccessUserManagement, ROLE_LABELS } from '../utils/roles';
 
 const ROLE_COLORS = {
@@ -200,6 +199,7 @@ export default function AdminUsers() {
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase();
     return users.filter((u) => {
+      if (u.role === 'admin') return false;
       if (term && !(`${u.name || ''} ${u.email || ''}`.toLowerCase().includes(term))) return false;
       if (roleFilter && u.role !== roleFilter) return false;
       return true;
@@ -375,8 +375,6 @@ export default function AdminUsers() {
     );
   }
 
-  if (loading) return <PageLoader />;
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-100 px-6 py-4">
@@ -407,7 +405,22 @@ export default function AdminUsers() {
       </div>
 
       <div className="p-6">
-        {filteredUsers.length === 0 ? (
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="bg-white rounded-2xl p-5 border border-gray-100 animate-pulse">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-11 h-11 rounded-full bg-gray-200" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 bg-gray-200 rounded w-3/4" />
+                    <div className="h-2 bg-gray-100 rounded w-full" />
+                  </div>
+                </div>
+                <div className="h-5 bg-gray-100 rounded-full w-24" />
+              </div>
+            ))}
+          </div>
+        ) : filteredUsers.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
             <p className="text-4xl mb-3">👥</p>
             <p className="text-base font-semibold text-gray-700 mb-1">No users found</p>

@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { PLATFORM_CONFIG } from '../config/constants';
@@ -178,6 +178,7 @@ const navIcons = {
 function Sidebar({ isOpen = false, onClose }) {
   const { currentUser, role, signOut, userPermissions, isTokenValid } = useAuth();
   const { companyId, company } = useCompany();
+  const location = useLocation();
   const isAdmin = role === 'admin';
   const isCompanyAdmin = role === 'companyadmin';
   const inCompany = !!companyId;
@@ -203,6 +204,7 @@ function Sidebar({ isOpen = false, onClose }) {
         ? 'bg-[#4ECDC4] text-[#1B6B6B]'
         : 'text-white/70 hover:bg-white/[0.08] hover:text-white'
     }`;
+  const isPathActive = (path) => location.pathname.includes(`/${path}`);
 
   const roleBadgeClass = ROLE_COLORS[role] || 'bg-slate-100 text-slate-700';
   const roleLabel = ROLE_LABELS[role] || role || 'User';
@@ -300,7 +302,7 @@ function Sidebar({ isOpen = false, onClose }) {
                         key={to}
                         to={`/company/${companyId}/${to}`}
                         onClick={() => onClose?.()}
-                        className={({ isActive }) => linkClass(isActive)}
+                        className={linkClass(isPathActive(to))}
                       >
                         <Icon className="w-5 h-5 shrink-0" />
                         {label}
@@ -331,7 +333,7 @@ function Sidebar({ isOpen = false, onClose }) {
                   key={to}
                   to={`/company/${companyId}/${to}`}
                   onClick={() => onClose?.()}
-                  className={({ isActive }) => linkClass(isActive)}
+                  className={linkClass(isPathActive(to))}
                 >
                   <Icon className="w-5 h-5 shrink-0" />
                   {label}

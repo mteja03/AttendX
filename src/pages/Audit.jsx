@@ -9,6 +9,7 @@ import {
   doc,
   query,
   orderBy,
+  limit,
   onSnapshot,
   where,
   getDoc,
@@ -19,61 +20,15 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { trackPageView } from '../utils/analytics';
-
-/** Format YYYY-MM-DD (from inputs / Firestore) as DD/MM/YYYY */
-function formatDate(dateStr) {
-  if (!dateStr) return '—';
-  try {
-    const [year, month, day] = dateStr.split('-');
-    if (!year || !month || !day) return dateStr;
-    return `${day}/${month}/${year}`;
-  } catch {
-    return dateStr;
-  }
-}
-
-/** Legacy Firestore status → UI lifecycle */
-function effStatus(status) {
-  if (status === 'Scheduled') return 'Assigned';
-  return status || '';
-}
-
-function getAllowedStatuses(currentStatus, userRole) {
-  const canMgr = userRole === 'admin' || userRole === 'hrmanager' || userRole === 'auditmanager';
-  if (!canMgr) return [];
-  const s = effStatus(currentStatus);
-  if (s === 'Submitted') return ['Under Review'];
-  if (s === 'Under Review') return ['Closed', 'Sent Back'];
-  if (s === 'Sent Back') return ['Under Review'];
-  return [];
-}
-
-function getFindingAddedByRole(userRole) {
-  if (userRole === 'auditor') return 'auditor';
-  if (userRole === 'auditmanager') return 'auditmanager';
-  if (userRole === 'hrmanager') return 'auditmanager';
-  if (userRole === 'admin') return 'auditmanager';
-  return 'auditor';
-}
-
-function getAuditScore(audit) {
-  const items = audit?.checklistReview || [];
-  const reviewed = items.filter((i) => i.result === 'pass' || i.result === 'fail');
-  if (reviewed.length === 0) return null;
-  const passed = items.filter((i) => i.result === 'pass').length;
-  return Math.round((passed / reviewed.length) * 100);
-}
-
-const AUDIT_STATUSES = [
-  { key: 'Assigned', color: '#8B5CF6', bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700', icon: '📋' },
-  { key: 'In Progress', color: '#3B82F6', bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: '✍️' },
-  { key: 'Submitted', color: '#F97316', bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-700', icon: '📤' },
-  { key: 'Sent Back', color: '#EF4444', bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: '↩' },
-  { key: 'Under Review', color: '#EC4899', bg: 'bg-pink-50', border: 'border-pink-200', badge: 'bg-pink-100 text-pink-700', icon: '👀' },
-  { key: 'Closed', color: '#10B981', bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-100 text-green-700', icon: '✅' },
-];
-
-const AUDIT_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#1B6B6B', '#6366F1', '#14B8A6'];
+import {
+  AUDIT_COLORS,
+  AUDIT_STATUSES,
+  effStatus,
+  formatDate,
+  getAuditScore,
+  getFindingAddedByRole,
+  isAuditOverdue,
+} from './audit/auditHelpers';
 
 /** Used by AuditCalendar; includes legacy keys for older documents */
 const STATUS_COLORS = {
@@ -536,18 +491,13 @@ function AuditorDashboard({ audits, currentUser }) {
 
   const activeCount = myAudits.filter((a) => effStatus(a.status) !== 'Closed').length;
 
-  const myScore = useMemo(() => {
-    const closedA = myAudits.filter((a) => effStatus(a.status) === 'Closed');
-    const scores = closedA.map((a) => getAuditScore(a)).filter((s) => s !== null);
-    return scores.length > 0 ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length) : null;
-  }, [myAudits]);
+  const closedA = myAudits.filter((a) => effStatus(a.status) === 'Closed');
+  const scoreList = closedA.map((a) => getAuditScore(a)).filter((s) => s !== null);
+  const myScore = scoreList.length > 0 ? Math.round(scoreList.reduce((sum, s) => sum + s, 0) / scoreList.length) : null;
 
   const completionRate = myAudits.length > 0 ? Math.round((closed.length / myAudits.length) * 100) : 0;
 
-  const myFindings = useMemo(
-    () => myAudits.reduce((sum, a) => sum + (a.findings || []).filter((f) => f.addedByRole === 'auditor').length, 0),
-    [myAudits],
-  );
+  const myFindings = myAudits.reduce((sum, a) => sum + (a.findings || []).filter((f) => f.addedByRole === 'auditor').length, 0);
 
   return (
     <div className="space-y-6">
@@ -1805,12 +1755,12 @@ function AssignAuditModal({
 
 
 function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSuccess, showError, userRole, isAuditor, canManage }) {
-  if (!audit || !audit.id) return null;
+  const safeAudit = audit || {};
   const [activeTab, setActiveTab] = useState('checklist');
   const [auditorStep, setAuditorStep] = useState('checklist'); // checklist | findings
-  const [checklistReview, setChecklistReview] = useState(() => audit.checklistReview || []);
-  const [findings, setFindings] = useState(() => audit.findings || []);
-  const [adminNotes, setAdminNotes] = useState(() => audit.adminNotes || '');
+  const [checklistReview, setChecklistReview] = useState(() => safeAudit.checklistReview || []);
+  const [findings, setFindings] = useState(() => safeAudit.findings || []);
+  const [adminNotes, setAdminNotes] = useState(() => safeAudit.adminNotes || '');
   const saveTimeoutRef = useRef(null);
   const [autoSaving, setAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
@@ -1833,46 +1783,52 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const [ownerSearch, setOwnerSearch] = useState('');
   const [showOwnerDrop, setShowOwnerDrop] = useState(false);
   const ownerRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
     const h = (e) => {
       if (ownerRef.current && !ownerRef.current.contains(e.target)) setShowOwnerDrop(false);
     };
     document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    return () => {
+      isMountedRef.current = false;
+      document.removeEventListener('mousedown', h);
+    };
   }, []);
 
   useEffect(() => {
-    setChecklistReview(Array.isArray(audit.checklistReview) ? audit.checklistReview : []);
-    setFindings(Array.isArray(audit.findings) ? audit.findings : []);
-    setAdminNotes(audit.adminNotes || '');
+    setChecklistReview(Array.isArray(safeAudit.checklistReview) ? safeAudit.checklistReview : []);
+    setFindings(Array.isArray(safeAudit.findings) ? safeAudit.findings : []);
+    setAdminNotes(safeAudit.adminNotes || '');
     setActiveTab('checklist');
     setAuditorStep('checklist');
     setShowSubmitConfirm(false);
     setShowCloseModal(false);
     setCloseFeedback('');
     setAuditRating(0);
-  }, [audit.id]);
+  }, [safeAudit.id, safeAudit.adminNotes, safeAudit.checklistReview, safeAudit.findings]);
 
-  const st = effStatus(audit.status);
-  const isClosed = audit.status === 'Closed';
+  const st = effStatus(safeAudit.status);
+  const isClosed = safeAudit.status === 'Closed';
   const isUnderReview = st === 'Under Review';
   const managerCanAct = canManage && isUnderReview;
-  const findingsData = findings || [];
-  const teamMembers = audit.teamMembers || [];
+  const checklistItems = Array.isArray(checklistReview) ? checklistReview : [];
+  const findingsData = Array.isArray(findings) ? findings : [];
+  const teamMembers = Array.isArray(safeAudit.teamMembers) ? safeAudit.teamMembers : [];
   const openFindings = findingsData.filter((f) => f.status !== 'Resolved');
   const resolvedFindings = findingsData.filter((f) => f.status === 'Resolved');
 
-  const passCount = checklistReview.filter((i) => i.result === 'pass').length;
-  const failCount = checklistReview.filter((i) => i.result === 'fail').length;
-  const naCount = checklistReview.filter((i) => i.result === 'na').length;
-  const totalItems = checklistReview.length;
+  const passCount = checklistItems.filter((i) => i.result === 'pass').length;
+  const failCount = checklistItems.filter((i) => i.result === 'fail').length;
+  const naCount = checklistItems.filter((i) => i.result === 'na').length;
+  const totalItems = checklistItems.length;
   const reviewedCount = passCount + failCount + naCount;
-  const complianceScore = getAuditScore({ checklistReview });
+  const complianceScore = getAuditScore({ checklistReview: checklistItems });
 
   const checklistEditable =
     isAuditor &&
-    !audit.checklistLocked &&
+    !safeAudit.checklistLocked &&
     !isClosed &&
     (st === 'Assigned' || st === 'In Progress' || st === 'Sent Back');
 
@@ -1908,7 +1864,9 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       if (isClosed) return;
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(async () => {
+        if (!isMountedRef.current) return;
         try {
+          if (!isMountedRef.current) return;
           setAutoSaving(true);
           const payload = {
             findings: newFindings,
@@ -1920,11 +1878,12 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
             payload.checklistReview = newChecklistReview;
           }
           await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), payload);
+          if (!isMountedRef.current) return;
           setLastSaved(new Date());
         } catch (e) {
           console.error('Auto-save failed:', e);
         } finally {
-          setAutoSaving(false);
+          if (isMountedRef.current) setAutoSaving(false);
         }
       }, 1000);
     },
@@ -2148,10 +2107,14 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     autoSave(updated, findingsData, adminNotes);
   };
 
-  const sections = [...new Set(checklistReview.map((i) => i.section))];
+  const sections = [...new Set(checklistItems.map((i) => i.section))];
   const handlePrint = () => {
-    const currentChecklist = checklistReview;
-    const currentFindings = findings;
+    if (!audit) {
+      showError('No audit data to print');
+      return;
+    }
+    const currentChecklist = checklistItems;
+    const currentFindings = findingsData;
     const currentNotes = adminNotes;
     const score = getAuditScore({ checklistReview: currentChecklist });
     const passItems = currentChecklist.filter((i) => i.result === 'pass');
@@ -3260,6 +3223,7 @@ function AuditTableRow({
 }) {
   const [status, setStatus] = useState(audit.status);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     setStatus(audit.status);
@@ -3276,6 +3240,8 @@ function AuditTableRow({
             closedAt: new Date(),
           }),
       });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
     } catch (e) {
       showError('Failed to save');
       setStatus(audit.status);
@@ -3454,6 +3420,11 @@ function AuditTableRow({
             );
           })()
         )}
+        {saved && (
+          <p className="text-xs text-green-500 mt-0.5 text-center">
+            ✓ Saved
+          </p>
+        )}
       </div>
 
       <div className="text-center">
@@ -3570,15 +3541,7 @@ function AuditList({
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-
-  const isOverdue = (audit) => {
-    if (effStatus(audit.status) === 'Closed') return false;
-    const end = audit.endDate || audit.dueDate;
-    if (!end) return false;
-    return new Date(end) < now;
-  };
+  const isOverdue = useCallback((audit) => isAuditOverdue({ ...audit, status: effStatus(audit?.status) }), []);
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
@@ -3633,7 +3596,7 @@ function AuditList({
       }
       return true;
     });
-  }, [audits, search, filters, activeStatusTab, auditorFilter, isAuditor]);
+  }, [audits, search, filters, activeStatusTab, auditorFilter, isAuditor, isOverdue]);
 
   const generateAuditId = async () => {
     const counterRef = doc(db, 'companies', companyId, 'settings', 'auditCounter');
@@ -4635,11 +4598,12 @@ export default function Audit() {
   const isHRManager = userRole === 'hrmanager';
   const canManage = isAdmin || isAuditManager || isHRManager;
 
-  const [activeTab, setActiveTab] = useState('audits');
-  const auditorDefaulted = useRef(false);
+  const [activeTab, setActiveTab] = useState(isAuditor ? 'dashboard' : 'audits');
   const [auditTypes, setAuditTypes] = useState([]);
   const [audits, setAudits] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [empLoaded, setEmpLoaded] = useState(false);
+  const employeesLoadedForRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -4658,13 +4622,6 @@ export default function Audit() {
   useEffect(() => {
     trackPageView('Audit');
   }, []);
-
-  useEffect(() => {
-    if (isAuditor && !auditorDefaulted.current) {
-      auditorDefaulted.current = true;
-      setActiveTab('dashboard');
-    }
-  }, [isAuditor]);
 
   const visibleAudits = useMemo(() => {
     if (isAdmin || isHRManager) return audits;
@@ -4716,7 +4673,7 @@ export default function Audit() {
   useEffect(() => {
     if (!companyId) return undefined;
     const unsub = onSnapshot(
-      query(collection(db, 'companies', companyId, 'audits'), orderBy('createdAt', 'desc')),
+      query(collection(db, 'companies', companyId, 'audits'), orderBy('createdAt', 'desc'), limit(200)),
       (snap) => {
         setAudits(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       },
@@ -4726,12 +4683,19 @@ export default function Audit() {
 
   useEffect(() => {
     if (!companyId) return;
+    if (empLoaded && employeesLoadedForRef.current === companyId && employees.length > 0) return;
     getDocs(query(collection(db, 'companies', companyId, 'employees'), where('status', '==', 'Active')))
       .then((snap) => {
         setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setEmpLoaded(true);
+        employeesLoadedForRef.current = companyId;
       })
-      .catch(() => setEmployees([]));
-  }, [companyId]);
+      .catch(() => {
+        setEmployees([]);
+        setEmpLoaded(false);
+        employeesLoadedForRef.current = null;
+      });
+  }, [companyId, empLoaded, employees.length]);
 
   if (!companyId) {
     return <p className="p-6 text-sm text-gray-500">Missing company.</p>;

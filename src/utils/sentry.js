@@ -65,3 +65,12 @@ export const captureError = (error, context = {}) => {
     Sentry.captureException(error);
   });
 };
+
+export const safeAsync = (fn) => async (...args) => {
+  try {
+    return await fn(...args);
+  } catch (error) {
+    captureError(error, { context: fn?.name || 'anonymous_async_handler' });
+    throw error;
+  }
+};
