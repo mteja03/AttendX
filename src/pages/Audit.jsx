@@ -2978,65 +2978,58 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 </div>
               )}
               {st === 'Under Review' && canManage && (
-                <div className="space-y-2">
-                  {activeTab !== 'overview' && (
-                    <div className="flex gap-3 flex-wrap">
-                      <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
-                        Close
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowSendBackModal(true)}
-                        className="flex-1 py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium"
-                      >
-                        ↩ Send Back
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('overview')}
-                        className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold"
-                      >
-                        Overview →
-                      </button>
-                    </div>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSendBackModal(true)}
+                    className="flex-1 py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50"
+                  >
+                    ↩ Send Back
+                  </button>
+
+                  {activeTab === 'checklist' && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('findings')}
+                      className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858]"
+                    >
+                      Findings →
+                    </button>
+                  )}
+
+                  {activeTab === 'findings' && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('overview')}
+                      className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858]"
+                    >
+                      Overview →
+                    </button>
                   )}
 
                   {activeTab === 'overview' && (
-                    <div className="space-y-2">
-                      {openFindings.length > 0 && (
-                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                          <p className="text-xs text-amber-700">
-                            ⚠️ {openFindings.length} finding{openFindings.length !== 1 ? 's' : ''} still open — resolve before closing
-                          </p>
-                        </div>
-                      )}
-                      <div className="flex gap-3">
-                        <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
-                          Close
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowSendBackModal(true)}
-                          className="flex-1 py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium"
-                        >
-                          ↩ Send Back
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (openFindings.length > 0) {
-                              showError('Resolve all findings first');
-                              return;
-                            }
-                            setShowCloseModal(true);
-                          }}
-                          disabled={openFindings.length > 0}
-                          className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40"
-                        >
-                          ✅ Close Audit
-                        </button>
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (openFindings.length > 0) {
+                          showError(`Resolve all ${openFindings.length} findings first`);
+                          return;
+                        }
+                        setShowCloseModal(true);
+                      }}
+                      disabled={openFindings.length > 0}
+                      className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      ✅ Close Audit
+                    </button>
                   )}
                 </div>
               )}
