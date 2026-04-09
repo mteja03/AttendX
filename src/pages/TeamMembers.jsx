@@ -36,11 +36,21 @@ const ROLE_INFO_CARDS = [
     badgeClass: 'bg-[#C5E8E8] text-[#1B6B6B]',
     desc: 'View employees, manage assets',
   },
+  {
+    role: 'Audit Manager',
+    badgeClass: 'bg-blue-100 text-blue-700',
+    desc: 'Audit module — scoped internal/external audits',
+  },
+  {
+    role: 'Auditor',
+    badgeClass: 'bg-teal-100 text-teal-700',
+    desc: 'Fill assigned audits and submit for review',
+  },
 ];
 
 function availableRolesToAdd(viewerRole) {
-  if (viewerRole === 'admin') return ['hrmanager', 'manager', 'itmanager'];
-  if (viewerRole === 'hrmanager') return ['manager', 'itmanager'];
+  if (viewerRole === 'admin') return ['hrmanager', 'manager', 'itmanager', 'auditmanager', 'auditor'];
+  if (viewerRole === 'hrmanager') return ['manager', 'itmanager', 'auditmanager', 'auditor'];
   return [];
 }
 
@@ -55,7 +65,7 @@ function roleBadge(role) {
 function canHrActOnTarget(viewerRole, targetRole) {
   if (viewerRole !== 'hrmanager') return false;
   if (targetRole === 'hrmanager' || targetRole === 'admin') return false;
-  return targetRole === 'manager' || targetRole === 'itmanager';
+  return ['manager', 'itmanager', 'auditmanager', 'auditor'].includes(targetRole);
 }
 
 export default function TeamMembers() {
@@ -72,10 +82,12 @@ export default function TeamMembers() {
   const [empPickerSearch, setEmpPickerSearch] = useState('');
   const [grantEmail, setGrantEmail] = useState('');
   const [grantRole, setGrantRole] = useState('');
+  const [grantAuditScope, setGrantAuditScope] = useState('both');
   const [saving, setSaving] = useState(false);
   const [removeConfirm, setRemoveConfirm] = useState(null);
   const [changeRoleFor, setChangeRoleFor] = useState(null);
   const [newRoleValue, setNewRoleValue] = useState('');
+  const [changeRoleAuditScope, setChangeRoleAuditScope] = useState('both');
 
   const canAddManagers = userRole === 'admin' || userRole === 'hrmanager';
   const roleOptions = availableRolesToAdd(userRole);
@@ -137,6 +149,7 @@ export default function TeamMembers() {
       return;
     }
     const email = grantEmail.trim().toLowerCase();
+    const auditScope = grantRole === 'auditmanager' ? grantAuditScope || 'both' : null;
     setSaving(true);
     try {
       const userRef = doc(db, 'users', email);
@@ -149,6 +162,7 @@ export default function TeamMembers() {
         await updateDoc(doc(db, 'users', userDocId), {
           companyId,
           role: grantRole,
+          auditScope,
           isActive: true,
           name: selectedEmployee.fullName,
           linkedEmployeeId: selectedEmployee.id,
@@ -158,6 +172,7 @@ export default function TeamMembers() {
           email,
           name: selectedEmployee.fullName,
           role: grantRole,
+          auditScope,
           companyId,
           linkedEmployeeId: selectedEmployee.id,
           isActive: true,
@@ -185,6 +200,7 @@ export default function TeamMembers() {
       setSelectedEmployee(null);
       setGrantEmail('');
       setGrantRole('');
+      setGrantAuditScope('both');
       setShowEmpPicker(false);
       await fetchData();
     } catch {
@@ -245,8 +261,9 @@ export default function TeamMembers() {
 
   const handleChangeRole = async () => {
     if (!changeRoleFor || !newRoleValue) return;
+    const auditScope = newRoleValue === 'auditmanager' ? changeRoleAuditScope || 'both' : null;
     try {
-      await updateDoc(doc(db, 'users', changeRoleFor.id), { role: newRoleValue });
+      await updateDoc(doc(db, 'users', changeRoleFor.id), { role: newRoleValue, auditScope });
       const tmId = await findTeamMemberDocId(changeRoleFor.email);
       if (tmId) {
         await updateDoc(doc(db, 'companies', companyId, 'teamMembers', tmId), { role: newRoleValue });
@@ -383,6 +400,7 @@ export default function TeamMembers() {
                               onClick={() => {
                                 setChangeRoleFor(m);
                                 setNewRoleValue(m.role);
+                                setChangeRoleAuditScope(m.auditScope || 'both');
                               }}
                               className="text-[#1B6B6B] text-xs font-medium hover:underline"
                             >
@@ -552,7 +570,11 @@ export default function TeamMembers() {
                           ? 'bg-green-100 text-green-700'
                           : role === 'manager'
                             ? 'bg-amber-100 text-amber-700'
-                            : 'bg-[#C5E8E8] text-[#1B6B6B]'
+                            : role === 'auditmanager'
+                              ? 'bg-blue-100 text-blue-700'
+                              : role === 'auditor'
+                                ? 'bg-teal-100 text-teal-700'
+                                : 'bg-[#C5E8E8] text-[#1B6B6B]'
                       }`}
                     >
                       {(ROLE_LABELS[role] || role).charAt(0)}
@@ -564,7 +586,11 @@ export default function TeamMembers() {
                           ? 'Full HR access — employees, leave, docs, assets, audits'
                           : role === 'manager'
                             ? 'Team leave and attendance only'
-                            : 'View employees, manage assets'}
+                            : role === 'auditmanager'
+                              ? 'Manage audits by scope (internal / external / both)'
+                              : role === 'auditor'
+                                ? 'Complete assigned audit checklists'
+                                : 'View employees, manage assets'}
                       </p>
                     </div>
                     {grantRole === role && <span className="text-[#4ECDC4] text-lg">✓</span>}
@@ -572,6 +598,22 @@ export default function TeamMembers() {
                 ))}
               </div>
             </div>
+
+            {grantRole === 'auditmanager' && (
+              <div className="mb-4">
+                <label className="text-xs text-gray-500 block mb-1.5">Audit Scope</label>
+                <select
+                  value={grantAuditScope}
+                  onChange={(e) => setGrantAuditScope(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="internal">🏢 Internal Audits Only</option>
+                  <option value="external">🌐 External Audits Only</option>
+                  <option value="both">🔄 Both Internal &amp; External</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Which audits this manager can see and manage</p>
+              </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-2">
               <button type="button" onClick={() => setShowAddModal(false)} className="text-sm text-slate-500" disabled={saving}>
@@ -622,12 +664,26 @@ export default function TeamMembers() {
               onChange={(e) => setNewRoleValue(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm mb-4"
             >
-              {['hrmanager', 'manager', 'itmanager'].map((r) => (
+              {['hrmanager', 'manager', 'itmanager', 'auditmanager', 'auditor'].map((r) => (
                 <option key={r} value={r}>
                   {ROLE_LABELS[r]}
                 </option>
               ))}
             </select>
+            {newRoleValue === 'auditmanager' && (
+              <div className="mb-4">
+                <label className="text-xs text-gray-500 block mb-1.5">Audit Scope</label>
+                <select
+                  value={changeRoleAuditScope}
+                  onChange={(e) => setChangeRoleAuditScope(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
+                  <option value="internal">🏢 Internal Audits Only</option>
+                  <option value="external">🌐 External Audits Only</option>
+                  <option value="both">🔄 Both Internal &amp; External</option>
+                </select>
+              </div>
+            )}
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setChangeRoleFor(null)} className="text-slate-500 text-sm">
                 Cancel

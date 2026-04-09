@@ -31,6 +31,7 @@ export function AuthProvider({ children }) {
   const [companyId, setCompanyId] = useState(null);
   const [googleAccessToken, setGoogleAccessToken] = useState(null);
   const [userPermissions, setUserPermissions] = useState(null);
+  const [auditScope, setAuditScope] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
@@ -42,6 +43,7 @@ export function AuthProvider({ children }) {
         setRole(null);
         setCompanyId(null);
         setUserPermissions(null);
+        setAuditScope(null);
         setGoogleAccessToken(null);
         try {
           localStorage.removeItem('gat');
@@ -71,6 +73,7 @@ export function AuthProvider({ children }) {
             setRole(null);
             setCompanyId(null);
             setUserPermissions(null);
+            setAuditScope(null);
             setAuthError('Access denied. Contact your HR admin to get access.');
             setLoading(false);
             return;
@@ -85,6 +88,7 @@ export function AuthProvider({ children }) {
             setRole(null);
             setCompanyId(null);
             setUserPermissions(null);
+            setAuditScope(null);
             setAuthError('Your account has been deactivated. Contact HR admin.');
             setLoading(false);
             return;
@@ -95,6 +99,7 @@ export function AuthProvider({ children }) {
           setRole(data.role || null);
           setCompanyId(data.companyId ?? null);
           setUserPermissions(data.permissions ?? null);
+          setAuditScope(data.auditScope ?? null);
           setAuthError('');
           try {
             const refUsed = snap.ref;
@@ -153,6 +158,7 @@ export function AuthProvider({ children }) {
           setRole(null);
           setCompanyId(null);
           setUserPermissions(null);
+          setAuditScope(null);
           setAuthError('Access denied. Contact your HR admin to get access.');
           setLoading(false);
         }
@@ -271,6 +277,7 @@ export function AuthProvider({ children }) {
       // ignore
     }
     setGoogleAccessToken(null);
+    setAuditScope(null);
     setSentryUser(null);
     await signOut(auth);
   }, []);
@@ -282,6 +289,7 @@ export function AuthProvider({ children }) {
       userRole: role,
       companyId,
       userPermissions,
+      auditScope,
       googleAccessToken,
       getValidToken,
       isTokenValid,
@@ -295,6 +303,7 @@ export function AuthProvider({ children }) {
       role,
       companyId,
       userPermissions,
+      auditScope,
       googleAccessToken,
       getValidToken,
       loading,

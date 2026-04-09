@@ -32,6 +32,22 @@ function formatDate(dateStr) {
   }
 }
 
+/** Legacy Firestore status → UI lifecycle */
+function effStatus(status) {
+  if (status === 'Scheduled') return 'Assigned';
+  return status || '';
+}
+
+function getAllowedStatuses(currentStatus, userRole) {
+  const canMgr = userRole === 'admin' || userRole === 'hrmanager' || userRole === 'auditmanager';
+  if (!canMgr) return [];
+  const s = effStatus(currentStatus);
+  if (s === 'Submitted') return ['Under Review'];
+  if (s === 'Under Review') return ['Closed', 'Sent Back'];
+  if (s === 'Sent Back') return ['Under Review'];
+  return [];
+}
+
 function getAuditScore(audit) {
   const items = audit?.checklistReview || [];
   const reviewed = items.filter((i) => i.result === 'pass' || i.result === 'fail');
@@ -41,43 +57,51 @@ function getAuditScore(audit) {
 }
 
 const AUDIT_STATUSES = [
-  { key: 'Scheduled', color: '#8B5CF6', bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700', icon: '📅' },
-  { key: 'In Progress', color: '#3B82F6', bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: '🔄' },
-  { key: 'Under Review', color: '#F97316', bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-700', icon: '👀' },
+  { key: 'Assigned', color: '#8B5CF6', bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700', icon: '📋' },
+  { key: 'In Progress', color: '#3B82F6', bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: '✍️' },
+  { key: 'Submitted', color: '#F97316', bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-700', icon: '📤' },
+  { key: 'Sent Back', color: '#EF4444', bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: '↩' },
+  { key: 'Under Review', color: '#EC4899', bg: 'bg-pink-50', border: 'border-pink-200', badge: 'bg-pink-100 text-pink-700', icon: '👀' },
   { key: 'Closed', color: '#10B981', bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-100 text-green-700', icon: '✅' },
 ];
 
 const AUDIT_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#1B6B6B', '#6366F1', '#14B8A6'];
 
-/** Used by AuditCalendar (unchanged); includes legacy keys for older documents */
+/** Used by AuditCalendar; includes legacy keys for older documents */
 const STATUS_COLORS = {
   Scheduled: 'bg-purple-100 text-purple-700',
   Assigned: 'bg-purple-100 text-purple-700',
   'In Progress': 'bg-blue-100 text-blue-700',
   Submitted: 'bg-orange-100 text-orange-700',
-  'Under Review': 'bg-orange-100 text-orange-700',
+  'Sent Back': 'bg-red-100 text-red-700',
+  'Under Review': 'bg-pink-100 text-pink-700',
   Closed: 'bg-green-100 text-green-700',
   Overdue: 'bg-red-100 text-red-700',
 };
+
+function statusMeta(status) {
+  const e = effStatus(status);
+  return AUDIT_STATUSES.find((s) => s.key === e) || { badge: 'bg-gray-100 text-gray-600', icon: '•' };
+}
 
 function AuditDashboard({ audits, auditTypes }) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
 
   const total = audits.length;
-  const scheduled = audits.filter((a) => a.status === 'Scheduled').length;
-  const inProgress = audits.filter((a) => a.status === 'In Progress').length;
-  const underReview = audits.filter((a) => a.status === 'Under Review').length;
-  const closed = audits.filter((a) => a.status === 'Closed').length;
+  const assigned = audits.filter((a) => effStatus(a.status) === 'Assigned').length;
+  const inProgress = audits.filter((a) => effStatus(a.status) === 'In Progress').length;
+  const underReview = audits.filter((a) => effStatus(a.status) === 'Under Review').length;
+  const closed = audits.filter((a) => effStatus(a.status) === 'Closed').length;
 
   const overdue = audits.filter((a) => {
-    if (a.status === 'Closed') return false;
+    if (effStatus(a.status) === 'Closed') return false;
     const end = a.endDate || a.dueDate;
     if (!end) return false;
     return new Date(end) < now;
   }).length;
 
-  const closedAudits = audits.filter((a) => a.status === 'Closed');
+  const closedAudits = audits.filter((a) => effStatus(a.status) === 'Closed');
   const complianceRate = (() => {
     const scores = closedAudits.map((a) => getAuditScore(a)).filter((s) => s !== null);
     if (scores.length === 0) return null;
@@ -85,10 +109,10 @@ function AuditDashboard({ audits, auditTypes }) {
   })();
 
   const riskCounts = {
-    Critical: audits.filter((a) => a.riskLevel === 'Critical' && a.status !== 'Closed').length,
-    High: audits.filter((a) => a.riskLevel === 'High' && a.status !== 'Closed').length,
-    Medium: audits.filter((a) => a.riskLevel === 'Medium' && a.status !== 'Closed').length,
-    Low: audits.filter((a) => a.riskLevel === 'Low' && a.status !== 'Closed').length,
+    Critical: audits.filter((a) => a.riskLevel === 'Critical' && effStatus(a.status) !== 'Closed').length,
+    High: audits.filter((a) => a.riskLevel === 'High' && effStatus(a.status) !== 'Closed').length,
+    Medium: audits.filter((a) => a.riskLevel === 'Medium' && effStatus(a.status) !== 'Closed').length,
+    Low: audits.filter((a) => a.riskLevel === 'Low' && effStatus(a.status) !== 'Closed').length,
   };
 
   const upcomingActions = audits
@@ -129,7 +153,7 @@ function AuditDashboard({ audits, auditTypes }) {
 
   const auditorWorkload = {};
   audits
-    .filter((a) => a.status !== 'Closed')
+    .filter((a) => effStatus(a.status) !== 'Closed')
     .forEach((a) => {
       if (a.auditorName) {
         auditorWorkload[a.auditorName] = (auditorWorkload[a.auditorName] || 0) + 1;
@@ -146,9 +170,9 @@ function AuditDashboard({ audits, auditTypes }) {
   });
 
   const pipeline = [
-    { label: 'Scheduled', count: scheduled, color: '#8B5CF6', bg: '#EDE9FE' },
+    { label: 'Assigned', count: assigned, color: '#8B5CF6', bg: '#EDE9FE' },
     { label: 'In Progress', count: inProgress, color: '#3B82F6', bg: '#DBEAFE' },
-    { label: 'Under Review', count: underReview, color: '#F97316', bg: '#FFEDD5' },
+    { label: 'Under Review', count: underReview, color: '#EC4899', bg: '#FCE7F3' },
     { label: 'Closed', count: closed, color: '#10B981', bg: '#D1FAE5' },
   ];
 
@@ -156,7 +180,7 @@ function AuditDashboard({ audits, auditTypes }) {
 
   const statusBadge = (audit, isOverdueAudit) => {
     if (isOverdueAudit) return 'bg-red-100 text-red-700';
-    return AUDIT_STATUSES.find((s) => s.key === audit.status)?.badge || 'bg-gray-100 text-gray-700';
+    return statusMeta(audit.status).badge || 'bg-gray-100 text-gray-700';
   };
 
   return (
@@ -437,7 +461,10 @@ function AuditDashboard({ audits, auditTypes }) {
         ) : (
           <div className="space-y-2">
             {audits.slice(0, 5).map((audit) => {
-              const isOverdueAudit = audit.status !== 'Closed' && (audit.endDate || audit.dueDate) && new Date(audit.endDate || audit.dueDate) < now;
+              const isOverdueAudit =
+                effStatus(audit.status) !== 'Closed' &&
+                (audit.endDate || audit.dueDate) &&
+                new Date(audit.endDate || audit.dueDate) < now;
               return (
                 <div key={audit.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -460,7 +487,7 @@ function AuditDashboard({ audits, auditTypes }) {
                     </div>
                   </div>
                   <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ml-2 ${statusBadge(audit, isOverdueAudit)}`}>
-                    {isOverdueAudit ? 'Overdue' : audit.status}
+                    {isOverdueAudit ? 'Overdue' : effStatus(audit.status)}
                   </span>
                 </div>
               );
@@ -468,6 +495,123 @@ function AuditDashboard({ audits, auditTypes }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function AuditorDashboard({ audits, currentUser }) {
+  const email = currentUser?.email?.toLowerCase();
+  const myAudits = audits.filter(
+    (a) =>
+      (a.auditorEmail || '').toLowerCase() === email ||
+      (a.teamMembers || []).some((m) => (m.email || '').toLowerCase() === email),
+  );
+
+  const assigned = myAudits.filter((a) => effStatus(a.status) === 'Assigned');
+  const inProgress = myAudits.filter((a) => effStatus(a.status) === 'In Progress');
+  const sentBack = myAudits.filter((a) => effStatus(a.status) === 'Sent Back');
+  const submitted = myAudits.filter((a) => {
+    const s = effStatus(a.status);
+    return s === 'Submitted' || s === 'Under Review';
+  });
+  const closed = myAudits.filter((a) => effStatus(a.status) === 'Closed');
+
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const overdue = myAudits.filter((a) => {
+    const s = effStatus(a.status);
+    if (s === 'Closed' || s === 'Submitted' || s === 'Under Review') return false;
+    const end = a.endDate || a.dueDate;
+    if (!end) return false;
+    return new Date(end) < now;
+  });
+
+  const activeCount = myAudits.filter((a) => effStatus(a.status) !== 'Closed').length;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-[#1B6B6B] to-[#2D8A8A] rounded-2xl p-6 text-white">
+        <h2 className="text-lg font-bold mb-1">My Audits</h2>
+        <p className="text-sm opacity-80">
+          {activeCount} active audit{activeCount !== 1 ? 's' : ''} assigned to you
+        </p>
+      </div>
+
+      {(sentBack.length > 0 || overdue.length > 0) && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-700">⚠️ Needs Your Attention</h3>
+          {sentBack.map((audit) => (
+            <div key={audit.id} className="bg-red-50 border border-red-200 rounded-2xl p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="text-xs font-mono text-gray-400">{audit.auditRefId}</span>
+                    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">↩ Sent Back</span>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-800">{audit.auditTypeName}</p>
+                  {audit.branch && <p className="text-xs text-gray-500 mt-0.5">🏢 {audit.branch}</p>}
+                  {audit.sentBackReason && (
+                    <p className="text-xs text-red-600 mt-1 italic">&quot;{audit.sentBackReason}&quot;</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          {overdue.map((audit) => (
+            <div key={audit.id} className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="text-xs font-mono text-gray-400">{audit.auditRefId}</span>
+                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">⚠️ Overdue</span>
+              </div>
+              <p className="text-sm font-semibold text-gray-800">{audit.auditTypeName}</p>
+              {audit.branch && <p className="text-xs text-gray-500 mt-0.5">🏢 {audit.branch}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Assigned', count: assigned.length, icon: '📋', color: 'bg-purple-50 border-purple-100', text: 'text-purple-700' },
+          { label: 'In Progress', count: inProgress.length, icon: '✍️', color: 'bg-blue-50 border-blue-100', text: 'text-blue-700' },
+          { label: 'Submitted', count: submitted.length, icon: '📤', color: 'bg-orange-50 border-orange-100', text: 'text-orange-700' },
+          { label: 'Closed', count: closed.length, icon: '✅', color: 'bg-green-50 border-green-100', text: 'text-green-700' },
+        ].map((s) => (
+          <div key={s.label} className={`border rounded-2xl p-4 ${s.color}`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-lg">{s.icon}</span>
+              <p className={`text-2xl font-bold ${s.text}`}>{s.count}</p>
+            </div>
+            <p className={`text-xs font-medium ${s.text}`}>{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {myAudits.length > 0 && (
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Recent Audits</h3>
+          <div className="space-y-2">
+            {myAudits.slice(0, 5).map((audit) => (
+              <div key={audit.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-mono text-gray-400">{audit.auditRefId}</span>
+                    <p className="text-sm font-medium text-gray-800">{audit.auditTypeName}</p>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {audit.branch || '—'} · Due {formatDate(audit.endDate)}
+                  </p>
+                </div>
+                <span
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusMeta(audit.status).badge}`}
+                >
+                  {effStatus(audit.status)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -596,7 +740,7 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
               const hasOverdue = dayAudits.some((a) => {
                 const t = new Date();
                 t.setHours(0, 0, 0, 0);
-                return a.dateType === 'end' && a.status !== 'Closed' && new Date(key) < t;
+                return a.dateType === 'end' && effStatus(a.status) !== 'Closed' && new Date(key) < t;
               });
 
               return (
@@ -685,7 +829,9 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
                     const overdueAudit =
-                      audit.dateType === 'end' && audit.status !== 'Closed' && new Date(getDayKey(selectedDay)) < today;
+                      audit.dateType === 'end' &&
+                      effStatus(audit.status) !== 'Closed' &&
+                      new Date(getDayKey(selectedDay)) < today;
                     return (
                       <div
                         key={`${audit.id}-${audit.dateType}-${idx}`}
@@ -711,10 +857,10 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
                             className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                               overdueAudit
                                 ? 'bg-red-100 text-red-700'
-                                : STATUS_COLORS[audit.status] || STATUS_COLORS.Assigned
+                                : STATUS_COLORS[effStatus(audit.status)] || STATUS_COLORS.Assigned
                             }`}
                           >
-                            {overdueAudit ? 'Overdue' : audit.status}
+                            {overdueAudit ? 'Overdue' : effStatus(audit.status)}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap ml-8">
@@ -764,9 +910,9 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
               return (
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { label: 'Scheduled', value: monthAudits.length, color: 'text-gray-700' },
-                    { label: 'Active', value: monthAudits.filter((a) => a.status !== 'Closed').length, color: 'text-blue-600' },
-                    { label: 'Closed', value: monthAudits.filter((a) => a.status === 'Closed').length, color: 'text-green-600' },
+                    { label: 'In month', value: monthAudits.length, color: 'text-gray-700' },
+                    { label: 'Active', value: monthAudits.filter((a) => effStatus(a.status) !== 'Closed').length, color: 'text-blue-600' },
+                    { label: 'Closed', value: monthAudits.filter((a) => effStatus(a.status) === 'Closed').length, color: 'text-green-600' },
                   ].map((stat) => (
                     <div key={stat.label} className="bg-gray-50 rounded-xl p-3 text-center">
                       <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
@@ -1586,7 +1732,7 @@ function AssignAuditModal({
 }
 
 
-function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSuccess, showError }) {
+function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSuccess, showError, userRole, isAuditor, canManage }) {
   if (!audit || !audit.id) return null;
   const [activeTab, setActiveTab] = useState('checklist');
   const [checklistReview, setChecklistReview] = useState(() => audit.checklistReview || []);
@@ -1595,6 +1741,9 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const saveTimeoutRef = useRef(null);
   const [autoSaving, setAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [showSendBackModal, setShowSendBackModal] = useState(false);
+  const [sendBackReason, setSendBackReason] = useState('');
   const [newFinding, setNewFinding] = useState({
     description: '',
     severity: 'Medium',
@@ -1623,6 +1772,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     setActiveTab('checklist');
   }, [audit.id]);
 
+  const st = effStatus(audit.status);
   const isClosed = audit.status === 'Closed';
   const findingsData = findings || [];
   const teamMembers = audit.teamMembers || [];
@@ -1636,43 +1786,77 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const reviewedCount = passCount + failCount + naCount;
   const complianceScore = getAuditScore({ checklistReview });
 
-  const TABS = [
-    { id: 'checklist', label: 'Checklist', count: totalItems },
-    { id: 'findings', label: 'Findings', count: findings.length },
-    { id: 'overview', label: 'Overview' },
-  ];
+  const checklistEditable =
+    isAuditor &&
+    !audit.checklistLocked &&
+    !isClosed &&
+    (st === 'Assigned' || st === 'In Progress' || st === 'Sent Back');
 
-  const autoSave = useCallback(async (newChecklistReview, newFindings, newAdminNotes) => {
-    if (isClosed) return;
-    clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(async () => {
-      try {
-        setAutoSaving(true);
-        await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
-          checklistReview: newChecklistReview,
-          findings: newFindings,
-          adminNotes: newAdminNotes,
-          updatedAt: new Date(),
-          updatedBy: currentUser?.email || '',
-        });
-        setLastSaved(new Date());
-      } catch (e) {
-        console.error('Auto-save failed:', e);
-      } finally {
-        setAutoSaving(false);
-      }
-    }, 1000);
-  }, [audit.id, companyId, currentUser, isClosed]);
+  const checklistReadOnlyDisplay = !checklistEditable;
+
+  const TABS = isAuditor
+    ? [
+        { id: 'checklist', label: 'Checklist', count: totalItems },
+        { id: 'findings', label: 'Findings', count: findings.length },
+      ]
+    : canManage
+      ? [
+          { id: 'checklist', label: 'Review', count: totalItems },
+          { id: 'findings', label: 'Findings', count: findings.length },
+          { id: 'overview', label: 'Overview' },
+        ]
+      : [
+          { id: 'checklist', label: 'Checklist', count: totalItems },
+          { id: 'findings', label: 'Findings', count: findings.length },
+          { id: 'overview', label: 'Overview' },
+        ];
+
+  const autoSave = useCallback(
+    async (newChecklistReview, newFindings, newAdminNotes) => {
+      if (isClosed) return;
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          setAutoSaving(true);
+          const payload = {
+            findings: newFindings,
+            adminNotes: newAdminNotes,
+            updatedAt: new Date(),
+            updatedBy: currentUser?.email || '',
+          };
+          if (checklistEditable || !isAuditor) {
+            payload.checklistReview = newChecklistReview;
+          }
+          await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), payload);
+          setLastSaved(new Date());
+        } catch (e) {
+          console.error('Auto-save failed:', e);
+        } finally {
+          setAutoSaving(false);
+        }
+      }, 1000);
+    },
+    [audit.id, companyId, currentUser, isClosed, checklistEditable, isAuditor],
+  );
 
   useEffect(() => () => clearTimeout(saveTimeoutRef.current), []);
 
   const updateChecklistItem = (id, result) => {
+    if (!checklistEditable) return;
     const updated = checklistReview.map((i) => (i.id === id ? { ...i, result } : i));
     setChecklistReview(updated);
+    if (effStatus(audit.status) === 'Assigned') {
+      updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+        status: 'In Progress',
+        updatedAt: new Date(),
+        updatedBy: currentUser?.email || '',
+      }).catch(() => {});
+    }
     autoSave(updated, findingsData, adminNotes);
   };
 
   const updateChecklistNote = (id, note) => {
+    if (!checklistEditable) return;
     const updated = checklistReview.map((i) => (i.id === id ? { ...i, note } : i));
     setChecklistReview(updated);
     autoSave(updated, findingsData, adminNotes);
@@ -1719,10 +1903,115 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   };
 
   const deleteFinding = (id) => {
+    if (!(checklistEditable || canManage) || isClosed) return;
     const updated = findingsData.filter((f) => f.id !== id);
     setFindings(updated);
     autoSave(checklistReview, updated, adminNotes);
   };
+
+  const canAddFinding = (isAuditor && checklistEditable) || (canManage && !isClosed);
+
+  const handleSubmit = async () => {
+    const unfilled = checklistReview.filter((i) => !i.result);
+    if (unfilled.length > 0) {
+      showError(`Fill all ${unfilled.length} checklist item${unfilled.length !== 1 ? 's' : ''} before submitting`);
+      return;
+    }
+    try {
+      setSaving(true);
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+        checklistReview,
+        findings: findingsData,
+        adminNotes,
+        status: 'Submitted',
+        submittedAt: new Date(),
+        submittedBy: currentUser?.email || '',
+        checklistLocked: true,
+        updatedAt: new Date(),
+        updatedBy: currentUser?.email || '',
+      });
+      showSuccess('Audit submitted!');
+      onClose();
+    } catch (e) {
+      showError(`Submit failed: ${e.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleMarkUnderReview = async () => {
+    try {
+      setSaving(true);
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+        status: 'Under Review',
+        reviewStartedAt: new Date(),
+        reviewStartedBy: currentUser?.email || '',
+        updatedAt: new Date(),
+      });
+      showSuccess('Audit under review');
+      onClose();
+    } catch (e) {
+      showError('Failed to update status');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCloseAudit = async () => {
+    const openF = (findingsData || []).filter((f) => f.status !== 'Resolved');
+    if (openF.length > 0) {
+      showError(`Resolve all ${openF.length} finding${openF.length !== 1 ? 's' : ''} first`);
+      return;
+    }
+    try {
+      setSaving(true);
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+        status: 'Closed',
+        closedAt: new Date(),
+        closedBy: currentUser?.email || '',
+        managerNotes: adminNotes,
+        updatedAt: new Date(),
+      });
+      showSuccess('Audit closed!');
+      onClose();
+    } catch (e) {
+      showError('Failed to close audit');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSendBack = async () => {
+    if (!sendBackReason.trim()) {
+      showError('Add a reason for sending back');
+      return;
+    }
+    try {
+      setSaving(true);
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+        status: 'Sent Back',
+        sentBackAt: new Date(),
+        sentBackBy: currentUser?.email || '',
+        sentBackReason: sendBackReason.trim(),
+        checklistLocked: false,
+        updatedAt: new Date(),
+      });
+      showSuccess('Audit sent back to auditor');
+      setShowSendBackModal(false);
+      setSendBackReason('');
+      onClose();
+    } catch (e) {
+      showError('Failed to send back');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const canSubmit =
+    isAuditor &&
+    (st === 'Assigned' || st === 'In Progress' || st === 'Sent Back') &&
+    totalItems > 0 &&
+    reviewedCount === totalItems;
 
   const sections = [...new Set(checklistReview.map((i) => i.section))];
   const handlePrint = () => {
@@ -1765,11 +2054,9 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 <span className="text-xs font-mono font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{audit.auditRefId}</span>
                 <h2 className="text-base font-semibold text-gray-800">{audit.auditTypeName}</h2>
                 <span
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${
-                    AUDIT_STATUSES.find((s) => s.key === audit.status)?.badge || 'bg-gray-100 text-gray-600'
-                  }`}
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${statusMeta(audit.status).badge}`}
                 >
-                  {AUDIT_STATUSES.find((s) => s.key === audit.status)?.icon} {audit.status}
+                  {statusMeta(audit.status).icon} {st}
                 </span>
               </div>
               <div className="flex items-center gap-2 flex-wrap text-xs text-gray-400">
@@ -1784,7 +2071,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 {audit.endDate && <span>📅 Due {formatDate(audit.endDate)}</span>}
               </div>
             </div>
-            <div className="flex items-center gap-2 ml-2">
+            <div className="flex items-center gap-2 ml-2 shrink-0">
               <div className="flex items-center gap-2">
                 {autoSaving && (
                   <span className="text-xs text-gray-400 flex items-center gap-1">
@@ -1801,6 +2088,15 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
               </button>
             </div>
           </div>
+
+          {st === 'Sent Back' && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl mb-3">
+              <p className="text-sm font-semibold text-red-700 mb-1">↩ Sent back for corrections</p>
+              {audit.sentBackReason && (
+                <p className="text-xs text-red-600">Manager note: {audit.sentBackReason}</p>
+              )}
+            </div>
+          )}
 
           {totalItems > 0 && (
             <div className="mt-3">
@@ -1868,7 +2164,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                         .map((item) => (
                           <div
                             key={item.id}
-                            className={`p-4 rounded-xl border transition-all ${
+                            className={`p-4 rounded-xl border ${
                               item.result === 'pass'
                                 ? 'bg-green-50 border-green-100'
                                 : item.result === 'fail'
@@ -1878,48 +2174,93 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                     : 'bg-white border-gray-100'
                             }`}
                           >
-                            <div className="flex items-start justify-between gap-2 mb-3">
-                              <p className="text-sm font-medium text-gray-800 flex-1">{item.question}</p>
-                              <span
-                                className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
-                                  item.riskLevel === 'Critical'
-                                    ? 'bg-red-100 text-red-700'
-                                    : item.riskLevel === 'High'
-                                      ? 'bg-orange-100 text-orange-700'
-                                      : item.riskLevel === 'Medium'
-                                        ? 'bg-amber-100 text-amber-700'
-                                        : 'bg-green-100 text-green-700'
-                                }`}
-                              >
-                                {item.riskLevel || 'Medium'}
-                              </span>
-                            </div>
-                            <div className="flex gap-2 mb-2 flex-wrap">
-                              {[
-                                { val: 'pass', label: '✅ Pass', active: 'bg-green-500 text-white border-green-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-green-50 hover:border-green-200' },
-                                { val: 'fail', label: '❌ Fail', active: 'bg-red-500 text-white border-red-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-200' },
-                                { val: 'na', label: '⏭ N/A', active: 'bg-gray-500 text-white border-gray-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-gray-100' },
-                              ].map((opt) => (
-                                <button
-                                  key={opt.val}
-                                  type="button"
-                                  disabled={isClosed}
-                                  onClick={() => updateChecklistItem(item.id, item.result === opt.val ? null : opt.val)}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                                    item.result === opt.val ? opt.active : opt.def
-                                  } ${isClosed ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                            {checklistReadOnlyDisplay ? (
+                              <div className="flex items-start gap-3">
+                                <span
+                                  className={`text-xs px-2 py-1 rounded-lg font-bold flex-shrink-0 mt-0.5 ${
+                                    item.result === 'pass'
+                                      ? 'bg-green-200 text-green-800'
+                                      : item.result === 'fail'
+                                        ? 'bg-red-200 text-red-800'
+                                        : item.result === 'na'
+                                          ? 'bg-gray-200 text-gray-600'
+                                          : 'bg-gray-100 text-gray-400'
+                                  }`}
                                 >
-                                  {opt.label}
-                                </button>
-                              ))}
-                            </div>
-                            <input
-                              value={item.note || ''}
-                              disabled={isClosed}
-                              onChange={(e) => updateChecklistNote(item.id, e.target.value)}
-                              placeholder="Note or observation (optional)..."
-                              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50 bg-white/80"
-                            />
+                                  {item.result === 'pass'
+                                    ? '✅ Pass'
+                                    : item.result === 'fail'
+                                      ? '❌ Fail'
+                                      : item.result === 'na'
+                                        ? '⏭ N/A'
+                                        : '— N/R'}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-800">{item.question}</p>
+                                  {item.note && (
+                                    <p className="text-xs text-gray-500 mt-1 italic">&quot;{item.note}&quot;</p>
+                                  )}
+                                </div>
+                                <span
+                                  className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                    item.riskLevel === 'Critical'
+                                      ? 'bg-red-100 text-red-600'
+                                      : item.riskLevel === 'High'
+                                        ? 'bg-orange-100 text-orange-600'
+                                        : item.riskLevel === 'Medium'
+                                          ? 'bg-amber-100 text-amber-600'
+                                          : 'bg-green-100 text-green-600'
+                                  }`}
+                                >
+                                  {item.riskLevel || 'Med'}
+                                </span>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-start justify-between gap-2 mb-3">
+                                  <p className="text-sm font-medium text-gray-800 flex-1">{item.question}</p>
+                                  <span
+                                    className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                                      item.riskLevel === 'Critical'
+                                        ? 'bg-red-100 text-red-700'
+                                        : item.riskLevel === 'High'
+                                          ? 'bg-orange-100 text-orange-700'
+                                          : item.riskLevel === 'Medium'
+                                            ? 'bg-amber-100 text-amber-700'
+                                            : 'bg-green-100 text-green-700'
+                                    }`}
+                                  >
+                                    {item.riskLevel || 'Medium'}
+                                  </span>
+                                </div>
+                                <div className="flex gap-2 mb-2 flex-wrap">
+                                  {[
+                                    { val: 'pass', label: '✅ Pass', active: 'bg-green-500 text-white border-green-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-green-50 hover:border-green-200' },
+                                    { val: 'fail', label: '❌ Fail', active: 'bg-red-500 text-white border-red-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-200' },
+                                    { val: 'na', label: '⏭ N/A', active: 'bg-gray-500 text-white border-gray-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-gray-100' },
+                                  ].map((opt) => (
+                                    <button
+                                      key={opt.val}
+                                      type="button"
+                                      disabled={isClosed}
+                                      onClick={() => updateChecklistItem(item.id, item.result === opt.val ? null : opt.val)}
+                                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                        item.result === opt.val ? opt.active : opt.def
+                                      } ${isClosed ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <input
+                                  value={item.note || ''}
+                                  disabled={isClosed}
+                                  onChange={(e) => updateChecklistNote(item.id, e.target.value)}
+                                  placeholder="Note or observation (optional)..."
+                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50 bg-white/80"
+                                />
+                              </>
+                            )}
                           </div>
                         ))}
                     </div>
@@ -1931,7 +2272,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
 
           {activeTab === 'findings' && (
             <div className="space-y-4">
-              {!isClosed && (
+              {!isClosed && canAddFinding && (
                 <button
                   type="button"
                   onClick={() => setShowAddFinding(true)}
@@ -2094,7 +2435,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                             >
                               {finding.severity}
                             </span>
-                            {!isClosed && (
+                            {!isClosed && (checklistEditable || canManage) && (
                               <button
                                 type="button"
                                 onClick={() => deleteFinding(finding.id)}
@@ -2114,7 +2455,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                             </span>
                           )}
                         </div>
-                        {!isClosed && (
+                        {!isClosed && (checklistEditable || canManage) && (
                           <div className="flex gap-2 flex-wrap">
                             {['Open', 'In Progress', 'Resolved'].map((s) => (
                               <button
@@ -2242,20 +2583,22 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 </div>
               )}
 
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Admin Notes</label>
-                <textarea
-                  value={adminNotes}
-                  disabled={isClosed}
-                  onChange={(e) => {
-                    setAdminNotes(e.target.value);
-                    autoSave(checklistReview, findingsData, e.target.value);
-                  }}
-                  rows={3}
-                  placeholder="Internal notes about this audit..."
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50"
-                />
-              </div>
+              {canManage && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Manager notes</label>
+                  <textarea
+                    value={adminNotes}
+                    disabled={isClosed}
+                    onChange={(e) => {
+                      setAdminNotes(e.target.value);
+                      autoSave(checklistReview, findingsData, e.target.value);
+                    }}
+                    rows={3}
+                    placeholder="Internal notes about this audit..."
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50"
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2278,14 +2621,123 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
               </div>
             </div>
           ) : (
-            <div className="flex gap-3">
-              <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
-                Close
-              </button>
+            <div className="space-y-2">
+              {canSubmit && (
+                <div className="flex gap-3">
+                  <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={saving}
+                    className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
+                  >
+                    {saving ? 'Submitting…' : '📤 Submit to Manager'}
+                  </button>
+                </div>
+              )}
+              {st === 'Submitted' && canManage && (
+                <div className="flex gap-3 flex-wrap">
+                  <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowSendBackModal(true)}
+                    className="flex-1 min-w-[120px] py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50"
+                  >
+                    ↩ Send Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleMarkUnderReview}
+                    disabled={saving}
+                    className="flex-1 min-w-[120px] py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
+                  >
+                    👀 Start Review
+                  </button>
+                </div>
+              )}
+              {st === 'Under Review' && canManage && (
+                <div className="space-y-2">
+                  {openFindings.length > 0 && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                      <p className="text-xs text-amber-700">
+                        ⚠️ {openFindings.length} finding{openFindings.length !== 1 ? 's' : ''} still open
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex gap-3 flex-wrap">
+                    <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSendBackModal(true)}
+                      className="flex-1 min-w-[120px] py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50"
+                    >
+                      ↩ Send Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCloseAudit}
+                      disabled={saving || openFindings.length > 0}
+                      className="flex-1 min-w-[120px] py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-40"
+                    >
+                      ✅ Close Audit
+                    </button>
+                  </div>
+                </div>
+              )}
+              {!(st === 'Submitted' && canManage) && !(st === 'Under Review' && canManage) && !canSubmit && (
+                <div className="flex gap-3">
+                  <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                    Close
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {showSendBackModal && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <h3 className="text-base font-semibold text-gray-800 mb-2">↩ Send Back for Corrections</h3>
+            <p className="text-sm text-gray-500 mb-4">The auditor will see this reason and must resubmit after corrections.</p>
+            <textarea
+              value={sendBackReason}
+              onChange={(e) => setSendBackReason(e.target.value)}
+              rows={3}
+              placeholder="Reason for sending back..."
+              className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-red-400 mb-4"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSendBackModal(false);
+                  setSendBackReason('');
+                }}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendBack}
+                disabled={!sendBackReason.trim() || saving}
+                className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-semibold disabled:opacity-50"
+              >
+                {saving ? 'Sending…' : '↩ Send Back'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2297,6 +2749,8 @@ function AuditTableRow({
   totalFindings,
   companyId,
   userRole,
+  isAuditor,
+  canManage,
   onOpen,
   onDelete,
   showError,
@@ -2329,29 +2783,24 @@ function AuditTableRow({
 
   const handleStatusChange = async (newStatus) => {
     if (newStatus === 'Closed') {
-      const checklist = audit.checklistReview || [];
-      if (checklist.length > 0) {
-        const unfilled = checklist.filter((i) => !i.result);
-        if (unfilled.length > 0) {
-          showError(
-            `Cannot close — ${unfilled.length} checklist item${unfilled.length !== 1 ? 's' : ''} not reviewed. Open the audit and mark each item Pass, Fail, or N/A.`,
-          );
-          return;
-        }
-      }
-      const openOrInProgress = (audit.findings || []).filter((f) => f.status === 'Open' || f.status === 'In Progress');
-      if (openOrInProgress.length > 0) {
-        const hasOpen = openOrInProgress.some((f) => f.status === 'Open');
-        const suffix = hasOpen ? 'open' : 'in progress';
-        showError(
-          `Cannot close — ${openOrInProgress.length} finding${openOrInProgress.length !== 1 ? 's' : ''} still ${suffix}. Resolve all findings first.`,
-        );
+      const openF = (audit.findings || []).filter((f) => f.status !== 'Resolved');
+      if (openF.length > 0) {
+        showError(`Resolve all ${openF.length} finding${openF.length !== 1 ? 's' : ''} first`);
         return;
       }
     }
     setStatus(newStatus);
     await saveChanges(newStatus);
   };
+
+  const eff = effStatus(status);
+  const selectDisabled =
+    saving ||
+    status === 'Closed' ||
+    eff === 'Assigned' ||
+    eff === 'In Progress' ||
+    isAuditor ||
+    !canManage;
 
   return (
     <div
@@ -2436,22 +2885,36 @@ function AuditTableRow({
       </div>
 
       <div onClick={(e) => e.stopPropagation()}>
-        <select
-          value={status}
-          disabled={saving || status === 'Closed'}
-          onChange={(e) => handleStatusChange(e.target.value)}
-          className={`w-full text-xs font-medium border rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none transition-colors ${
-            saving ? 'opacity-50 cursor-wait' : ''
-          } ${status === 'Closed' ? 'cursor-not-allowed opacity-70 bg-gray-50' : ''} ${
-            AUDIT_STATUSES.find((s) => s.key === status)?.badge || 'bg-gray-100 text-gray-600 border-gray-200'
-          }`}
-        >
-          {AUDIT_STATUSES.map((s) => (
-            <option key={s.key} value={s.key}>
-              {s.icon} {s.key}
-            </option>
-          ))}
-        </select>
+        {isAuditor ? (
+          <span
+            className={`inline-flex w-full justify-center text-xs font-medium border rounded-lg px-2 py-1.5 ${
+              statusMeta(status).badge
+            } border-gray-200`}
+          >
+            {statusMeta(status).icon} {eff}
+          </span>
+        ) : (
+          <select
+            value={eff}
+            disabled={selectDisabled}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            className={`w-full text-xs font-medium border rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none transition-colors ${
+              saving ? 'opacity-50 cursor-wait' : ''
+            } ${selectDisabled ? 'cursor-not-allowed opacity-70 bg-gray-50' : ''} ${
+              statusMeta(status).badge
+            } border-gray-200`}
+          >
+            {AUDIT_STATUSES.filter((s) => {
+              if (s.key === eff) return true;
+              const allowed = getAllowedStatuses(status, userRole);
+              return allowed.includes(s.key);
+            }).map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.icon} {s.key}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="text-center">
@@ -2489,7 +2952,7 @@ function AuditTableRow({
       </div>
 
       <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
-        {userRole === 'admin' && (
+        {(userRole === 'admin' || userRole === 'hrmanager' || userRole === 'auditmanager') && canManage && (
           <button
             type="button"
             onClick={onDelete}
@@ -2504,7 +2967,20 @@ function AuditTableRow({
   );
 }
 
-function AuditList({ audits, auditTypes, company, companyId, currentUser, userRole, employees, showSuccess, showError, setSelectedAudit }) {
+function AuditList({
+  audits,
+  auditTypes,
+  company,
+  companyId,
+  currentUser,
+  userRole,
+  employees,
+  showSuccess,
+  showError,
+  setSelectedAudit,
+  isAuditor,
+  canManage,
+}) {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState('list');
@@ -2556,7 +3032,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
   now.setHours(0, 0, 0, 0);
 
   const isOverdue = (audit) => {
-    if (audit.status === 'Closed') return false;
+    if (effStatus(audit.status) === 'Closed') return false;
     const end = audit.endDate || audit.dueDate;
     if (!end) return false;
     return new Date(end) < now;
@@ -2580,7 +3056,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
           return false;
       }
       if (filters.status) {
-        const eff = isOverdue(a) ? 'Overdue' : a.status;
+        const eff = isOverdue(a) ? 'Overdue' : effStatus(a.status);
         if (eff !== filters.status) return false;
       }
       if (filters.type && a.auditTypeId !== filters.type) return false;
@@ -2658,6 +3134,10 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
         result: null,
         note: '',
       }));
+      const teamMembersNorm = (assignForm.teamMembers || []).map((m) => ({
+        ...m,
+        email: (m.email || '').toLowerCase(),
+      }));
       await addDoc(collection(db, 'companies', companyId, 'audits'), {
         auditRefId: refId,
         auditTypeId: assignForm.auditTypeId,
@@ -2671,15 +3151,16 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
         department: assignForm.department,
         auditorId: assignForm.auditorId,
         auditorName: assignForm.auditorName,
-        auditorEmail: assignForm.auditorEmail,
-        teamMembers: assignForm.teamMembers,
+        auditorEmail: (assignForm.auditorEmail || '').toLowerCase(),
+        teamMembers: teamMembersNorm,
         startDate: assignForm.startDate,
         endDate: assignForm.endDate,
         notes: assignForm.notes,
-        status: 'Scheduled',
+        status: 'Assigned',
         checklistReview,
         findings: [],
         adminNotes: '',
+        checklistLocked: false,
         createdAt: new Date(),
         createdBy: currentUser?.email || '',
       });
@@ -2721,6 +3202,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
 
   return (
     <div>
+      {!isAuditor && (
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex-1 min-w-48 relative">
@@ -2767,14 +3249,16 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
             )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => setShowAssignModal(true)}
-            disabled={auditTypes.length === 0}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 whitespace-nowrap"
-          >
-            + Assign Audit
-          </button>
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => setShowAssignModal(true)}
+              disabled={auditTypes.length === 0}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 whitespace-nowrap"
+            >
+              + Assign Audit
+            </button>
+          )}
         </div>
 
         {showFilters && (
@@ -2798,7 +3282,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
                   className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">All Statuses</option>
-                  {['Scheduled', 'In Progress', 'Under Review', 'Closed', 'Overdue'].map((s) => (
+                  {['Assigned', 'In Progress', 'Submitted', 'Sent Back', 'Under Review', 'Closed', 'Overdue'].map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
@@ -2941,7 +3425,96 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
           )}
         </div>
       </div>
+      )}
 
+      {isAuditor ? (
+        <div className="space-y-3">
+          {filtered.map((audit) => {
+            const es = effStatus(audit.status);
+            const canFillNow = es === 'Assigned' || es === 'In Progress' || es === 'Sent Back';
+            const totalItems = (audit.checklistReview || []).length;
+            const filledItems = (audit.checklistReview || []).filter((i) => i.result).length;
+            const progress = totalItems > 0 ? Math.round((filledItems / totalItems) * 100) : 0;
+            return (
+              <div
+                key={audit.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedAudit(audit)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
+                }}
+                className={`bg-white border rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all ${
+                  es === 'Sent Back' ? 'border-red-200 hover:border-red-300' : 'border-gray-100 hover:border-[#4ECDC4]'
+                }`}
+              >
+                <div
+                  className="h-1 -mx-5 -mt-5 mb-4 rounded-t-2xl"
+                  style={{
+                    background: es === 'Sent Back' ? '#EF4444' : audit.auditTypeColor || '#8B5CF6',
+                  }}
+                />
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="text-xs font-mono text-gray-400">{audit.auditRefId}</span>
+                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${statusMeta(audit.status).badge}`}>
+                        {es}
+                      </span>
+                    </div>
+                    <p className="text-base font-semibold text-gray-800 mb-1">{audit.auditTypeName}</p>
+                    <div className="flex items-center gap-3 flex-wrap text-xs text-gray-400">
+                      {audit.branch && <span>🏢 {audit.branch}</span>}
+                      {audit.location && <span>📍 {audit.location}</span>}
+                      <span>📅 Due {formatDate(audit.endDate)}</span>
+                    </div>
+                    {es === 'Sent Back' && audit.sentBackReason && (
+                      <div className="mt-2 p-2.5 bg-red-50 border border-red-100 rounded-xl">
+                        <p className="text-xs text-red-600 font-medium">↩ Manager note:</p>
+                        <p className="text-xs text-red-500 italic mt-0.5">&quot;{audit.sentBackReason}&quot;</p>
+                      </div>
+                    )}
+                  </div>
+                  {totalItems > 0 && (
+                    <div className="flex-shrink-0 text-right">
+                      <div
+                        className={`w-14 h-14 mx-auto rounded-full border-2 flex items-center justify-center text-xs font-bold ${
+                          es === 'Closed' ? 'border-green-200 bg-green-50 text-green-700' : 'border-[#E8F5F5] bg-[#F8FCFC] text-[#1B6B6B]'
+                        }`}
+                      >
+                        {progress}%
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {filledItems}/{totalItems}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                {canFillNow && (
+                  <div className="mt-4 pt-3 border-t border-gray-100">
+                    <div
+                      className={`w-full py-2 rounded-xl text-sm font-medium text-center ${
+                        es === 'Sent Back'
+                          ? 'bg-red-50 text-red-600 border border-red-200'
+                          : 'bg-[#E8F5F5] text-[#1B6B6B]'
+                      }`}
+                    >
+                      {es === 'Sent Back' ? '↩ Fix & Resubmit' : es === 'In Progress' ? '✍️ Continue Filling' : '▶ Start Audit'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {filtered.length === 0 && (
+            <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
+              <p className="text-5xl mb-4">✅</p>
+              <p className="text-base font-semibold text-gray-700">No audits assigned to you</p>
+            </div>
+          )}
+        </div>
+      ) : (
+      <>
       {viewMode === 'list' && (
         <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
           {filtered.length === 0 ? (
@@ -2951,7 +3524,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
               <p className="text-sm text-gray-400 mb-6">
                 {audits.length === 0 ? 'Assign your first audit to get started' : 'Try adjusting your filters'}
               </p>
-              {audits.length === 0 && (
+              {audits.length === 0 && canManage && (
                 <button
                   type="button"
                   onClick={() => setShowAssignModal(true)}
@@ -2985,6 +3558,8 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
                       totalFindings={totalFindings}
                       companyId={companyId}
                       userRole={userRole}
+                      isAuditor={false}
+                      canManage={canManage}
                       onOpen={() => setSelectedAudit(audit)}
                       onDelete={(e) => handleDelete(e, audit)}
                       showError={showError}
@@ -3000,7 +3575,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
       {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {AUDIT_STATUSES.map((status) => {
-            const cols = filtered.filter((a) => a.status === status.key && !isOverdue(a));
+            const cols = filtered.filter((a) => effStatus(a.status) === status.key && !isOverdue(a));
             return (
               <div key={status.key} className="flex-shrink-0 w-72">
                 <div className={`flex items-center justify-between p-3 rounded-xl mb-3 ${status.bg} border ${status.border}`}>
@@ -3022,7 +3597,7 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
                       }}
                       className="bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:shadow-sm hover:border-gray-200 transition-all relative group"
                     >
-                      {userRole === 'admin' && (
+                      {(userRole === 'admin' || userRole === 'hrmanager' || userRole === 'auditmanager') && canManage && (
                         <button
                           type="button"
                           onClick={(e) => handleDelete(e, audit)}
@@ -3082,6 +3657,8 @@ function AuditList({ audits, auditTypes, company, companyId, currentUser, userRo
             );
           })}
         </div>
+      )}
+      </>
       )}
 
       {showAssignModal && (
@@ -3166,7 +3743,7 @@ function AuditHistory({ audits, company }) {
                 <p className="text-sm text-gray-600 truncate">{audit.branch || '—'}</p>
                 <p className="text-sm text-gray-600 truncate">{audit.auditorName || '—'}</p>
                 <p className="text-sm text-gray-600">{formatDate(audit.endDate)}</p>
-                <p className="text-sm text-gray-600">{audit.status}</p>
+                <p className="text-sm text-gray-600">{effStatus(audit.status)}</p>
                 <p className="text-sm text-gray-600">{score === null ? '—' : `${score}%`}</p>
                 <p className="text-sm text-gray-600">{openF || '—'}</p>
               </div>
@@ -3179,7 +3756,7 @@ function AuditHistory({ audits, company }) {
 }
 
 function AuditReports({ audits, employees }) {
-  const closedAudits = audits.filter((a) => a.status === 'Closed');
+  const closedAudits = audits.filter((a) => effStatus(a.status) === 'Closed');
   const overallScores = closedAudits.map((a) => getAuditScore(a)).filter((s) => s !== null);
   const overallRate = overallScores.length > 0 ? Math.round(overallScores.reduce((sum, s) => sum + s, 0) / overallScores.length) : null;
 
@@ -3210,7 +3787,7 @@ function AuditReports({ audits, employees }) {
       const p = map[a.auditorName];
       p.totalAssigned++;
 
-      if (a.status === 'Closed') {
+      if (effStatus(a.status) === 'Closed') {
         p.closed++;
         const score = getAuditScore(a);
         if (score !== null) p.scores.push(score);
@@ -3221,11 +3798,11 @@ function AuditReports({ audits, employees }) {
           else p.late++;
         }
       }
-      if (a.status === 'In Progress') p.inProgress++;
+      if (effStatus(a.status) === 'In Progress') p.inProgress++;
 
       const now = new Date();
       now.setHours(0, 0, 0, 0);
-      if (a.status !== 'Closed' && a.endDate && new Date(a.endDate) < now) p.overdue++;
+      if (effStatus(a.status) !== 'Closed' && a.endDate && new Date(a.endDate) < now) p.overdue++;
 
       const f = a.findings || [];
       p.findings += f.length;
@@ -3347,11 +3924,18 @@ function AuditReports({ audits, employees }) {
 
 export default function Audit() {
   const { companyId: routeCompanyId } = useParams();
-  const { companyId: authCompanyId, currentUser, userRole } = useAuth();
+  const { companyId: authCompanyId, currentUser, userRole, auditScope } = useAuth();
   const companyId = routeCompanyId || authCompanyId;
   const { company } = useCompany();
 
+  const isAdmin = userRole === 'admin';
+  const isAuditManager = userRole === 'auditmanager';
+  const isAuditor = userRole === 'auditor';
+  const isHRManager = userRole === 'hrmanager';
+  const canManage = isAdmin || isAuditManager || isHRManager;
+
   const [activeTab, setActiveTab] = useState('audits');
+  const auditorDefaulted = useRef(false);
   const [auditTypes, setAuditTypes] = useState([]);
   const [audits, setAudits] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -3373,6 +3957,47 @@ export default function Audit() {
   useEffect(() => {
     trackPageView('Audit');
   }, []);
+
+  useEffect(() => {
+    if (isAuditor && !auditorDefaulted.current) {
+      auditorDefaulted.current = true;
+      setActiveTab('dashboard');
+    }
+  }, [isAuditor]);
+
+  const visibleAudits = useMemo(() => {
+    if (isAdmin || isHRManager) return audits;
+    if (isAuditManager) {
+      if (!auditScope || auditScope === 'both') return audits;
+      if (auditScope === 'internal') return audits.filter((a) => a.auditCategory === 'Internal');
+      if (auditScope === 'external') return audits.filter((a) => a.auditCategory === 'External');
+      return audits;
+    }
+    if (isAuditor) {
+      const email = currentUser?.email?.toLowerCase();
+      return audits.filter(
+        (a) =>
+          (a.auditorEmail || '').toLowerCase() === email ||
+          (a.teamMembers || []).some((m) => (m.email || '').toLowerCase() === email),
+      );
+    }
+    return audits;
+  }, [audits, isAdmin, isHRManager, isAuditManager, isAuditor, auditScope, currentUser]);
+
+  const mainTabs = useMemo(() => {
+    const base = [
+      { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+      { id: 'audits', label: 'Audits', icon: '🔍' },
+    ];
+    const extra =
+      canManage
+        ? [
+            { id: 'history', label: 'History', icon: '📅' },
+            { id: 'reports', label: 'Reports', icon: '📈' },
+          ]
+        : [];
+    return [...base, ...extra];
+  }, [canManage]);
 
   useEffect(() => {
     if (!companyId) return undefined;
@@ -3406,13 +4031,6 @@ export default function Audit() {
       })
       .catch(() => setEmployees([]));
   }, [companyId]);
-
-  const TABS = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'audits', label: 'Audits', icon: '🔍' },
-    { id: 'history', label: 'History', icon: '📅' },
-    { id: 'reports', label: 'Reports', icon: '📈' },
-  ];
 
   if (!companyId) {
     return <p className="p-6 text-sm text-gray-500">Missing company.</p>;
@@ -3453,18 +4071,20 @@ export default function Audit() {
             >
               📅
             </button>
-            <button
-              type="button"
-              onClick={() => setShowSettings(true)}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
-            >
-              ⚙️ Settings
-            </button>
+            {canManage && (
+              <button
+                type="button"
+                onClick={() => setShowSettings(true)}
+                className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                ⚙️ Settings
+              </button>
+            )}
           </div>
         </div>
 
         <div className="flex gap-1">
-          {TABS.map((tab) => (
+          {mainTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -3481,10 +4101,15 @@ export default function Audit() {
       </div>
 
       <div className="p-6">
-        {activeTab === 'dashboard' && <AuditDashboard audits={audits} auditTypes={auditTypes} />}
+        {activeTab === 'dashboard' &&
+          (isAuditor ? (
+            <AuditorDashboard audits={visibleAudits} currentUser={currentUser} />
+          ) : (
+            <AuditDashboard audits={visibleAudits} auditTypes={auditTypes} />
+          ))}
         {activeTab === 'audits' && (
           <AuditList
-            audits={audits}
+            audits={visibleAudits}
             auditTypes={auditTypes}
             company={company}
             companyId={companyId}
@@ -3494,14 +4119,20 @@ export default function Audit() {
             showSuccess={showSuccess}
             showError={showError}
             setSelectedAudit={setSelectedAudit}
+            isAuditor={isAuditor}
+            canManage={canManage}
           />
         )}
-        {activeTab === 'history' && <AuditHistory audits={audits} auditTypes={auditTypes} company={company} employees={employees} />}
-        {activeTab === 'reports' && <AuditReports audits={audits} auditTypes={auditTypes} company={company} employees={employees} />}
+        {activeTab === 'history' && (
+          <AuditHistory audits={visibleAudits} auditTypes={auditTypes} company={company} employees={employees} />
+        )}
+        {activeTab === 'reports' && (
+          <AuditReports audits={visibleAudits} auditTypes={auditTypes} company={company} employees={employees} />
+        )}
       </div>
 
       {selectedAudit && (() => {
-        const liveAudit = audits.find((a) => a.id === selectedAudit.id) || selectedAudit;
+        const liveAudit = visibleAudits.find((a) => a.id === selectedAudit.id) || audits.find((a) => a.id === selectedAudit.id) || selectedAudit;
         return (
           <AuditDetail
             key={liveAudit.id + liveAudit.status}
@@ -3512,6 +4143,9 @@ export default function Audit() {
             onClose={() => setSelectedAudit(null)}
             showSuccess={showSuccess}
             showError={showError}
+            userRole={userRole}
+            isAuditor={isAuditor}
+            canManage={canManage}
           />
         );
       })()}
@@ -3529,12 +4163,12 @@ export default function Audit() {
 
       {showCalendar && (
         <AuditCalendar
-          audits={audits}
+          audits={visibleAudits}
           onClose={() => setShowCalendar(false)}
           onSelectAudit={(a) => {
             setShowCalendar(false);
             setActiveTab('audits');
-            const fresh = audits.find((x) => x.id === a.id);
+            const fresh = visibleAudits.find((x) => x.id === a.id) || audits.find((x) => x.id === a.id);
             setSelectedAudit(fresh || a);
           }}
         />

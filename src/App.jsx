@@ -60,9 +60,20 @@ function HomeRedirect() {
     return <Navigate to="/companies" replace />;
   }
   if (companyId) {
+    if (role === 'auditmanager' || role === 'auditor') {
+      return <Navigate to={`/company/${companyId}/audit`} replace />;
+    }
     return <Navigate to={`/company/${companyId}/dashboard`} replace />;
   }
   return <Navigate to="/companies" replace />;
+}
+
+function CompanyIndexRedirect() {
+  const { role } = useAuth();
+  if (role === 'auditmanager' || role === 'auditor') {
+    return <Navigate to="audit" replace />;
+  }
+  return <Navigate to="dashboard" replace />;
 }
 
 function LoginRoute() {
@@ -111,7 +122,7 @@ function AppRoutes() {
           />
           <Route path="unauthorized" element={<Unauthorized />} />
           <Route path="company/:companyId" element={<CompanyLayout />}>
-            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route index element={<CompanyIndexRedirect />} />
             <Route
               path="dashboard"
               element={
@@ -205,7 +216,7 @@ function AppRoutes() {
             <Route
               path="audit"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <RoleRoute allowedRoles={['admin', 'hrmanager', 'auditmanager', 'auditor']}>
                   <ErrorBoundary>
                     <Audit />
                   </ErrorBoundary>

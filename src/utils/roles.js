@@ -3,6 +3,8 @@ export const ROLES = {
   hrmanager: 'hrmanager',
   manager: 'manager',
   itmanager: 'itmanager',
+  auditmanager: 'auditmanager',
+  auditor: 'auditor',
 };
 
 export const ROLE_LABELS = {
@@ -10,6 +12,8 @@ export const ROLE_LABELS = {
   hrmanager: 'HR Manager',
   manager: 'Manager',
   itmanager: 'IT Manager',
+  auditmanager: 'Audit Manager',
+  auditor: 'Auditor',
 };
 
 export const ROLE_COLORS = {
@@ -17,10 +21,16 @@ export const ROLE_COLORS = {
   hrmanager: 'bg-green-100 text-green-700',
   manager: 'bg-amber-100 text-amber-700',
   itmanager: 'bg-[#C5E8E8] text-[#1B6B6B]',
+  auditmanager: 'bg-blue-100 text-blue-700',
+  auditor: 'bg-teal-100 text-teal-700',
 };
 
 /** Company sidebar routes by login role */
 export function getNavItems(role) {
+  if (role === 'auditmanager' || role === 'auditor') {
+    return [{ to: 'audit', label: 'Audit' }];
+  }
+
   const base = [{ to: 'dashboard', label: 'Dashboard' }];
 
   if (role === 'admin' || role === 'hrmanager') {
@@ -72,6 +82,18 @@ export const ROLE_PERMISSIONS = {
     selfService: true,
   },
   itmanager: {
+    userManagement: false,
+    hrModules: false,
+    teamManagement: false,
+    selfService: true,
+  },
+  auditmanager: {
+    userManagement: false,
+    hrModules: false,
+    teamManagement: false,
+    selfService: true,
+  },
+  auditor: {
     userManagement: false,
     hrModules: false,
     teamManagement: false,

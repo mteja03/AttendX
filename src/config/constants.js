@@ -1,4 +1,5 @@
 // AttendX Platform Configuration
+// Role labels, colors, and nav: see src/utils/roles.js (ROLE_LABELS, ROLE_COLORS, getNavItems).
 export const PLATFORM_CONFIG = {
   // Platform admin email — this user gets admin role automatically on first login
   ADMIN_EMAIL: import.meta.env.VITE_ADMIN_EMAIL || 'sbmotorsinfo@gmail.com',

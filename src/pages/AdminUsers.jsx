@@ -21,6 +21,8 @@ const ROLE_BADGES = {
   hrmanager: 'bg-[#E8F5F5] text-[#1B6B6B]',
   manager: 'bg-blue-100 text-blue-700',
   itmanager: 'bg-orange-100 text-orange-700',
+  auditmanager: 'bg-blue-100 text-blue-700',
+  auditor: 'bg-teal-100 text-teal-700',
 };
 
 const DEFAULT_MODULE_PERMISSIONS = {
@@ -64,6 +66,8 @@ const ROLE_OPTIONS = [
   { value: 'hrmanager', label: 'HR Manager' },
   { value: 'manager', label: 'Manager' },
   { value: 'itmanager', label: 'IT Manager' },
+  { value: 'auditmanager', label: 'Audit Manager' },
+  { value: 'auditor', label: 'Auditor' },
 ];
 
 function formatDate(v) {
@@ -88,6 +92,7 @@ export default function AdminUsers() {
     name: '',
     role: 'hrmanager',
     companyId: '',
+    auditScope: 'both',
   });
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -202,11 +207,14 @@ export default function AdminUsers() {
     setSaving(true);
     try {
       const ref = doc(db, 'users', email);
+      const auditScope =
+        form.role === 'auditmanager' ? form.auditScope || 'both' : null;
       await setDoc(ref, {
         email,
         name: form.name.trim(),
         role: form.role,
         companyId: form.companyId || null,
+        auditScope,
         isActive: true,
         createdAt: serverTimestamp(),
         photoURL: '',
@@ -220,6 +228,7 @@ export default function AdminUsers() {
           name: form.name.trim(),
           role: form.role,
           companyId: form.companyId || null,
+          auditScope,
           isActive: true,
           createdAt: new Date(),
           photoURL: '',
@@ -228,7 +237,7 @@ export default function AdminUsers() {
         ...prev.filter((u) => u.id !== email),
       ]);
       setShowForm(false);
-      setForm({ email: '', name: '', role: 'hrmanager', companyId: '' });
+      setForm({ email: '', name: '', role: 'hrmanager', companyId: '', auditScope: 'both' });
       success('User added');
     } catch {
       showError('Failed to add user');
@@ -418,13 +427,20 @@ export default function AdminUsers() {
                   </td>
                   <td className="px-4 py-3 text-slate-700">{u.email}</td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`text-xs px-2.5 py-1 rounded-full font-medium inline-block ${
-                        ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {ROLE_LABELS[u.role] || u.role}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded-full font-medium inline-block ${
+                          ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {ROLE_LABELS[u.role] || u.role}
+                      </span>
+                      {u.role === 'auditmanager' && u.auditScope && (
+                        <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                          {u.auditScope === 'internal' ? '🏢 Internal' : u.auditScope === 'external' ? '🌐 External' : '🔄 Both'}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -557,6 +573,21 @@ export default function AdminUsers() {
                   ))}
                 </select>
               </div>
+              {form.role === 'auditmanager' && (
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1.5">Audit Scope</label>
+                  <select
+                    value={form.auditScope || 'both'}
+                    onChange={(e) => setForm((p) => ({ ...p, auditScope: e.target.value }))}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
+                  >
+                    <option value="internal">🏢 Internal Audits Only</option>
+                    <option value="external">🌐 External Audits Only</option>
+                    <option value="both">🔄 Both Internal &amp; External</option>
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">Determines which audits this manager can see and manage</p>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Company</label>
                 <select
