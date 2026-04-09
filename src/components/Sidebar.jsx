@@ -1,7 +1,5 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo } from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { collection, doc, limit, onSnapshot, orderBy, query, updateDoc, where, writeBatch } from 'firebase/firestore';
-import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { PLATFORM_CONFIG } from '../config/constants';
@@ -185,49 +183,6 @@ function Sidebar({ isOpen = false, onClose }) {
 
   const companyNavItems = getNavItems(isAdmin ? 'admin' : role);
 
-  const [showNotifPanel, setShowNotifPanel] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-
-  useEffect(() => {
-    if (!currentUser?.email) return undefined;
-    const unsub = onSnapshot(
-      query(
-        collection(db, 'notifications'),
-        where('recipientEmail', '==', currentUser.email.toLowerCase()),
-        where('read', '==', false),
-        orderBy('createdAt', 'desc'),
-        limit(20),
-      ),
-      (snap) => {
-        setNotifications(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      },
-      () => setNotifications([]),
-    );
-    return unsub;
-  }, [currentUser]);
-
-  const unreadCount = notifications.length;
-
-  const markRead = async (id) => {
-    try {
-      await updateDoc(doc(db, 'notifications', id), { read: true });
-    } catch {
-      // ignore
-    }
-  };
-
-  const markAllRead = async () => {
-    try {
-      const batch = writeBatch(db);
-      notifications.forEach((n) => {
-        batch.update(doc(db, 'notifications', n.id), { read: true });
-      });
-      await batch.commit();
-    } catch {
-      // ignore
-    }
-  };
-
   const canAccessModule = (module) => {
     if (role === 'admin') return true;
     if (!userPermissions) return true;
@@ -300,72 +255,6 @@ function Sidebar({ isOpen = false, onClose }) {
         <div>
           <p className="text-white font-bold text-base tracking-wide leading-none">AttendX</p>
           <p className="text-white/40 text-xs mt-0.5">HR Platform</p>
-        </div>
-        <div className="ml-auto relative">
-          <button
-            type="button"
-            onClick={() => setShowNotifPanel((v) => !v)}
-            className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/10 text-white/70 hover:text-white transition-colors"
-            aria-label="Notifications"
-          >
-            🔔
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </button>
-
-          {showNotifPanel && (
-            <div className="absolute left-12 top-0 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-800">Notifications</h3>
-                {unreadCount > 0 && (
-                  <button type="button" onClick={markAllRead} className="text-xs text-[#1B6B6B] hover:underline">
-                    Mark all read
-                  </button>
-                )}
-              </div>
-
-              <div className="max-h-80 overflow-y-auto">
-                {notifications.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-2xl mb-2">🔔</p>
-                    <p className="text-sm text-gray-400">No new notifications</p>
-                  </div>
-                ) : (
-                  notifications.map((notif) => (
-                    <div
-                      key={notif.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => {
-                        markRead(notif.id);
-                        setShowNotifPanel(false);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          markRead(notif.id);
-                          setShowNotifPanel(false);
-                        }
-                      }}
-                      className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50"
-                    >
-                      <span className="text-lg flex-shrink-0 mt-0.5">{notif.icon || '🔔'}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800">{notif.title}</p>
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{notif.body}</p>
-                        <p className="text-xs text-gray-300 mt-1">
-                          {notif.createdAt?.toDate ? notif.createdAt.toDate().toLocaleString('en-IN') : ''}
-                        </p>
-                      </div>
-                      <div className="w-2 h-2 bg-[#1B6B6B] rounded-full flex-shrink-0 mt-2" />
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
