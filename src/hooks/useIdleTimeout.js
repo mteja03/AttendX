@@ -18,9 +18,12 @@ export function useIdleTimeout(onSignOut, onWarning, onActive) {
   const onSignOutRef = useRef(onSignOut);
   const onWarningRef = useRef(onWarning);
   const onActiveRef = useRef(onActive);
-  onSignOutRef.current = onSignOut;
-  onWarningRef.current = onWarning;
-  onActiveRef.current = onActive;
+
+  useEffect(() => {
+    onSignOutRef.current = onSignOut;
+    onWarningRef.current = onWarning;
+    onActiveRef.current = onActive;
+  }, [onSignOut, onWarning, onActive]);
 
   const resetTimers = useCallback(() => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -66,7 +69,6 @@ export function useIdleTimeout(onSignOut, onWarning, onActive) {
     };
 
     if (import.meta.env.DEV) {
-      // eslint-disable-next-line no-console
       console.log('[IdleTimeout] timers started');
     }
 

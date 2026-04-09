@@ -5,12 +5,20 @@ export default function NotificationBanner({ notification, onClose, onClick }) {
 
   useEffect(() => {
     if (!notification) return undefined;
-    setVisible(true);
-    const timer = setTimeout(() => {
+
+    const showId = setTimeout(() => {
+      setVisible(true);
+    }, 0);
+
+    const hideId = setTimeout(() => {
       setVisible(false);
       setTimeout(onClose, 300);
-    }, 5000);
-    return () => clearTimeout(timer);
+    }, 3000);
+
+    return () => {
+      clearTimeout(showId);
+      clearTimeout(hideId);
+    };
   }, [notification, onClose]);
 
   if (!notification) return null;

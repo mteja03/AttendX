@@ -7,23 +7,21 @@ export default function IdleWarningBanner({ onStaySignedIn, onSignOut, visible }
   const [countdown, setCountdown] = useState(WARNING_SECONDS);
 
   useEffect(() => {
-    if (!visible) {
+    if (!visible) return undefined;
+    const id = setTimeout(() => {
       setCountdown(WARNING_SECONDS);
-      return undefined;
-    }
-
-    const interval = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
+    }, 0);
+    return () => clearTimeout(id);
   }, [visible]);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    if (countdown <= 0) return undefined;
+    const id = setInterval(() => {
+      setCountdown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [visible, countdown]);
 
   if (!visible) return null;
 

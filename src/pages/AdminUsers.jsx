@@ -173,8 +173,8 @@ export default function AdminUsers() {
     if (!showAddModal) return;
     const targetCompanyId = currentUserRole === 'admin' ? form.companyId : authCompanyId;
     if (!targetCompanyId) {
-      setEmployees([]);
-      return;
+      const id = setTimeout(() => setEmployees([]), 0);
+      return () => clearTimeout(id);
     }
     const loadEmployees = async () => {
       try {

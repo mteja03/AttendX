@@ -775,7 +775,7 @@ export default function Reports() {
       { name: 'In Progress', value: onboardingStats.inProgress },
       { name: 'Completed', value: onboardingStats.completed },
     ],
-    [activeTab, onboardingStats],
+    [onboardingStats],
   );
 
   const deptOnboardingAvg = useMemo(() => {
@@ -793,7 +793,7 @@ export default function Reports() {
     return Object.entries(acc)
       .map(([name, { sum, n }]) => ({ name, avg: n ? Math.round(sum / n) : 0 }))
       .sort((a, b) => b.avg - a.avg);
-  }, [employees]);
+  }, [employees, activeTab]);
 
   const ninetyDaysAgo = useMemo(() => {
     const d = new Date();
@@ -819,7 +819,7 @@ export default function Reports() {
         return { e, pct, left, status, join: toJSDate(e.joiningDate) };
       })
       .sort((a, b) => (b.join?.getTime() || 0) - (a.join?.getTime() || 0));
-  }, [activeTab, employees, ninetyDaysAgo]);
+  }, [employees, ninetyDaysAgo]);
 
   const offboardingEmployees = useMemo(
     () => (activeTab !== 'offboarding' ? [] : employees.filter((e) => e.offboarding)),

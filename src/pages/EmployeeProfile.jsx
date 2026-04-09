@@ -5811,7 +5811,7 @@ export default function EmployeeProfile() {
                           'PF & ESIC details settled',
                           'Knowledge transfer completed',
                           'Access revoked from all systems',
-                        ].map((item, i) => (
+                        ].map((item) => (
                           <div
                             key={item}
                             className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0"
@@ -7189,7 +7189,7 @@ export default function EmployeeProfile() {
                     });
                     success('Photo removed');
                     await fetchEmployee();
-                  } catch (e) {
+                  } catch {
                     showError('Failed to remove photo');
                   } finally {
                     setUploadingPhoto(false);

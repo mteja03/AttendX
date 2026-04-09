@@ -1050,7 +1050,7 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
     try {
       await deleteDoc(doc(db, 'companies', companyId, 'auditTypes', type.id));
       showSuccess('Template deleted');
-    } catch (e) {
+    } catch {
       showError('Failed to delete');
     }
   };
@@ -2023,7 +2023,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       });
       showSuccess('Audit under review');
       onClose();
-    } catch (e) {
+    } catch {
       showError('Failed to update status');
     } finally {
       setSaving(false);
@@ -2051,7 +2051,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       showSuccess('Audit closed!');
       setShowCloseModal(false);
       onClose();
-    } catch (e) {
+    } catch {
       showError('Failed to close audit');
     } finally {
       setSaving(false);
@@ -2078,18 +2078,12 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       setShowSendBackModal(false);
       setSendBackReason('');
       onClose();
-    } catch (e) {
+    } catch {
       showError('Failed to send back');
     } finally {
       setSaving(false);
     }
   };
-
-  const canSubmit =
-    isAuditor &&
-    (st === 'Assigned' || st === 'In Progress' || st === 'Sent Back') &&
-    totalItems > 0 &&
-    reviewedCount === totalItems;
 
   const approvedCount = checklistReview.filter((i) => i.managerApproval).length;
 
@@ -3211,7 +3205,6 @@ function AuditTableRow({
   openFindings,
   totalFindings,
   companyId,
-  userRole,
   isAuditor,
   canManage,
   isAdmin,
@@ -3242,7 +3235,7 @@ function AuditTableRow({
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
-    } catch (e) {
+    } catch {
       showError('Failed to save');
       setStatus(audit.status);
     } finally {
@@ -3703,7 +3696,7 @@ function AuditList({
     try {
       await deleteDoc(doc(db, 'companies', companyId, 'audits', audit.id));
       showSuccess('Audit deleted');
-    } catch (err) {
+    } catch {
       showError('Failed to delete');
     }
   };
@@ -4180,7 +4173,6 @@ function AuditList({
                       openFindings={openFindings}
                       totalFindings={totalFindings}
                       companyId={companyId}
-                      userRole={userRole}
                       isAuditor={false}
                       canManage={canManage}
                       isAdmin={isAdmin}
@@ -4391,7 +4383,7 @@ function AuditHistory({ audits, company }) {
   );
 }
 
-function AuditReports({ audits, employees }) {
+function AuditReports({ audits }) {
   const closedAudits = audits.filter((a) => effStatus(a.status) === 'Closed');
   const overallScores = closedAudits.map((a) => getAuditScore(a)).filter((s) => s !== null);
   const overallRate = overallScores.length > 0 ? Math.round(overallScores.reduce((sum, s) => sum + s, 0) / overallScores.length) : null;

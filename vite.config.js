@@ -52,23 +52,13 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('/src/pages/audit/') || id.includes('\\src\\pages\\audit\\')) return 'audit';
           if (!id.includes('node_modules')) return undefined;
-          if (id.includes('recharts')) return 'charts';
-          if (id.includes('xlsx') || id.includes('file-saver')) return 'file-export';
-          if (id.includes('jszip')) return 'zip';
-          if (id.includes('html2canvas')) return 'html2canvas';
-          if (id.includes('firebase')) {
-            if (id.includes('firebase/storage')) return 'firebase-storage';
-            if (id.includes('firestore')) return 'firebase-db';
-            if (id.includes('auth')) return 'firebase-auth';
-            if (id.includes('app')) return 'firebase-app';
-            return 'firebase-misc';
-          }
-          if (id.includes('react-router')) return 'react-router';
-          if (id.includes('react-dom') || /node_modules[/\\]react[/\\]/.test(id)) {
-            return 'vendor';
-          }
+          if (id.includes('node_modules/firebase')) return 'firebase';
+          if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-') || id.includes('node_modules/victory')) return 'charts';
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router')) return 'vendor';
+          if (id.includes('node_modules/xlsx') || id.includes('node_modules/exceljs') || id.includes('node_modules/file-saver')) return 'file-export';
+          if (id.includes('node_modules/jszip')) return 'zip';
+          if (id.includes('node_modules/html2canvas')) return 'html2canvas';
           return undefined;
         },
       },
