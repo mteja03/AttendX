@@ -59,20 +59,16 @@ function HomeRedirect() {
   if (role === 'admin') {
     return <Navigate to="/companies" replace />;
   }
+  if (role === 'companyadmin' && companyId) {
+    return <Navigate to={`/company/${companyId}/dashboard`} replace />;
+  }
   if (companyId) {
-    if (role === 'auditmanager' || role === 'auditor') {
-      return <Navigate to={`/company/${companyId}/audit`} replace />;
-    }
     return <Navigate to={`/company/${companyId}/dashboard`} replace />;
   }
   return <Navigate to="/companies" replace />;
 }
 
 function CompanyIndexRedirect() {
-  const { role } = useAuth();
-  if (role === 'auditmanager' || role === 'auditor') {
-    return <Navigate to="audit" replace />;
-  }
   return <Navigate to="dashboard" replace />;
 }
 
@@ -107,17 +103,21 @@ function AppRoutes() {
           <Route
             path="companies"
             element={
-              <ErrorBoundary>
-                <Companies />
-              </ErrorBoundary>
+              <RoleRoute allowedRoles={['admin']}>
+                <ErrorBoundary>
+                  <Companies />
+                </ErrorBoundary>
+              </RoleRoute>
             }
           />
           <Route
             path="admin/users"
             element={
-              <ErrorBoundary>
-                <AdminUsers />
-              </ErrorBoundary>
+              <RoleRoute allowedRoles={['admin', 'companyadmin']}>
+                <ErrorBoundary>
+                  <AdminUsers />
+                </ErrorBoundary>
+              </RoleRoute>
             }
           />
           <Route path="unauthorized" element={<Unauthorized />} />
@@ -126,7 +126,7 @@ function AppRoutes() {
             <Route
               path="dashboard"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager', 'itmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager', 'manager', 'itmanager']}>
                   <ErrorBoundary>
                     <Dashboard />
                   </ErrorBoundary>
@@ -136,7 +136,7 @@ function AppRoutes() {
             <Route
               path="employees"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager', 'itmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager', 'manager', 'itmanager']}>
                   <ErrorBoundary>
                     <Employees />
                   </ErrorBoundary>
@@ -146,7 +146,7 @@ function AppRoutes() {
             <Route
               path="employees/:empId"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager', 'itmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager', 'manager', 'itmanager']}>
                   <ErrorBoundary>
                     <EmployeeProfile />
                   </ErrorBoundary>
@@ -156,7 +156,7 @@ function AppRoutes() {
             <Route
               path="leave"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager', 'manager']}>
                   <ErrorBoundary>
                     <Leave />
                   </ErrorBoundary>
@@ -166,7 +166,7 @@ function AppRoutes() {
             <Route
               path="calendar"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager', 'itmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager', 'manager', 'itmanager']}>
                   <ErrorBoundary>
                     <CompanyCalendar />
                   </ErrorBoundary>
@@ -176,7 +176,7 @@ function AppRoutes() {
             <Route
               path="documents"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager']}>
                   <ErrorBoundary>
                     <Documents />
                   </ErrorBoundary>
@@ -186,7 +186,7 @@ function AppRoutes() {
             <Route
               path="policies"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager']}>
                   <ErrorBoundary>
                     <Library />
                   </ErrorBoundary>
@@ -196,7 +196,7 @@ function AppRoutes() {
             <Route
               path="assets"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager', 'manager', 'itmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager', 'manager', 'itmanager']}>
                   <ErrorBoundary>
                     <Assets />
                   </ErrorBoundary>
@@ -206,7 +206,7 @@ function AppRoutes() {
             <Route
               path="reports"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager']}>
                   <ErrorBoundary>
                     <Reports />
                   </ErrorBoundary>
@@ -216,7 +216,7 @@ function AppRoutes() {
             <Route
               path="audit"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager', 'auditmanager', 'auditor']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager', 'auditmanager', 'auditor']}>
                   <ErrorBoundary>
                     <Audit />
                   </ErrorBoundary>
@@ -226,7 +226,7 @@ function AppRoutes() {
             <Route
               path="team"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager']}>
                   <ErrorBoundary>
                     <TeamMembers />
                   </ErrorBoundary>
@@ -236,7 +236,7 @@ function AppRoutes() {
             <Route
               path="orgchart"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager']}>
                   <ErrorBoundary>
                     <OrgChart />
                   </ErrorBoundary>
@@ -246,7 +246,7 @@ function AppRoutes() {
             <Route
               path="settings"
               element={
-                <RoleRoute allowedRoles={['admin', 'hrmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager']}>
                   <ErrorBoundary>
                     <Settings />
                   </ErrorBoundary>

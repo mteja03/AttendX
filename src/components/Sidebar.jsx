@@ -3,7 +3,7 @@ import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { PLATFORM_CONFIG } from '../config/constants';
-import { ROLE_COLORS, ROLE_LABELS, getNavItems } from '../utils/roles';
+import { ROLE_COLORS, ROLE_LABELS, ALL_NAV_ITEMS, DEFAULT_PERMISSIONS } from '../utils/roles';
 
 function NavIcon({ className }) {
   return (
@@ -179,17 +179,15 @@ function Sidebar({ isOpen = false, onClose }) {
   const { currentUser, role, signOut, userPermissions, isTokenValid } = useAuth();
   const { companyId, company } = useCompany();
   const isAdmin = role === 'admin';
+  const isCompanyAdmin = role === 'companyadmin';
   const inCompany = !!companyId;
 
-  const companyNavItems = getNavItems(isAdmin ? 'admin' : role);
-
-  const canAccessModule = (module) => {
-    if (role === 'admin') return true;
-    if (!userPermissions) return true;
-    return userPermissions[module] !== false;
-  };
-
-  const visibleCompanyNavItems = companyNavItems.filter((item) => canAccessModule(item.to));
+  const effectivePermissions = userPermissions || DEFAULT_PERMISSIONS[role] || {};
+  const visibleCompanyNavItems = ALL_NAV_ITEMS.filter((item) => {
+    if (isAdmin || isCompanyAdmin) return true;
+    if (item.to === 'dashboard') return true;
+    return effectivePermissions[item.to] !== false;
+  });
 
   const handleSignOut = async () => {
     try {

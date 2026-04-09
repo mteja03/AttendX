@@ -1,26 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
 import { canAccessUserManagement, ROLE_LABELS } from '../utils/roles';
-import { toDisplayDate } from '../utils';
 
-const ROLE_BADGES = {
+const ROLE_COLORS = {
   admin: 'bg-purple-100 text-purple-700',
-  hrmanager: 'bg-[#E8F5F5] text-[#1B6B6B]',
-  manager: 'bg-blue-100 text-blue-700',
-  itmanager: 'bg-orange-100 text-orange-700',
+  companyadmin: 'bg-indigo-100 text-indigo-700',
+  hrmanager: 'bg-green-100 text-green-700',
+  manager: 'bg-amber-100 text-amber-700',
+  itmanager: 'bg-[#C5E8E8] text-[#1B6B6B]',
   auditmanager: 'bg-blue-100 text-blue-700',
   auditor: 'bg-teal-100 text-teal-700',
 };
@@ -47,178 +38,232 @@ const PERMISSION_MODULES = [
   { key: 'documents', label: 'Documents', icon: '📄' },
   { key: 'assets', label: 'Assets', icon: '📦' },
   { key: 'reports', label: 'Reports', icon: '📊' },
-  {
-    key: 'audit',
-    label: 'Audit',
-    icon: '🔍',
-    description: 'View and manage audits, assign audits, fill checklists',
-  },
+  { key: 'audit', label: 'Audit', icon: '🔍' },
   { key: 'policies', label: 'Library', icon: '📋' },
   { key: 'calendar', label: 'Calendar', icon: '🗓️' },
-  { key: 'onboarding', label: 'Onboarding', icon: '🎯' },
-  { key: 'offboarding', label: 'Offboarding', icon: '👋' },
   { key: 'orgchart', label: 'Org Chart', icon: '🏢' },
   { key: 'settings', label: 'Settings', icon: '⚙️' },
   { key: 'team', label: 'Team Members', icon: '👤' },
 ];
 
-const ROLE_OPTIONS = [
-  { value: 'hrmanager', label: 'HR Manager' },
-  { value: 'manager', label: 'Manager' },
-  { value: 'itmanager', label: 'IT Manager' },
-  { value: 'auditmanager', label: 'Audit Manager' },
-  { value: 'auditor', label: 'Auditor' },
-];
+function UserCard({ user, currentUserRole, companies, onEdit, onToggleActive, onDelete, onEditPermissions }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef(null);
+  const isActive = user.isActive !== false;
+  const roleColor = ROLE_COLORS[user.role] || 'bg-gray-100 text-gray-600';
+  const roleLabel = ROLE_LABELS[user.role] || user.role;
+  const company = companies?.find((c) => c.id === user.companyId);
+  const canMutate = user.role !== 'admin' && !(currentUserRole === 'companyadmin' && user.role === 'companyadmin');
 
-function formatDate(v) {
-  if (!v) return '—';
-  const d = v?.toDate ? v.toDate() : new Date(v);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  useEffect(() => {
+    const onDocClick = (ev) => {
+      if (!menuRef.current?.contains(ev.target)) setShowMenu(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  return (
+    <div className={`bg-white border rounded-2xl p-5 hover:shadow-sm transition-all ${isActive ? 'border-gray-100' : 'border-gray-100 opacity-60'}`}>
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-base flex-shrink-0"
+            style={{ background: isActive ? '#1B6B6B' : '#9CA3AF' }}
+          >
+            {user.name?.charAt(0) || user.email?.charAt(0) || '?'}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-800 truncate">{user.name || 'No name'}</p>
+            <p className="text-xs text-gray-400 truncate">{user.email}</p>
+          </div>
+        </div>
+        {canMutate && (
+          <div ref={menuRef} className="relative">
+            <button type="button" onClick={() => setShowMenu((v) => !v)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-lg">
+              ···
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 top-9 bg-white border border-gray-100 rounded-xl shadow-xl z-20 w-44 overflow-hidden">
+                <button type="button" onClick={() => { onEdit(); setShowMenu(false); }} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">✏️ Edit</button>
+                <button type="button" onClick={() => { onEditPermissions(); setShowMenu(false); }} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">🔑 Permissions</button>
+                <button type="button" onClick={() => { onToggleActive(); setShowMenu(false); }} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">{isActive ? '🚫 Deactivate' : '✅ Activate'}</button>
+                <button type="button" onClick={() => { onDelete(); setShowMenu(false); }} className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50">🗑️ Remove</button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${roleColor}`}>{roleLabel}</span>
+        {user.role === 'auditmanager' && user.auditScope && (
+          <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+            {user.auditScope === 'internal' ? '🏢 Internal' : user.auditScope === 'external' ? '🌐 External' : '🔄 Both'}
+          </span>
+        )}
+        <span className={`text-xs px-2 py-0.5 rounded-full ${isActive ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>{isActive ? 'Active' : 'Inactive'}</span>
+      </div>
+      {company && <p className="text-xs text-gray-400 mb-2 flex items-center gap-1.5">🏢 {company.name}</p>}
+      <p className="text-xs text-gray-400">
+        {user.lastLoginAt ? `Last login: ${new Date(user.lastLoginAt?.toDate ? user.lastLoginAt.toDate() : user.lastLoginAt).toLocaleDateString('en-GB')}` : 'Never logged in'}
+      </p>
+    </div>
+  );
 }
 
 export default function AdminUsers() {
-  const { currentUser, role } = useAuth();
+  const { currentUser, role: currentUserRole, companyId: authCompanyId } = useAuth();
   const { success, error: showError } = useToast();
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterCompany, setFilterCompany] = useState('');
-  const [filterRole, setFilterRole] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    email: '',
-    name: '',
-    role: 'hrmanager',
-    companyId: '',
-    auditScope: 'both',
-  });
-  const [formError, setFormError] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEmpDrop, setShowEmpDrop] = useState(false);
+  const [empSearch, setEmpSearch] = useState('');
+  const [addMethod, setAddMethod] = useState('employee');
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
   const [removeConfirm, setRemoveConfirm] = useState(null);
   const [editingPermissionsUser, setEditingPermissionsUser] = useState(null);
   const [permissionDraft, setPermissionDraft] = useState(DEFAULT_MODULE_PERMISSIONS);
   const [savingPermissions, setSavingPermissions] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const empRef = useRef(null);
+  const [form, setForm] = useState({ email: '', name: '', role: '', companyId: '', auditScope: 'both', selectedEmpId: '' });
+  const isUserAdmin = canAccessUserManagement(currentUserRole);
+  const isCompanyAdmin = currentUserRole === 'companyadmin';
 
-  const isAdmin = canAccessUserManagement(role);
+  const roleOptions = useMemo(
+    () => [
+      { value: 'hrmanager', label: 'HR Manager' },
+      { value: 'manager', label: 'Manager' },
+      { value: 'itmanager', label: 'IT Manager' },
+      { value: 'auditmanager', label: 'Audit Manager' },
+      { value: 'auditor', label: 'Auditor' },
+      ...(currentUserRole === 'admin' ? [{ value: 'companyadmin', label: 'Company Admin' }] : []),
+    ],
+    [currentUserRole],
+  );
 
   useEffect(() => {
-    if (!isAdmin || !currentUser) return;
+    if (!isUserAdmin || !currentUser) return;
     const load = async () => {
       setLoading(true);
       try {
-        const [usersSnap, companiesSnap] = await Promise.all([
-          getDocs(collection(db, 'users')),
-          getDocs(collection(db, 'companies')),
-        ]);
+        const companiesSnap = await getDocs(collection(db, 'companies'));
+        const allCompanies = companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const scopedCompanies = isCompanyAdmin ? allCompanies.filter((c) => c.id === authCompanyId) : allCompanies;
+        setCompanies(scopedCompanies);
+        const usersSnap = isCompanyAdmin
+          ? await getDocs(query(collection(db, 'users'), where('companyId', '==', authCompanyId)))
+          : await getDocs(collection(db, 'users'));
         const allUsers = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const byEmail = {};
-        const keepUid = currentUser.uid;
-        allUsers.forEach((u) => {
-          const email = (u.email || '').toLowerCase().trim();
-          if (!email) return;
-          const existing = byEmail[email];
-          const uTime = u.createdAt?.toMillis?.() ?? u.createdAt?.getTime?.() ?? 0;
-          if (!existing) {
-            byEmail[email] = u;
-            return;
-          }
-          const existingTime = existing.createdAt?.toMillis?.() ?? existing.createdAt?.getTime?.() ?? 0;
-          const keep =
-            existing.id === keepUid
-              ? existing
-              : u.id === keepUid
-                ? u
-                : uTime >= existingTime
-                  ? u
-                  : existing;
-          byEmail[email] = keep;
-        });
-        const toDelete = allUsers.filter((u) => {
-          const email = (u.email || '').toLowerCase().trim();
-          return email && byEmail[email] && byEmail[email].id !== u.id;
-        });
-        for (const u of toDelete) {
-          try {
-            await deleteDoc(doc(db, 'users', u.id));
-          } catch (e) {
-            console.warn('Could not delete duplicate user doc', u.id, e);
-          }
-        }
-        const withEmail = Object.values(byEmail);
-        const noEmail = allUsers.filter((u) => !(u.email || '').trim());
-        setUsers([...withEmail, ...noEmail]);
-        setCompanies(companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setUsers(allUsers);
       } catch {
         showError('Failed to load users');
       }
       setLoading(false);
     };
     load();
-  }, [isAdmin, currentUser, showError]);
+  }, [authCompanyId, currentUser, isCompanyAdmin, isUserAdmin, showError]);
 
-  const stats = useMemo(() => {
-    const active = users.filter((u) => u.isActive !== false).length;
-    const inactive = users.filter((u) => u.isActive === false).length;
-    return { total: users.length, active, inactive };
-  }, [users]);
-
-  const filtered = useMemo(() => {
-    let list = users;
-    const term = search.trim().toLowerCase();
-    if (term) {
-      list = list.filter(
-        (u) =>
-          u.email?.toLowerCase().includes(term) ||
-          u.name?.toLowerCase().includes(term),
-      );
+  useEffect(() => {
+    if (!showAddModal) return;
+    const targetCompanyId = currentUserRole === 'admin' ? form.companyId : authCompanyId;
+    if (!targetCompanyId) {
+      setEmployees([]);
+      return;
     }
-    if (filterCompany) list = list.filter((u) => u.companyId === filterCompany);
-    if (filterRole) list = list.filter((u) => u.role === filterRole);
-    if (filterStatus === 'active') list = list.filter((u) => u.isActive !== false);
-    if (filterStatus === 'inactive') list = list.filter((u) => u.isActive === false);
-    return list;
-  }, [users, search, filterCompany, filterRole, filterStatus]);
+    const loadEmployees = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'companies', targetCompanyId, 'employees'));
+        setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch {
+        setEmployees([]);
+      }
+    };
+    loadEmployees();
+  }, [authCompanyId, currentUserRole, form.companyId, showAddModal]);
 
-  const handleFormChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+  useEffect(() => {
+    if (!showEmpDrop) return;
+    const onDocClick = (ev) => {
+      if (!empRef.current?.contains(ev.target)) setShowEmpDrop(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [showEmpDrop]);
+
+  const filteredUsers = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return users.filter((u) => {
+      if (term && !(`${u.name || ''} ${u.email || ''}`.toLowerCase().includes(term))) return false;
+      if (roleFilter && u.role !== roleFilter) return false;
+      return true;
+    });
+  }, [users, search, roleFilter]);
+
+  const resetAddForm = () => {
+    setForm({
+      email: '',
+      name: '',
+      role: '',
+      companyId: currentUserRole === 'admin' ? '' : authCompanyId || '',
+      auditScope: 'both',
+      selectedEmpId: '',
+    });
+    setEmpSearch('');
+    setAddMethod('employee');
     setFormError('');
+  };
+
+  const openAdd = () => {
+    resetAddForm();
+    setShowAddModal(true);
   };
 
   const isGmail = (email) => /^[^@]+@gmail\.com$/i.test((email || '').trim());
 
   const handleAddUser = async (e) => {
     e.preventDefault();
-    setFormError('');
-    const email = form.email.trim().toLowerCase();
-    if (!email) return;
+    const email = (form.email || '').trim().toLowerCase();
+    if (!email || !form.name.trim() || !form.role) {
+      setFormError('Please fill all required fields.');
+      return;
+    }
     if (!isGmail(email)) {
-      setFormError('Please enter a valid @gmail.com address.');
+      setFormError('Must be a valid Gmail address.');
+      return;
+    }
+    if (currentUserRole === 'companyadmin' && form.role === 'companyadmin') {
+      setFormError('Company Admin cannot create another Company Admin.');
       return;
     }
     const existsByDocId = await getDoc(doc(db, 'users', email));
-    const existsInList = users.some((u) => (u.email || '').toLowerCase() === email);
-    if (existsByDocId.exists() || existsInList) {
+    if (existsByDocId.exists()) {
       setFormError('A user with this email already exists.');
+      return;
+    }
+    const targetCompanyId = form.companyId || authCompanyId;
+    if (!targetCompanyId) {
+      setFormError('Please select a company.');
       return;
     }
     setSaving(true);
     try {
-      const ref = doc(db, 'users', email);
-      const auditScope =
-        form.role === 'auditmanager' ? form.auditScope || 'both' : null;
-      await setDoc(ref, {
+      await setDoc(doc(db, 'users', email), {
         email,
         name: form.name.trim(),
         role: form.role,
-        companyId: form.companyId || null,
-        auditScope,
+        companyId: targetCompanyId,
         isActive: true,
-        createdAt: serverTimestamp(),
-        photoURL: '',
-        addedBy: currentUser?.email || '',
+        auditScope: form.auditScope || null,
+        employeeId: form.selectedEmpId || null,
+        createdAt: new Date(),
+        createdBy: currentUser?.email || '',
         permissions: { ...DEFAULT_MODULE_PERMISSIONS },
       });
       setUsers((prev) => [
@@ -227,45 +272,71 @@ export default function AdminUsers() {
           email,
           name: form.name.trim(),
           role: form.role,
-          companyId: form.companyId || null,
-          auditScope,
+          companyId: targetCompanyId,
           isActive: true,
+          auditScope: form.auditScope || null,
+          employeeId: form.selectedEmpId || null,
           createdAt: new Date(),
-          photoURL: '',
-          permissions: { ...DEFAULT_MODULE_PERMISSIONS },
         },
-        ...prev.filter((u) => u.id !== email),
+        ...prev,
       ]);
-      setShowForm(false);
-      setForm({ email: '', name: '', role: 'hrmanager', companyId: '', auditScope: 'both' });
-      success('User added');
+      setShowAddModal(false);
+      success('User added successfully');
     } catch {
       showError('Failed to add user');
     }
     setSaving(false);
   };
 
-  const handleDeactivate = async (user) => {
+  const openEdit = (user) => {
+    setEditingUser(user);
+    setForm({
+      email: user.email || '',
+      name: user.name || '',
+      role: user.role || '',
+      companyId: user.companyId || authCompanyId || '',
+      auditScope: user.auditScope || 'both',
+      selectedEmpId: user.employeeId || '',
+    });
+  };
+
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    if (currentUserRole === 'companyadmin' && form.role === 'companyadmin') {
+      setFormError('Company Admin cannot assign Company Admin role.');
+      return;
+    }
+    setSaving(true);
     try {
-      await updateDoc(doc(db, 'users', user.id), { isActive: false });
-      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, isActive: false } : u)));
-      success('User deactivated');
+      const payload = {
+        name: form.name.trim(),
+        role: form.role,
+        companyId: currentUserRole === 'admin' ? form.companyId || null : authCompanyId || null,
+        auditScope: form.role === 'auditmanager' ? form.auditScope || 'both' : null,
+      };
+      await updateDoc(doc(db, 'users', editingUser.id), payload);
+      setUsers((prev) => prev.map((u) => (u.id === editingUser.id ? { ...u, ...payload } : u)));
+      setEditingUser(null);
+      success('User updated');
     } catch {
-      showError('Failed to deactivate');
+      showError('Failed to update user');
+    }
+    setSaving(false);
+  };
+
+  const handleToggleActive = async (user) => {
+    try {
+      const next = user.isActive === false;
+      await updateDoc(doc(db, 'users', user.id), { isActive: next });
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, isActive: next } : u)));
+      success(next ? 'User activated' : 'User deactivated');
+    } catch {
+      showError('Failed to update status');
     }
   };
 
-  const handleActivate = async (user) => {
-    try {
-      await updateDoc(doc(db, 'users', user.id), { isActive: true });
-      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, isActive: true } : u)));
-      success('User activated');
-    } catch {
-      showError('Failed to activate');
-    }
-  };
-
-  const handleRemove = async (user) => {
+  const handleDelete = async (user) => {
     try {
       await deleteDoc(doc(db, 'users', user.id));
       setUsers((prev) => prev.filter((u) => u.id !== user.id));
@@ -276,337 +347,172 @@ export default function AdminUsers() {
     }
   };
 
-  const openPermissionsModal = (user) => {
+  const openPermissions = (user) => {
     setEditingPermissionsUser(user);
-    setPermissionDraft({
-      ...DEFAULT_MODULE_PERMISSIONS,
-      ...(user.permissions && typeof user.permissions === 'object' ? user.permissions : {}),
-    });
-  };
-
-  const togglePermission = (key) => {
-    setPermissionDraft((prev) => ({ ...prev, [key]: !prev[key] }));
+    setPermissionDraft({ ...DEFAULT_MODULE_PERMISSIONS, ...(user.permissions || {}) });
   };
 
   const savePermissions = async () => {
     if (!editingPermissionsUser) return;
     setSavingPermissions(true);
     try {
-      await updateDoc(doc(db, 'users', editingPermissionsUser.id), {
-        permissions: permissionDraft,
-      });
-      setUsers((prev) =>
-        prev.map((u) => (u.id === editingPermissionsUser.id ? { ...u, permissions: { ...permissionDraft } } : u)),
-      );
-      success('Permissions saved!');
+      await updateDoc(doc(db, 'users', editingPermissionsUser.id), { permissions: permissionDraft });
+      setUsers((prev) => prev.map((u) => (u.id === editingPermissionsUser.id ? { ...u, permissions: { ...permissionDraft } } : u)));
       setEditingPermissionsUser(null);
-    } catch (e) {
-      console.error(e);
+      success('Permissions saved');
+    } catch {
       showError('Failed to save permissions');
     }
     setSavingPermissions(false);
   };
 
-  if (!isAdmin) {
+  if (!isUserAdmin) {
     return (
       <div className="p-8">
-        <h1 className="text-2xl font-semibold text-slate-800">Platform Users</h1>
-        <p className="mt-2 text-slate-500 text-sm">You do not have permission to view this page.</p>
+        <h1 className="text-xl font-semibold text-gray-800">Platform Users</h1>
+        <p className="text-sm text-gray-500 mt-2">You do not have permission to view this page.</p>
       </div>
     );
   }
 
+  if (loading) return <PageLoader />;
+
   return (
-    <div className="p-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-800">Platform Users</h1>
-          <p className="text-slate-500 text-sm mt-1">Manage who can access AttendX.</p>
+    <div className="min-h-screen bg-gray-50">
+      <div className="bg-white border-b border-gray-100 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-800">Platform Users</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Manage who has access to AttendX</p>
+          </div>
+          <button type="button" onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]">+ Add User</button>
         </div>
-        <button
-          type="button"
-          onClick={() => { setShowForm(true); setFormError(''); }}
-          className="inline-flex items-center justify-center rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
-        >
-          Add User
-        </button>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-slate-500 text-sm">Total Users</p>
-          <p className="text-xl font-semibold text-slate-800 mt-1">{stats.total}</p>
+        <div className="flex gap-3 mt-4">
+          <div className="flex-1 relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name or email..." className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
+          </div>
+          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]">
+            <option value="">All Roles</option>
+            {Object.entries(ROLE_LABELS).filter(([r]) => r !== 'admin').map(([value, label]) => (<option key={value} value={value}>{label}</option>))}
+          </select>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-slate-500 text-sm">Active</p>
-          <p className="text-xl font-semibold text-slate-800 mt-1">{stats.active}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-slate-500 text-sm">Inactive</p>
-          <p className="text-xl font-semibold text-slate-800 mt-1">{stats.inactive}</p>
+        <div className="flex gap-4 mt-4 text-sm text-gray-500">
+          <span>{filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''}</span>
+          <span>·</span>
+          <span className="text-green-600">{users.filter((u) => u.isActive !== false).length} active</span>
+          <span>·</span>
+          <span className="text-gray-400">{users.filter((u) => u.isActive === false).length} inactive</span>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-4">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or email"
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-56"
-        />
-        <select
-          value={filterCompany}
-          onChange={(e) => setFilterCompany(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-44"
-        >
-          <option value="">All companies</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <select
-          value={filterRole}
-          onChange={(e) => setFilterRole(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-40"
-        >
-          <option value="">All roles</option>
-          {ROLE_OPTIONS.map((r) => (
-            <option key={r.value} value={r.value}>{r.label}</option>
-          ))}
-          <option value="admin">Admin</option>
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] w-32"
-        >
-          <option value="">All status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
+      <div className="p-6">
+        {filteredUsers.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
+            <p className="text-4xl mb-3">👥</p>
+            <p className="text-base font-semibold text-gray-700 mb-1">No users found</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredUsers.map((user) => (
+              <UserCard key={user.id || user.email} user={user} currentUserRole={currentUserRole} companies={companies} onEdit={() => openEdit(user)} onToggleActive={() => handleToggleActive(user)} onDelete={() => setRemoveConfirm(user)} onEditPermissions={() => openPermissions(user)} />
+            ))}
+          </div>
+        )}
       </div>
 
-      {loading ? (
-        <PageLoader />
-      ) : (
-        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium">Avatar + Name</th>
-                <th className="px-4 py-3 text-left font-medium">Email</th>
-                <th className="px-4 py-3 text-left font-medium">Role</th>
-                <th className="px-4 py-3 text-left font-medium">Company</th>
-                <th className="px-4 py-3 text-left font-medium">Last Login</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-left font-medium">Added date</th>
-                <th className="px-4 py-3 text-left font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((u) => (
-                <tr key={u.id} className="border-t border-slate-100 hover:bg-slate-50/50">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <img
-                        src={u.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || u.email || 'U')}`}
-                        alt=""
-                        className="h-9 w-9 rounded-full object-cover"
-                      />
-                      <span className="font-medium text-slate-800">{u.name || '—'}</span>
-                      {(currentUser?.email || '').toLowerCase() === (u.email || '').toLowerCase() && (
-                        <span className="inline-flex items-center rounded-full bg-[#1B6B6B] px-2 py-0.5 text-xs font-medium text-white">
-                          You
-                        </span>
-                      )}
-                      {!u.lastLoginAt && !u.lastLogin && (
-                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Never logged in</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">{u.email}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span
-                        className={`text-xs px-2.5 py-1 rounded-full font-medium inline-block ${
-                          ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {ROLE_LABELS[u.role] || u.role}
-                      </span>
-                      {u.role === 'auditmanager' && u.auditScope && (
-                        <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
-                          {u.auditScope === 'internal' ? '🏢 Internal' : u.auditScope === 'external' ? '🌐 External' : '🔄 Both'}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      {u.companyId && (
-                        <div
-                          className="w-5 h-5 rounded text-white text-[10px] flex items-center justify-center font-bold shrink-0"
-                          style={{
-                            background: companies.find((c) => c.id === u.companyId)?.color || '#1B6B6B',
-                          }}
-                        >
-                          {(companies.find((c) => c.id === u.companyId)?.initials || '?').charAt(0)}
-                        </div>
-                      )}
-                      <span className="text-sm text-gray-600">{companies.find((c) => c.id === u.companyId)?.name || '—'}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-400">
-                    {u.lastLoginAt || u.lastLogin ? toDisplayDate(u.lastLoginAt || u.lastLogin) : 'Never'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                        u.isActive !== false
-                          ? 'bg-green-50 text-green-700 border border-green-100'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}
-                    >
-                      {u.isActive !== false ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{formatDate(u.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {u.role !== 'admin' && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => openPermissionsModal(u)}
-                            className="text-xs px-2.5 py-1 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
-                          >
-                            Permissions
-                          </button>
-                          {u.isActive !== false ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDeactivate(u)}
-                              className="text-xs font-medium text-amber-600 hover:text-amber-700"
-                            >
-                              Deactivate
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleActivate(u)}
-                              className="text-xs font-medium text-green-600 hover:text-green-700"
-                            >
-                              Activate
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setRemoveConfirm(u)}
-                            className="text-xs font-medium text-red-600 hover:text-red-700"
-                          >
-                            Remove
-                          </button>
-                        </>
-                      )}
-                      {u.role === 'admin' && <span className="text-xs text-slate-400">—</span>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td className="px-4 py-8 text-center text-slate-500 text-sm" colSpan={8}>
-                    No users found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {showForm && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      {(showAddModal || editingUser) && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-slate-800">Add User</h2>
-              <button type="button" onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <h3 className="text-lg font-semibold text-gray-800">{editingUser ? 'Edit User' : 'Add User'}</h3>
+              <button type="button" onClick={() => { setShowAddModal(false); setEditingUser(null); }} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
-            <form onSubmit={handleAddUser} className="space-y-4">
-              {formError && (
-                <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>
+            {formError && <p className="mb-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>}
+            {!editingUser && (
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                {[{ id: 'employee', icon: '👤', label: 'Select Employee', sub: 'From your employee list' }, { id: 'manual', icon: '✉️', label: 'Enter Manually', sub: 'Gmail + Full Name' }].map((m) => (
+                  <button key={m.id} type="button" onClick={() => { setAddMethod(m.id); setForm((prev) => ({ ...prev, email: '', name: '', selectedEmpId: '' })); setEmpSearch(''); }} className={`p-4 rounded-xl border-2 text-left transition-all ${addMethod === m.id ? 'border-[#1B6B6B] bg-[#E8F5F5]' : 'border-gray-200 hover:border-gray-300'}`}>
+                    <span className="text-2xl block mb-2">{m.icon}</span>
+                    <p className={`text-sm font-medium ${addMethod === m.id ? 'text-[#1B6B6B]' : 'text-gray-800'}`}>{m.label}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{m.sub}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+            <form onSubmit={editingUser ? saveEdit : handleAddUser} className="space-y-3">
+              {!editingUser && addMethod === 'employee' && (
+                <div ref={empRef} className="relative">
+                  <label className="text-xs text-gray-500 block mb-1.5">Select Employee *</label>
+                  <input type="text" value={form.selectedEmpId ? form.name : empSearch} placeholder="Search employee by name..." onChange={(e) => { setEmpSearch(e.target.value); setShowEmpDrop(true); if (!e.target.value) setForm((p) => ({ ...p, email: '', name: '', selectedEmpId: '' })); }} onFocus={() => { setShowEmpDrop(true); setEmpSearch(''); setForm((p) => ({ ...p, email: '', name: '', selectedEmpId: '' })); }} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                  {showEmpDrop && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
+                      {employees.filter((emp) => emp.status === 'Active' && emp.email && (!empSearch || `${emp.fullName || ''} ${emp.email || ''}`.toLowerCase().includes(empSearch.toLowerCase()))).slice(0, 8).map((emp) => (
+                        <div key={emp.id} onMouseDown={(ev) => { ev.preventDefault(); setForm((p) => ({ ...p, email: (emp.email || '').toLowerCase(), name: emp.fullName || '', selectedEmpId: emp.id })); setEmpSearch(''); setShowEmpDrop(false); }} className="flex items-center gap-3 px-4 py-3 hover:bg-[#E8F5F5] cursor-pointer border-b border-gray-50 last:border-0">
+                          <div className="w-8 h-8 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{emp.fullName?.charAt(0)}</div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
+                            <p className="text-xs text-gray-400 truncate">{emp.email} · {emp.designation || emp.department || ''}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
+
+              {(!editingUser && addMethod === 'manual') && (
+                <>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Full Name *</label>
+                    <input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Gmail Address *</label>
+                    <input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value.toLowerCase() }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                  </div>
+                </>
+              )}
+
+              {editingUser && (
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1.5">Full Name *</label>
+                  <input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Gmail address <span className="text-red-500">*</span></label>
-                <input
-                  type="email"
-                  name="email"
-                  value={form.email}
-                  onChange={handleFormChange}
-                  placeholder="user@gmail.com"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Full Name <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  name="name"
-                  value={form.name}
-                  onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Role</label>
-                <select
-                  name="role"
-                  value={form.role}
-                  onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
-                >
-                  {ROLE_OPTIONS.map((r) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
+                <label className="text-xs text-gray-500 block mb-1.5">Role *</label>
+                <select value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value, auditScope: e.target.value === 'auditmanager' ? 'both' : null }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]">
+                  <option value="">Select role...</option>
+                  {roleOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                 </select>
               </div>
+
               {form.role === 'auditmanager' && (
                 <div>
                   <label className="text-xs text-gray-500 block mb-1.5">Audit Scope</label>
-                  <select
-                    value={form.auditScope || 'both'}
-                    onChange={(e) => setForm((p) => ({ ...p, auditScope: e.target.value }))}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
-                  >
-                    <option value="internal">🏢 Internal Audits Only</option>
-                    <option value="external">🌐 External Audits Only</option>
-                    <option value="both">🔄 Both Internal &amp; External</option>
-                  </select>
-                  <p className="text-xs text-gray-400 mt-1">Determines which audits this manager can see and manage</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[{ v: 'internal', l: '🏢 Internal' }, { v: 'external', l: '🌐 External' }, { v: 'both', l: '🔄 Both' }].map((opt) => (
+                      <button key={opt.v} type="button" onClick={() => setForm((p) => ({ ...p, auditScope: opt.v }))} className={`py-2 rounded-xl text-xs font-medium border-2 transition-all ${form.auditScope === opt.v ? 'border-[#1B6B6B] bg-[#E8F5F5] text-[#1B6B6B]' : 'border-gray-200 text-gray-500'}`}>{opt.l}</button>
+                    ))}
+                  </div>
                 </div>
               )}
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Company</label>
-                <select
-                  name="companyId"
-                  value={form.companyId}
-                  onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
-                >
-                  <option value="">— Select company —</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowForm(false)} className="text-sm text-slate-500 hover:text-slate-700" disabled={saving}>Cancel</button>
-                <button type="submit" className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50" disabled={saving}>
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
+
+              {currentUserRole === 'admin' && (
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1.5">Assign to Company</label>
+                  <select value={form.companyId || ''} onChange={(e) => setForm((p) => ({ ...p, companyId: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]">
+                    <option value="">Select company...</option>
+                    {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => { setShowAddModal(false); setEditingUser(null); }} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancel</button>
+                <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold disabled:opacity-50">{saving ? 'Saving...' : editingUser ? 'Save Changes' : 'Add User'}</button>
               </div>
             </form>
           </div>
@@ -617,60 +523,20 @@ export default function AdminUsers() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-slate-800 mb-1">Permissions</h3>
-            <p className="text-sm text-gray-400 mb-4">
-              {editingPermissionsUser.name || editingPermissionsUser.email} ·{' '}
-              {ROLE_LABELS[editingPermissionsUser.role] || editingPermissionsUser.role}
-            </p>
+            <p className="text-sm text-gray-400 mb-4">{editingPermissionsUser.name || editingPermissionsUser.email} · {ROLE_LABELS[editingPermissionsUser.role] || editingPermissionsUser.role}</p>
             <div className="space-y-2">
               {PERMISSION_MODULES.map((module) => (
-                <div
-                  key={module.key}
-                  className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-gray-50"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span aria-hidden>{module.icon}</span>
-                      <span className="text-sm text-gray-800 truncate">{module.label}</span>
-                    </div>
-                    {module.description ? (
-                      <p className="text-xs text-gray-400 mt-0.5 pl-7 leading-snug">{module.description}</p>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => togglePermission(module.key)}
-                    className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-                      permissionDraft[module.key] ? 'bg-[#1B6B6B]' : 'bg-gray-200'
-                    }`}
-                    aria-pressed={!!permissionDraft[module.key]}
-                    aria-label={`Toggle ${module.label}`}
-                  >
-                    <span
-                      className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                        permissionDraft[module.key] ? 'translate-x-5' : 'translate-x-0.5'
-                      }`}
-                    />
+                <div key={module.key} className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-gray-50">
+                  <div className="min-w-0 flex-1"><span className="text-sm text-gray-800 truncate">{module.icon} {module.label}</span></div>
+                  <button type="button" onClick={() => setPermissionDraft((prev) => ({ ...prev, [module.key]: !prev[module.key] }))} className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${permissionDraft[module.key] ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}>
+                    <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${permissionDraft[module.key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
                   </button>
                 </div>
               ))}
             </div>
             <div className="flex gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setEditingPermissionsUser(null)}
-                className="flex-1 py-2 border border-slate-200 rounded-xl text-sm text-gray-600 hover:bg-slate-50"
-                disabled={savingPermissions}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={savePermissions}
-                disabled={savingPermissions}
-                className="flex-1 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
-              >
-                {savingPermissions ? 'Saving…' : 'Save Permissions'}
-              </button>
+              <button type="button" onClick={() => setEditingPermissionsUser(null)} className="flex-1 py-2 border border-slate-200 rounded-xl text-sm text-gray-600 hover:bg-slate-50" disabled={savingPermissions}>Cancel</button>
+              <button type="button" onClick={savePermissions} disabled={savingPermissions} className="flex-1 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50">{savingPermissions ? 'Saving...' : 'Save Permissions'}</button>
             </div>
           </div>
         </div>
@@ -680,24 +546,10 @@ export default function AdminUsers() {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-2">Remove user?</h3>
-            <p className="text-sm text-slate-600 mb-4">
-              This will permanently delete <strong>{removeConfirm.name || removeConfirm.email}</strong>. They will lose access to AttendX.
-            </p>
+            <p className="text-sm text-slate-600 mb-4">This will permanently delete <strong>{removeConfirm.name || removeConfirm.email}</strong>.</p>
             <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setRemoveConfirm(null)}
-                className="text-sm text-slate-500 hover:text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleRemove(removeConfirm)}
-                className="rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2"
-              >
-                Remove
-              </button>
+              <button type="button" onClick={() => setRemoveConfirm(null)} className="text-sm text-slate-500 hover:text-slate-700">Cancel</button>
+              <button type="button" onClick={() => handleDelete(removeConfirm)} className="rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2">Remove</button>
             </div>
           </div>
         </div>

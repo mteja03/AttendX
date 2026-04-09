@@ -32,6 +32,7 @@ export function AuthProvider({ children }) {
   const [googleAccessToken, setGoogleAccessToken] = useState(null);
   const [userPermissions, setUserPermissions] = useState(null);
   const [auditScope, setAuditScope] = useState(null);
+  const [isCompanyAdmin, setIsCompanyAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
@@ -44,6 +45,7 @@ export function AuthProvider({ children }) {
         setCompanyId(null);
         setUserPermissions(null);
         setAuditScope(null);
+        setIsCompanyAdmin(false);
         setGoogleAccessToken(null);
         try {
           localStorage.removeItem('gat');
@@ -74,12 +76,14 @@ export function AuthProvider({ children }) {
             setCompanyId(null);
             setUserPermissions(null);
             setAuditScope(null);
+            setIsCompanyAdmin(false);
             setAuthError('Access denied. Contact your HR admin to get access.');
             setLoading(false);
             return;
           }
 
           const data = snap.data();
+          const companyAdminRole = data.role === 'companyadmin';
 
           if (data.isActive === false) {
             await signOut(auth);
@@ -89,6 +93,7 @@ export function AuthProvider({ children }) {
             setCompanyId(null);
             setUserPermissions(null);
             setAuditScope(null);
+            setIsCompanyAdmin(false);
             setAuthError('Your account has been deactivated. Contact HR admin.');
             setLoading(false);
             return;
@@ -97,9 +102,14 @@ export function AuthProvider({ children }) {
           setCurrentUser(firebaseUser);
           setSentryUser(firebaseUser);
           setRole(data.role || null);
-          setCompanyId(data.companyId ?? null);
+          if (companyAdminRole && data.companyId) {
+            setCompanyId(data.companyId);
+          } else {
+            setCompanyId(data.companyId ?? null);
+          }
           setUserPermissions(data.permissions ?? null);
           setAuditScope(data.auditScope ?? null);
+          setIsCompanyAdmin(companyAdminRole);
           setAuthError('');
           try {
             const refUsed = snap.ref;
@@ -159,6 +169,7 @@ export function AuthProvider({ children }) {
           setCompanyId(null);
           setUserPermissions(null);
           setAuditScope(null);
+          setIsCompanyAdmin(false);
           setAuthError('Access denied. Contact your HR admin to get access.');
           setLoading(false);
         }
@@ -278,6 +289,7 @@ export function AuthProvider({ children }) {
     }
     setGoogleAccessToken(null);
     setAuditScope(null);
+    setIsCompanyAdmin(false);
     setSentryUser(null);
     await signOut(auth);
   }, []);
@@ -290,6 +302,7 @@ export function AuthProvider({ children }) {
       companyId,
       userPermissions,
       auditScope,
+      isCompanyAdmin,
       googleAccessToken,
       getValidToken,
       isTokenValid,
@@ -304,6 +317,7 @@ export function AuthProvider({ children }) {
       companyId,
       userPermissions,
       auditScope,
+      isCompanyAdmin,
       googleAccessToken,
       getValidToken,
       loading,
