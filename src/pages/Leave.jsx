@@ -32,6 +32,7 @@ import {
   trackLeaveRejected,
   trackPageView,
 } from '../utils/analytics';
+import { WhatsAppButton } from '../utils/whatsapp';
 
 function mergeLeaveListsById(a, b) {
   const m = new Map();
@@ -182,6 +183,11 @@ export default function Leave() {
   const [saving, setSaving] = useState(false);
   const [actioningId, setActioningId] = useState(null);
   const [errorModal, setErrorModal] = useState(null);
+
+  const getEmployeeMobile = (empId) => {
+    const emp = employees.find((e) => e.id === empId);
+    return emp?.mobile || emp?.phone || '';
+  };
 
   const handleSmartError = async (error, context, fallback = 'Failed to save. Please try again.') => {
     await logError(error, { companyId, ...context });
@@ -971,7 +977,7 @@ export default function Leave() {
                     </td>
                     <td className="px-4 py-3">
                       {l.status === 'Pending' && (
-                        <span className="flex gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <button
                             type="button"
                             disabled={actioningId === l.id}
@@ -988,7 +994,35 @@ export default function Leave() {
                           >
                             Reject
                           </button>
-                        </span>
+                          <WhatsAppButton
+                            phone={l.employeeMobile || getEmployeeMobile(l.employeeId)}
+                            message={
+                              `Dear ${l.employeeName} Garu,\n\n` +
+                              `Your leave request from ${l.startDate ? toDisplayDate(l.startDate) : '—'} to ` +
+                              `${l.endDate ? toDisplayDate(l.endDate) : '—'} ` +
+                              `(${l.days ?? 1} day${(l.days ?? 1) !== 1 ? 's' : ''}) is pending review.\n\n` +
+                              `Thank you,\nAttendX HR`
+                            }
+                            size="xs"
+                          />
+                        </div>
+                      )}
+                      {(l.status === 'Approved' || l.status === 'Rejected') && (
+                        <WhatsAppButton
+                          phone={l.employeeMobile || getEmployeeMobile(l.employeeId)}
+                          message={
+                            `Dear ${l.employeeName} Garu,\n\n` +
+                            `Your leave request from ${l.startDate ? toDisplayDate(l.startDate) : '—'} to ` +
+                            `${l.endDate ? toDisplayDate(l.endDate) : '—'} ` +
+                            `(${l.days ?? 1} day${(l.days ?? 1) !== 1 ? 's' : ''}) ` +
+                            `has been *${l.status}*.\n\n` +
+                            (l.status === 'Rejected' && l.rejectReason
+                              ? `Reason: ${l.rejectReason}\n\n`
+                              : '') +
+                            `Thank you,\nAttendX HR`
+                          }
+                          size="xs"
+                        />
                       )}
                     </td>
                   </tr>
@@ -1046,23 +1080,57 @@ export default function Leave() {
                 )}
 
                 {leave.status === 'Pending' && (
-                  <div className="flex gap-2 mt-3">
-                    <button
-                      type="button"
-                      disabled={actioningId === leave.id}
-                      onClick={() => handleApprove(leave)}
-                      className="flex-1 min-h-[44px] py-2 bg-green-600 text-white rounded-xl text-xs font-medium hover:bg-green-700 active:bg-green-800 disabled:opacity-50"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      disabled={actioningId === leave.id}
-                      onClick={() => handleReject(leave)}
-                      className="flex-1 min-h-[44px] py-2 bg-red-100 text-red-600 rounded-xl text-xs font-medium hover:bg-red-200 active:bg-red-300 disabled:opacity-50"
-                    >
-                      Reject
-                    </button>
+                  <div className="flex flex-col gap-2 mt-3">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={actioningId === leave.id}
+                        onClick={() => handleApprove(leave)}
+                        className="flex-1 min-h-[44px] py-2 bg-green-600 text-white rounded-xl text-xs font-medium hover:bg-green-700 active:bg-green-800 disabled:opacity-50"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={actioningId === leave.id}
+                        onClick={() => handleReject(leave)}
+                        className="flex-1 min-h-[44px] py-2 bg-red-100 text-red-600 rounded-xl text-xs font-medium hover:bg-red-200 active:bg-red-300 disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                    <WhatsAppButton
+                      phone={leave.employeeMobile || getEmployeeMobile(leave.employeeId)}
+                      message={
+                        `Dear ${leave.employeeName} Garu,\n\n` +
+                        `Your leave request from ${leave.startDate ? toDisplayDate(leave.startDate) : '—'} to ` +
+                        `${leave.endDate ? toDisplayDate(leave.endDate) : '—'} ` +
+                        `(${leave.days ?? 1} day${(leave.days ?? 1) !== 1 ? 's' : ''}) is pending review.\n\n` +
+                        `Thank you,\nAttendX HR`
+                      }
+                      size="xs"
+                      className="w-full justify-center"
+                    />
+                  </div>
+                )}
+                {(leave.status === 'Approved' || leave.status === 'Rejected') && (
+                  <div className="mt-3">
+                    <WhatsAppButton
+                      phone={leave.employeeMobile || getEmployeeMobile(leave.employeeId)}
+                      message={
+                        `Dear ${leave.employeeName} Garu,\n\n` +
+                        `Your leave request from ${leave.startDate ? toDisplayDate(leave.startDate) : '—'} to ` +
+                        `${leave.endDate ? toDisplayDate(leave.endDate) : '—'} ` +
+                        `(${leave.days ?? 1} day${(leave.days ?? 1) !== 1 ? 's' : ''}) ` +
+                        `has been *${leave.status}*.\n\n` +
+                        (leave.status === 'Rejected' && leave.rejectReason
+                          ? `Reason: ${leave.rejectReason}\n\n`
+                          : '') +
+                        `Thank you,\nAttendX HR`
+                      }
+                      size="xs"
+                      className="w-full justify-center"
+                    />
                   </div>
                 )}
               </div>

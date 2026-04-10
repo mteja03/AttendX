@@ -27,6 +27,7 @@ import { calculateProRatedAllowance, isMidYearJoinerThisYear } from '../utils/le
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 import { trackPageView, trackReportViewed } from '../utils/analytics';
+import { WhatsAppButton } from '../utils/whatsapp';
 
 const CHART_COLORS = ['#1B6B6B', '#4ECDC4', '#2BB8B0', '#155858', '#7EDDD8', '#0F4444', '#A8EDEA', '#264653', '#2A9D8F'];
 
@@ -2360,6 +2361,7 @@ export default function Reports() {
                     <th className="py-2 px-2">Department</th>
                     <th className="py-2 px-2">Completion</th>
                     <th className="py-2 px-2">Missing</th>
+                    <th className="py-2 px-2 w-24">Remind</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2381,6 +2383,27 @@ export default function Reports() {
                         </div>
                       </td>
                       <td className="py-2 px-2 text-xs text-gray-600 max-w-xs">{missing.slice(0, 5).join(', ')}{missing.length > 5 ? '…' : ''}</td>
+                      <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                        {(emp.mobile || emp.phone) && missing.length > 0 ? (
+                          <WhatsAppButton
+                            phone={emp.mobile || emp.phone}
+                            message={
+                              `Dear ${emp.fullName} Garu,\n\n` +
+                              `This is a reminder from HR Department.\n\n` +
+                              `The following mandatory document is pending submission:\n\n` +
+                              `📄 *${missing.join(', ')}*
+
+` +
+                              `Please submit it at the earliest convenience.\n\n` +
+                              `Thank you,\nHR Team`
+                            }
+                            size="xs"
+                            label="Remind"
+                          />
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

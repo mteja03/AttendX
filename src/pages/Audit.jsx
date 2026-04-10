@@ -29,6 +29,7 @@ import {
   getFindingAddedByRole,
   isAuditOverdue,
 } from './audit/auditHelpers';
+import { WhatsAppButton, whatsappUrl } from '../utils/whatsapp';
 
 /** Used by AuditCalendar; includes legacy keys for older documents */
 const STATUS_COLORS = {
@@ -1395,7 +1396,47 @@ function AssignAuditModal({
   saving,
   onClose,
   onSubmit,
+  assignedAudit,
+  onAssignedDone,
 }) {
+  if (assignedAudit) {
+    return (
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 text-center">
+          <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center text-2xl mx-auto mb-3">
+            ✅
+          </div>
+          <p className="text-base font-semibold text-gray-800 mb-1">Audit Assigned!</p>
+          <p className="text-sm text-gray-500 mb-4">
+            {assignedAudit.refId} assigned to {assignedAudit.auditorName}
+          </p>
+          <WhatsAppButton
+            phone={assignedAudit.auditorPhone}
+            message={
+              `Dear ${assignedAudit.auditorName} Garu,\n\n` +
+              `A new audit has been assigned to you.\n\n` +
+              `*${assignedAudit.refId}* — ${assignedAudit.typeName}\n` +
+              (assignedAudit.branch ? `Branch: ${assignedAudit.branch}\n` : '') +
+              `Due Date: ${assignedAudit.endDate ? formatDate(assignedAudit.endDate) : '—'}\n\n` +
+              `Please log in to AttendX to begin the audit.\n\n` +
+              `Thank you,\nAudit Team`
+            }
+            label="Notify Auditor on WhatsApp"
+            size="md"
+            className="w-full justify-center"
+          />
+          <button
+            type="button"
+            onClick={onAssignedDone}
+            className="mt-3 w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
@@ -1767,6 +1808,8 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const [saving, setSaving] = useState(false);
   const [showSendBackModal, setShowSendBackModal] = useState(false);
   const [sendBackReason, setSendBackReason] = useState('');
+  const [sentBackTo, setSentBackTo] = useState(null);
+  const [closedAuditData, setClosedAuditData] = useState(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [closeFeedback, setCloseFeedback] = useState('');
@@ -1807,6 +1850,8 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     setShowCloseModal(false);
     setCloseFeedback('');
     setAuditRating(0);
+    setSentBackTo(null);
+    setClosedAuditData(null);
   }, [safeAudit.id, safeAudit.adminNotes, safeAudit.checklistReview, safeAudit.findings]);
 
   const st = effStatus(safeAudit.status);
@@ -1816,6 +1861,10 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const checklistItems = Array.isArray(checklistReview) ? checklistReview : [];
   const findingsData = Array.isArray(findings) ? findings : [];
   const teamMembers = Array.isArray(safeAudit.teamMembers) ? safeAudit.teamMembers : [];
+  const auditorEmployee = (employees || []).find(
+    (e) => (e.email || '').toLowerCase() === (safeAudit.auditorEmail || '').toLowerCase(),
+  );
+  const auditorPhone = auditorEmployee?.mobile || auditorEmployee?.phone || '';
   const openFindings = findingsData.filter((f) => f.status !== 'Resolved');
   const resolvedFindings = findingsData.filter((f) => f.status === 'Resolved');
 
@@ -2049,8 +2098,14 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       });
 
       showSuccess('Audit closed!');
-      setShowCloseModal(false);
-      onClose();
+      setClosedAuditData({
+        phone: auditorPhone,
+        name: audit.auditorName,
+        refId: audit.auditRefId,
+        typeName: audit.auditTypeName,
+        branch: audit.branch,
+        rating: auditRating,
+      });
     } catch {
       showError('Failed to close audit');
     } finally {
@@ -2065,19 +2120,24 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     }
     try {
       setSaving(true);
+      const reason = sendBackReason.trim();
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
         status: 'Sent Back',
         sentBackAt: new Date(),
         sentBackBy: currentUser?.email || '',
-        sentBackReason: sendBackReason.trim(),
+        sentBackReason: reason,
         checklistLocked: false,
         updatedAt: new Date(),
       });
 
       showSuccess('Audit sent back to auditor');
-      setShowSendBackModal(false);
+      setSentBackTo({
+        phone: auditorPhone,
+        name: audit.auditorName,
+        reason,
+        refId: audit.auditRefId,
+      });
       setSendBackReason('');
-      onClose();
     } catch {
       showError('Failed to send back');
     } finally {
@@ -2663,7 +2723,36 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                           <span className="text-xs text-gray-400">{finding.addedByName || '—'}</span>
                         </div>
                         <div className="flex items-center gap-3 flex-wrap mb-3">
-                          {finding.ownerName && <span className="text-xs text-gray-500">👤 {finding.ownerName}</span>}
+                          {finding.ownerName && (
+                            <span className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
+                              👤 {finding.ownerName}
+                              {(() => {
+                                const ownerEmp = (employees || []).find(
+                                  (e) => e.id === finding.ownerId || e.fullName === finding.ownerName,
+                                );
+                                const phone = ownerEmp?.mobile || ownerEmp?.phone || '';
+                                if (!phone) return null;
+                                return (
+                                  <WhatsAppButton
+                                    phone={phone}
+                                    message={
+                                      `Dear ${finding.ownerName} Garu,\n\n` +
+                                      `An audit finding has been assigned to you for resolution.\n\n` +
+                                      `*Audit:* ${audit.auditRefId} — ${audit.auditTypeName}\n` +
+                                      (audit.branch ? `*Branch:* ${audit.branch}\n` : '') +
+                                      `*Finding:* ${finding.description}\n` +
+                                      `*Severity:* ${finding.severity}\n` +
+                                      (finding.targetDate ? `*Fix by:* ${formatDate(finding.targetDate)}\n` : '') +
+                                      `\nPlease take necessary action and update the status.\n\n` +
+                                      `Thank you,\nAudit Team`
+                                    }
+                                    size="xs"
+                                    label="Notify Owner"
+                                  />
+                                );
+                              })()}
+                            </span>
+                          )}
                           {finding.targetDate && (
                             <span className={`text-xs font-medium ${isOverdueFinding ? 'text-red-600' : 'text-gray-500'}`}>
                               {isOverdueFinding ? '⚠️ ' : '📅 '}
@@ -2919,7 +3008,10 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowSendBackModal(true)}
+                    onClick={() => {
+                      setSentBackTo(null);
+                      setShowSendBackModal(true);
+                    }}
                     className="flex-1 min-w-[120px] py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50"
                   >
                     ↩ Send Back
@@ -2946,7 +3038,10 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
 
                   <button
                     type="button"
-                    onClick={() => setShowSendBackModal(true)}
+                    onClick={() => {
+                      setSentBackTo(null);
+                      setShowSendBackModal(true);
+                    }}
                     className="flex-1 py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50"
                   >
                     ↩ Send Back
@@ -2980,6 +3075,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                           showError(`Resolve all ${openFindings.length} findings first`);
                           return;
                         }
+                        setClosedAuditData(null);
                         setShowCloseModal(true);
                       }}
                       disabled={openFindings.length > 0}
@@ -3064,97 +3160,136 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       {showCloseModal && (
         <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">✅ Close Audit</h3>
-            <p className="text-sm text-gray-500 mb-5">
-              {audit.auditRefId} — {audit.auditTypeName}
-            </p>
-
-            {getAuditScore({ checklistReview }) !== null && (
-              <div
-                className={`p-4 rounded-xl mb-5 text-center ${
-                  (getAuditScore({ checklistReview }) || 0) >= 80
-                    ? 'bg-green-50 border border-green-100'
-                    : (getAuditScore({ checklistReview }) || 0) >= 60
-                      ? 'bg-amber-50 border border-amber-100'
-                      : 'bg-red-50 border border-red-100'
-                }`}
-              >
-                <p
-                  className={`text-3xl font-bold ${
-                    (getAuditScore({ checklistReview }) || 0) >= 80
-                      ? 'text-green-700'
-                      : (getAuditScore({ checklistReview }) || 0) >= 60
-                        ? 'text-amber-700'
-                        : 'text-red-700'
-                  }`}
+            {closedAuditData ? (
+              <>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2 text-center">Audit closed</h3>
+                <p className="text-sm text-gray-500 mb-4 text-center">You can notify the lead auditor on WhatsApp.</p>
+                <WhatsAppButton
+                  phone={closedAuditData.phone}
+                  message={
+                    `Dear ${closedAuditData.name} Garu,\n\n` +
+                    `Audit *${closedAuditData.refId}* — ${closedAuditData.typeName}` +
+                    (closedAuditData.branch ? ` (${closedAuditData.branch})` : '') +
+                    ` has been reviewed and *Closed*.\n\n` +
+                    (closedAuditData.rating
+                      ? `Rating: ${'⭐'.repeat(closedAuditData.rating)}\n\n`
+                      : '') +
+                    `Thank you for completing the audit.\n\n` +
+                    `Regards,\nAudit Manager`
+                  }
+                  label="Notify Auditor on WhatsApp"
+                  className="w-full justify-center"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCloseModal(false);
+                    setClosedAuditData(null);
+                    setAuditRating(0);
+                    setCloseFeedback('');
+                    onClose();
+                  }}
+                  className="mt-3 w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
                 >
-                  {getAuditScore({ checklistReview })}%
+                  Done
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">✅ Close Audit</h3>
+                <p className="text-sm text-gray-500 mb-5">
+                  {audit.auditRefId} — {audit.auditTypeName}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Compliance Score</p>
-              </div>
-            )}
 
-            <div className="mb-4">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Rate this Audit</label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setAuditRating(n)}
-                    className={`flex-1 py-3 rounded-xl text-xl transition-all border-2 ${
-                      auditRating >= n ? 'bg-amber-50 border-amber-300' : 'bg-gray-50 border-gray-100 hover:border-amber-200'
+                {getAuditScore({ checklistReview }) !== null && (
+                  <div
+                    className={`p-4 rounded-xl mb-5 text-center ${
+                      (getAuditScore({ checklistReview }) || 0) >= 80
+                        ? 'bg-green-50 border border-green-100'
+                        : (getAuditScore({ checklistReview }) || 0) >= 60
+                          ? 'bg-amber-50 border border-amber-100'
+                          : 'bg-red-50 border border-red-100'
                     }`}
                   >
-                    ⭐
+                    <p
+                      className={`text-3xl font-bold ${
+                        (getAuditScore({ checklistReview }) || 0) >= 80
+                          ? 'text-green-700'
+                          : (getAuditScore({ checklistReview }) || 0) >= 60
+                            ? 'text-amber-700'
+                            : 'text-red-700'
+                      }`}
+                    >
+                      {getAuditScore({ checklistReview })}%
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">Compliance Score</p>
+                  </div>
+                )}
+
+                <div className="mb-4">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Rate this Audit</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setAuditRating(n)}
+                        className={`flex-1 py-3 rounded-xl text-xl transition-all border-2 ${
+                          auditRating >= n ? 'bg-amber-50 border-amber-300' : 'bg-gray-50 border-gray-100 hover:border-amber-200'
+                        }`}
+                      >
+                        ⭐
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-xs text-gray-400">Poor</span>
+                    <span className="text-xs text-gray-400">Excellent</span>
+                  </div>
+                  {auditRating > 0 && (
+                    <p className="text-xs text-center text-amber-600 font-medium mt-1">
+                      {['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][auditRating]}
+                    </p>
+                  )}
+                </div>
+
+                <div className="mb-5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">
+                    Final Comments (optional)
+                  </label>
+                  <textarea
+                    value={closeFeedback}
+                    onChange={(e) => setCloseFeedback(e.target.value)}
+                    rows={3}
+                    placeholder="Overall observations, recommendations, or notes for this audit..."
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCloseModal(false);
+                      setClosedAuditData(null);
+                      setAuditRating(0);
+                      setCloseFeedback('');
+                    }}
+                    className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600"
+                  >
+                    Cancel
                   </button>
-                ))}
-              </div>
-              <div className="flex justify-between mt-1">
-                <span className="text-xs text-gray-400">Poor</span>
-                <span className="text-xs text-gray-400">Excellent</span>
-              </div>
-              {auditRating > 0 && (
-                <p className="text-xs text-center text-amber-600 font-medium mt-1">
-                  {['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][auditRating]}
-                </p>
-              )}
-            </div>
-
-            <div className="mb-5">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">
-                Final Comments (optional)
-              </label>
-              <textarea
-                value={closeFeedback}
-                onChange={(e) => setCloseFeedback(e.target.value)}
-                rows={3}
-                placeholder="Overall observations, recommendations, or notes for this audit..."
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]"
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCloseModal(false);
-                  setAuditRating(0);
-                  setCloseFeedback('');
-                }}
-                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCloseAudit}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
-              >
-                {saving ? 'Closing...' : '✅ Close Audit'}
-              </button>
-            </div>
+                  <button
+                    type="button"
+                    onClick={handleCloseAudit}
+                    disabled={saving}
+                    className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {saving ? 'Closing...' : '✅ Close Audit'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -3162,36 +3297,69 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       {showSendBackModal && (
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
-            <h3 className="text-base font-semibold text-gray-800 mb-2">↩ Send Back for Corrections</h3>
-            <p className="text-sm text-gray-500 mb-4">The auditor will see this reason and must resubmit after corrections.</p>
-            <textarea
-              value={sendBackReason}
-              onChange={(e) => setSendBackReason(e.target.value)}
-              rows={3}
-              placeholder="Reason for sending back..."
-              className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-red-400 mb-4"
-              autoFocus
-            />
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSendBackModal(false);
-                  setSendBackReason('');
-                }}
-                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSendBack}
-                disabled={!sendBackReason.trim() || saving}
-                className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-semibold disabled:opacity-50"
-              >
-                {saving ? 'Sending…' : '↩ Send Back'}
-              </button>
-            </div>
+            {sentBackTo ? (
+              <>
+                <h3 className="text-base font-semibold text-gray-800 mb-2 text-center">Sent back</h3>
+                <p className="text-sm text-gray-500 mb-4 text-center">Notify the auditor on WhatsApp if you like.</p>
+                <WhatsAppButton
+                  phone={sentBackTo.phone}
+                  message={
+                    `Dear ${sentBackTo.name} Garu,\n\n` +
+                    `Your audit *${sentBackTo.refId}* has been sent back for corrections.\n\n` +
+                    `*Reason:* ${sentBackTo.reason}\n\n` +
+                    `Please log in to AttendX, make the corrections, and resubmit.\n\n` +
+                    `Thank you,\nAudit Manager`
+                  }
+                  label="Notify Auditor on WhatsApp"
+                  className="w-full justify-center"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSendBackModal(false);
+                    setSentBackTo(null);
+                    onClose();
+                  }}
+                  className="mt-3 w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+                >
+                  Done
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-base font-semibold text-gray-800 mb-2">↩ Send Back for Corrections</h3>
+                <p className="text-sm text-gray-500 mb-4">The auditor will see this reason and must resubmit after corrections.</p>
+                <textarea
+                  value={sendBackReason}
+                  onChange={(e) => setSendBackReason(e.target.value)}
+                  rows={3}
+                  placeholder="Reason for sending back..."
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-red-400 mb-4"
+                  autoFocus
+                />
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSendBackModal(false);
+                      setSendBackReason('');
+                      setSentBackTo(null);
+                    }}
+                    className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSendBack}
+                    disabled={!sendBackReason.trim() || saving}
+                    className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-semibold disabled:opacity-50"
+                  >
+                    {saving ? 'Sending…' : '↩ Send Back'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -3209,6 +3377,7 @@ function AuditTableRow({
   canManage,
   isAdmin,
   currentUser,
+  employees,
   showSuccess,
   onOpen,
   onDelete,
@@ -3454,7 +3623,48 @@ function AuditTableRow({
         )}
       </div>
 
-      <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+        {(() => {
+          const emp = employees?.find(
+            (e) => (e.email || '').toLowerCase() === (audit.auditorEmail || '').toLowerCase(),
+          );
+          const phone = emp?.mobile || emp?.phone || '';
+          if (!phone) return null;
+          const stLabel = effStatus(status);
+          const messages = {
+            Assigned:
+              `Dear ${audit.auditorName} Garu,\n` +
+              `Reminder: Audit *${audit.auditRefId}* — ${audit.auditTypeName} is assigned to you.\n` +
+              `Due: ${audit.endDate ? formatDate(audit.endDate) : '—'}\nPlease log in to AttendX.`,
+            'In Progress':
+              `Dear ${audit.auditorName} Garu,\n` +
+              `Reminder: Audit *${audit.auditRefId}* is in progress. Due: ${audit.endDate ? formatDate(audit.endDate) : '—'}.\n` +
+              `Please complete and submit at the earliest.`,
+            'Sent Back':
+              `Dear ${audit.auditorName} Garu,\n` +
+              `Audit *${audit.auditRefId}* has been sent back for corrections.\n` +
+              `Reason: ${audit.sentBackReason || 'See AttendX'}\n` +
+              `Please resubmit after corrections.`,
+          };
+          const msg = messages[stLabel];
+          if (!msg) return null;
+          const url = whatsappUrl(phone, msg);
+          if (!url) return null;
+          return (
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title={`WhatsApp ${audit.auditorName}`}
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#25D366]/10 text-[#25D366] transition-colors opacity-0 group-hover:opacity-100"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+              </svg>
+            </a>
+          );
+        })()}
         {isAdmin && (
           <button
             type="button"
@@ -3486,6 +3696,7 @@ function AuditList({
 }) {
   const isAdmin = userRole === 'admin';
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignedAudit, setAssignedAudit] = useState(null);
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState('list');
   const [search, setSearch] = useState('');
@@ -3676,9 +3887,17 @@ function AuditList({
         createdAt: new Date(),
         createdBy: currentUser?.email || '',
       });
+      const leadEmp = employees.find((e) => e.id === assignForm.auditorId);
+      const auditorPhone = leadEmp?.mobile || leadEmp?.phone || '';
+      setAssignedAudit({
+        refId,
+        auditorName: assignForm.auditorName,
+        auditorPhone,
+        endDate: assignForm.endDate,
+        typeName: type?.name || '',
+        branch: assignForm.branch || '',
+      });
       showSuccess(`${refId} assigned to ${assignForm.auditorName}!`);
-      setShowAssignModal(false);
-      resetAssignForm();
     } catch (e) {
       showError('Failed: ' + e.message);
     } finally {
@@ -4177,6 +4396,7 @@ function AuditList({
                       canManage={canManage}
                       isAdmin={isAdmin}
                       currentUser={currentUser}
+                      employees={employees}
                       showSuccess={showSuccess}
                       onOpen={() => setSelectedAudit(audit)}
                       onDelete={(e) => handleDelete(e, audit)}
@@ -4297,8 +4517,15 @@ function AuditList({
           leadRef={leadRef}
           teamRef={teamRef}
           saving={saving}
+          assignedAudit={assignedAudit}
+          onAssignedDone={() => {
+            setShowAssignModal(false);
+            setAssignedAudit(null);
+            resetAssignForm();
+          }}
           onClose={() => {
             setShowAssignModal(false);
+            setAssignedAudit(null);
             setAssignForm(emptyAssign);
             setLeadSearch('');
             setTeamSearch('');

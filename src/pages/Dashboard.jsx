@@ -17,6 +17,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { toDateString, toDisplayDate, toJSDate } from '../utils';
 import { trackPageView } from '../utils/analytics';
+import { WhatsAppButton } from '../utils/whatsapp';
 
 const EMPTY_ASSET_STATS = {
   total: 0,
@@ -107,13 +108,36 @@ const CELEBRATION_COLORS = {
   },
 };
 
-function CelebrationItem({ item, showDate, companyId, employees }) {
+function CelebrationItem({ item, showDate, companyId, employees, navigate }) {
   const colors = CELEBRATION_COLORS[item.type];
   const emp = employees?.find((e) => e.id === item.empId);
+  const phone = emp?.mobile || emp?.phone || '';
+  const years = item.years ?? 0;
+  const cake = '\u{1f382}';
+  const trophy = '\u{1f3c6}';
+  const ring = '\u{1f48d}';
+  const wishBirthday =
+    phone &&
+    `Dear ${item.name} Garu,\n\n${cake} *Happy Birthday!* ${cake}\n\nWishing you a wonderful birthday and a fantastic year ahead!\n\nBest wishes,\nHR Team`;
+  const wishWork =
+    phone &&
+    `Dear ${item.name} Garu,\n\n${trophy} *Happy Work Anniversary!* ${trophy}\n\nCongratulations on completing ${years} year${years !== 1 ? 's' : ''} with us!\n\nYour dedication and hard work are truly valued.\n\nBest wishes,\nHR Team`;
+  const wishWedding =
+    phone &&
+    `Dear ${item.name} Garu,\n\n${ring} *Happy Wedding Anniversary!* ${ring}\n\nWishing you and your family a joyful celebration!\n\nBest wishes,\nHR Team`;
+
   return (
-    <Link
-      to={`/company/${companyId}/employees/${item.empId}`}
-      className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4ECDC4]"
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={() => navigate(`/company/${companyId}/employees/${item.empId}`)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          navigate(`/company/${companyId}/employees/${item.empId}`);
+        }
+      }}
+      className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4ECDC4] cursor-pointer"
     >
       <div
         className={`flex items-center gap-3 p-3 rounded-xl border ${colors.bg} ${colors.border} transition-all hover:shadow-sm`}
@@ -128,7 +152,16 @@ function CelebrationItem({ item, showDate, companyId, employees }) {
           <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
           <p className={`text-xs font-medium ${colors.text}`}>{item.subtext}</p>
         </div>
-        <div className="flex-shrink-0 text-right">
+        <div className="flex-shrink-0 flex flex-col items-end gap-1.5 text-right" onClick={(e) => e.stopPropagation()}>
+          {item.type === 'birthday' && wishBirthday && (
+            <WhatsAppButton phone={phone} message={wishBirthday} size="xs" label={`Wish ${cake}`} />
+          )}
+          {item.type === 'work' && wishWork && (
+            <WhatsAppButton phone={phone} message={wishWork} size="xs" label={`Wish ${trophy}`} />
+          )}
+          {item.type === 'wedding' && wishWedding && (
+            <WhatsAppButton phone={phone} message={wishWedding} size="xs" label={`Wish ${ring}`} />
+          )}
           <span className={`text-xs px-2 py-1 rounded-full font-medium ${colors.badge}`}>{item.label}</span>
           {showDate && item.diff > 1 && (
             <p className="text-xs text-gray-400 mt-0.5 text-right">
@@ -137,7 +170,7 @@ function CelebrationItem({ item, showDate, companyId, employees }) {
           )}
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -460,6 +493,7 @@ export default function Dashboard() {
               icon: '💍',
               color: 'purple',
               subtext: `${years} year${years !== 1 ? 's' : ''} together`,
+              years,
               diff,
               next,
             };
@@ -489,6 +523,7 @@ export default function Dashboard() {
               icon: '🏆',
               color: 'teal',
               subtext: `${years} year${years !== 1 ? 's' : ''} at company`,
+              years,
               diff,
               next,
             };
@@ -950,6 +985,7 @@ export default function Dashboard() {
                       showDate={celebTab !== 'today' && celebTab !== 'tomorrow'}
                       companyId={companyId}
                       employees={employees}
+                      navigate={navigate}
                     />
                   ))}
                 </div>
