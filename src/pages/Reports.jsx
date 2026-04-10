@@ -2384,16 +2384,14 @@ export default function Reports() {
                       </td>
                       <td className="py-2 px-2 text-xs text-gray-600 max-w-xs">{missing.slice(0, 5).join(', ')}{missing.length > 5 ? '…' : ''}</td>
                       <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
-                        {(emp.mobile || emp.phone) && missing.length > 0 ? (
+                        {(emp.mobile || emp.phone || emp.mobileNumber) && missing.length > 0 ? (
                           <WhatsAppButton
-                            phone={emp.mobile || emp.phone}
+                            phone={emp.mobile || emp.phone || emp.mobileNumber}
                             message={
                               `Dear ${emp.fullName} Garu,\n\n` +
                               `This is a reminder from HR Department.\n\n` +
                               `The following mandatory document is pending submission:\n\n` +
-                              `📄 *${missing.join(', ')}*
-
-` +
+                              `📄 *${missing.join(', ')}*\n\n` +
                               `Please submit it at the earliest convenience.\n\n` +
                               `Thank you,\nHR Team`
                             }

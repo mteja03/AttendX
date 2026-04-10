@@ -186,7 +186,7 @@ export default function Leave() {
 
   const getEmployeeMobile = (empId) => {
     const emp = employees.find((e) => e.id === empId);
-    return emp?.mobile || emp?.phone || '';
+    return emp?.mobile || emp?.phone || emp?.mobileNumber || '';
   };
 
   const handleSmartError = async (error, context, fallback = 'Failed to save. Please try again.') => {

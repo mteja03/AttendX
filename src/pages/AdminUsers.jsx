@@ -134,6 +134,12 @@ export default function AdminUsers() {
   const [form, setForm] = useState({ email: '', name: '', role: '', companyId: '', auditScope: 'both', selectedEmpId: '' });
   const isUserAdmin = canAccessUserManagement(currentUserRole);
   const isCompanyAdmin = currentUserRole === 'companyadmin';
+  const isAdmin = currentUserRole === 'admin';
+
+  const usersQuery = useMemo(() => {
+    if (isAdmin) return query(collection(db, 'users'));
+    return query(collection(db, 'users'), where('companyId', '==', authCompanyId));
+  }, [authCompanyId, isAdmin]);
 
   const roleOptions = useMemo(
     () => [
@@ -156,9 +162,7 @@ export default function AdminUsers() {
         const allCompanies = companiesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
         const scopedCompanies = isCompanyAdmin ? allCompanies.filter((c) => c.id === authCompanyId) : allCompanies;
         setCompanies(scopedCompanies);
-        const usersSnap = isCompanyAdmin
-          ? await getDocs(query(collection(db, 'users'), where('companyId', '==', authCompanyId)))
-          : await getDocs(collection(db, 'users'));
+        const usersSnap = await getDocs(usersQuery);
         const allUsers = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setUsers(allUsers);
       } catch {
@@ -167,7 +171,7 @@ export default function AdminUsers() {
       setLoading(false);
     };
     load();
-  }, [authCompanyId, currentUser, isCompanyAdmin, isUserAdmin, showError]);
+  }, [authCompanyId, currentUser, isCompanyAdmin, isUserAdmin, showError, usersQuery]);
 
   useEffect(() => {
     if (!showAddModal) return;

@@ -3459,11 +3459,12 @@ export default function EmployeeProfile() {
                 <span>
                   <span className="text-slate-500 text-sm">Phone</span>
                   <br />
-                  {employee.phone || employee.mobile || '—'}
+                  {employee.phone || employee.mobile || employee.mobileNumber || '—'}
                 </span>
-                {(employee.phone || employee.mobile) && whatsappUrl(employee.phone || employee.mobile, `Dear ${employee.fullName} Garu,\n\n`) && (
+                {(employee.phone || employee.mobile || employee.mobileNumber) &&
+                  whatsappUrl(employee.phone || employee.mobile || employee.mobileNumber, `Dear ${employee.fullName} Garu,\n\n`) && (
                   <a
-                    href={whatsappUrl(employee.phone || employee.mobile, `Dear ${employee.fullName} Garu,\n\n`)}
+                    href={whatsappUrl(employee.phone || employee.mobile || employee.mobileNumber, `Dear ${employee.fullName} Garu,\n\n`)}
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open WhatsApp"

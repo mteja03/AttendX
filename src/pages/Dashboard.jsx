@@ -111,7 +111,7 @@ const CELEBRATION_COLORS = {
 function CelebrationItem({ item, showDate, companyId, employees, navigate }) {
   const colors = CELEBRATION_COLORS[item.type];
   const emp = employees?.find((e) => e.id === item.empId);
-  const phone = emp?.mobile || emp?.phone || '';
+  const phone = emp?.mobile || emp?.phone || emp?.mobileNumber || '';
   const years = item.years ?? 0;
   const cake = '\u{1f382}';
   const trophy = '\u{1f3c6}';

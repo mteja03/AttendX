@@ -13,6 +13,20 @@ export const OVERALL_RESULTS = ['pass', 'fail', 'na'];
 
 export function formatDate(dateStr) {
   if (!dateStr) return '—';
+  // Firestore Timestamp
+  if (dateStr?.toDate) {
+    try {
+      const d = dateStr.toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB') : '—';
+    } catch {
+      return '—';
+    }
+  }
+  // Date object
+  if (dateStr instanceof Date) {
+    return !Number.isNaN(dateStr.getTime()) ? dateStr.toLocaleDateString('en-GB') : '—';
+  }
+  if (typeof dateStr !== 'string') return '—';
   try {
     const [year, month, day] = dateStr.split('-');
     if (!year || !month || !day) return dateStr;

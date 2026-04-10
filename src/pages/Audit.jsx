@@ -1806,6 +1806,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const [autoSaving, setAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [showSendBackModal, setShowSendBackModal] = useState(false);
   const [sendBackReason, setSendBackReason] = useState('');
   const [sentBackTo, setSentBackTo] = useState(null);
@@ -1864,7 +1865,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const auditorEmployee = (employees || []).find(
     (e) => (e.email || '').toLowerCase() === (safeAudit.auditorEmail || '').toLowerCase(),
   );
-  const auditorPhone = auditorEmployee?.mobile || auditorEmployee?.phone || '';
+  const auditorPhone = auditorEmployee?.mobile || auditorEmployee?.phone || auditorEmployee?.mobileNumber || '';
   const openFindings = findingsData.filter((f) => f.status !== 'Resolved');
   const resolvedFindings = findingsData.filter((f) => f.status === 'Resolved');
 
@@ -1939,7 +1940,11 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     [audit.id, companyId, currentUser, isClosed, checklistEditable, isAuditor],
   );
 
-  useEffect(() => () => clearTimeout(saveTimeoutRef.current), []);
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
 
   const updateChecklistItem = (id, result) => {
     if (!checklistEditable) return;
@@ -1967,7 +1972,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       showError('Enter finding description');
       return;
     }
-    const addedByRole = getFindingAddedByRole(userRole);
+    const addedByRole = isAuditorMode ? 'auditor' : 'auditmanager';
     const finding = {
       id: 'finding_' + Date.now(),
       description: newFinding.description.trim(),
@@ -2009,15 +2014,13 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const deleteFinding = (id) => {
     const finding = (findingsData || []).find((f) => f.id === id);
     if (!finding || isClosed) return;
+    const role = finding.addedByRole || 'auditor';
     const canDeleteFinding = (() => {
       if (isAuditorMode) {
-        return (
-          finding.addedByRole === 'auditor' &&
-          (finding.addedBy || '').toLowerCase() === (currentUser?.email || '').toLowerCase()
-        );
+        return role === 'auditor' && (finding.addedBy || '').toLowerCase() === (currentUser?.email || '').toLowerCase();
       }
       if (canManage) {
-        return finding.addedByRole === 'auditmanager';
+        return role === 'auditmanager';
       }
       return false;
     })();
@@ -2032,13 +2035,14 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const canManageFindings = canManage && isUnderReview;
 
   const handleSubmit = async () => {
+    if (submitting) return;
     const unfilled = checklistReview.filter((i) => !i.result);
     if (unfilled.length > 0) {
-      showError(`Fill all ${unfilled.length} checklist item${unfilled.length !== 1 ? 's' : ''} before submitting`);
+      showError('Fill all items first');
       return;
     }
     try {
-      setSaving(true);
+      setSubmitting(true);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
         checklistReview,
         findings: findingsData,
@@ -2051,13 +2055,13 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
         updatedBy: currentUser?.email || '',
       });
 
-      showSuccess('Audit submitted!');
+      showSuccess('Submitted!');
       setShowSubmitConfirm(false);
       onClose();
     } catch (e) {
-      showError(`Submit failed: ${e.message}`);
+      showError('Submit failed: ' + e.message);
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   };
 
@@ -2685,15 +2689,16 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                             </span>
                             {!isClosed &&
                               (() => {
+                                const role = finding.addedByRole || 'auditor';
                                 const canDeleteFinding = (() => {
                                   if (isAuditorMode) {
                                     return (
-                                      finding.addedByRole === 'auditor' &&
+                                      role === 'auditor' &&
                                       (finding.addedBy || '').toLowerCase() === (currentUser?.email || '').toLowerCase()
                                     );
                                   }
                                   if (canManage) {
-                                    return finding.addedByRole === 'auditmanager';
+                                    return role === 'auditmanager';
                                   }
                                   return false;
                                 })();
@@ -2730,7 +2735,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                 const ownerEmp = (employees || []).find(
                                   (e) => e.id === finding.ownerId || e.fullName === finding.ownerName,
                                 );
-                                const phone = ownerEmp?.mobile || ownerEmp?.phone || '';
+                                const phone = ownerEmp?.mobile || ownerEmp?.phone || ownerEmp?.mobileNumber || '';
                                 if (!phone) return null;
                                 return (
                                   <WhatsAppButton
@@ -3628,7 +3633,7 @@ function AuditTableRow({
           const emp = employees?.find(
             (e) => (e.email || '').toLowerCase() === (audit.auditorEmail || '').toLowerCase(),
           );
-          const phone = emp?.mobile || emp?.phone || '';
+          const phone = emp?.mobile || emp?.phone || emp?.mobileNumber || '';
           if (!phone) return null;
           const stLabel = effStatus(status);
           const messages = {
@@ -3888,7 +3893,7 @@ function AuditList({
         createdBy: currentUser?.email || '',
       });
       const leadEmp = employees.find((e) => e.id === assignForm.auditorId);
-      const auditorPhone = leadEmp?.mobile || leadEmp?.phone || '';
+      const auditorPhone = leadEmp?.mobile || leadEmp?.phone || leadEmp?.mobileNumber || '';
       setAssignedAudit({
         refId,
         auditorName: assignForm.auditorName,
