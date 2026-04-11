@@ -953,6 +953,18 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
 }
 
 function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSuccess, showError }) {
+  const { userRole, auditScope } = useAuth();
+  const isAuditManager = userRole === 'auditmanager';
+
+  const visibleTemplates = useMemo(() => {
+    return auditTypes.filter((t) => {
+      if (!isAuditManager) return true;
+      if (auditScope === 'internal') return t.auditCategory === 'Internal';
+      if (auditScope === 'external') return t.auditCategory === 'External';
+      return true;
+    });
+  }, [auditTypes, isAuditManager, auditScope]);
+
   const [showModal, setShowModal] = useState(false);
   const [editingType, setEditingType] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -966,16 +978,34 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
   const [checklistItems, setChecklistItems] = useState([]);
   const [sections, setSections] = useState(['General']);
   const [newSection, setNewSection] = useState('');
+  const [editingSection, setEditingSection] = useState(null);
+  const [editSectionName, setEditSectionName] = useState('');
 
   const resetForm = () => {
-    setForm({ auditCategory: '', name: '', description: '', color: AUDIT_COLORS[0], riskLevel: 'Medium' });
+    const defaultCategory =
+      isAuditManager && auditScope === 'internal'
+        ? 'Internal'
+        : isAuditManager && auditScope === 'external'
+          ? 'External'
+          : '';
+    setForm({
+      auditCategory: defaultCategory,
+      name: '',
+      description: '',
+      color: AUDIT_COLORS[0],
+      riskLevel: 'Medium',
+    });
     setChecklistItems([]);
     setSections(['General']);
     setNewSection('');
     setEditingType(null);
+    setEditingSection(null);
+    setEditSectionName('');
   };
 
   const openEdit = (type) => {
+    setEditingSection(null);
+    setEditSectionName('');
     setEditingType(type);
     setForm({
       auditCategory: type.auditCategory || '',
@@ -1066,7 +1096,7 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
             <div>
               <h2 className="text-base font-semibold text-gray-800">Audit Settings</h2>
               <p className="text-xs text-gray-400">
-                {auditTypes.length} template{auditTypes.length !== 1 ? 's' : ''}
+                {visibleTemplates.length} template{visibleTemplates.length !== 1 ? 's' : ''}
               </p>
             </div>
           </div>
@@ -1090,10 +1120,12 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
             </button>
           </div>
 
-          {auditTypes.length === 0 ? (
+          {visibleTemplates.length === 0 ? (
             <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-2xl">
               <p className="text-3xl mb-3">📋</p>
-              <p className="text-sm font-medium text-gray-600 mb-1">No templates yet</p>
+              <p className="text-sm font-medium text-gray-600 mb-1">
+                {auditTypes.length > 0 && isAuditManager ? 'No templates in your scope' : 'No templates yet'}
+              </p>
               <p className="text-xs text-gray-400 mb-4">Create your first audit template to get started</p>
               <button
                 type="button"
@@ -1108,7 +1140,7 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
             </div>
           ) : (
             <div className="space-y-3">
-              {auditTypes.map((type) => (
+              {visibleTemplates.map((type) => (
                 <div key={type.id} className="bg-white border border-gray-100 rounded-2xl p-4 hover:shadow-sm transition-all">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3 flex-1">
@@ -1188,20 +1220,27 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
               <div>
                 <label className="text-xs text-gray-500 block mb-1.5">Audit Category *</label>
                 <div className="grid grid-cols-2 gap-3">
-                  {['Internal', 'External'].map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, auditCategory: cat }))}
-                      className={`py-3 px-4 rounded-xl border-2 text-sm font-medium transition-all ${
-                        form.auditCategory === cat
-                          ? 'border-[#1B6B6B] bg-[#E8F5F5] text-[#1B6B6B]'
-                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                      }`}
-                    >
-                      {cat === 'Internal' ? '🏢 Internal' : '🌐 External'}
-                    </button>
-                  ))}
+                  {['Internal', 'External']
+                    .filter((cat) => {
+                      if (!isAuditManager) return true;
+                      if (auditScope === 'internal') return cat === 'Internal';
+                      if (auditScope === 'external') return cat === 'External';
+                      return true;
+                    })
+                    .map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, auditCategory: cat }))}
+                        className={`py-3 px-4 rounded-xl border-2 text-sm font-medium transition-all ${
+                          form.auditCategory === cat
+                            ? 'border-[#1B6B6B] bg-[#E8F5F5] text-[#1B6B6B]'
+                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                        }`}
+                      >
+                        {cat === 'Internal' ? '🏢 Internal' : '🌐 External'}
+                      </button>
+                    ))}
                 </div>
               </div>
 
@@ -1274,10 +1313,71 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
                 {sections.map((section) => (
                   <div key={section} className="mb-5">
                     <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
-                      <h4 className="text-sm font-semibold text-gray-700">{section}</h4>
-                      <button type="button" onClick={() => addItem(section)} className="text-xs text-[#1B6B6B] hover:underline">
-                        + Add item
-                      </button>
+                      {editingSection === section ? (
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <input
+                            value={editSectionName}
+                            onChange={(e) => setEditSectionName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && editSectionName.trim()) {
+                                const newName = editSectionName.trim();
+                                setSections((prev) => prev.map((s) => (s === section ? newName : s)));
+                                setChecklistItems((prev) => prev.map((i) => (i.section === section ? { ...i, section: newName } : i)));
+                                setEditingSection(null);
+                              }
+                              if (e.key === 'Escape') setEditingSection(null);
+                            }}
+                            autoFocus
+                            className="text-sm font-semibold border border-[#1B6B6B] rounded-lg px-2 py-0.5 focus:outline-none flex-1 min-w-0"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newName = editSectionName.trim();
+                              if (!newName) return;
+                              setSections((prev) => prev.map((s) => (s === section ? newName : s)));
+                              setChecklistItems((prev) => prev.map((i) => (i.section === section ? { ...i, section: newName } : i)));
+                              setEditingSection(null);
+                            }}
+                            className="text-xs text-[#1B6B6B] shrink-0"
+                          >
+                            ✓
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h4 className="text-sm font-semibold text-gray-700 truncate">{section}</h4>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingSection(section);
+                              setEditSectionName(section);
+                            }}
+                            className="text-gray-300 hover:text-gray-500 text-xs shrink-0"
+                            aria-label="Rename section"
+                          >
+                            ✏️
+                          </button>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        <button type="button" onClick={() => addItem(section)} className="text-xs text-[#1B6B6B] hover:underline">
+                          + Add item
+                        </button>
+                        {sections.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSections((prev) => prev.filter((s) => s !== section));
+                              setChecklistItems((prev) => prev.filter((i) => i.section !== section));
+                              if (editingSection === section) setEditingSection(null);
+                            }}
+                            className="text-xs text-red-400 hover:text-red-600 hover:underline"
+                          >
+                            Remove section
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {checklistItems
@@ -1380,6 +1480,7 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
 function AssignAuditModal({
   auditTypes,
   company,
+  companyId,
   employees,
   assignForm,
   setAssignForm,
@@ -1399,6 +1500,31 @@ function AssignAuditModal({
   assignedAudit,
   onAssignedDone,
 }) {
+  const [localBranches, setLocalBranches] = useState([]);
+  const [localLocations, setLocalLocations] = useState([]);
+  const [localDepts, setLocalDepts] = useState([]);
+  const [localCategories, setLocalCategories] = useState([]);
+
+  useEffect(() => {
+    if (company?.branches?.length > 0 || company?.locations?.length > 0 || company?.departments?.length > 0 || company?.categories?.length > 0) {
+      setLocalBranches(company.branches || []);
+      setLocalLocations(company.locations || []);
+      setLocalDepts(company.departments || []);
+      setLocalCategories(company.categories || []);
+      return;
+    }
+    if (!companyId) return;
+    getDoc(doc(db, 'companies', companyId)).then((snap) => {
+      if (snap.exists()) {
+        const d = snap.data();
+        setLocalBranches(d.branches || []);
+        setLocalLocations(d.locations || []);
+        setLocalDepts(d.departments || []);
+        setLocalCategories(d.categories || []);
+      }
+    });
+  }, [company, companyId]);
+
   if (assignedAudit) {
     return (
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -1415,9 +1541,17 @@ function AssignAuditModal({
             message={
               `Dear ${assignedAudit.auditorName} Garu,\n\n` +
               `A new audit has been assigned to you.\n\n` +
-              `*${assignedAudit.refId}* — ${assignedAudit.typeName}\n` +
-              (assignedAudit.branch ? `Branch: ${assignedAudit.branch}\n` : '') +
-              `Due Date: ${assignedAudit.endDate ? formatDate(assignedAudit.endDate) : '—'}\n\n` +
+              `*${assignedAudit.refId}*\n` +
+              `📋 *Audit:* ${assignedAudit.typeName}\n` +
+              `🏷️ *Category:* ${assignedAudit.category || 'Internal'}\n` +
+              (assignedAudit.branch ? `🏢 *Branch:* ${assignedAudit.branch}\n` : '') +
+              (assignedAudit.location ? `📍 *Location:* ${assignedAudit.location}\n` : '') +
+              (assignedAudit.department ? `🏬 *Department:* ${assignedAudit.department}\n` : '') +
+              (assignedAudit.teamMembers?.length > 0
+                ? `👥 *Team:* ${[assignedAudit.auditorName + ' (Lead)', ...assignedAudit.teamMembers.map((m) => m.fullName)].join(', ')}\n`
+                : '') +
+              (assignedAudit.startDate ? `📅 *Start Date:* ${formatDate(assignedAudit.startDate)}\n` : '') +
+              `📅 *Due Date:* ${assignedAudit.endDate ? formatDate(assignedAudit.endDate) : '—'}\n\n` +
               `Please log in to AttendX to begin the audit.\n\n` +
               `Thank you,\nAudit Team`
             }
@@ -1511,7 +1645,7 @@ function AssignAuditModal({
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
               >
                 <option value="">Select category...</option>
-                {(company?.categories || []).map((c) => (
+                {localCategories.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -1523,7 +1657,7 @@ function AssignAuditModal({
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
               >
                 <option value="">Select location...</option>
-                {(company?.locations || []).map((l) => (
+                {localLocations.map((l) => (
                   <option key={l} value={l}>
                     {l}
                   </option>
@@ -1536,7 +1670,7 @@ function AssignAuditModal({
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">Select branch...</option>
-                  {(company?.branches || []).map((b) => (
+                  {localBranches.map((b) => (
                     <option key={b} value={b}>
                       {b}
                     </option>
@@ -1548,7 +1682,7 @@ function AssignAuditModal({
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">Select dept...</option>
-                  {(company?.departments || []).map((d) => (
+                  {localDepts.map((d) => (
                     <option key={d} value={d}>
                       {d}
                     </option>
@@ -3638,18 +3772,47 @@ function AuditTableRow({
           const stLabel = effStatus(status);
           const messages = {
             Assigned:
-              `Dear ${audit.auditorName} Garu,\n` +
-              `Reminder: Audit *${audit.auditRefId}* — ${audit.auditTypeName} is assigned to you.\n` +
-              `Due: ${audit.endDate ? formatDate(audit.endDate) : '—'}\nPlease log in to AttendX.`,
+              `Dear ${audit.auditorName} Garu,\n\n` +
+              `🔔 *Audit Reminder*\n\n` +
+              `*${audit.auditRefId}*\n` +
+              `📋 *Audit:* ${audit.auditTypeName}\n` +
+              `🏷️ *Category:* ${audit.auditCategory || 'Internal'}\n` +
+              (audit.branch ? `🏢 *Branch:* ${audit.branch}\n` : '') +
+              (audit.location ? `📍 *Location:* ${audit.location}\n` : '') +
+              (audit.department ? `🏬 *Department:* ${audit.department}\n` : '') +
+              ((audit.teamMembers?.length || 0) > 0
+                ? `👥 *Team:* ${[audit.auditorName + ' (Lead)', ...audit.teamMembers.map((m) => m.fullName)].join(', ')}\n`
+                : '') +
+              (audit.startDate ? `📅 *Start:* ${formatDate(audit.startDate)}\n` : '') +
+              `📅 *Due:* ${audit.endDate ? formatDate(audit.endDate) : '—'}\n\n` +
+              `This audit is assigned to you. Please log in to AttendX to begin.\n\n` +
+              `Thank you,\nAudit Team`,
             'In Progress':
-              `Dear ${audit.auditorName} Garu,\n` +
-              `Reminder: Audit *${audit.auditRefId}* is in progress. Due: ${audit.endDate ? formatDate(audit.endDate) : '—'}.\n` +
-              `Please complete and submit at the earliest.`,
+              `Dear ${audit.auditorName} Garu,\n\n` +
+              `⏳ *Audit In Progress — Reminder*\n\n` +
+              `*${audit.auditRefId}*\n` +
+              `📋 *Audit:* ${audit.auditTypeName}\n` +
+              `🏷️ *Category:* ${audit.auditCategory || 'Internal'}\n` +
+              (audit.branch ? `🏢 *Branch:* ${audit.branch}\n` : '') +
+              (audit.location ? `📍 *Location:* ${audit.location}\n` : '') +
+              (audit.department ? `🏬 *Department:* ${audit.department}\n` : '') +
+              ((audit.teamMembers?.length || 0) > 0
+                ? `👥 *Team:* ${[audit.auditorName + ' (Lead)', ...audit.teamMembers.map((m) => m.fullName)].join(', ')}\n`
+                : '') +
+              (audit.startDate ? `📅 *Start:* ${formatDate(audit.startDate)}\n` : '') +
+              `📅 *Due:* ${audit.endDate ? formatDate(audit.endDate) : '—'}\n\n` +
+              `Your audit is in progress. Please complete and submit at the earliest.\n\n` +
+              `Thank you,\nAudit Team`,
             'Sent Back':
-              `Dear ${audit.auditorName} Garu,\n` +
-              `Audit *${audit.auditRefId}* has been sent back for corrections.\n` +
-              `Reason: ${audit.sentBackReason || 'See AttendX'}\n` +
-              `Please resubmit after corrections.`,
+              `Dear ${audit.auditorName} Garu,\n\n` +
+              `↩ *Audit Sent Back for Corrections*\n\n` +
+              `*${audit.auditRefId}*\n` +
+              `📋 *Audit:* ${audit.auditTypeName}\n` +
+              (audit.branch ? `🏢 *Branch:* ${audit.branch}\n` : '') +
+              `📅 *Due:* ${audit.endDate ? formatDate(audit.endDate) : '—'}\n\n` +
+              `*Reason:* ${audit.sentBackReason || 'See AttendX for details'}\n\n` +
+              `Please make the corrections and resubmit.\n\n` +
+              `Thank you,\nAudit Team`,
           };
           const msg = messages[stLabel];
           if (!msg) return null;
@@ -3898,9 +4061,14 @@ function AuditList({
         refId,
         auditorName: assignForm.auditorName,
         auditorPhone,
-        endDate: assignForm.endDate,
         typeName: type?.name || '',
-        branch: assignForm.branch || '',
+        category: type?.auditCategory || 'Internal',
+        location: assignForm.location,
+        branch: assignForm.branch,
+        department: assignForm.department,
+        teamMembers: assignForm.teamMembers,
+        startDate: assignForm.startDate,
+        endDate: assignForm.endDate,
       });
       showSuccess(`${refId} assigned to ${assignForm.auditorName}!`);
     } catch (e) {
@@ -4508,6 +4676,7 @@ function AuditList({
         <AssignAuditModal
           auditTypes={auditTypes}
           company={company}
+          companyId={companyId}
           employees={employees}
           assignForm={assignForm}
           setAssignForm={setAssignForm}
@@ -4815,6 +4984,18 @@ export default function Audit() {
   const { companyId: authCompanyId, currentUser, userRole, auditScope } = useAuth();
   const companyId = routeCompanyId || authCompanyId;
   const { company } = useCompany();
+  const [companyData, setCompanyData] = useState(null);
+
+  useEffect(() => {
+    if (!companyId) return;
+    getDoc(doc(db, 'companies', companyId)).then((snap) => {
+      if (snap.exists()) {
+        setCompanyData({ id: snap.id, ...snap.data() });
+      }
+    });
+  }, [companyId]);
+
+  const effectiveCompany = companyData || company;
 
   const isAdmin = userRole === 'admin';
   const isAuditManager = userRole === 'auditmanager';
@@ -5000,7 +5181,7 @@ export default function Audit() {
           <AuditList
             audits={visibleAudits}
             auditTypes={auditTypes}
-            company={company}
+            company={effectiveCompany}
             companyId={companyId}
             currentUser={currentUser}
             userRole={userRole}
@@ -5013,11 +5194,9 @@ export default function Audit() {
           />
         )}
         {activeTab === 'history' && (
-          <AuditHistory audits={visibleAudits} auditTypes={auditTypes} company={company} employees={employees} />
+          <AuditHistory audits={visibleAudits} company={effectiveCompany} />
         )}
-        {activeTab === 'reports' && (
-          <AuditReports audits={visibleAudits} auditTypes={auditTypes} company={company} employees={employees} />
-        )}
+        {activeTab === 'reports' && <AuditReports audits={visibleAudits} />}
       </div>
 
       {selectedAudit && (() => {
