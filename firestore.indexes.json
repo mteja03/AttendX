@@ -1,6 +1,11 @@
 {
   "indexes": [
     {
+      "collectionGroup": "teamMembers",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "email", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "employees",
       "queryScope": "COLLECTION",
       "fields": [

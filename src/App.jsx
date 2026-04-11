@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import Layout from './components/Layout';
 import CompanyLayout from './components/CompanyLayout';
 import Login from './pages/Login';
@@ -24,6 +24,25 @@ const Audit = lazy(() => import('./pages/audit/index.jsx'));
 const Library = lazy(() => import('./pages/Library'));
 const OrgChart = lazy(() => import('./pages/OrgChart'));
 const CompanyCalendar = lazy(() => import('./pages/Calendar'));
+
+const DASHBOARD_ALLOWED = ['admin', 'companyadmin', 'hrmanager', 'manager', 'itmanager'];
+
+function DashboardEntry() {
+  const { role } = useAuth();
+  const { companyId } = useParams();
+
+  if (role === 'auditmanager' || role === 'auditor') {
+    return <Navigate to={`/company/${companyId}/audit`} replace />;
+  }
+
+  return (
+    <RoleRoute allowedRoles={DASHBOARD_ALLOWED}>
+      <ErrorBoundary>
+        <Dashboard />
+      </ErrorBoundary>
+    </RoleRoute>
+  );
+}
 
 function ProtectedRoute({ children }) {
   const { currentUser, loading } = useAuth();
@@ -59,13 +78,16 @@ function HomeRedirect() {
   if (role === 'admin') {
     return <Navigate to="/companies" replace />;
   }
-  if (role === 'companyadmin' && companyId) {
-    return <Navigate to={`/company/${companyId}/dashboard`} replace />;
+  if (!role) {
+    return <Navigate to="/access-restricted" replace />;
   }
-  if (companyId) {
-    return <Navigate to={`/company/${companyId}/dashboard`} replace />;
+  if (!companyId) {
+    return <Navigate to="/access-restricted" replace />;
   }
-  return <Navigate to="/companies" replace />;
+  if (role === 'auditmanager' || role === 'auditor') {
+    return <Navigate to={`/company/${companyId}/audit`} replace />;
+  }
+  return <Navigate to={`/company/${companyId}/dashboard`} replace />;
 }
 
 function CompanyIndexRedirect() {
@@ -121,18 +143,10 @@ function AppRoutes() {
             }
           />
           <Route path="unauthorized" element={<Unauthorized />} />
+          <Route path="access-restricted" element={<Unauthorized />} />
           <Route path="company/:companyId" element={<CompanyLayout />}>
             <Route index element={<CompanyIndexRedirect />} />
-            <Route
-              path="dashboard"
-              element={
-                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager', 'manager', 'itmanager']}>
-                  <ErrorBoundary>
-                    <Dashboard />
-                  </ErrorBoundary>
-                </RoleRoute>
-              }
-            />
+            <Route path="dashboard" element={<DashboardEntry />} />
             <Route
               path="employees"
               element={

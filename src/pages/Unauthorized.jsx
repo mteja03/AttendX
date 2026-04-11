@@ -4,21 +4,40 @@ import { ROLE_LABELS, getNavItems } from '../utils/roles';
 
 export default function Unauthorized() {
   const navigate = useNavigate();
-  const { userRole, companyId } = useAuth();
-  const label = ROLE_LABELS[userRole] || userRole || 'User';
+  const { userRole, companyId, currentUser, signOut } = useAuth();
+  const email = currentUser?.email ?? '';
+  const roleLabel = userRole ? ROLE_LABELS[userRole] || userRole : null;
+
+  const detailMessage = !userRole
+    ? `${email || 'This account'} is not set up as a user in AttendX. Please contact your administrator.`
+    : !companyId
+      ? `Your account (${roleLabel || userRole}) is not assigned to a company. Please contact your administrator.`
+      : `You don't have permission to access this page.`;
+
   const navItems = getNavItems(userRole === 'admin' ? 'admin' : userRole);
   const paths = navItems.map((i) => i.to).filter((to) => to !== 'dashboard');
 
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (err) {
+      console.error('Sign out failed', err);
+    }
+    navigate('/login', { replace: true });
+  };
+
   return (
-    <div className="text-center py-16 px-4 max-w-lg mx-auto">
-      <p className="text-5xl mb-4">🔒</p>
-      <h1 className="text-xl font-semibold text-gray-800 mb-2">Access Restricted</h1>
-      <p className="text-gray-500 mb-6">You don&apos;t have permission to view this page.</p>
-      <div className="bg-gray-50 rounded-xl p-4 max-w-sm mx-auto mb-6 text-left">
-        <p className="text-sm font-medium text-gray-700 mb-2">Your role: {label}</p>
-        <p className="text-sm text-gray-500 mb-3">Contact your HR Admin to request additional access.</p>
-        {companyId && paths.length > 0 && (
-          <div className="border-t border-gray-200 pt-3 mt-3">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-lg text-center border border-gray-100">
+        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">🔒</div>
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">Access Restricted</h2>
+        <p className="text-sm text-gray-500 mb-4">{detailMessage}</p>
+        <p className="text-xs text-gray-400 mb-6">
+          Signed in as: {email || '—'}
+          {userRole && ` · Role: ${roleLabel || userRole}`}
+        </p>
+        {userRole && companyId && paths.length > 0 && (
+          <div className="bg-gray-50 rounded-xl p-4 text-left mb-6 border border-gray-100">
             <p className="text-xs font-medium text-gray-600 mb-2">You can open:</p>
             <ul className="text-xs text-gray-500 space-y-1">
               <li>• Dashboard</li>
@@ -30,14 +49,23 @@ export default function Unauthorized() {
             </ul>
           </div>
         )}
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="w-full py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
+          >
+            Sign Out & Try Again
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="w-full py-2.5 text-[#1B6B6B] rounded-xl text-sm font-medium border border-gray-200 hover:bg-gray-50"
+          >
+            Go Back
+          </button>
+        </div>
       </div>
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        className="px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
-      >
-        Go Back
-      </button>
     </div>
   );
 }

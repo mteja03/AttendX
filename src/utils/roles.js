@@ -8,6 +8,17 @@ export const ROLES = {
   auditor: 'auditor',
 };
 
+/** Roles allowed to sign in and use the app (platform user or synced team member). */
+export const VALID_ROLES = [
+  'admin',
+  'companyadmin',
+  'hrmanager',
+  'manager',
+  'itmanager',
+  'auditmanager',
+  'auditor',
+];
+
 export const ROLE_LABELS = {
   admin: 'Admin',
   companyadmin: 'Company Admin',

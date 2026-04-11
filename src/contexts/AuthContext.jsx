@@ -2,9 +2,50 @@
 // Context files intentionally export multiple values — fast refresh limitation accepted for provider files.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+  collectionGroup,
+  query,
+  where,
+  getDocs,
+  limit,
+} from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/config';
 import { PLATFORM_CONFIG } from '../config/constants';
+import { DEFAULT_PERMISSIONS, VALID_ROLES } from '../utils/roles';
+
+async function resolveUserFromTeamMembers(emailNorm) {
+  if (!emailNorm) return { data: null, usersRef: null };
+  try {
+    const q = query(collectionGroup(db, 'teamMembers'), where('email', '==', emailNorm), limit(10));
+    const snap = await getDocs(q);
+    if (snap.empty) return { data: null, usersRef: null };
+    const activeDoc = snap.docs.find((d) => d.data()?.isActive !== false) || snap.docs[0];
+    const tm = activeDoc.data() || {};
+    const companyId = activeDoc.ref.parent.parent.id;
+    return {
+      data: {
+        email: tm.email || emailNorm,
+        name: tm.name || '',
+        role: tm.role,
+        companyId,
+        auditScope: tm.auditScope ?? null,
+        permissions: tm.permissions ?? null,
+        isActive: tm.isActive !== false,
+        linkedEmployeeId: tm.employeeId || tm.empId || null,
+        photoURL: tm.photoURL || '',
+      },
+      usersRef: null,
+    };
+  } catch (e) {
+    console.warn('Team member lookup failed', e);
+    return { data: null, usersRef: null };
+  }
+}
 import { setSentryUser } from '../utils/sentry';
 import { trackLogin, trackLogout } from '../utils/analytics';
 
@@ -61,14 +102,32 @@ export function AuthProvider({ children }) {
       const checkWhitelist = async () => {
         try {
           const email = firebaseUser.email?.toLowerCase();
+          let userDocRef = null;
+          let data = null;
+
           let ref = doc(db, 'users', email || '');
           let snap = await getDoc(ref);
-          if (!snap.exists()) {
+          if (snap.exists()) {
+            userDocRef = snap.ref;
+            data = snap.data();
+          } else {
             ref = doc(db, 'users', firebaseUser.uid);
             snap = await getDoc(ref);
+            if (snap.exists()) {
+              userDocRef = snap.ref;
+              data = snap.data();
+            }
           }
 
-          if (!snap.exists()) {
+          if (!data) {
+            const tmRes = await resolveUserFromTeamMembers(email);
+            if (tmRes.data) {
+              data = tmRes.data;
+              userDocRef = tmRes.usersRef;
+            }
+          }
+
+          if (!data) {
             await signOut(auth);
             setSentryUser(null);
             setCurrentUser(null);
@@ -82,8 +141,8 @@ export function AuthProvider({ children }) {
             return;
           }
 
-          const data = snap.data();
           const companyAdminRole = data.role === 'companyadmin';
+          const roleVal = data.role || null;
 
           if (data.isActive === false) {
             await signOut(auth);
@@ -99,26 +158,37 @@ export function AuthProvider({ children }) {
             return;
           }
 
+          if (!roleVal || !VALID_ROLES.includes(roleVal)) {
+            await signOut(auth);
+            setSentryUser(null);
+            setCurrentUser(null);
+            setRole(null);
+            setCompanyId(null);
+            setUserPermissions(null);
+            setAuditScope(null);
+            setIsCompanyAdmin(false);
+            setAuthError('Access denied. Contact your HR admin to get access.');
+            setLoading(false);
+            return;
+          }
+
           setCurrentUser(firebaseUser);
           setSentryUser(firebaseUser);
-          setRole(data.role || null);
-          if (companyAdminRole && data.companyId) {
-            setCompanyId(data.companyId);
-          } else {
-            setCompanyId(data.companyId ?? null);
-          }
-          setUserPermissions(data.permissions ?? null);
+          setRole(roleVal);
+          setCompanyId(data.companyId || null);
+          setUserPermissions(data.permissions ?? DEFAULT_PERMISSIONS[roleVal] ?? {});
           setAuditScope(data.auditScope ?? null);
           setIsCompanyAdmin(companyAdminRole);
           setAuthError('');
-          try {
-            const refUsed = snap.ref;
-            await updateDoc(refUsed, {
-              lastLogin: serverTimestamp(),
-              lastLoginAt: serverTimestamp(),
-            });
-          } catch {
-            // ignore lastLogin write failures (e.g. rules)
+          if (userDocRef) {
+            try {
+              await updateDoc(userDocRef, {
+                lastLogin: serverTimestamp(),
+                lastLoginAt: serverTimestamp(),
+              });
+            } catch {
+              // ignore lastLogin write failures (e.g. rules)
+            }
           }
           try {
             try {
