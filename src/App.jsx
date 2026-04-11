@@ -7,6 +7,7 @@ import Unauthorized from './pages/Unauthorized';
 import ErrorBoundary from './components/ErrorBoundary';
 import PageLoader from './components/PageLoader';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { VALID_ROLES } from './utils/roles';
 import { ToastProvider } from './contexts/ToastContext';
 
 const Companies = lazy(() => import('./pages/Companies'));
@@ -45,7 +46,7 @@ function DashboardEntry() {
 }
 
 function ProtectedRoute({ children }) {
-  const { currentUser, loading } = useAuth();
+  const { currentUser, role, loading } = useAuth();
 
   if (loading) {
     return <PageLoader fullScreen message="Loading..." />;
@@ -53,6 +54,10 @@ function ProtectedRoute({ children }) {
 
   if (!currentUser) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (role && !VALID_ROLES.includes(role)) {
+    return <Navigate to="/access-restricted" replace />;
   }
 
   return children;
@@ -91,6 +96,10 @@ function HomeRedirect() {
 }
 
 function CompanyIndexRedirect() {
+  const { role } = useAuth();
+  if (role === 'auditmanager' || role === 'auditor') {
+    return <Navigate to="audit" replace />;
+  }
   return <Navigate to="dashboard" replace />;
 }
 

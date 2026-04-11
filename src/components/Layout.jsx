@@ -15,7 +15,8 @@ export default function Layout() {
   const companyMatch = useMatch('/company/:companyId/*');
   const companyIdFromRoute = companyMatch?.params?.companyId ?? null;
   const navigate = useNavigate();
-  const { currentUser, signOut, companyId } = useAuth();
+  const { currentUser, signOut, companyId: authCompanyId } = useAuth();
+  const companyIdForContext = companyIdFromRoute || authCompanyId || null;
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const [notification, setNotification] = useState(null);
   const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
@@ -72,12 +73,12 @@ export default function Layout() {
 
   const handleAllowNotifications = useCallback(async () => {
     const emailKey = currentUser?.email?.toLowerCase() || '';
-    const token = await requestNotificationPermission(emailKey, companyId ?? companyIdFromRoute);
+    const token = await requestNotificationPermission(emailKey, companyIdForContext);
     setShowPermissionPrompt(false);
     if (token) {
       await startForegroundListener();
     }
-  }, [currentUser?.email, companyId, companyIdFromRoute, startForegroundListener]);
+  }, [currentUser?.email, companyIdForContext, startForegroundListener]);
 
   const dismissNotification = useCallback(() => setNotification(null), []);
 
@@ -111,7 +112,7 @@ export default function Layout() {
   }, [resetIdleTimers]);
 
   return (
-    <CompanyProvider companyIdFromRoute={companyIdFromRoute}>
+    <CompanyProvider companyIdFromRoute={companyIdForContext}>
       <div className="min-h-screen bg-[#f1f5f9]">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 

@@ -8,6 +8,7 @@ import {
   setDoc,
   updateDoc,
   serverTimestamp,
+  collection,
   collectionGroup,
   query,
   where,
@@ -16,7 +17,22 @@ import {
 } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/config';
 import { PLATFORM_CONFIG } from '../config/constants';
+import { setSentryUser } from '../utils/sentry';
+import { trackLogin, trackLogout } from '../utils/analytics';
 import { DEFAULT_PERMISSIONS, VALID_ROLES } from '../utils/roles';
+
+/** Firestore may store companyId as a string or a DocumentReference — always expose a string id in context. */
+export function normalizeCompanyId(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'string') {
+    const t = value.trim();
+    return t || null;
+  }
+  if (typeof value === 'object' && typeof value.id === 'string' && value.id) {
+    return value.id;
+  }
+  return null;
+}
 
 async function resolveUserFromTeamMembers(emailNorm) {
   if (!emailNorm) return { data: null, usersRef: null };
@@ -46,8 +62,6 @@ async function resolveUserFromTeamMembers(emailNorm) {
     return { data: null, usersRef: null };
   }
 }
-import { setSentryUser } from '../utils/sentry';
-import { trackLogin, trackLogout } from '../utils/analytics';
 
 const AuthContext = createContext(null);
 
@@ -119,6 +133,20 @@ export function AuthProvider({ children }) {
             }
           }
 
+          if (!data && email) {
+            try {
+              const byEmailField = query(collection(db, 'users'), where('email', '==', email), limit(2));
+              const found = await getDocs(byEmailField);
+              if (!found.empty) {
+                const d = found.docs[0];
+                userDocRef = d.ref;
+                data = d.data();
+              }
+            } catch (lookupErr) {
+              console.warn('users collection email field lookup failed', lookupErr);
+            }
+          }
+
           if (!data) {
             const tmRes = await resolveUserFromTeamMembers(email);
             if (tmRes.data) {
@@ -172,12 +200,18 @@ export function AuthProvider({ children }) {
             return;
           }
 
+          const resolvedCompanyId = normalizeCompanyId(data.companyId);
+
           setCurrentUser(firebaseUser);
           setSentryUser(firebaseUser);
           setRole(roleVal);
-          setCompanyId(data.companyId || null);
+          if (resolvedCompanyId) {
+            setCompanyId(resolvedCompanyId);
+          } else {
+            setCompanyId(null);
+          }
           setUserPermissions(data.permissions ?? DEFAULT_PERMISSIONS[roleVal] ?? {});
-          setAuditScope(data.auditScope ?? null);
+          setAuditScope(data.auditScope != null && data.auditScope !== '' ? data.auditScope : null);
           setIsCompanyAdmin(companyAdminRole);
           setAuthError('');
           if (userDocRef) {
