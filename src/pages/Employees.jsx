@@ -1524,7 +1524,7 @@ export default function Employees() {
           )}
         </div>
 
-          <div className="lg:hidden space-y-3">
+          <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {paginatedEmployees.map((emp) => (
               <div
                 key={emp.id}

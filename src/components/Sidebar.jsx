@@ -212,14 +212,14 @@ function Sidebar({ isOpen = false, onClose }) {
   return (
     <>
       {isOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={onClose} role="presentation" aria-hidden />
+        <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={onClose} role="presentation" aria-hidden />
       )}
 
       <aside
         className={`
           flex flex-col h-screen bg-[#1B6B6B] fixed left-0 top-0 overflow-hidden text-white
-          z-50 w-64 transition-transform duration-300 ease-out
-          lg:translate-x-0 lg:w-56
+          z-40 w-64 flex-shrink-0 transition-transform duration-300 ease-out
+          lg:static lg:z-auto lg:translate-x-0 lg:h-screen lg:w-56
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >

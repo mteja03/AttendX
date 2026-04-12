@@ -2,10 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+html,
+body {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
 @layer base {
   body {
     @apply bg-slate-50 text-slate-800 antialiased;
   }
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .settings-list::-webkit-scrollbar {

@@ -31,6 +31,7 @@ import {
 } from './audit/auditHelpers';
 import { WhatsAppButton } from '../utils/whatsapp';
 import { whatsappUrl } from '../utils/whatsappUrl';
+import useIsMobile from '../hooks/useIsMobile';
 
 /** Used by AuditCalendar; includes legacy keys for older documents */
 const STATUS_COLORS = {
@@ -821,7 +822,7 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') setSelectedDay(selectedDay === day ? null : day);
                   }}
-                  className={`relative aspect-square flex flex-col items-center justify-start pt-1.5 rounded-xl cursor-pointer transition-all ${
+                  className={`relative min-h-[44px] aspect-square flex flex-col items-center justify-start pt-1.5 rounded-xl cursor-pointer transition-all ${
                     isSelected
                       ? 'bg-[#1B6B6B] text-white'
                       : isToday
@@ -841,7 +842,7 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
                       {dayAudits.slice(0, 3).map((a, idx) => (
                         <div
                           key={idx}
-                          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                          className="w-2 h-2 sm:w-1.5 sm:h-1.5 rounded-full flex-shrink-0"
                           style={{
                             background: isSelected
                               ? 'white'
@@ -1619,8 +1620,9 @@ function AssignAuditModal({
 
   if (assignedAudit) {
     return (
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 text-center">
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
+        <div role="presentation" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 sm:mx-4 text-center">
           <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center text-2xl mx-auto mb-3">
             ✅
           </div>
@@ -1664,8 +1666,9 @@ function AssignAuditModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
+      <div role="presentation" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden sm:mx-4">
         <div className="px-6 py-5 border-b flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1675,7 +1678,11 @@ function AssignAuditModal({
                 <p className="text-xs text-gray-400">Schedule an audit for an auditor</p>
               </div>
             </div>
-            <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-w-[44px] min-h-[44px] w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
+            >
               ✕
             </button>
           </div>
@@ -1755,7 +1762,7 @@ function AssignAuditModal({
                   </option>
                 ))}
               </select>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <select
                   value={assignForm.branch}
                   onChange={(e) => setAssignForm((p) => ({ ...p, branch: e.target.value }))}
@@ -1957,7 +1964,7 @@ function AssignAuditModal({
 
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Schedule</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-gray-500 block mb-1.5">Start Date</label>
                 <input
@@ -2684,18 +2691,26 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[94vh] flex flex-col overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
+      <div
+        role="presentation"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={handleDetailClose}
+      />
+      <div
+        className="relative bg-white w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl max-h-[95vh] sm:max-h-[94vh] flex flex-col overflow-hidden shadow-2xl sm:mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         {isAuditorMode && (
-          <div className="flex items-center gap-0 mb-1 px-6 pt-4 flex-shrink-0">
+          <div className="flex items-center gap-0 px-4 py-3 flex-shrink-0">
             {[
-              { id: 'checklist', label: 'Checklist', num: 1 },
-              { id: 'findings', label: 'Findings', num: 2 },
+              { id: 'checklist', label: '1. Checklist', num: 1 },
+              { id: 'findings', label: '2. Findings', num: 2 },
             ].map((step, idx) => (
               <div key={step.id} className="flex items-center flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                    className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                       auditorStep === step.id || (step.id === 'checklist' && auditorStep === 'findings')
                         ? 'bg-[#1B6B6B] text-white'
                         : 'bg-gray-100 text-gray-400'
@@ -2703,11 +2718,13 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   >
                     {step.num}
                   </div>
-                  <span className={`text-xs font-medium ${auditorStep === step.id ? 'text-[#1B6B6B]' : 'text-gray-400'}`}>
-                    {step.label}
+                  <span
+                    className={`text-xs font-medium hidden sm:inline ${auditorStep === step.id ? 'text-[#1B6B6B]' : 'text-gray-400'}`}
+                  >
+                    {step.label.replace(/^\d+\.\s*/, '')}
                   </span>
                 </div>
-                {idx === 0 && <div className="flex-1 h-px bg-gray-200 mx-3" />}
+                {idx === 0 && <div className="flex-1 h-px bg-gray-200 mx-2" />}
               </div>
             ))}
           </div>
@@ -2748,7 +2765,11 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   <span className="text-xs text-gray-400">✓ Saved</span>
                 )}
               </div>
-              <button type="button" onClick={handleDetailClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleDetailClose}
+                className="min-w-[44px] min-h-[44px] w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 flex-shrink-0"
+              >
                 ✕
               </button>
             </div>
@@ -2790,7 +2811,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
           )}
 
           {!isAuditorMode && (
-            <div className="flex gap-1 mt-3 flex-wrap">
+            <div className="flex gap-1 mt-3 overflow-x-auto scrollbar-none flex-nowrap pb-1">
               {(canManage && isUnderReview ? MANAGER_TABS : TABS).map((tab) => (
                 <button
                   key={tab.id}
@@ -2916,7 +2937,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                     {item.riskLevel || 'Medium'}
                                   </span>
                                 </div>
-                                <div className="flex gap-2 mb-2 flex-wrap">
+                                <div className="flex gap-2 mb-2 flex-wrap sm:flex-nowrap">
                                   {[
                                     { val: 'pass', label: '✅ Pass', active: 'bg-green-500 text-white border-green-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-green-50 hover:border-green-200' },
                                     { val: 'fail', label: '❌ Fail', active: 'bg-red-500 text-white border-red-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-200' },
@@ -2927,7 +2948,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                       type="button"
                                       disabled={isClosed}
                                       onClick={() => updateChecklistItem(item.id, item.result === opt.val ? null : opt.val)}
-                                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                      className={`flex-1 sm:flex-none min-h-[44px] px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
                                         item.result === opt.val ? opt.active : opt.def
                                       } ${isClosed ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                                     >
@@ -3517,7 +3538,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
           {!isAuditorMode && activeTab === 'overview' && (
             <div className="space-y-4">
               {totalItems > 0 && (
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {[
                     { label: 'Pass', count: passCount, color: 'bg-green-50 border-green-100', text: 'text-green-700', icon: '✅' },
                     { label: 'Fail', count: failCount, color: 'bg-red-50 border-red-100', text: 'text-red-700', icon: '❌' },
@@ -3588,7 +3609,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
               {findingsData.length > 0 && (
                 <div className="bg-white border border-gray-100 rounded-xl p-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Findings Summary</p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {[
                       { l: 'Total', v: findingsData.length, c: 'text-gray-700' },
                       { l: 'Open', v: openFindings.length, c: openFindings.length > 0 ? 'text-red-600' : 'text-gray-700' },
@@ -3880,8 +3901,13 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       </div>
 
       {showSubmitConfirm && (
-        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4">
+          <div
+            role="presentation"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowSubmitConfirm(false)}
+          />
+          <div className="relative bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl sm:mx-4">
             <div className="text-center mb-5">
               <div className="w-16 h-16 bg-[#E8F5F5] rounded-full flex items-center justify-center text-3xl mx-auto mb-3">📤</div>
               <h3 className="text-lg font-semibold text-gray-800 mb-2">Submit Audit?</h3>
@@ -3939,8 +3965,18 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       )}
 
       {showCloseModal && (
-        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4">
+          <div
+            role="presentation"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => {
+              setShowCloseModal(false);
+              setClosedAuditData(null);
+              setAuditRating(0);
+              setCloseFeedback('');
+            }}
+          />
+          <div className="relative bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl sm:mx-4">
             {closedAuditData ? (
               <>
                 <h3 className="text-lg font-semibold text-gray-800 mb-2 text-center">Audit closed</h3>
@@ -4076,8 +4112,17 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       )}
 
       {showSendBackModal && (
-        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4">
+          <div
+            role="presentation"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => {
+              setShowSendBackModal(false);
+              setSendBackReason('');
+              setSentBackTo(null);
+            }}
+          />
+          <div className="relative bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl sm:mx-4">
             {sentBackTo ? (
               <>
                 <h3 className="text-base font-semibold text-gray-800 mb-2 text-center">Sent back</h3>
@@ -4515,6 +4560,74 @@ function AuditTableRow({
   );
 }
 
+function ManagerMobileAuditCard({ audit, overdueAudit, openFindings, totalFindings, isAdmin, onOpen, onDelete }) {
+  const score = getAuditScore(audit);
+  const st = effStatus(audit.status);
+  const meta = statusMeta(audit.status);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') onOpen();
+      }}
+      className={`bg-white rounded-2xl border p-4 cursor-pointer hover:shadow-sm transition-all text-left ${
+        overdueAudit ? 'border-red-200' : 'border-gray-100'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center text-white text-sm font-bold"
+          style={{ background: audit.auditTypeColor || '#8B5CF6' }}
+        >
+          {(audit.auditTypeName || '?').charAt(0)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+            <span className="text-xs font-mono text-gray-400">{audit.auditRefId}</span>
+            {overdueAudit && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overdue</span>}
+          </div>
+          <p className="text-sm font-semibold text-gray-800 truncate">{audit.auditTypeName}</p>
+          {(audit.branch || audit.location) && (
+            <p className="text-xs text-gray-400 mt-0.5">
+              {audit.branch && <>🏢 {audit.branch}</>}
+              {audit.branch && audit.location && ' · '}
+              {audit.location && <>📍 {audit.location}</>}
+            </p>
+          )}
+        </div>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(e);
+            }}
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl hover:bg-red-50 text-gray-400 hover:text-red-500 shrink-0"
+            aria-label="Delete audit"
+          >
+            🗑️
+          </button>
+        )}
+      </div>
+      <div className="flex items-center justify-between gap-2 flex-wrap mt-3 pt-3 border-t border-gray-100">
+        <span className={`text-xs px-2 py-1 rounded-full font-medium ${meta.badge}`}>
+          {meta.icon} {st}
+        </span>
+        <div className="flex items-center gap-3 text-xs text-gray-500">
+          <span>{score === null || score === undefined ? '—' : `${score}%`}</span>
+          <span>
+            {openFindings}/{totalFindings} findings
+          </span>
+        </div>
+      </div>
+      {audit.auditorName && <p className="text-xs text-gray-500 mt-2">👤 {audit.auditorName}</p>}
+    </div>
+  );
+}
+
 function AuditList({
   audits,
   auditTypes,
@@ -4529,6 +4642,7 @@ function AuditList({
   isAuditor,
   canManage,
 }) {
+  const isMobile = useIsMobile();
   const isAdmin = userRole === 'admin';
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignedAudit, setAssignedAudit] = useState(null);
@@ -5003,7 +5117,7 @@ function AuditList({
       )}
 
       {/* Status sub-tabs */}
-      <div className="flex gap-1 overflow-x-auto pb-1 flex-nowrap mb-4">
+      <div className="flex gap-1 overflow-x-auto scrollbar-none pb-1 flex-nowrap mb-4">
         <button
           type="button"
           onClick={() => setActiveStatusTab('all')}
@@ -5075,7 +5189,7 @@ function AuditList({
       </div>
 
       {isAuditor && (
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-none flex-nowrap pb-1">
           {[
             { id: 'active', label: 'Active', count: audits.filter((a) => effStatus(a.status) !== 'Closed').length },
             { id: 'all', label: 'All', count: audits.length },
@@ -5190,9 +5304,9 @@ function AuditList({
         </div>
       ) : (
       <>
-      {viewMode === 'list' && (
-        <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-          {filtered.length === 0 ? (
+      {viewMode === 'list' &&
+        (filtered.length === 0 ? (
+          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
             <div className="text-center py-20">
               <p className="text-5xl mb-4">🔍</p>
               <p className="text-base font-semibold text-gray-700 mb-2">{audits.length === 0 ? 'No audits yet' : 'No audits match filters'}</p>
@@ -5204,14 +5318,36 @@ function AuditList({
                   type="button"
                   onClick={() => setShowAssignModal(true)}
                   disabled={auditTypes.length === 0}
-                  className="px-5 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium disabled:opacity-50"
+                  className="px-5 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium disabled:opacity-50 min-h-[44px]"
                 >
                   + Assign First Audit
                 </button>
               )}
             </div>
-          ) : (
-            <>
+          </div>
+        ) : isMobile ? (
+          <div className="space-y-3">
+            {filtered.map((audit) => {
+              const overdueAudit = isOverdue(audit);
+              const openFindings = (audit.findings || []).filter((f) => f.status !== 'Resolved').length;
+              const totalFindings = (audit.findings || []).length;
+              return (
+                <ManagerMobileAuditCard
+                  key={audit.id}
+                  audit={audit}
+                  overdueAudit={overdueAudit}
+                  openFindings={openFindings}
+                  totalFindings={totalFindings}
+                  isAdmin={isAdmin}
+                  onOpen={() => setSelectedAudit(audit)}
+                  onDelete={(e) => handleDelete(e, audit)}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl -mx-0.5 px-0.5">
+            <div className="min-w-[920px] bg-white border border-gray-100 rounded-2xl overflow-hidden">
               <div className="grid grid-cols-[2fr_1fr_1fr_1fr_160px_80px_80px_40px] gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
                 {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Score', 'Findings', ''].map((h) => (
                   <p key={h || 'actions'} className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate">
@@ -5245,10 +5381,9 @@ function AuditList({
                   );
                 })}
               </div>
-            </>
-          )}
-        </div>
-      )}
+            </div>
+          </div>
+        ))}
 
       {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
@@ -5404,16 +5539,17 @@ function AuditHistory({ audits, company }) {
   return (
     <div className="space-y-4">
       <div className="bg-white border border-gray-100 rounded-2xl p-4 flex items-center gap-2 flex-wrap">
-        <select value={selectedBranch} onChange={(e) => setSelectedBranch(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm">
+        <select value={selectedBranch} onChange={(e) => setSelectedBranch(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm min-h-[44px]">
           <option value="">All Branches</option>
           {(company?.branches || []).map((b) => (
             <option key={b} value={b}>{b}</option>
           ))}
         </select>
-        <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm" />
-        <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+        <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm min-h-[44px]" />
+        <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm min-h-[44px]" />
       </div>
-      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+      <div className="overflow-x-auto rounded-2xl border border-gray-100">
+        <div className="min-w-[800px] bg-white rounded-2xl overflow-hidden">
         <div className="grid grid-cols-[1fr_1fr_1fr_100px_120px_100px_80px_80px] gap-3 px-5 py-3 border-b border-gray-100 bg-gray-50">
           {['Audit', 'Branch', 'Auditor', 'End Date', 'Status', 'Score', 'Rating', 'Findings'].map((h) => (
             <p key={h} className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{h}</p>
@@ -5445,6 +5581,7 @@ function AuditHistory({ audits, company }) {
               </div>
             );
           })}
+        </div>
         </div>
       </div>
     </div>
@@ -5570,9 +5707,9 @@ function AuditReports({ audits }) {
         {auditorPerf.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">No data</p>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {auditorPerf.map((ap) => (
-              <div key={ap.name} className="border border-gray-100 rounded-xl p-4 hover:border-gray-200 transition-colors">
+              <div key={ap.name} className="border border-gray-100 rounded-xl p-4 hover:border-gray-200 transition-colors min-w-0">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
@@ -5591,7 +5728,7 @@ function AuditReports({ audits }) {
                   )}
                 </div>
 
-                <div className="grid grid-cols-4 gap-2 mb-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
                   {[
                     { label: 'Closed', value: ap.closed, color: 'bg-green-50 text-green-700' },
                     { label: 'In Progress', value: ap.inProgress, color: 'bg-blue-50 text-blue-700' },
@@ -5793,17 +5930,17 @@ export default function Audit() {
         </div>
       )}
 
-      <div className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white border-b border-gray-100 px-4 md:px-6 py-4 sticky top-0 z-10">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <div>
-            <h1 className="text-xl font-semibold text-gray-800">Audit</h1>
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-800">Audit</h1>
             <p className="text-sm text-gray-400 mt-0.5">Schedule, track and close audits</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setShowCalendar(true)}
-              className="w-9 h-9 flex items-center justify-center border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+              className="min-w-[44px] min-h-[44px] w-9 h-9 flex items-center justify-center border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
               title="Audit Calendar"
             >
               📅
@@ -5812,7 +5949,7 @@ export default function Audit() {
               <button
                 type="button"
                 onClick={() => setShowSettings(true)}
-                className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                className="min-h-[44px] flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 ⚙️ Settings
               </button>
@@ -5820,13 +5957,13 @@ export default function Audit() {
           </div>
         </div>
 
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto scrollbar-none flex-nowrap pb-1 -mx-1 px-1">
           {mainTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-medium transition-colors flex-shrink-0 ${
                 activeTab === tab.id ? 'bg-[#E8F5F5] text-[#1B6B6B]' : 'text-gray-500 hover:bg-gray-100'
               }`}
             >
@@ -5837,7 +5974,7 @@ export default function Audit() {
         </div>
       </div>
 
-      <div className="p-6">
+      <div>
         {activeTab === 'dashboard' &&
           (isAuditor ? (
             <AuditorDashboard audits={visibleAudits} currentUser={currentUser} />

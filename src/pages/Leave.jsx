@@ -582,13 +582,13 @@ export default function Leave() {
   const hasActiveLeaveFilters = activeLeaveFiltersCount > 0;
 
   return (
-    <div className="p-4 sm:p-8">
-      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <div className="flex flex-col gap-3 mb-6 sm:flex-row items-start sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-800">Leave</h1>
+          <h1 className="text-lg sm:text-xl font-semibold text-slate-800">Leave</h1>
           <p className="text-sm text-gray-500 mt-1">Leave requests and balance</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
             {hasActiveLeaveFilters && (
               <p className="text-xs text-amber-600 mb-2">
@@ -719,7 +719,7 @@ export default function Leave() {
       <div className="mb-4">
         <button
           onClick={() => setShowLeaveFilters((v) => !v)}
-          className={`flex items-center gap-2 px-3 py-2 border rounded-xl text-sm ${
+          className={`flex items-center gap-2 px-3 py-2 min-h-[44px] border rounded-xl text-sm flex-wrap ${
             showLeaveFilters || hasActiveLeaveFilters
               ? 'border-[#1B6B6B] text-[#1B6B6B] bg-[#E8F5F5]'
               : 'border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -735,7 +735,7 @@ export default function Leave() {
 
         {showLeaveFilters && (
           <div className="bg-white border border-gray-100 rounded-2xl p-5 mb-4">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <h3 className="text-sm font-semibold text-gray-700">Filter Leave</h3>
               <button
                 onClick={() =>
@@ -924,8 +924,8 @@ export default function Leave() {
         <PageLoader />
       ) : (
         <>
-          <div className="hidden lg:block overflow-x-auto border border-slate-200 rounded-xl bg-white">
-            <table className="min-w-full text-sm">
+          <div className="hidden lg:block overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+            <table className="min-w-[600px] w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Employee</th>
@@ -1265,7 +1265,7 @@ export default function Leave() {
                   ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Start Date</label>
                   <input
