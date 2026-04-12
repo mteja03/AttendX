@@ -2027,7 +2027,11 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof sessionStorage === 'undefined' || !auditIdForSession) return 'checklist';
     try {
-      return sessionStorage.getItem(`auditTab_${auditIdForSession}`) || 'checklist';
+      return (
+        sessionStorage.getItem(`tab_${auditIdForSession}`) ||
+        sessionStorage.getItem(`auditTab_${auditIdForSession}`) ||
+        'checklist'
+      );
     } catch {
       return 'checklist';
     }
@@ -2035,7 +2039,11 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const [auditorStep, setAuditorStep] = useState(() => {
     if (typeof sessionStorage === 'undefined' || !auditIdForSession) return 'checklist';
     try {
-      return sessionStorage.getItem(`auditorStep_${auditIdForSession}`) || 'checklist';
+      return (
+        sessionStorage.getItem(`step_${auditIdForSession}`) ||
+        sessionStorage.getItem(`auditorStep_${auditIdForSession}`) ||
+        'checklist'
+      );
     } catch {
       return 'checklist';
     }
@@ -2070,6 +2078,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const ownerRef = useRef(null);
   const isMountedRef = useRef(true);
   const lastSavedRef = useRef(null);
+  const isSavingRef = useRef(false);
   const [auditDocs, setAuditDocs] = useState(() => (Array.isArray(safeAudit.auditDocuments) ? safeAudit.auditDocuments : []));
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -2079,6 +2088,8 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     const id = safeAudit?.id;
     if (id && typeof sessionStorage !== 'undefined') {
       try {
+        sessionStorage.removeItem(`tab_${id}`);
+        sessionStorage.removeItem(`step_${id}`);
         sessionStorage.removeItem(`auditTab_${id}`);
         sessionStorage.removeItem(`auditorStep_${id}`);
       } catch {
@@ -2127,7 +2138,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   useEffect(() => {
     if (!safeAudit.id) return;
     try {
-      sessionStorage.setItem(`auditTab_${safeAudit.id}`, activeTab);
+      sessionStorage.setItem(`tab_${safeAudit.id}`, activeTab);
     } catch {
       /* ignore */
     }
@@ -2136,7 +2147,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   useEffect(() => {
     if (!safeAudit.id) return;
     try {
-      sessionStorage.setItem(`auditorStep_${safeAudit.id}`, auditorStep);
+      sessionStorage.setItem(`step_${safeAudit.id}`, auditorStep);
     } catch {
       /* ignore */
     }
@@ -2173,6 +2184,12 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
 
   const isAuditorMode = checklistEditable;
 
+  useEffect(() => {
+    if (!isAuditorMode && isAuditor && (auditorStep === 'checklist' || auditorStep === 'findings')) {
+      setActiveTab(auditorStep);
+    }
+  }, [isAuditorMode, isAuditor, auditorStep]);
+
   const MANAGER_TABS = [
     { id: 'checklist', label: '1. Review', count: totalItems },
     { id: 'findings', label: '2. Findings', count: findings.length },
@@ -2203,6 +2220,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(async () => {
         if (!isMountedRef.current) return;
+        if (isSavingRef.current) return;
         const prev = lastSavedRef.current;
         if (!prev) return;
         const changed =
@@ -2213,6 +2231,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
         if (!changed) return;
         try {
           if (!isMountedRef.current) return;
+          isSavingRef.current = true;
           setAutoSaving(true);
           const payload = {
             findings: newFindings,
@@ -2236,6 +2255,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
         } catch (e) {
           console.error('Auto-save failed:', e);
         } finally {
+          isSavingRef.current = false;
           if (isMountedRef.current) setAutoSaving(false);
         }
       }, 1500);
@@ -2775,7 +2795,12 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    if (isAuditor && (tab.id === 'checklist' || tab.id === 'findings')) {
+                      setAuditorStep(tab.id);
+                    }
+                  }}
                   className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-colors ${
                     activeTab === tab.id ? 'bg-[#E8F5F5] text-[#1B6B6B]' : 'text-gray-500 hover:bg-gray-100'
                   }`}
@@ -3272,7 +3297,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   </p>
 
                   {canUploadAuditDoc && (
-                    <div>
+                    <div className="mb-3">
                       <input
                         ref={fileInputRef}
                         type="file"
@@ -3285,14 +3310,18 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                         id="audit-doc-upload"
                       />
                       {uploading ? (
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-xs text-gray-500">Uploading...</span>
-                            <span className="text-xs font-medium text-[#1B6B6B]">{uploadProgress}%</span>
+                        <div className="border-2 border-[#1B6B6B] border-solid rounded-xl p-4 bg-[#E8F5F5]">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-8 h-8 border-2 border-[#1B6B6B] border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-[#1B6B6B] truncate">Uploading...</p>
+                              <p className="text-xs text-[#1B6B6B]/80">Please wait, do not close this window</p>
+                            </div>
+                            <span className="text-sm font-bold text-[#1B6B6B] flex-shrink-0">{uploadProgress}%</span>
                           </div>
-                          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="w-full h-2.5 bg-white rounded-full overflow-hidden border border-[#1B6B6B]/20">
                             <div
-                              className="h-full bg-[#1B6B6B] rounded-full transition-all"
+                              className="h-full bg-[#1B6B6B] rounded-full transition-all duration-300"
                               style={{ width: `${uploadProgress}%` }}
                             />
                           </div>
@@ -3300,10 +3329,11 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                       ) : (
                         <label
                           htmlFor="audit-doc-upload"
-                          className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors cursor-pointer mb-3"
+                          className="flex items-center justify-center gap-2 w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] hover:bg-[#E8F5F5]/50 transition-all cursor-pointer"
                         >
-                          <span className="text-lg">📎</span>
-                          Click to upload PDF, image or Word doc
+                          <span className="text-xl">📎</span>
+                          <span>Upload PDF, image or Word doc</span>
+                          <span className="text-xs text-gray-300">· Max 20MB</span>
                         </label>
                       )}
                     </div>
@@ -3722,6 +3752,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                             return;
                           }
                           setAuditorStep('findings');
+                          setActiveTab('findings');
                         }}
                         className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold"
                       >
@@ -3732,7 +3763,10 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                     <>
                       <button
                         type="button"
-                        onClick={() => setAuditorStep('checklist')}
+                        onClick={() => {
+                          setAuditorStep('checklist');
+                          setActiveTab('checklist');
+                        }}
                         className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600"
                       >
                         ← Back
@@ -4161,8 +4195,8 @@ function AuditTableRow({
 
   const handleStatusChange = async (newStatus) => {
     const eff = effStatus(status);
-    if (newStatus === 'Closed' && eff === 'Submitted') {
-      showError('Cannot close directly from Submitted. Click Start Review first.');
+    if (eff === 'Submitted' && newStatus === 'Closed') {
+      showError('Start Review first before closing.');
       return;
     }
     if (newStatus === 'Closed') {
@@ -4295,32 +4329,36 @@ function AuditTableRow({
 
             if (eff === 'Submitted') {
               return (
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    if (!window.confirm('Start reviewing this audit?')) return;
-                    try {
-                      setSaving(true);
-                      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
-                        status: 'Under Review',
-                        reviewStartedAt: new Date(),
-                        reviewStartedBy: currentUser?.email || '',
-                        updatedAt: new Date(),
-                      });
-                      setStatus('Under Review');
-                      showSuccess?.('Review started');
-                    } catch {
-                      showError('Failed to start review');
-                    } finally {
-                      setSaving(false);
-                    }
-                  }}
-                  className="w-full py-1.5 bg-[#1B6B6B] text-white rounded-lg text-xs font-medium hover:bg-[#155858] disabled:opacity-50 transition-colors"
-                >
-                  {saving ? '...' : '👀 Start Review'}
-                </button>
+                <div className="w-full" role="presentation" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const targetStatus = 'Under Review';
+                      if (!window.confirm('Start reviewing this audit?')) return;
+                      try {
+                        setSaving(true);
+                        await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+                          status: targetStatus,
+                          reviewStartedAt: new Date(),
+                          reviewStartedBy: currentUser?.email || '',
+                          updatedAt: new Date(),
+                        });
+                        setStatus(targetStatus);
+                        showSuccess?.('Review started');
+                      } catch (err) {
+                        showError('Failed: ' + (err?.message || String(err)));
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    className="w-full py-1.5 bg-[#1B6B6B] text-white rounded-lg text-xs font-medium hover:bg-[#155858] disabled:opacity-50 transition-colors"
+                  >
+                    {saving ? '...' : '👀 Start Review'}
+                  </button>
+                </div>
               );
             }
 
