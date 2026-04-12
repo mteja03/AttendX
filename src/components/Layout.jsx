@@ -100,16 +100,17 @@ export default function Layout() {
     setShowIdleWarning(false);
   }, []);
 
-  const resetIdleTimers = useIdleTimeout(
-    currentUser ? handleIdleSignOut : null,
-    currentUser ? handleIdleWarning : null,
-    currentUser ? handleIdleActive : null,
-  );
+  const { resetTimer } = useIdleTimeout({
+    onWarning: handleIdleWarning,
+    onSignOut: handleIdleSignOut,
+    onActive: handleIdleActive,
+    enabled: !!currentUser,
+  });
 
   const handleStaySignedIn = useCallback(() => {
     setShowIdleWarning(false);
-    resetIdleTimers();
-  }, [resetIdleTimers]);
+    resetTimer();
+  }, [resetTimer]);
 
   return (
     <CompanyProvider companyIdFromRoute={companyIdForContext}>
