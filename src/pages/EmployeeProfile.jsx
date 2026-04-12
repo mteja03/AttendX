@@ -26,7 +26,7 @@ import { useToast } from '../contexts/ToastContext';
 import { DOCUMENT_CHECKLIST, getDocById } from '../utils/documentTypes';
 import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDrive';
 import { toDisplayDate, toJSDate, toDateString, formatLakhs } from '../utils';
-import { whatsappUrl } from '../utils/whatsapp';
+import { whatsappUrl } from '../utils/whatsappUrl';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 import { deleteEmployeePhoto } from '../utils/photoUpload';
 import { updateCompanyCounts } from '../utils/updateCompanyCounts';

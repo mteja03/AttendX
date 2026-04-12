@@ -27,10 +27,10 @@ import {
   effStatus,
   formatDate,
   getAuditScore,
-  getFindingAddedByRole,
   isAuditOverdue,
 } from './audit/auditHelpers';
-import { WhatsAppButton, whatsappUrl } from '../utils/whatsapp';
+import { WhatsAppButton } from '../utils/whatsapp';
+import { whatsappUrl } from '../utils/whatsappUrl';
 
 /** Used by AuditCalendar; includes legacy keys for older documents */
 const STATUS_COLORS = {
@@ -1546,30 +1546,76 @@ function AssignAuditModal({
   assignedAudit,
   onAssignedDone,
 }) {
-  const [localBranches, setLocalBranches] = useState([]);
-  const [localLocations, setLocalLocations] = useState([]);
-  const [localDepts, setLocalDepts] = useState([]);
-  const [localCategories, setLocalCategories] = useState([]);
+  const localBranchesFromCompany = useMemo(
+    () => ((company?.branches?.length ?? 0) > 0 ? company.branches : null),
+    [company],
+  );
+  const localLocationsFromCompany = useMemo(
+    () => ((company?.locations?.length ?? 0) > 0 ? company.locations : null),
+    [company],
+  );
+  const localDeptsFromCompany = useMemo(
+    () => ((company?.departments?.length ?? 0) > 0 ? company.departments : null),
+    [company],
+  );
+  const localCategoriesFromCompany = useMemo(
+    () => ((company?.categories?.length ?? 0) > 0 ? company.categories : null),
+    [company],
+  );
+
+  const [orgListsFromFetch, setOrgListsFromFetch] = useState(null);
 
   useEffect(() => {
-    if (company?.branches?.length > 0 || company?.locations?.length > 0 || company?.departments?.length > 0 || company?.categories?.length > 0) {
-      setLocalBranches(company.branches || []);
-      setLocalLocations(company.locations || []);
-      setLocalDepts(company.departments || []);
-      setLocalCategories(company.categories || []);
+    const hasCompanyLists =
+      localBranchesFromCompany !== null ||
+      localLocationsFromCompany !== null ||
+      localDeptsFromCompany !== null ||
+      localCategoriesFromCompany !== null;
+    if (hasCompanyLists) {
       return;
     }
     if (!companyId) return;
+    let cancelled = false;
     getDoc(doc(db, 'companies', companyId)).then((snap) => {
-      if (snap.exists()) {
-        const d = snap.data();
-        setLocalBranches(d.branches || []);
-        setLocalLocations(d.locations || []);
-        setLocalDepts(d.departments || []);
-        setLocalCategories(d.categories || []);
-      }
+      if (cancelled || !snap.exists()) return;
+      const d = snap.data();
+      setOrgListsFromFetch({
+        branches: d.branches || [],
+        locations: d.locations || [],
+        departments: d.departments || [],
+        categories: d.categories || [],
+      });
     });
-  }, [company, companyId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    companyId,
+    localBranchesFromCompany,
+    localLocationsFromCompany,
+    localDeptsFromCompany,
+    localCategoriesFromCompany,
+  ]);
+
+  const localBranches = useMemo(() => {
+    if (localBranchesFromCompany) return localBranchesFromCompany;
+    return orgListsFromFetch?.branches ?? [];
+  }, [localBranchesFromCompany, orgListsFromFetch]);
+
+  const localLocations = useMemo(() => {
+    if (localLocationsFromCompany) return localLocationsFromCompany;
+    return orgListsFromFetch?.locations ?? [];
+  }, [localLocationsFromCompany, orgListsFromFetch]);
+
+  const localDepts = useMemo(() => {
+    if (localDeptsFromCompany) return localDeptsFromCompany;
+    return orgListsFromFetch?.departments ?? [];
+  }, [localDeptsFromCompany, orgListsFromFetch]);
+
+  const localCategories = useMemo(() => {
+    if (localCategoriesFromCompany) return localCategoriesFromCompany;
+    return orgListsFromFetch?.categories ?? [];
+  }, [localCategoriesFromCompany, orgListsFromFetch]);
 
   if (assignedAudit) {
     return (
@@ -1975,7 +2021,7 @@ function AssignAuditModal({
 }
 
 
-function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSuccess, showError, userRole, isAuditor, canManage }) {
+function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSuccess, showError, isAuditor, canManage }) {
   const safeAudit = audit || {};
   const auditIdForSession = safeAudit.id || audit?.id || '';
   const [activeTab, setActiveTab] = useState(() => {
@@ -2054,6 +2100,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     };
   }, []);
 
+  // Reset draft state only when the opened audit changes — not on every Firestore field update.
   useEffect(() => {
     if (!safeAudit.id) return;
     const cr = Array.isArray(safeAudit.checklistReview) ? safeAudit.checklistReview : [];
@@ -2075,7 +2122,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     setAuditRating(0);
     setSentBackTo(null);
     setClosedAuditData(null);
-  }, [safeAudit.id]);
+  }, [safeAudit.id]); // eslint-disable-line react-hooks/exhaustive-deps -- reset draft only when audit id changes
 
   useEffect(() => {
     if (!safeAudit.id) return;
@@ -5793,7 +5840,6 @@ export default function Audit() {
             onClose={() => setSelectedAudit(null)}
             showSuccess={showSuccess}
             showError={showError}
-            userRole={userRole}
             isAuditor={isAuditor}
             canManage={canManage}
           />
