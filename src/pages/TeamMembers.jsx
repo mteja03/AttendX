@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   collection,
@@ -50,6 +50,100 @@ const ROLE_INFO_CARDS = [
 
 const TEAM_MEMBER_ROLES = ['hrmanager', 'manager', 'itmanager', 'auditmanager', 'auditor'];
 
+const DEFAULT_PERMISSIONS = {
+  hrmanager: {
+    employees: true,
+    leave: true,
+    calendar: true,
+    documents: true,
+    policies: true,
+    assets: true,
+    reports: true,
+    audit: false,
+    team: true,
+    orgchart: true,
+    settings: true,
+    onboarding: true,
+    offboarding: true,
+  },
+  manager: {
+    employees: false,
+    leave: true,
+    calendar: true,
+    documents: false,
+    policies: false,
+    assets: false,
+    reports: true,
+    audit: false,
+    team: false,
+    orgchart: true,
+    settings: false,
+    onboarding: false,
+    offboarding: false,
+  },
+  itmanager: {
+    employees: false,
+    leave: false,
+    calendar: true,
+    documents: false,
+    policies: false,
+    assets: true,
+    reports: true,
+    audit: false,
+    team: false,
+    orgchart: false,
+    settings: false,
+    onboarding: false,
+    offboarding: false,
+  },
+  auditmanager: {
+    employees: false,
+    leave: false,
+    calendar: false,
+    documents: false,
+    policies: false,
+    assets: false,
+    reports: false,
+    audit: true,
+    team: false,
+    orgchart: false,
+    settings: false,
+    onboarding: false,
+    offboarding: false,
+  },
+  auditor: {
+    employees: false,
+    leave: false,
+    calendar: false,
+    documents: false,
+    policies: false,
+    assets: false,
+    reports: false,
+    audit: true,
+    team: false,
+    orgchart: false,
+    settings: false,
+    onboarding: false,
+    offboarding: false,
+  },
+};
+
+const ALL_PERMISSIONS = [
+  { key: 'employees', label: 'Employees', icon: '🧑‍💼' },
+  { key: 'leave', label: 'Leave', icon: '🏖️' },
+  { key: 'calendar', label: 'Calendar', icon: '📅' },
+  { key: 'documents', label: 'Documents', icon: '📄' },
+  { key: 'policies', label: 'Library', icon: '📚' },
+  { key: 'assets', label: 'Assets', icon: '💻' },
+  { key: 'reports', label: 'Reports', icon: '📈' },
+  { key: 'audit', label: 'Audit', icon: '🔍' },
+  { key: 'team', label: 'Team Members', icon: '👥' },
+  { key: 'orgchart', label: 'Org Chart', icon: '🌐' },
+  { key: 'settings', label: 'Settings', icon: '⚙️' },
+  { key: 'onboarding', label: 'Onboarding', icon: '🎉' },
+  { key: 'offboarding', label: 'Offboarding', icon: '📤' },
+];
+
 function availableRolesToAdd(viewerRole) {
   if (viewerRole === 'admin') return TEAM_MEMBER_ROLES;
   if (viewerRole === 'hrmanager') return TEAM_MEMBER_ROLES.filter((r) => r !== 'hrmanager');
@@ -90,6 +184,12 @@ export default function TeamMembers() {
   const [changeRoleFor, setChangeRoleFor] = useState(null);
   const [newRoleValue, setNewRoleValue] = useState('');
   const [changeRoleAuditScope, setChangeRoleAuditScope] = useState('both');
+  const [menuOpenForId, setMenuOpenForId] = useState(null);
+  const [showPermissions, setShowPermissions] = useState(false);
+  const [permissionsTarget, setPermissionsTarget] = useState(null);
+  const [permissionsForm, setPermissionsForm] = useState({});
+  const [savingPerms, setSavingPerms] = useState(false);
+  const actionsMenuRef = useRef(null);
 
   const canAddManagers = userRole === 'admin' || userRole === 'hrmanager';
   const roleOptions = availableRolesToAdd(userRole);
@@ -126,6 +226,17 @@ export default function TeamMembers() {
     });
     return () => cancelAnimationFrame(id);
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!menuOpenForId) return;
+    const close = (e) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target)) {
+        setMenuOpenForId(null);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [menuOpenForId]);
 
   const employeesWithoutAccess = useMemo(() => {
     return employees.filter((emp) => {
@@ -279,6 +390,31 @@ export default function TeamMembers() {
     }
   };
 
+  const handleSavePermissions = async () => {
+    if (!permissionsTarget) return;
+    try {
+      setSavingPerms(true);
+      const tmId = await findTeamMemberDocId(permissionsTarget.email);
+      if (tmId) {
+        await updateDoc(doc(db, 'companies', companyId, 'teamMembers', tmId), {
+          permissions: permissionsForm,
+          updatedAt: new Date(),
+        });
+      }
+      await updateDoc(doc(db, 'users', permissionsTarget.id), { permissions: permissionsForm }).catch(() => {});
+      success(
+        `Permissions updated for ${permissionsTarget.name || permissionsTarget.email || 'member'}`,
+      );
+      setShowPermissions(false);
+      setPermissionsTarget(null);
+      await fetchData();
+    } catch (e) {
+      showError('Failed: ' + (e?.message || String(e)));
+    } finally {
+      setSavingPerms(false);
+    }
+  };
+
   const showActions = (m) => {
     if (userRole === 'admin') return m.role !== 'admin';
     if (userRole === 'hrmanager') return canHrActOnTarget(userRole, m.role);
@@ -378,44 +514,93 @@ export default function TeamMembers() {
                     <td className="px-4 py-3 text-slate-600">{formatLastLogin(m.lastLogin)}</td>
                     <td className="px-4 py-3">
                       {showActions(m) ? (
-                        <div className="flex flex-wrap gap-2">
-                          {active ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDeactivateMember(m)}
-                              className="text-amber-600 text-xs font-medium hover:underline"
-                            >
-                              Deactivate
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleActivateMember(m)}
-                              className="text-green-600 text-xs font-medium hover:underline"
-                            >
-                              Activate
-                            </button>
-                          )}
-                          {userRole === 'admin' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setChangeRoleFor(m);
-                                setNewRoleValue(m.role);
-                                setChangeRoleAuditScope(m.auditScope || 'both');
-                              }}
-                              className="text-[#1B6B6B] text-xs font-medium hover:underline"
-                            >
-                              Change Role
-                            </button>
-                          )}
+                        <div
+                          className="relative inline-block"
+                          ref={(node) => {
+                            if (menuOpenForId === m.id) {
+                              actionsMenuRef.current = node;
+                            } else if (actionsMenuRef.current === node) {
+                              actionsMenuRef.current = null;
+                            }
+                          }}
+                        >
                           <button
                             type="button"
-                            onClick={() => setRemoveConfirm(m)}
-                            className="text-red-600 text-xs font-medium hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMenuOpenForId((id) => (id === m.id ? null : m.id));
+                            }}
+                            className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-lg leading-none"
+                            aria-label="More actions"
                           >
-                            Remove
+                            ⋯
                           </button>
+                          {menuOpenForId === m.id && (
+                            <div className="absolute right-0 top-full mt-1 z-50 min-w-[11rem] rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                              {active ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuOpenForId(null);
+                                    handleDeactivateMember(m);
+                                  }}
+                                  className="w-full text-left px-4 py-2.5 text-sm text-amber-700 hover:bg-gray-50 flex items-center gap-2"
+                                >
+                                  Deactivate
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuOpenForId(null);
+                                    handleActivateMember(m);
+                                  }}
+                                  className="w-full text-left px-4 py-2.5 text-sm text-green-700 hover:bg-gray-50 flex items-center gap-2"
+                                >
+                                  Activate
+                                </button>
+                              )}
+                              {userRole === 'admin' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuOpenForId(null);
+                                    setChangeRoleFor(m);
+                                    setNewRoleValue(m.role);
+                                    setChangeRoleAuditScope(m.auditScope || 'both');
+                                  }}
+                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                >
+                                  ✏️ Edit
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPermissionsTarget(m);
+                                  setPermissionsForm({
+                                    ...(DEFAULT_PERMISSIONS[m.role] || {}),
+                                    ...(m.permissions || {}),
+                                  });
+                                  setShowPermissions(true);
+                                  setMenuOpenForId(null);
+                                }}
+                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                🔑 Permissions
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuOpenForId(null);
+                                  setRemoveConfirm(m);
+                                }}
+                                className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span className="text-xs text-gray-400">—</span>
@@ -692,6 +877,167 @@ export default function TeamMembers() {
               </button>
               <button type="button" onClick={handleChangeRole} className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2">
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPermissions && permissionsTarget && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-100 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white font-bold text-base flex-shrink-0">
+                    {(permissionsTarget.name || permissionsTarget.email)?.charAt(0)?.toUpperCase()}
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-800">Permissions</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {permissionsTarget.name || permissionsTarget.email}
+                      {' · '}
+                      {ROLE_LABELS[permissionsTarget.role] || permissionsTarget.role}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPermissions(false);
+                    setPermissionsTarget(null);
+                  }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
+                >
+                  ✕
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setPermissionsForm({ ...(DEFAULT_PERMISSIONS[permissionsTarget.role] || {}) })
+                }
+                className="mt-3 text-xs text-[#1B6B6B] hover:underline"
+              >
+                Reset to role defaults
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <p className="text-xs text-gray-400 mb-4">Toggle which sections this user can access in AttendX.</p>
+              <div className="space-y-2">
+                {ALL_PERMISSIONS.map((perm) => {
+                  const isOn = permissionsForm[perm.key] !== false;
+                  return (
+                    <div
+                      key={perm.key}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() =>
+                        setPermissionsForm((prev) => ({
+                          ...prev,
+                          [perm.key]: !isOn,
+                        }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setPermissionsForm((prev) => ({
+                            ...prev,
+                            [perm.key]: !isOn,
+                          }));
+                        }
+                      }}
+                      className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
+                        isOn
+                          ? 'bg-[#E8F5F5] border-[#4ECDC4]'
+                          : 'bg-white border-gray-100 hover:border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg w-7 text-center">{perm.icon}</span>
+                        <span
+                          className={`text-sm font-medium ${isOn ? 'text-[#1B6B6B]' : 'text-gray-500'}`}
+                        >
+                          {perm.label}
+                        </span>
+                      </div>
+                      <div
+                        className={`w-11 h-6 rounded-full transition-colors flex-shrink-0 relative ${
+                          isOn ? 'bg-[#1B6B6B]' : 'bg-gray-200'
+                        }`}
+                      >
+                        <div
+                          className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                            isOn ? 'translate-x-5' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-xs text-gray-400 mb-2 font-medium">Quick presets</p>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const all = {};
+                      ALL_PERMISSIONS.forEach((p) => {
+                        all[p.key] = true;
+                      });
+                      setPermissionsForm(all);
+                    }}
+                    className="px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-medium hover:bg-green-100"
+                  >
+                    ✅ Enable All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const none = {};
+                      ALL_PERMISSIONS.forEach((p) => {
+                        none[p.key] = false;
+                      });
+                      setPermissionsForm(none);
+                    }}
+                    className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-medium hover:bg-red-100"
+                  >
+                    ❌ Disable All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPermissionsForm({ ...(DEFAULT_PERMISSIONS[permissionsTarget.role] || {}) })
+                    }
+                    className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-medium hover:bg-blue-100"
+                  >
+                    🔄 Role Defaults
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-100 flex-shrink-0 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPermissions(false);
+                  setPermissionsTarget(null);
+                }}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePermissions}
+                disabled={savingPerms}
+                className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-50"
+              >
+                {savingPerms ? 'Saving...' : '💾 Save Permissions'}
               </button>
             </div>
           </div>
