@@ -50,6 +50,14 @@ function statusMeta(status) {
   return AUDIT_STATUSES.find((s) => s.key === e) || { badge: 'bg-gray-100 text-gray-600', icon: '•' };
 }
 
+/** Normalise template/audit category for Firestore and scope filtering (case-insensitive). */
+function normaliseAuditCategory(cat) {
+  if (!cat) return 'Internal';
+  const lower = String(cat).toLowerCase().trim();
+  if (lower === 'external') return 'External';
+  return 'Internal';
+}
+
 function formatAuditDocSize(bytes) {
   if (bytes == null || Number.isNaN(Number(bytes))) return '—';
   const n = Number(bytes);
@@ -1006,8 +1014,10 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
   const visibleTemplates = useMemo(() => {
     return auditTypes.filter((t) => {
       if (!isAuditManager) return true;
-      if (auditScope === 'internal') return t.auditCategory === 'Internal';
-      if (auditScope === 'external') return t.auditCategory === 'External';
+      if (!auditScope || auditScope === 'both') return true;
+      const cat = (t.auditCategory || 'internal').toLowerCase().trim();
+      if (auditScope === 'internal') return cat === 'internal';
+      if (auditScope === 'external') return cat === 'external';
       return true;
     });
   }, [auditTypes, isAuditManager, auditScope]);
@@ -1094,7 +1104,7 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
     try {
       setSaving(true);
       const data = {
-        auditCategory: form.auditCategory,
+        auditCategory: normaliseAuditCategory(form.auditCategory),
         name: form.name.trim(),
         description: form.description.trim(),
         color: form.color,
@@ -4810,12 +4820,13 @@ function AuditList({
         ...m,
         email: (m.email || '').toLowerCase(),
       }));
+      const resolvedCategory = normaliseAuditCategory(type?.auditCategory || assignForm.category);
       await addDoc(collection(db, 'companies', companyId, 'audits'), {
         auditRefId: refId,
         auditTypeId: assignForm.auditTypeId,
         auditTypeName: type?.name || '',
         auditTypeColor: type?.color || '#8B5CF6',
-        auditCategory: type?.auditCategory || 'Internal',
+        auditCategory: resolvedCategory,
         riskLevel: type?.riskLevel || 'Medium',
         category: assignForm.category,
         location: assignForm.location,
@@ -4843,7 +4854,7 @@ function AuditList({
         auditorName: assignForm.auditorName,
         auditorPhone,
         typeName: type?.name || '',
-        category: type?.auditCategory || 'Internal',
+        category: resolvedCategory,
         location: assignForm.location,
         branch: assignForm.branch,
         department: assignForm.department,
@@ -5785,7 +5796,7 @@ function AuditReports({ audits }) {
 
 export default function Audit() {
   const { companyId: routeCompanyId } = useParams();
-  const { companyId: authCompanyId, currentUser, userRole, auditScope } = useAuth();
+  const { companyId: authCompanyId, currentUser, userRole, auditScope, isCompanyAdmin } = useAuth();
   const companyId = routeCompanyId || authCompanyId;
   const { company } = useCompany();
   const [companyData, setCompanyData] = useState(null);
@@ -5836,9 +5847,14 @@ export default function Audit() {
     if (isAdmin || isHRManager) return audits;
     if (isAuditManager) {
       if (!auditScope || auditScope === 'both') return audits;
-      if (auditScope === 'internal') return audits.filter((a) => a.auditCategory === 'Internal');
-      if (auditScope === 'external') return audits.filter((a) => a.auditCategory === 'External');
-      return audits;
+      const managerEmail = (currentUser?.email || '').toLowerCase();
+      return audits.filter((a) => {
+        if (managerEmail && (a.createdBy || '').toLowerCase() === managerEmail) return true;
+        const category = (a.auditCategory || 'internal').toLowerCase().trim();
+        if (auditScope === 'internal') return category === 'internal';
+        if (auditScope === 'external') return category === 'external';
+        return true;
+      });
     }
     if (isAuditor) {
       const email = currentUser?.email?.toLowerCase();
@@ -5848,8 +5864,9 @@ export default function Audit() {
           (a.teamMembers || []).some((m) => (m.email || '').toLowerCase() === email),
       );
     }
+    if (isCompanyAdmin) return audits;
     return audits;
-  }, [audits, isAdmin, isHRManager, isAuditManager, isAuditor, auditScope, currentUser]);
+  }, [audits, isAdmin, isHRManager, isAuditManager, isAuditor, isCompanyAdmin, auditScope, currentUser]);
 
   const mainTabs = useMemo(() => {
     const base = [
