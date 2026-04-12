@@ -66,6 +66,34 @@ function fileDocIconType(type) {
   return '📎';
 }
 
+function stableStringify(value) {
+  try {
+    return JSON.stringify(value, (_, v) => {
+      if (v && typeof v.toDate === 'function') {
+        try {
+          return v.toDate().toISOString();
+        } catch {
+          return v;
+        }
+      }
+      return v;
+    });
+  } catch {
+    return String(value);
+  }
+}
+
+function auditDocViewLabel(type) {
+  const t = String(type || '').toLowerCase();
+  if (t.includes('pdf')) return '👁️ View';
+  if (t.includes('image')) return '🖼️ View';
+  return '⬇️ Open';
+}
+
+function isAuditDocImageType(type) {
+  return String(type || '').toLowerCase().includes('image');
+}
+
 function AuditDashboard({ audits, auditTypes }) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -1949,8 +1977,23 @@ function AssignAuditModal({
 
 function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSuccess, showError, userRole, isAuditor, canManage }) {
   const safeAudit = audit || {};
-  const [activeTab, setActiveTab] = useState('checklist');
-  const [auditorStep, setAuditorStep] = useState('checklist'); // checklist | findings
+  const auditIdForSession = safeAudit.id || audit?.id || '';
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof sessionStorage === 'undefined' || !auditIdForSession) return 'checklist';
+    try {
+      return sessionStorage.getItem(`auditTab_${auditIdForSession}`) || 'checklist';
+    } catch {
+      return 'checklist';
+    }
+  });
+  const [auditorStep, setAuditorStep] = useState(() => {
+    if (typeof sessionStorage === 'undefined' || !auditIdForSession) return 'checklist';
+    try {
+      return sessionStorage.getItem(`auditorStep_${auditIdForSession}`) || 'checklist';
+    } catch {
+      return 'checklist';
+    }
+  });
   const [checklistReview, setChecklistReview] = useState(() => safeAudit.checklistReview || []);
   const [findings, setFindings] = useState(() => safeAudit.findings || []);
   const [adminNotes, setAdminNotes] = useState(() => safeAudit.adminNotes || '');
@@ -1980,10 +2023,24 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const [showOwnerDrop, setShowOwnerDrop] = useState(false);
   const ownerRef = useRef(null);
   const isMountedRef = useRef(true);
+  const lastSavedRef = useRef(null);
   const [auditDocs, setAuditDocs] = useState(() => (Array.isArray(safeAudit.auditDocuments) ? safeAudit.auditDocuments : []));
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
+
+  const handleDetailClose = useCallback(() => {
+    const id = safeAudit?.id;
+    if (id && typeof sessionStorage !== 'undefined') {
+      try {
+        sessionStorage.removeItem(`auditTab_${id}`);
+        sessionStorage.removeItem(`auditorStep_${id}`);
+      } catch {
+        /* ignore */
+      }
+    }
+    onClose();
+  }, [safeAudit?.id, onClose]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -1998,19 +2055,45 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   }, []);
 
   useEffect(() => {
-    setChecklistReview(Array.isArray(safeAudit.checklistReview) ? safeAudit.checklistReview : []);
-    setFindings(Array.isArray(safeAudit.findings) ? safeAudit.findings : []);
+    if (!safeAudit.id) return;
+    const cr = Array.isArray(safeAudit.checklistReview) ? safeAudit.checklistReview : [];
+    const fd = Array.isArray(safeAudit.findings) ? safeAudit.findings : [];
+    const ad = Array.isArray(safeAudit.auditDocuments) ? safeAudit.auditDocuments : [];
+    setChecklistReview(cr);
+    setFindings(fd);
     setAdminNotes(safeAudit.adminNotes || '');
-    setAuditDocs(Array.isArray(safeAudit.auditDocuments) ? safeAudit.auditDocuments : []);
-    setActiveTab('checklist');
-    setAuditorStep('checklist');
+    setAuditDocs(ad);
+    lastSavedRef.current = {
+      checklistReview: cr,
+      findings: fd,
+      adminNotes: safeAudit.adminNotes || '',
+      auditDocuments: ad,
+    };
     setShowSubmitConfirm(false);
     setShowCloseModal(false);
     setCloseFeedback('');
     setAuditRating(0);
     setSentBackTo(null);
     setClosedAuditData(null);
-  }, [safeAudit.id, safeAudit.adminNotes, safeAudit.checklistReview, safeAudit.findings, safeAudit.auditDocuments]);
+  }, [safeAudit.id]);
+
+  useEffect(() => {
+    if (!safeAudit.id) return;
+    try {
+      sessionStorage.setItem(`auditTab_${safeAudit.id}`, activeTab);
+    } catch {
+      /* ignore */
+    }
+  }, [activeTab, safeAudit.id]);
+
+  useEffect(() => {
+    if (!safeAudit.id) return;
+    try {
+      sessionStorage.setItem(`auditorStep_${safeAudit.id}`, auditorStep);
+    } catch {
+      /* ignore */
+    }
+  }, [auditorStep, safeAudit.id]);
 
   const st = effStatus(safeAudit.status);
   const isClosed = safeAudit.status === 'Closed';
@@ -2067,17 +2150,27 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
         ];
 
   const autoSave = useCallback(
-    async (newChecklistReview, newFindings, newAdminNotes) => {
+    (newChecklistReview, newFindings, newAdminNotes, newAuditDocs) => {
       if (isClosed) return;
+      const docs = newAuditDocs !== undefined && newAuditDocs !== null ? newAuditDocs : auditDocs;
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(async () => {
         if (!isMountedRef.current) return;
+        const prev = lastSavedRef.current;
+        if (!prev) return;
+        const changed =
+          stableStringify(newChecklistReview) !== stableStringify(prev.checklistReview) ||
+          stableStringify(newFindings) !== stableStringify(prev.findings) ||
+          (newAdminNotes || '') !== (prev.adminNotes || '') ||
+          stableStringify(docs || []) !== stableStringify(prev.auditDocuments || []);
+        if (!changed) return;
         try {
           if (!isMountedRef.current) return;
           setAutoSaving(true);
           const payload = {
             findings: newFindings,
             adminNotes: newAdminNotes,
+            auditDocuments: docs || [],
             updatedAt: new Date(),
             updatedBy: currentUser?.email || '',
           };
@@ -2086,15 +2179,21 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
           }
           await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), payload);
           if (!isMountedRef.current) return;
+          lastSavedRef.current = {
+            checklistReview: newChecklistReview,
+            findings: newFindings,
+            adminNotes: newAdminNotes,
+            auditDocuments: docs || [],
+          };
           setLastSaved(new Date());
         } catch (e) {
           console.error('Auto-save failed:', e);
         } finally {
           if (isMountedRef.current) setAutoSaving(false);
         }
-      }, 1000);
+      }, 1500);
     },
-    [audit.id, companyId, currentUser, isClosed, checklistEditable, isAuditor],
+    [audit.id, companyId, currentUser, isClosed, checklistEditable, isAuditor, auditDocs],
   );
 
   useEffect(() => {
@@ -2114,14 +2213,14 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
         updatedBy: currentUser?.email || '',
       }).catch(() => {});
     }
-    autoSave(updated, findingsData, adminNotes);
+    autoSave(updated, findingsData, adminNotes, auditDocs);
   };
 
   const updateChecklistNote = (id, note) => {
     if (!checklistEditable) return;
     const updated = checklistReview.map((i) => (i.id === id ? { ...i, note } : i));
     setChecklistReview(updated);
-    autoSave(updated, findingsData, adminNotes);
+    autoSave(updated, findingsData, adminNotes, auditDocs);
   };
 
   const addFinding = () => {
@@ -2148,25 +2247,30 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     };
     const newFindings = [...findingsData, finding];
     setFindings(newFindings);
-    autoSave(checklistReview, newFindings, adminNotes);
+    autoSave(checklistReview, newFindings, adminNotes, auditDocs);
     setNewFinding({ description: '', severity: 'Medium', ownerName: '', ownerId: '', ownerEmail: '', targetDate: '' });
     setOwnerSearch('');
     setShowAddFinding(false);
   };
 
-  const updateFindingStatus = (id, newStatus) => {
-    const updated = findingsData.map((f) =>
-        f.id === id
-          ? {
-              ...f,
-              status: newStatus,
-              ...(newStatus === 'Resolved' && { resolvedAt: new Date().toISOString() }),
-            }
-          : f,
-      );
-    setFindings(updated);
-    autoSave(checklistReview, updated, adminNotes);
-  };
+  const updateFindingStatus = useCallback(
+    (id, newStatus) => {
+      setFindings((prev) => {
+        const updated = prev.map((f) =>
+          f.id === id
+            ? {
+                ...f,
+                status: newStatus,
+                ...(newStatus === 'Resolved' && { resolvedAt: new Date().toISOString() }),
+              }
+            : f,
+        );
+        autoSave(checklistReview, updated, adminNotes, auditDocs);
+        return updated;
+      });
+    },
+    [autoSave, checklistReview, adminNotes, auditDocs],
+  );
 
   const deleteFinding = (id) => {
     const finding = (findingsData || []).find((f) => f.id === id);
@@ -2184,7 +2288,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     if (!canDeleteFinding) return;
     const updated = findingsData.filter((f) => f.id !== id);
     setFindings(updated);
-    autoSave(checklistReview, updated, adminNotes);
+    autoSave(checklistReview, updated, adminNotes, auditDocs);
   };
 
   const canAddFinding = (isAuditor && checklistEditable) || (canManage && !isClosed);
@@ -2214,7 +2318,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
 
       showSuccess('Submitted!');
       setShowSubmitConfirm(false);
-      onClose();
+      handleDetailClose();
     } catch (e) {
       showError('Submit failed: ' + e.message);
     } finally {
@@ -2232,7 +2336,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
         updatedAt: new Date(),
       });
       showSuccess('Audit under review');
-      onClose();
+      handleDetailClose();
     } catch {
       showError('Failed to update status');
     } finally {
@@ -2312,14 +2416,14 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     if (!canManage || isAuditorMode) return;
     const updated = checklistReview.map((i) => (i.id === id ? { ...i, managerApproval: approval } : i));
     setChecklistReview(updated);
-    autoSave(updated, findingsData, adminNotes);
+    autoSave(updated, findingsData, adminNotes, auditDocs);
   };
 
   const updateManagerNote = (id, note) => {
     if (!canManage || isAuditorMode) return;
     const updated = checklistReview.map((i) => (i.id === id ? { ...i, managerNote: note } : i));
     setChecklistReview(updated);
-    autoSave(updated, findingsData, adminNotes);
+    autoSave(updated, findingsData, adminNotes, auditDocs);
   };
 
   const sections = [...new Set(checklistItems.map((i) => i.section))];
@@ -2393,6 +2497,12 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       const updatedDocs = [...auditDocs, docRecord];
       setAuditDocs(updatedDocs);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updatedDocs });
+      if (lastSavedRef.current) {
+        lastSavedRef.current = {
+          ...lastSavedRef.current,
+          auditDocuments: updatedDocs,
+        };
+      }
       showSuccess(`${file.name} uploaded!`);
     } catch (e) {
       showError('Upload failed: ' + (e?.message || String(e)));
@@ -2411,6 +2521,12 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
       const updatedDocs = auditDocs.filter((d) => d.id !== docRecord.id);
       setAuditDocs(updatedDocs);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updatedDocs });
+      if (lastSavedRef.current) {
+        lastSavedRef.current = {
+          ...lastSavedRef.current,
+          auditDocuments: updatedDocs,
+        };
+      }
       showSuccess('Document deleted');
     } catch (e) {
       showError('Delete failed: ' + (e?.message || String(e)));
@@ -2565,7 +2681,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   <span className="text-xs text-gray-400">✓ Saved</span>
                 )}
               </div>
-              <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 flex-shrink-0">
+              <button type="button" onClick={handleDetailClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 flex-shrink-0">
                 ✕
               </button>
             </div>
@@ -3151,55 +3267,84 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                       {auditDocs.map((docRecord) => (
                         <div
                           key={docRecord.id}
-                          className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-100 rounded-xl hover:border-gray-200 transition-all"
+                          className="p-3 bg-gray-50 border border-gray-100 rounded-xl hover:border-gray-200 transition-all"
                         >
-                          <div className="w-9 h-9 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-lg flex-shrink-0">
-                            {fileDocIconType(docRecord.type)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">{docRecord.name}</p>
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                              <span className="text-xs text-gray-400">{formatAuditDocSize(docRecord.size)}</span>
-                              <span className="text-xs text-gray-300">·</span>
-                              <span className="text-xs text-gray-400">{docRecord.uploadedByName}</span>
-                              <span className="text-xs text-gray-300">·</span>
-                              <span
-                                className={`text-xs px-1.5 py-0.5 rounded-full ${
-                                  docRecord.uploadedByRole === 'auditor' ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'
-                                }`}
-                              >
-                                {docRecord.uploadedByRole === 'auditor' ? '👷 Auditor' : '🧑‍💼 Manager'}
-                              </span>
-                              <span className="text-xs text-gray-300">·</span>
-                              <span className="text-xs text-gray-400">
-                                {docRecord.uploadedAt ? new Date(docRecord.uploadedAt).toLocaleDateString('en-GB') : '—'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <a
-                              href={docRecord.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E8F5F5] text-[#1B6B6B] transition-colors"
-                              title="Download / View"
-                            >
-                              ⬇️
-                            </a>
-                            {canDeleteAuditorDoc(docRecord) && (
+                          {isAuditDocImageType(docRecord.type) && docRecord.url && (
+                            <div className="mb-2">
                               <button
                                 type="button"
+                                className="w-full p-0 border-0 bg-transparent rounded-xl overflow-hidden cursor-zoom-in"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDocDelete(docRecord);
+                                  window.open(docRecord.url, '_blank', 'noopener,noreferrer');
                                 }}
-                                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
-                                title="Delete"
                               >
-                                🗑️
+                                <img
+                                  src={docRecord.url}
+                                  alt={docRecord.name}
+                                  className="w-full max-h-32 object-cover rounded-xl border border-gray-100"
+                                />
                               </button>
-                            )}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-lg flex-shrink-0">
+                              {fileDocIconType(docRecord.type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate">{docRecord.name}</p>
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                <span className="text-xs text-gray-400">{formatAuditDocSize(docRecord.size)}</span>
+                                <span className="text-xs text-gray-300">·</span>
+                                <span className="text-xs text-gray-400">{docRecord.uploadedByName}</span>
+                                <span className="text-xs text-gray-300">·</span>
+                                <span
+                                  className={`text-xs px-1.5 py-0.5 rounded-full ${
+                                    docRecord.uploadedByRole === 'auditor' ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'
+                                  }`}
+                                >
+                                  {docRecord.uploadedByRole === 'auditor' ? '👷 Auditor' : '🧑‍💼 Manager'}
+                                </span>
+                                <span className="text-xs text-gray-300">·</span>
+                                <span className="text-xs text-gray-400">
+                                  {docRecord.uploadedAt ? new Date(docRecord.uploadedAt).toLocaleDateString('en-GB') : '—'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <a
+                                href={docRecord.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#E8F5F5] text-[#1B6B6B] text-xs font-medium hover:bg-[#1B6B6B] hover:text-white transition-colors"
+                                title="View document"
+                              >
+                                {auditDocViewLabel(docRecord.type)}
+                              </a>
+                              <a
+                                href={docRecord.url}
+                                download={docRecord.name}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 text-[#1B6B6B] text-xs"
+                                title="Download"
+                              >
+                                ⬇️
+                              </a>
+                              {canDeleteAuditorDoc(docRecord) && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDocDelete(docRecord);
+                                  }}
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
+                                  title="Delete"
+                                >
+                                  🗑️
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -3224,37 +3369,65 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   ) : (
                     <div className="space-y-2">
                       {auditDocs.map((docRecord) => (
-                        <div
-                          key={docRecord.id}
-                          className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-100 rounded-xl"
-                        >
-                          <div className="w-9 h-9 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-lg flex-shrink-0">
-                            {fileDocIconType(docRecord.type)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">{docRecord.name}</p>
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                              <span className="text-xs text-gray-400">{formatAuditDocSize(docRecord.size)}</span>
-                              <span className="text-xs text-gray-300">·</span>
-                              <span className="text-xs text-gray-400">{docRecord.uploadedByName}</span>
-                              <span className="text-xs text-gray-300">·</span>
-                              <span className="text-xs bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full">👷 Auditor</span>
-                              <span className="text-xs text-gray-300">·</span>
-                              <span className="text-xs text-gray-400">
-                                {docRecord.uploadedAt ? new Date(docRecord.uploadedAt).toLocaleDateString('en-GB') : '—'}
-                              </span>
+                        <div key={docRecord.id} className="p-3 bg-gray-50 border border-gray-100 rounded-xl">
+                          {isAuditDocImageType(docRecord.type) && docRecord.url && (
+                            <div className="mb-2">
+                              <button
+                                type="button"
+                                className="w-full p-0 border-0 bg-transparent rounded-xl overflow-hidden cursor-zoom-in"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(docRecord.url, '_blank', 'noopener,noreferrer');
+                                }}
+                              >
+                                <img
+                                  src={docRecord.url}
+                                  alt={docRecord.name}
+                                  className="w-full max-h-32 object-cover rounded-xl border border-gray-100"
+                                />
+                              </button>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-lg flex-shrink-0">
+                              {fileDocIconType(docRecord.type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate">{docRecord.name}</p>
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                <span className="text-xs text-gray-400">{formatAuditDocSize(docRecord.size)}</span>
+                                <span className="text-xs text-gray-300">·</span>
+                                <span className="text-xs text-gray-400">{docRecord.uploadedByName}</span>
+                                <span className="text-xs text-gray-300">·</span>
+                                <span className="text-xs bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full">👷 Auditor</span>
+                                <span className="text-xs text-gray-300">·</span>
+                                <span className="text-xs text-gray-400">
+                                  {docRecord.uploadedAt ? new Date(docRecord.uploadedAt).toLocaleDateString('en-GB') : '—'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <a
+                                href={docRecord.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#E8F5F5] text-[#1B6B6B] text-xs font-medium hover:bg-[#1B6B6B] hover:text-white transition-colors"
+                                title="View document"
+                              >
+                                {auditDocViewLabel(docRecord.type)}
+                              </a>
+                              <a
+                                href={docRecord.url}
+                                download={docRecord.name}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 text-[#1B6B6B] text-xs"
+                                title="Download"
+                              >
+                                ⬇️
+                              </a>
                             </div>
                           </div>
-                          <a
-                            href={docRecord.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E8F5F5] text-[#1B6B6B] transition-colors flex-shrink-0"
-                            title="Download / View"
-                          >
-                            ⬇️
-                          </a>
                         </div>
                       ))}
                     </div>
@@ -3360,22 +3533,56 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   </p>
                   <div className="space-y-2">
                     {auditDocs.map((docRecord) => (
-                      <a
-                        key={docRecord.id}
-                        href={docRecord.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl hover:bg-[#E8F5F5] transition-colors group"
-                      >
-                        <span className="text-xl">{fileDocIconType(docRecord.type)}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-[#1B6B6B] group-hover:underline truncate">{docRecord.name}</p>
-                          <p className="text-xs text-gray-400">
-                            {formatAuditDocSize(docRecord.size)} · {docRecord.uploadedByName}
-                          </p>
+                      <div key={docRecord.id} className="p-2.5 bg-gray-50 rounded-xl hover:bg-[#E8F5F5] transition-colors group">
+                        {isAuditDocImageType(docRecord.type) && docRecord.url && (
+                          <div className="mb-2">
+                            <button
+                              type="button"
+                              className="w-full p-0 border-0 bg-transparent rounded-xl overflow-hidden cursor-zoom-in"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(docRecord.url, '_blank', 'noopener,noreferrer');
+                              }}
+                            >
+                              <img
+                                src={docRecord.url}
+                                alt={docRecord.name}
+                                className="w-full max-h-32 object-cover rounded-xl border border-gray-100"
+                              />
+                            </button>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-3">
+                          <span className="text-xl">{fileDocIconType(docRecord.type)}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-[#1B6B6B] group-hover:underline truncate">{docRecord.name}</p>
+                            <p className="text-xs text-gray-400">
+                              {formatAuditDocSize(docRecord.size)} · {docRecord.uploadedByName}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <a
+                              href={docRecord.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#E8F5F5] text-[#1B6B6B] text-xs font-medium hover:bg-[#1B6B6B] hover:text-white transition-colors"
+                              title="View document"
+                            >
+                              {auditDocViewLabel(docRecord.type)}
+                            </a>
+                            <a
+                              href={docRecord.url}
+                              download={docRecord.name}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 text-[#1B6B6B] text-xs"
+                              title="Download"
+                            >
+                              ⬇️
+                            </a>
+                          </div>
                         </div>
-                        <span className="text-[#1B6B6B] opacity-0 group-hover:opacity-100">⬇️</span>
-                      </a>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -3421,7 +3628,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                     disabled={isClosed}
                     onChange={(e) => {
                       setAdminNotes(e.target.value);
-                      autoSave(checklistReview, findingsData, e.target.value);
+                      autoSave(checklistReview, findingsData, e.target.value, auditDocs);
                     }}
                     rows={3}
                     placeholder="Internal notes about this audit..."
@@ -3442,7 +3649,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 </p>
               </div>
               <div className="flex gap-3">
-                <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
+                <button type="button" onClick={handleDetailClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">
                   Close
                 </button>
                 <button type="button" onClick={handlePrint} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858]">
@@ -3456,7 +3663,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 <div className="flex gap-3">
                   {auditorStep === 'checklist' ? (
                     <>
-                      <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
+                      <button type="button" onClick={handleDetailClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">
                         Close
                       </button>
                       <button
@@ -3496,7 +3703,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
               )}
               {st === 'Submitted' && canManage && (
                 <div className="flex gap-3 flex-wrap">
-                  <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                  <button type="button" onClick={handleDetailClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
                     Close
                   </button>
                   <button
@@ -3523,7 +3730,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                 <div className="flex gap-3">
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={handleDetailClose}
                     className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
                   >
                     Close
@@ -3581,7 +3788,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
               )}
               {!(st === 'Submitted' && canManage) && !(st === 'Under Review' && canManage) && !isAuditorMode && (
                 <div className="flex gap-3">
-                  <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                  <button type="button" onClick={handleDetailClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
                     Close
                   </button>
                 </div>
@@ -3680,7 +3887,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                     setClosedAuditData(null);
                     setAuditRating(0);
                     setCloseFeedback('');
-                    onClose();
+                    handleDetailClose();
                   }}
                   className="mt-3 w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
                 >
@@ -3811,7 +4018,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   onClick={() => {
                     setShowSendBackModal(false);
                     setSentBackTo(null);
-                    onClose();
+                    handleDetailClose();
                   }}
                   className="mt-3 w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
                 >
@@ -3906,10 +4113,26 @@ function AuditTableRow({
   };
 
   const handleStatusChange = async (newStatus) => {
+    const eff = effStatus(status);
+    if (newStatus === 'Closed' && eff === 'Submitted') {
+      showError('Cannot close directly from Submitted. Click Start Review first.');
+      return;
+    }
     if (newStatus === 'Closed') {
-      const openF = (audit.findings || []).filter((f) => f.status !== 'Resolved');
-      if (openF.length > 0) {
-        showError(`Resolve all ${openF.length} finding${openF.length !== 1 ? 's' : ''} first`);
+      const checklist = audit.checklistReview || [];
+      if (checklist.length > 0) {
+        const unfilled = checklist.filter((i) => !i.result);
+        if (unfilled.length > 0) {
+          showError(`Cannot close — ${unfilled.length} checklist item${unfilled.length !== 1 ? 's' : ''} not reviewed`);
+          return;
+        }
+      }
+      const openFindings = (audit.findings || []).filter((f) => {
+        const s = f.status || 'Open';
+        return s === 'Open' || s === 'In Progress';
+      });
+      if (openFindings.length > 0) {
+        showError(`Cannot close — ${openFindings.length} finding${openFindings.length !== 1 ? 's' : ''} still open`);
         return;
       }
     }
@@ -4028,7 +4251,9 @@ function AuditTableRow({
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={async () => {
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!window.confirm('Start reviewing this audit?')) return;
                     try {
                       setSaving(true);
                       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
@@ -4040,14 +4265,14 @@ function AuditTableRow({
                       setStatus('Under Review');
                       showSuccess?.('Review started');
                     } catch {
-                      showError('Failed');
+                      showError('Failed to start review');
                     } finally {
                       setSaving(false);
                     }
                   }}
-                  className="w-full py-1.5 bg-[#1B6B6B] text-white rounded-lg text-xs font-medium hover:bg-[#155858] transition-colors disabled:opacity-50"
+                  className="w-full py-1.5 bg-[#1B6B6B] text-white rounded-lg text-xs font-medium hover:bg-[#155858] disabled:opacity-50 transition-colors"
                 >
-                  👀 Start Review
+                  {saving ? '...' : '👀 Start Review'}
                 </button>
               );
             }
@@ -4057,7 +4282,10 @@ function AuditTableRow({
                 <select
                   value={eff}
                   disabled={saving}
-                  onChange={(e) => handleStatusChange(e.target.value)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleStatusChange(e.target.value);
+                  }}
                   className={`w-full text-xs font-medium border rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none transition-colors ${
                     saving ? 'opacity-50 cursor-wait' : ''
                   } ${statusMeta(status).badge} border-gray-200`}
@@ -5557,7 +5785,7 @@ export default function Audit() {
         const liveAudit = visibleAudits.find((a) => a.id === selectedAudit.id) || audits.find((a) => a.id === selectedAudit.id) || selectedAudit;
         return (
           <AuditDetail
-            key={liveAudit.id + liveAudit.status}
+            key={liveAudit.id}
             audit={liveAudit}
             companyId={companyId}
             currentUser={currentUser}
