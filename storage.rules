@@ -8,5 +8,19 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
       allow delete: if request.auth != null;
     }
+
+    match /audits/{companyId}/{auditId}/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('application/pdf')
+          || request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/msword'
+          || request.resource.contentType
+            == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
+      allow delete: if request.auth != null;
+    }
   }
 }

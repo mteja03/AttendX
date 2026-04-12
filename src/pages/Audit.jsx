@@ -16,7 +16,8 @@ import {
   setDoc,
   increment,
 } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
+import { db, storage } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { trackPageView } from '../utils/analytics';
@@ -46,6 +47,23 @@ const STATUS_COLORS = {
 function statusMeta(status) {
   const e = effStatus(status);
   return AUDIT_STATUSES.find((s) => s.key === e) || { badge: 'bg-gray-100 text-gray-600', icon: '•' };
+}
+
+function formatAuditDocSize(bytes) {
+  if (bytes == null || Number.isNaN(Number(bytes))) return '—';
+  const n = Number(bytes);
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileDocIconType(type) {
+  if (!type) return '📎';
+  const t = String(type).toLowerCase();
+  if (t.includes('pdf')) return '📄';
+  if (t.includes('image')) return '🖼️';
+  if (t.includes('word') || t.includes('document') || t === 'application/msword') return '📝';
+  return '📎';
 }
 
 function AuditDashboard({ audits, auditTypes }) {
@@ -1962,6 +1980,11 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   const [showOwnerDrop, setShowOwnerDrop] = useState(false);
   const ownerRef = useRef(null);
   const isMountedRef = useRef(true);
+  const [auditDocs, setAuditDocs] = useState(() => (Array.isArray(safeAudit.auditDocuments) ? safeAudit.auditDocuments : []));
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef(null);
+  const managerFileInputRef = useRef(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -1979,6 +2002,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     setChecklistReview(Array.isArray(safeAudit.checklistReview) ? safeAudit.checklistReview : []);
     setFindings(Array.isArray(safeAudit.findings) ? safeAudit.findings : []);
     setAdminNotes(safeAudit.adminNotes || '');
+    setAuditDocs(Array.isArray(safeAudit.auditDocuments) ? safeAudit.auditDocuments : []);
     setActiveTab('checklist');
     setAuditorStep('checklist');
     setShowSubmitConfirm(false);
@@ -1987,7 +2011,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     setAuditRating(0);
     setSentBackTo(null);
     setClosedAuditData(null);
-  }, [safeAudit.id, safeAudit.adminNotes, safeAudit.checklistReview, safeAudit.findings]);
+  }, [safeAudit.id, safeAudit.adminNotes, safeAudit.checklistReview, safeAudit.findings, safeAudit.auditDocuments]);
 
   const st = effStatus(safeAudit.status);
   const isClosed = safeAudit.status === 'Closed';
@@ -2300,11 +2324,99 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   };
 
   const sections = [...new Set(checklistItems.map((i) => i.section))];
+
+  const handleDocUpload = async (file) => {
+    if (!file) return;
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      showError('File too large. Max 10MB.');
+      return;
+    }
+    const ALLOWED_TYPES = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      showError('Only PDF, images and Word docs allowed');
+      return;
+    }
+    try {
+      setUploading(true);
+      setUploadProgress(0);
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filename = `${timestamp}_${safeName}`;
+      const storagePath = `audits/${companyId}/${audit.id}/${filename}`;
+      const storageRef = ref(storage, storagePath);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+      await new Promise((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+            setUploadProgress(progress);
+          },
+          reject,
+          resolve,
+        );
+      });
+      const url = await getDownloadURL(uploadTask.snapshot.ref);
+      const uploadedByRole = isAuditorMode ? 'auditor' : 'auditmanager';
+      const docRecord = {
+        id: `doc_${timestamp}`,
+        name: file.name,
+        url,
+        storagePath,
+        size: file.size,
+        type: file.type,
+        uploadedBy: (currentUser?.email || '').toLowerCase(),
+        uploadedByName: currentUser?.displayName || currentUser?.email || 'User',
+        uploadedByRole,
+        uploadedAt: new Date().toISOString(),
+      };
+      const updatedDocs = [...auditDocs, docRecord];
+      setAuditDocs(updatedDocs);
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updatedDocs });
+      showSuccess(`${file.name} uploaded!`);
+    } catch (e) {
+      showError('Upload failed: ' + (e?.message || String(e)));
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (managerFileInputRef.current) managerFileInputRef.current.value = '';
+    }
+  };
+
+  const handleDocDelete = async (docRecord) => {
+    if (!window.confirm(`Delete "${docRecord.name}"?`)) return;
+    try {
+      const storageRef = ref(storage, docRecord.storagePath);
+      await deleteObject(storageRef).catch(() => {});
+      const updatedDocs = auditDocs.filter((d) => d.id !== docRecord.id);
+      setAuditDocs(updatedDocs);
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updatedDocs });
+      showSuccess('Document deleted');
+    } catch (e) {
+      showError('Delete failed: ' + (e?.message || String(e)));
+    }
+  };
+
   const handlePrint = () => {
     if (!audit) {
       showError('No audit data to print');
       return;
     }
+    const esc = (s) =>
+      String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     const currentChecklist = checklistItems;
     const currentFindings = findingsData;
     const currentNotes = adminNotes;
@@ -2319,6 +2431,36 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
     <p>Score: ${score !== null ? `${score}%` : '—'} | Pass: ${passItems.length} | Fail: ${failItems.length} | N/A: ${naItems.length}</p>
     ${sectionsForPrint.map((section) => `<h3>${section}</h3>${currentChecklist.filter((i) => i.section === section).map((item) => `<p>${item.question} — ${item.result || '—'} ${item.note || ''}</p>`).join('')}`).join('')}
     ${currentFindings.length > 0 ? `<h3>Findings</h3>${currentFindings.map((f) => `<p>${f.description} (${f.severity || 'Medium'}) - ${f.status || 'Open'}</p>`).join('')}` : ''}
+    ${
+      auditDocs.length > 0
+        ? `
+    <div class="section-title" style="font-size:14px;font-weight:600;margin:16px 0 8px">📎 Attached Documents</div>
+    <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+      ${auditDocs
+        .map(
+          (d, i) => `
+      <div style="display:flex; align-items:center; gap:10px; padding: 10px 12px;
+        border-bottom: ${i < auditDocs.length - 1 ? '1px solid #f3f4f6' : 'none'};
+        background: ${i % 2 === 0 ? '#f9fafb' : '#ffffff'}">
+        <span style="font-size:18px">
+          ${d.type?.includes('pdf') ? '📄' : d.type?.includes('image') ? '🖼️' : '📝'}
+        </span>
+        <div style="flex:1">
+          <div style="font-size:12px; font-weight:500">${esc(d.name)}</div>
+          <div style="font-size:11px; color:#6b7280">
+            ${formatAuditDocSize(d.size)} · ${esc(d.uploadedByName)} ·
+            ${d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString('en-GB') : '—'}
+          </div>
+        </div>
+        <div style="font-size:11px; color:#1B6B6B">
+          ${d.url ? `<a href="${esc(d.url)}" style="color:#1B6B6B">View Online</a>` : ''}
+        </div>
+      </div>`,
+        )
+        .join('')}
+    </div>`
+        : ''
+    }
     ${audit.auditRating ? `
       <h3>⭐ Manager Feedback</h3>
       <div style="padding: 12px; background: #fffbeb; border-radius: 8px; border: 1px solid #fde68a;">
@@ -2935,6 +3077,160 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                   })}
                 </div>
               )}
+
+              {(() => {
+                const showAuditorDocUpload = isAuditorMode && !isClosed;
+                const showManagerDocUpload = canManage && isUnderReview && !isAuditorMode && !isClosed;
+                const emailLc = (currentUser?.email || '').toLowerCase();
+                return (
+                  <div className="mt-6 pt-5 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                      <h4 className="text-sm font-semibold text-gray-700">📎 Audit Documents</h4>
+                      <div className="flex items-center gap-3">
+                        {showManagerDocUpload && (
+                          <>
+                            <label
+                              htmlFor="manager-doc-upload"
+                              className="text-xs text-[#1B6B6B] hover:underline cursor-pointer font-medium"
+                            >
+                              + Add Document
+                            </label>
+                            <input
+                              ref={managerFileInputRef}
+                              type="file"
+                              id="manager-doc-upload"
+                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleDocUpload(file);
+                              }}
+                            />
+                          </>
+                        )}
+                        <span className="text-xs text-gray-400">
+                          {auditDocs.length} file{auditDocs.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-gray-400 mb-3">
+                      Upload physical audit reports, photos, or supporting documents. Max 10MB per file.
+                    </p>
+
+                    {showAuditorDocUpload && (
+                      <div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleDocUpload(file);
+                          }}
+                          className="hidden"
+                          id="audit-doc-upload"
+                        />
+                        {uploading ? (
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xs text-gray-500">Uploading...</span>
+                              <span className="text-xs font-medium text-[#1B6B6B]">{uploadProgress}%</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-[#1B6B6B] rounded-full transition-all"
+                                style={{ width: `${uploadProgress}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <label
+                            htmlFor="audit-doc-upload"
+                            className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors cursor-pointer mb-3"
+                          >
+                            <span className="text-lg">📎</span>
+                            Click to upload PDF, image or Word doc
+                          </label>
+                        )}
+                      </div>
+                    )}
+
+                    {auditDocs.length > 0 ? (
+                      <div className="space-y-2">
+                        {auditDocs.map((docRecord) => {
+                          const uploaderLc = (docRecord.uploadedBy || '').toLowerCase();
+                          const canDeleteDoc =
+                            !isClosed &&
+                            uploaderLc === emailLc &&
+                            (isAuditorMode || (canManage && isUnderReview && !isAuditorMode));
+                          return (
+                            <div
+                              key={docRecord.id}
+                              className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-100 rounded-xl hover:border-gray-200 transition-all"
+                            >
+                              <div className="w-9 h-9 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-lg flex-shrink-0">
+                                {fileDocIconType(docRecord.type)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-800 truncate">{docRecord.name}</p>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  <span className="text-xs text-gray-400">{formatAuditDocSize(docRecord.size)}</span>
+                                  <span className="text-xs text-gray-300">·</span>
+                                  <span className="text-xs text-gray-400">{docRecord.uploadedByName}</span>
+                                  <span className="text-xs text-gray-300">·</span>
+                                  <span
+                                    className={`text-xs px-1.5 py-0.5 rounded-full ${
+                                      docRecord.uploadedByRole === 'auditor' ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'
+                                    }`}
+                                  >
+                                    {docRecord.uploadedByRole === 'auditor' ? '👷 Auditor' : '🧑‍💼 Manager'}
+                                  </span>
+                                  <span className="text-xs text-gray-300">·</span>
+                                  <span className="text-xs text-gray-400">
+                                    {docRecord.uploadedAt ? new Date(docRecord.uploadedAt).toLocaleDateString('en-GB') : '—'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <a
+                                  href={docRecord.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E8F5F5] text-[#1B6B6B] transition-colors"
+                                  title="Download / View"
+                                >
+                                  ⬇️
+                                </a>
+                                {canDeleteDoc && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDocDelete(docRecord);
+                                    }}
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
+                                    title="Delete"
+                                  >
+                                    🗑️
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      !isAuditorMode && (
+                        <div className="text-center py-6 border-2 border-dashed border-gray-100 rounded-xl">
+                          <p className="text-xs text-gray-400">No documents uploaded</p>
+                        </div>
+                      )
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -3022,6 +3318,34 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                         <p className={`text-xl font-bold ${s.c}`}>{s.v}</p>
                         <p className="text-xs text-gray-400 mt-0.5">{s.l}</p>
                       </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {auditDocs.length > 0 && (
+                <div className="bg-white border border-gray-100 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                    📎 Documents ({auditDocs.length})
+                  </p>
+                  <div className="space-y-2">
+                    {auditDocs.map((docRecord) => (
+                      <a
+                        key={docRecord.id}
+                        href={docRecord.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl hover:bg-[#E8F5F5] transition-colors group"
+                      >
+                        <span className="text-xl">{fileDocIconType(docRecord.type)}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-[#1B6B6B] group-hover:underline truncate">{docRecord.name}</p>
+                          <p className="text-xs text-gray-400">
+                            {formatAuditDocSize(docRecord.size)} · {docRecord.uploadedByName}
+                          </p>
+                        </div>
+                        <span className="text-[#1B6B6B] opacity-0 group-hover:opacity-100">⬇️</span>
+                      </a>
                     ))}
                   </div>
                 </div>
