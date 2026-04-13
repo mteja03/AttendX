@@ -4623,11 +4623,6 @@ function AuditTableRow({
         </div>
 
         <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-end gap-1">
-          {isAuditor && (eff === 'Assigned' || eff === 'In Progress' || eff === 'Sent Back') && (
-            <span className="text-xs text-[#1B6B6B] font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-              {eff === 'Assigned' ? '▶ Start' : eff === 'Sent Back' ? '↩ Fix' : '✍️ Fill'}
-            </span>
-          )}
           {renderWhatsAppLink()}
           <div className="w-6 h-6 flex items-center justify-center text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -4737,11 +4732,9 @@ function AuditList({
   isAuditor,
   canManage,
 }) {
-  const isAdmin = userRole === 'admin';
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignedAudit, setAssignedAudit] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [viewMode, setViewMode] = useState('list');
   const [search, setSearch] = useState('');
   const [activeStatusTab, setActiveStatusTab] = useState('all'); // all | overdue | status
   const [showFilters, setShowFilters] = useState(false);
@@ -4996,22 +4989,6 @@ function AuditList({
             )}
           </div>
 
-          <div className="flex border border-gray-200 rounded-xl overflow-hidden">
-            {[
-              { id: 'list', icon: '☰' },
-              { id: 'kanban', icon: '⊞' },
-            ].map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() => setViewMode(v.id)}
-                className={`px-3 py-2.5 text-sm transition-colors ${viewMode === v.id ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-              >
-                {v.icon}
-              </button>
-            ))}
-          </div>
-
           <button
             type="button"
             onClick={() => setShowFilters(!showFilters)}
@@ -5229,194 +5206,47 @@ function AuditList({
         })}
       </div>
 
-      <>
-      {viewMode === 'list' && (
-        <div>
-          {filtered.length === 0 ? (
-            <EmptyAuditState
-              total={audits.length}
-              onAssign={() => setShowAssignModal(true)}
-              auditTypesEmpty={auditTypes.length === 0}
-              canManage={canManage}
-            />
-          ) : (
-            <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-              <div
-                className="hidden md:grid gap-3 px-5 py-3 bg-gray-50/80 border-b border-gray-100"
-                style={{ gridTemplateColumns: '2fr 1.2fr 1.2fr 1fr 140px 80px 88px' }}
-              >
-                {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Score', ''].map((h, i) => (
-                  <div key={i} className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate">
-                    {h}
-                  </div>
-                ))}
-              </div>
-              <div className="divide-y divide-gray-50">
-                {filtered.map((audit) => (
-                  <AuditTableRow
-                    key={audit.id}
-                    audit={audit}
-                    companyId={companyId}
-                    userRole={userRole}
-                    currentUser={currentUser}
-                    employees={employees}
-                    onOpen={() => setSelectedAudit(audit)}
-                    onDelete={(e) => handleDelete(e, audit)}
-                    showSuccess={showSuccess}
-                    showError={showError}
-                    canManage={canManage}
-                    isAuditor={isAuditor}
-                  />
-                ))}
-              </div>
+      <div>
+        {filtered.length === 0 ? (
+          <EmptyAuditState
+            total={audits.length}
+            onAssign={() => setShowAssignModal(true)}
+            auditTypesEmpty={auditTypes.length === 0}
+            canManage={canManage}
+          />
+        ) : (
+          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+            <div
+              className="hidden md:grid gap-3 px-5 py-3 bg-gray-50/80 border-b border-gray-100"
+              style={{ gridTemplateColumns: '2fr 1.2fr 1.2fr 1fr 140px 80px 88px' }}
+            >
+              {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Score', ''].map((h, i) => (
+                <div key={i} className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate">
+                  {h}
+                </div>
+              ))}
             </div>
-          )}
-        </div>
-      )}
-
-      {viewMode === 'kanban' && (
-        <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-none -mx-1 px-1">
-          {AUDIT_STATUSES.filter((colCfg) => {
-            const count = filtered.filter((a) => effStatus(a.status) === colCfg.key && !isOverdue(a)).length;
-            if (isAuditor && colCfg.key === 'Assigned') return true;
-            if (canManage && colCfg.key === 'Submitted') return true;
-            return count > 0;
-          }).map((colCfg) => {
-            const colAudits = filtered.filter((a) => effStatus(a.status) === colCfg.key && !isOverdue(a));
-            const overdueLane =
-              colCfg.key === 'Assigned'
-                ? filtered.filter(
-                    (a) =>
-                      isOverdue(a) && ['Assigned', 'In Progress', 'Sent Back'].includes(effStatus(a.status)),
-                  )
-                : [];
-            const showEmpty = colAudits.length === 0 && overdueLane.length === 0;
-            return (
-              <div key={colCfg.key} className="flex-shrink-0 w-64">
-                <div className={`mb-2 flex items-center justify-between rounded-2xl border px-3 py-2.5 ${colCfg.bg} ${colCfg.border}`}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">{colCfg.icon}</span>
-                    <span className="text-xs font-semibold text-gray-700">{colCfg.key}</span>
-                  </div>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${colCfg.badge}`}>{colAudits.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {colAudits.map((audit) => {
-                    const score = getAuditScore(audit);
-                    return (
-                      <div
-                        key={audit.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedAudit(audit)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
-                        }}
-                        className="group relative cursor-pointer overflow-hidden rounded-2xl border border-gray-100 bg-white p-3.5 transition-all hover:border-gray-200 hover:shadow-sm"
-                      >
-                        <div
-                          className="absolute top-0 left-0 right-0 h-0.5"
-                          style={{ background: audit.auditTypeColor || '#8B5CF6' }}
-                        />
-                        <div className="flex items-start gap-2 mb-2.5">
-                          <div
-                            className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white"
-                            style={{ background: audit.auditTypeColor || '#8B5CF6' }}
-                          >
-                            {audit.auditTypeName?.charAt(0)}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="mb-0.5 font-mono text-xs text-gray-400">{audit.auditRefId}</p>
-                            <p className="text-sm font-semibold text-gray-800 leading-tight">{audit.auditTypeName}</p>
-                          </div>
-                        </div>
-                        {(audit.branch || audit.location) && (
-                          <p className="text-xs text-gray-400 mb-2 truncate">
-                            {[audit.branch, audit.location].filter(Boolean).join(' · ')}
-                          </p>
-                        )}
-                        <div className="flex items-center justify-between">
-                          {audit.auditorName ? (
-                            <div className="flex items-center gap-1.5">
-                              <div className="w-5 h-5 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold">
-                                {audit.auditorName.charAt(0)}
-                              </div>
-                              <span className="text-xs text-gray-500 truncate max-w-[90px]">{audit.auditorName}</span>
-                            </div>
-                          ) : (
-                            <span />
-                          )}
-                          {score !== null && (
-                            <span
-                              className={`text-xs font-bold ${
-                                score >= 80 ? 'text-green-600' : score >= 60 ? 'text-amber-600' : 'text-red-600'
-                              }`}
-                            >
-                              {score}%
-                            </span>
-                          )}
-                        </div>
-                        {score !== null && (
-                          <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden mt-2">
-                            <div
-                              className={`h-full rounded-full ${
-                                score >= 80 ? 'bg-green-500' : score >= 60 ? 'bg-amber-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${score}%` }}
-                            />
-                          </div>
-                        )}
-                        {audit.endDate && (
-                          <p className="text-xs text-gray-400 mt-2">Due {formatDate(audit.endDate)}</p>
-                        )}
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(e, audit);
-                            }}
-                            className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-xl text-xs text-gray-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                          >
-                            🗑️
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {overdueLane.length > 0 && (
-                    <>
-                      <div className="text-xs text-red-500 font-medium px-1 mt-3 mb-1">⚠ Overdue</div>
-                      {overdueLane.map((audit) => (
-                        <div
-                          key={`od-${audit.id}`}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => setSelectedAudit(audit)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
-                          }}
-                          className="bg-red-50 border border-red-200 rounded-xl p-3 cursor-pointer hover:border-red-300 transition-all"
-                        >
-                          <p className="text-xs font-mono text-red-400 mb-0.5">{audit.auditRefId}</p>
-                          <p className="text-sm font-semibold text-red-700">{audit.auditTypeName}</p>
-                          {audit.branch && <p className="text-xs text-red-400 mt-1">🏢 {audit.branch}</p>}
-                        </div>
-                      ))}
-                    </>
-                  )}
-                  {showEmpty && (
-                    <div className="border-2 border-dashed border-gray-100 rounded-xl py-6 text-center">
-                      <p className="text-xs text-gray-300">No audits</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      </>
+            <div className="divide-y divide-gray-50">
+              {filtered.map((audit) => (
+                <AuditTableRow
+                  key={audit.id}
+                  audit={audit}
+                  companyId={companyId}
+                  userRole={userRole}
+                  currentUser={currentUser}
+                  employees={employees}
+                  onOpen={() => setSelectedAudit(audit)}
+                  onDelete={(e) => handleDelete(e, audit)}
+                  showSuccess={showSuccess}
+                  showError={showError}
+                  canManage={canManage}
+                  isAuditor={isAuditor}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {showAssignModal && (
         <AssignAuditModal
