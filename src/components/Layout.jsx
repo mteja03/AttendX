@@ -119,18 +119,18 @@ export default function Layout() {
 
   return (
     <CompanyProvider companyIdFromRoute={companyIdForContext}>
-      <div className="min-h-screen bg-[#f1f5f9] flex">
+      <div className="flex h-screen overflow-hidden bg-[#f1f5f9]">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="lg:hidden sticky top-0 z-20 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3 safe-bottom">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div className="lg:hidden flex flex-shrink-0 z-20 items-center gap-3 border-b border-gray-100 bg-white px-4 py-3 safe-bottom">
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 setSidebarOpen(true);
               }}
-              className="w-9 h-9 shrink-0 rounded-xl min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-100 active:bg-gray-200 text-gray-600"
+              className="flex h-9 w-9 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100 active:bg-gray-200"
               aria-label="Open menu"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -139,11 +139,11 @@ export default function Layout() {
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </button>
-            <span className="text-base font-semibold text-[#1B6B6B] truncate">AttendX</span>
+            <span className="truncate text-base font-semibold text-[#1B6B6B]">AttendX</span>
           </div>
 
-          <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-[#f1f5f9]">
-            <div className="p-4 md:p-6 lg:p-8 safe-bottom min-h-full">
+          <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[#f1f5f9]">
+            <div className="safe-bottom p-4 md:p-6 lg:p-8">
               <Outlet />
             </div>
           </main>

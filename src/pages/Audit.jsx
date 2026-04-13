@@ -86,6 +86,13 @@ const STATUS_TAB_CONFIG = [
     countClass: 'bg-blue-200 text-blue-700',
   },
   {
+    id: 'Sent Back',
+    label: 'Sent Back',
+    getCount: (list) => list.filter((a) => effStatus(a.status) === 'Sent Back').length,
+    activeClass: 'bg-amber-50 text-amber-800 border-amber-300',
+    countClass: 'bg-amber-200 text-amber-800',
+  },
+  {
     id: 'Submitted',
     label: 'Submitted',
     getCount: (list) => list.filter((a) => effStatus(a.status) === 'Submitted').length,
@@ -98,13 +105,6 @@ const STATUS_TAB_CONFIG = [
     getCount: (list) => list.filter((a) => effStatus(a.status) === 'Under Review').length,
     activeClass: 'bg-pink-50 text-pink-700 border-pink-300',
     countClass: 'bg-pink-200 text-pink-700',
-  },
-  {
-    id: 'Sent Back',
-    label: 'Sent Back',
-    getCount: (list) => list.filter((a) => effStatus(a.status) === 'Sent Back').length,
-    activeClass: 'bg-amber-50 text-amber-800 border-amber-300',
-    countClass: 'bg-amber-200 text-amber-800',
   },
   {
     id: 'Closed',
@@ -506,7 +506,7 @@ function AuditDashboard({ audits, auditTypes }) {
                   return (
                     <div key={name} className="flex items-center gap-3">
                       <div
-                        className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white"
                         style={{ background: type?.color || '#8B5CF6' }}
                       >
                         {name?.charAt(0)}
@@ -552,7 +552,7 @@ function AuditDashboard({ audits, auditTypes }) {
                 <div key={audit.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div
-                      className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white"
                       style={{ background: audit.auditTypeColor || '#8B5CF6' }}
                     >
                       {audit.auditTypeName?.charAt(0) || 'A'}
@@ -804,7 +804,7 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} role="presentation" />
-      <div className="relative bg-white w-full max-w-lg h-full flex flex-col shadow-2xl">
+      <div className="relative bg-white w-full max-w-lg h-full flex flex-col shadow-sm">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-[#E8F5F5] rounded-xl flex items-center justify-center text-lg">📅</div>
@@ -973,7 +973,7 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <div
-                            className="w-6 h-6 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white"
                             style={{ background: audit.auditTypeColor || '#8B5CF6' }}
                           >
                             {audit.auditTypeName?.charAt(0)}
@@ -1194,7 +1194,7 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} role="presentation" />
-      <div className="relative bg-white w-full max-w-2xl h-full flex flex-col shadow-2xl">
+      <div className="relative bg-white w-full max-w-2xl h-full flex flex-col shadow-sm">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-[#E8F5F5] rounded-xl flex items-center justify-center text-lg">⚙️</div>
@@ -1295,10 +1295,10 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
                       </div>
                     </div>
                     <div className="flex gap-1 ml-2">
-                      <button type="button" onClick={() => openEdit(type)} className="px-3 py-1.5 text-xs text-[#1B6B6B] hover:bg-[#E8F5F5] rounded-lg">
+                      <button type="button" onClick={() => openEdit(type)} className="rounded-xl px-3 py-1.5 text-xs text-[#1B6B6B] hover:bg-[#E8F5F5]">
                         Edit
                       </button>
-                      <button type="button" onClick={() => handleDelete(type)} className="px-3 py-1.5 text-xs text-red-400 hover:bg-red-50 rounded-lg">
+                      <button type="button" onClick={() => handleDelete(type)} className="rounded-xl px-3 py-1.5 text-xs text-red-400 hover:bg-red-50">
                         Delete
                       </button>
                     </div>
@@ -1313,7 +1313,7 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
       {showModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => { setShowModal(false); resetForm(); }} role="presentation" />
-          <div className="relative bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+          <div className="relative bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-sm overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
               <h2 className="text-lg font-semibold text-gray-800">{editingType ? 'Edit Template' : 'New Audit Template'}</h2>
               <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
@@ -1355,7 +1355,7 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
                   value={form.name}
                   onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                   placeholder="e.g. Cash Handling Audit"
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 />
               </div>
 
@@ -1365,7 +1365,7 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
                   value={form.description}
                   onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                   placeholder="Brief description..."
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 />
               </div>
 
@@ -1433,7 +1433,7 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
                               if (e.key === 'Escape') setEditingSection(null);
                             }}
                             autoFocus
-                            className="text-sm font-semibold border border-[#1B6B6B] rounded-lg px-2 py-0.5 focus:outline-none flex-1 min-w-0"
+                            className="min-w-0 flex-1 rounded-xl border border-[#1B6B6B] px-2 py-0.5 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                           />
                           <button
                             type="button"
@@ -1494,12 +1494,12 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
                               value={item.question}
                               onChange={(e) => updateItem(item.id, 'question', e.target.value)}
                               placeholder="Checklist item..."
-                              className="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                             />
                             <select
                               value={item.riskLevel || 'Medium'}
                               onChange={(e) => updateItem(item.id, 'riskLevel', e.target.value)}
-                              className={`text-xs border rounded-lg px-2 py-1.5 font-medium ${
+                              className={`rounded-xl border px-2 py-1.5 text-xs font-medium ${
                                 item.riskLevel === 'Critical'
                                   ? 'bg-red-50 border-red-200 text-red-700'
                                   : item.riskLevel === 'High'
@@ -1678,9 +1678,9 @@ function AssignAuditModal({
 
   if (assignedAudit) {
     return (
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
+      <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
         <div role="presentation" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 sm:mx-4 text-center">
+        <div className="relative max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-6 text-center shadow-sm sm:mx-4 sm:max-w-2xl sm:rounded-2xl">
           <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center text-2xl mx-auto mb-3">
             ✅
           </div>
@@ -1724,9 +1724,9 @@ function AssignAuditModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div role="presentation" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden sm:mx-4">
+      <div className="relative flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-sm sm:mx-4 sm:max-w-2xl sm:rounded-2xl">
         <div className="px-6 py-5 border-b flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1752,7 +1752,7 @@ function AssignAuditModal({
             <select
               value={assignForm.auditTypeId}
               onChange={(e) => setAssignForm((prev) => ({ ...prev, auditTypeId: e.target.value }))}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
             >
               <option value="">Select template...</option>
               {auditTypes.map((t) => (
@@ -1799,7 +1799,7 @@ function AssignAuditModal({
               <select
                 value={assignForm.category}
                 onChange={(e) => setAssignForm((p) => ({ ...p, category: e.target.value }))}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
               >
                 <option value="">Select category...</option>
                 {localCategories.map((c) => (
@@ -1811,7 +1811,7 @@ function AssignAuditModal({
               <select
                 value={assignForm.location}
                 onChange={(e) => setAssignForm((p) => ({ ...p, location: e.target.value }))}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
               >
                 <option value="">Select location...</option>
                 {localLocations.map((l) => (
@@ -1824,7 +1824,7 @@ function AssignAuditModal({
                 <select
                   value={assignForm.branch}
                   onChange={(e) => setAssignForm((p) => ({ ...p, branch: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 >
                   <option value="">Select branch...</option>
                   {localBranches.map((b) => (
@@ -1836,7 +1836,7 @@ function AssignAuditModal({
                 <select
                   value={assignForm.department}
                   onChange={(e) => setAssignForm((p) => ({ ...p, department: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 >
                   <option value="">Select dept...</option>
                   {localDepts.map((d) => (
@@ -1870,7 +1870,7 @@ function AssignAuditModal({
                     setShowLeadDrop(true);
                     setAssignForm((p) => ({ ...p, auditorId: '', auditorName: '', auditorEmail: '' }));
                   }}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 />
                 {showLeadDrop && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
@@ -1939,7 +1939,7 @@ function AssignAuditModal({
                     setShowTeamDrop(true);
                   }}
                   onFocus={() => setShowTeamDrop(true)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 />
                 {showTeamDrop && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
@@ -2029,7 +2029,7 @@ function AssignAuditModal({
                   type="date"
                   value={assignForm.startDate}
                   onChange={(e) => setAssignForm((p) => ({ ...p, startDate: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 />
               </div>
               <div>
@@ -2038,7 +2038,7 @@ function AssignAuditModal({
                   type="date"
                   value={assignForm.endDate}
                   onChange={(e) => setAssignForm((p) => ({ ...p, endDate: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 />
               </div>
             </div>
@@ -2749,14 +2749,14 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div
         role="presentation"
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={handleDetailClose}
       />
       <div
-        className="relative bg-white w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl max-h-[95vh] sm:max-h-[94vh] flex flex-col overflow-hidden shadow-2xl sm:mx-4"
+        className="relative flex max-h-[95vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-sm sm:mx-4 sm:max-h-[90vh] sm:max-w-2xl sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {isAuditorMode && (
@@ -2791,7 +2791,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
           <div className="flex items-start justify-between mb-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
-                <span className="text-xs font-mono font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{audit.auditRefId}</span>
+                <span className="rounded-xl bg-gray-100 px-2 py-0.5 font-mono text-xs font-bold text-gray-400">{audit.auditRefId}</span>
                 <h2 className="text-base font-semibold text-gray-800">{audit.auditTypeName}</h2>
                 <span
                   className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${statusMeta(audit.status).badge}`}
@@ -2939,7 +2939,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                             {checklistReadOnlyDisplay ? (
                               <div className="flex items-start gap-3">
                                 <span
-                                  className={`text-xs px-2 py-1 rounded-lg font-bold flex-shrink-0 mt-0.5 ${
+                                  className={`mt-0.5 flex-shrink-0 rounded-xl px-2 py-1 text-xs font-bold ${
                                     item.result === 'pass'
                                       ? 'bg-green-200 text-green-800'
                                       : item.result === 'fail'
@@ -3006,7 +3006,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                       type="button"
                                       disabled={isClosed}
                                       onClick={() => updateChecklistItem(item.id, item.result === opt.val ? null : opt.val)}
-                                      className={`flex-1 sm:flex-none min-h-[44px] px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
+                                      className={`min-h-[44px] flex-1 rounded-xl border px-3 py-2 text-xs font-medium transition-all sm:flex-none ${
                                         item.result === opt.val ? opt.active : opt.def
                                       } ${isClosed ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                                     >
@@ -3019,7 +3019,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                   disabled={isClosed}
                                   onChange={(e) => updateChecklistNote(item.id, e.target.value)}
                                   placeholder="Note or observation (optional)..."
-                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50 bg-white/80"
+                                  className="w-full rounded-xl border border-gray-200 bg-white/80 px-3 py-2 text-xs focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20 disabled:bg-gray-50"
                                 />
                               </>
                             )}
@@ -3030,7 +3030,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                   <button
                                     type="button"
                                     onClick={() => updateManagerApproval(item.id, item.managerApproval === 'approved' ? null : 'approved')}
-                                    className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
+                                    className={`rounded-xl border px-3 py-1 text-xs font-medium transition-all ${
                                       item.managerApproval === 'approved'
                                         ? 'bg-green-500 text-white border-green-500'
                                         : 'bg-white text-gray-400 border-gray-200 hover:bg-green-50 hover:border-green-200 hover:text-green-700'
@@ -3041,7 +3041,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                   <button
                                     type="button"
                                     onClick={() => updateManagerApproval(item.id, item.managerApproval === 'concern' ? null : 'concern')}
-                                    className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
+                                    className={`rounded-xl border px-3 py-1 text-xs font-medium transition-all ${
                                       item.managerApproval === 'concern'
                                         ? 'bg-amber-500 text-white border-amber-500'
                                         : 'bg-white text-gray-400 border-gray-200 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700'
@@ -3055,7 +3055,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                     value={item.managerNote || ''}
                                     onChange={(e) => updateManagerNote(item.id, e.target.value)}
                                     placeholder="Add note (optional)..."
-                                    className="mt-2 w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#1B6B6B] bg-white"
+                                    className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                                   />
                                 )}
                               </div>
@@ -3111,7 +3111,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                           key={opt.v}
                           type="button"
                           onClick={() => setNewFinding((p) => ({ ...p, severity: opt.v }))}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                          className={`rounded-xl border px-3 py-1.5 text-xs font-medium transition-all ${
                             newFinding.severity === opt.v ? opt.a : `${opt.c} hover:opacity-80`
                           }`}
                         >
@@ -3326,7 +3326,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                 key={s}
                                 type="button"
                                 onClick={() => updateFindingStatus(finding.id, s)}
-                                className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
+                                className={`rounded-xl border px-3 py-1 text-xs font-medium transition-all ${
                                   finding.status === s
                                     ? s === 'Resolved'
                                       ? 'bg-green-500 text-white border-green-500'
@@ -3473,7 +3473,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#E8F5F5] text-[#1B6B6B] text-xs font-medium hover:bg-[#1B6B6B] hover:text-white transition-colors"
+                                className="flex items-center gap-1 rounded-xl bg-[#E8F5F5] px-2.5 py-1.5 text-xs font-medium text-[#1B6B6B] transition-colors hover:bg-[#1B6B6B] hover:text-white"
                                 title="View document"
                               >
                                 {auditDocViewLabel(docRecord.type)}
@@ -3482,7 +3482,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                 href={docRecord.url}
                                 download={docRecord.name}
                                 onClick={(e) => e.stopPropagation()}
-                                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 text-[#1B6B6B] text-xs"
+                                className="flex h-8 w-8 items-center justify-center rounded-xl text-[#1B6B6B] hover:bg-gray-200 text-xs"
                                 title="Download"
                               >
                                 ⬇️
@@ -3494,7 +3494,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                     e.stopPropagation();
                                     handleDocDelete(docRecord);
                                   }}
-                                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
+                                  className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500"
                                   title="Delete"
                                 >
                                   🗑️
@@ -3568,7 +3568,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#E8F5F5] text-[#1B6B6B] text-xs font-medium hover:bg-[#1B6B6B] hover:text-white transition-colors"
+                                className="flex items-center gap-1 rounded-xl bg-[#E8F5F5] px-2.5 py-1.5 text-xs font-medium text-[#1B6B6B] transition-colors hover:bg-[#1B6B6B] hover:text-white"
                                 title="View document"
                               >
                                 {auditDocViewLabel(docRecord.type)}
@@ -3577,7 +3577,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                 href={docRecord.url}
                                 download={docRecord.name}
                                 onClick={(e) => e.stopPropagation()}
-                                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 text-[#1B6B6B] text-xs"
+                                className="flex h-8 w-8 items-center justify-center rounded-xl text-[#1B6B6B] hover:bg-gray-200 text-xs"
                                 title="Download"
                               >
                                 ⬇️
@@ -3722,7 +3722,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#E8F5F5] text-[#1B6B6B] text-xs font-medium hover:bg-[#1B6B6B] hover:text-white transition-colors"
+                              className="flex items-center gap-1 rounded-xl bg-[#E8F5F5] px-2.5 py-1.5 text-xs font-medium text-[#1B6B6B] transition-colors hover:bg-[#1B6B6B] hover:text-white"
                               title="View document"
                             >
                               {auditDocViewLabel(docRecord.type)}
@@ -3731,7 +3731,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                               href={docRecord.url}
                               download={docRecord.name}
                               onClick={(e) => e.stopPropagation()}
-                              className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 text-[#1B6B6B] text-xs"
+                              className="flex h-8 w-8 items-center justify-center rounded-xl text-[#1B6B6B] hover:bg-gray-200 text-xs"
                               title="Download"
                             >
                               ⬇️
@@ -3965,7 +3965,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
             className="absolute inset-0 bg-black/50"
             onClick={() => setShowSubmitConfirm(false)}
           />
-          <div className="relative bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl sm:mx-4">
+          <div className="relative bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-6 shadow-sm sm:mx-4">
             <div className="text-center mb-5">
               <div className="w-16 h-16 bg-[#E8F5F5] rounded-full flex items-center justify-center text-3xl mx-auto mb-3">📤</div>
               <h3 className="text-lg font-semibold text-gray-800 mb-2">Submit Audit?</h3>
@@ -4034,7 +4034,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
               setCloseFeedback('');
             }}
           />
-          <div className="relative bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl sm:mx-4">
+          <div className="relative bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-6 shadow-sm sm:mx-4">
             {closedAuditData ? (
               <>
                 <h3 className="text-lg font-semibold text-gray-800 mb-2 text-center">Audit closed</h3>
@@ -4180,7 +4180,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
               setSentBackTo(null);
             }}
           />
-          <div className="relative bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl sm:mx-4">
+          <div className="relative bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-6 shadow-sm sm:mx-4">
             {sentBackTo ? (
               <>
                 <h3 className="text-base font-semibold text-gray-800 mb-2 text-center">Sent back</h3>
@@ -4254,7 +4254,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
 function EmptyAuditState({ total, onAssign, auditTypesEmpty, canManage }) {
   const noAuditsAtAll = total === 0;
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+    <div className="overflow-hidden rounded-2xl border-2 border-dashed border-gray-100 bg-white">
       <div className="text-center py-20 px-4">
         <p className="text-5xl mb-4">{noAuditsAtAll ? '📋' : '🔍'}</p>
         <p className="text-base font-semibold text-gray-700 mb-2">
@@ -4419,7 +4419,7 @@ function AuditTableRow({
         rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
         title={`WhatsApp ${audit.auditorName}`}
-        className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#25D366]/10 text-[#25D366] transition-colors opacity-0 group-hover:opacity-100"
+        className="flex h-7 w-7 items-center justify-center rounded-xl text-[#25D366] opacity-0 transition-colors hover:bg-[#25D366]/10 group-hover:opacity-100"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
@@ -4435,8 +4435,8 @@ function AuditTableRow({
     <div onClick={(e) => e.stopPropagation()} className="min-w-0">
       {isAuditor && (
         <span
-          className={`inline-flex w-full justify-center items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border ${
-            overdueAudit ? 'bg-red-50 text-red-700 border-red-200' : `${statusCfg.badge} border-gray-200`
+          className={`inline-flex w-full items-center justify-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-medium ${
+            overdueAudit ? 'border-red-200 bg-red-50 text-red-700' : `${statusCfg.badge} border-gray-200`
           }`}
         >
           {overdueAudit ? '⚠️ Overdue' : `${statusCfg.icon} ${eff}`}
@@ -4450,7 +4450,7 @@ function AuditTableRow({
             e.stopPropagation();
             await saveStatus('Under Review');
           }}
-          className="w-full py-1.5 bg-[#1B6B6B] text-white rounded-lg text-xs font-medium hover:bg-[#155858] disabled:opacity-50 transition-colors"
+          className="w-full rounded-xl bg-[#1B6B6B] py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#155858] disabled:opacity-50"
         >
           {saving ? '...' : '👀 Start Review'}
         </button>
@@ -4463,7 +4463,7 @@ function AuditTableRow({
             e.stopPropagation();
             saveStatus(e.target.value);
           }}
-          className="w-full text-xs font-medium border rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none bg-pink-50 text-pink-700 border-pink-200"
+          className="w-full cursor-pointer rounded-xl border border-pink-200 bg-pink-50 px-2 py-1.5 text-xs font-medium text-pink-700 focus:border-pink-300 focus:outline-none focus:ring-1 focus:ring-pink-300"
         >
           <option value="Under Review">👀 Under Review</option>
           <option value="Closed">✅ Close Audit</option>
@@ -4471,8 +4471,8 @@ function AuditTableRow({
       )}
       {!isAuditor && (!canManage || (eff !== 'Submitted' && eff !== 'Under Review')) && (
         <span
-          className={`inline-flex w-full justify-center items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border ${
-            overdueAudit ? 'bg-red-50 text-red-700 border-red-200' : `${statusCfg.badge} border-gray-200`
+          className={`inline-flex w-full items-center justify-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-medium ${
+            overdueAudit ? 'border-red-200 bg-red-50 text-red-700' : `${statusCfg.badge} border-gray-200`
           }`}
         >
           {overdueAudit ? '⚠️ Overdue' : `${statusCfg.icon} ${eff}`}
@@ -4485,12 +4485,12 @@ function AuditTableRow({
   return (
     <div>
       <div
-        className={`hidden md:grid gap-3 px-5 py-3.5 items-center group cursor-pointer transition-colors relative ${
+        className={`relative hidden cursor-pointer items-center gap-3 px-5 py-3.5 transition-colors group md:grid ${
           overdueAudit
-            ? 'bg-red-50/20 hover:bg-red-50/40'
+            ? 'bg-red-50/30 hover:bg-red-50/40'
             : isSentBack
-              ? 'bg-amber-50/30 hover:bg-amber-50/50'
-              : 'hover:bg-gray-50/60'
+              ? 'bg-amber-50/40 hover:bg-amber-50/50'
+              : 'hover:bg-[#E8F5F5]/30'
         }`}
         style={gridStyle}
         onClick={onOpen}
@@ -4503,7 +4503,7 @@ function AuditTableRow({
             }}
           />
           <div
-            className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-sm font-bold"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white"
             style={{
               background: overdueAudit ? '#EF4444' : audit.auditTypeColor || '#8B5CF6',
             }}
@@ -4519,7 +4519,7 @@ function AuditTableRow({
             </div>
             <p className="text-sm font-semibold text-gray-800 truncate">{audit.auditTypeName}</p>
             {isSentBack && isAuditor && audit.sentBackReason && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-1.5 flex items-center gap-1">
+              <p className="mt-1.5 flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
                 <span>↩</span>
                 <span className="line-clamp-1">{audit.sentBackReason}</span>
               </p>
@@ -4639,7 +4639,7 @@ function AuditTableRow({
               type="button"
               onClick={onDelete}
               title="Delete audit"
-              className="w-7 h-7 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-300 hover:text-red-500 transition-all"
+              className="flex h-7 w-7 items-center justify-center rounded-xl text-gray-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
             >
               🗑️
             </button>
@@ -4648,8 +4648,8 @@ function AuditTableRow({
       </div>
 
       <div
-        className={`md:hidden group p-4 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0 ${
-          overdueAudit ? 'bg-red-50/30' : isSentBack ? 'bg-amber-50/30' : 'hover:bg-gray-50/60'
+        className={`group border-b border-gray-100 p-4 transition-colors last:border-b-0 md:hidden ${
+          overdueAudit ? 'bg-red-50/30' : isSentBack ? 'bg-amber-50/30' : 'hover:bg-[#E8F5F5]/30'
         }`}
         onClick={onOpen}
       >
@@ -4681,7 +4681,7 @@ function AuditTableRow({
             </div>
             <p className="text-sm font-semibold text-gray-800">{audit.auditTypeName}</p>
             {isSentBack && isAuditor && audit.sentBackReason && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-1.5 flex items-center gap-1">
+              <p className="mt-1.5 flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
                 <span>↩</span>
                 <span className="line-clamp-2">{audit.sentBackReason}</span>
               </p>
@@ -4978,8 +4978,8 @@ function AuditList({
   };
 
   return (
-    <div>
-      <div className="flex flex-col gap-4 mb-6">
+    <div className="space-y-4 p-4 md:p-6">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex-1 min-w-48 relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
@@ -4987,7 +4987,7 @@ function AuditList({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by ID, template, branch, auditor..."
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+              className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
             />
             {search && (
               <button type="button" onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
@@ -5055,10 +5055,10 @@ function AuditList({
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters((p) => ({ ...p, status: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 >
                   <option value="">All Statuses</option>
-                  {['Assigned', 'In Progress', 'Submitted', 'Sent Back', 'Under Review', 'Closed', 'Overdue'].map((s) => (
+                  {['Assigned', 'In Progress', 'Sent Back', 'Submitted', 'Under Review', 'Closed', 'Overdue'].map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
@@ -5070,7 +5070,7 @@ function AuditList({
                 <select
                   value={filters.type}
                   onChange={(e) => setFilters((p) => ({ ...p, type: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 >
                   <option value="">All Templates</option>
                   {auditTypes.map((t) => (
@@ -5085,7 +5085,7 @@ function AuditList({
                 <select
                   value={filters.category}
                   onChange={(e) => setFilters((p) => ({ ...p, category: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 >
                   <option value="">All</option>
                   <option value="Internal">🏢 Internal</option>
@@ -5097,7 +5097,7 @@ function AuditList({
                 <select
                   value={filters.riskLevel}
                   onChange={(e) => setFilters((p) => ({ ...p, riskLevel: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 >
                   <option value="">All</option>
                   <option value="Critical">🔴 Critical</option>
@@ -5111,7 +5111,7 @@ function AuditList({
                 <select
                   value={filters.branch}
                   onChange={(e) => setFilters((p) => ({ ...p, branch: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 >
                   <option value="">All Branches</option>
                   {(company?.branches || []).map((b) => (
@@ -5126,7 +5126,7 @@ function AuditList({
                 <select
                   value={filters.location}
                   onChange={(e) => setFilters((p) => ({ ...p, location: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 >
                   <option value="">All Locations</option>
                   {(company?.locations || []).map((l) => (
@@ -5141,7 +5141,7 @@ function AuditList({
                 <select
                   value={filters.auditor}
                   onChange={(e) => setFilters((p) => ({ ...p, auditor: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 >
                   <option value="">All Auditors</option>
                   {[...new Set(audits.map((a) => a.auditorName).filter(Boolean))]
@@ -5159,7 +5159,7 @@ function AuditList({
                   type="date"
                   value={filters.dateFrom}
                   onChange={(e) => setFilters((p) => ({ ...p, dateFrom: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 />
               </div>
               <div>
@@ -5168,7 +5168,7 @@ function AuditList({
                   type="date"
                   value={filters.dateTo}
                   onChange={(e) => setFilters((p) => ({ ...p, dateTo: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 />
               </div>
             </div>
@@ -5202,9 +5202,9 @@ function AuditList({
         </div>
       </div>
 
-      {/* Status tabs — counts from role-visible audits only */}
-      <div className="flex gap-1.5 overflow-x-auto scrollbar-none flex-nowrap pb-1 mb-4">
-        {STATUS_TAB_CONFIG.filter((tab) => tab.id === 'all' || tab.getCount(audits) > 0).map((tab) => {
+      {/* Status tabs — always visible; counts from role-visible audits */}
+      <div className="flex flex-shrink-0 gap-1.5 overflow-x-auto overflow-y-visible pb-1 scrollbar-none">
+        {STATUS_TAB_CONFIG.map((tab) => {
           const count = tab.getCount(audits);
           const isActive = activeStatusTab === tab.id;
           return (
@@ -5212,13 +5212,13 @@ function AuditList({
               key={tab.id}
               type="button"
               onClick={() => setActiveStatusTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all flex-shrink-0 ${
-                isActive ? tab.activeClass : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50'
+              className={`flex flex-shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all ${
+                isActive ? tab.activeClass : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
               {tab.label}
               <span
-                className={`text-xs font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                className={`rounded-full px-1.5 py-0.5 text-xs font-bold leading-none ${
                   isActive ? tab.countClass : 'bg-gray-100 text-gray-500'
                 }`}
               >
@@ -5293,7 +5293,7 @@ function AuditList({
             const showEmpty = colAudits.length === 0 && overdueLane.length === 0;
             return (
               <div key={colCfg.key} className="flex-shrink-0 w-64">
-                <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl mb-2 border ${colCfg.bg} ${colCfg.border}`}>
+                <div className={`mb-2 flex items-center justify-between rounded-2xl border px-3 py-2.5 ${colCfg.bg} ${colCfg.border}`}>
                   <div className="flex items-center gap-2">
                     <span className="text-base">{colCfg.icon}</span>
                     <span className="text-xs font-semibold text-gray-700">{colCfg.key}</span>
@@ -5312,7 +5312,7 @@ function AuditList({
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') setSelectedAudit(audit);
                         }}
-                        className="bg-white border border-gray-100 rounded-xl p-3.5 cursor-pointer hover:border-gray-200 hover:shadow-sm transition-all group relative overflow-hidden"
+                        className="group relative cursor-pointer overflow-hidden rounded-2xl border border-gray-100 bg-white p-3.5 transition-all hover:border-gray-200 hover:shadow-sm"
                       >
                         <div
                           className="absolute top-0 left-0 right-0 h-0.5"
@@ -5320,13 +5320,13 @@ function AuditList({
                         />
                         <div className="flex items-start gap-2 mb-2.5">
                           <div
-                            className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold mt-0.5"
+                            className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white"
                             style={{ background: audit.auditTypeColor || '#8B5CF6' }}
                           >
                             {audit.auditTypeName?.charAt(0)}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-mono text-gray-400 mb-0.5">{audit.auditRefId}</p>
+                          <div className="min-w-0 flex-1">
+                            <p className="mb-0.5 font-mono text-xs text-gray-400">{audit.auditRefId}</p>
                             <p className="text-sm font-semibold text-gray-800 leading-tight">{audit.auditTypeName}</p>
                           </div>
                         </div>
@@ -5376,7 +5376,7 @@ function AuditList({
                               e.stopPropagation();
                               handleDelete(e, audit);
                             }}
-                            className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-300 hover:text-red-500 transition-all text-xs"
+                            className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-xl text-xs text-gray-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
                           >
                             🗑️
                           </button>
@@ -5483,14 +5483,28 @@ function AuditHistory({ audits, company }) {
   return (
     <div className="space-y-4">
       <div className="bg-white border border-gray-100 rounded-2xl p-4 flex items-center gap-2 flex-wrap">
-        <select value={selectedBranch} onChange={(e) => setSelectedBranch(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm min-h-[44px]">
+        <select
+          value={selectedBranch}
+          onChange={(e) => setSelectedBranch(e.target.value)}
+          className="min-h-[44px] rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
+        >
           <option value="">All Branches</option>
           {(company?.branches || []).map((b) => (
             <option key={b} value={b}>{b}</option>
           ))}
         </select>
-        <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm min-h-[44px]" />
-        <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm min-h-[44px]" />
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className="min-h-[44px] rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
+        />
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          className="min-h-[44px] rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
+        />
       </div>
       <div className="overflow-x-auto rounded-2xl border border-gray-100">
         <div className="min-w-[800px] bg-white rounded-2xl overflow-hidden">
@@ -5653,7 +5667,10 @@ function AuditReports({ audits }) {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {auditorPerf.map((ap) => (
-              <div key={ap.name} className="border border-gray-100 rounded-xl p-4 hover:border-gray-200 transition-colors min-w-0">
+              <div
+                key={ap.name}
+                className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 transition-colors hover:border-gray-200 hover:shadow-sm"
+              >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
@@ -5679,7 +5696,7 @@ function AuditReports({ audits }) {
                     { label: 'Overdue', value: ap.overdue, color: ap.overdue > 0 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500' },
                     { label: 'Findings', value: ap.findings, color: ap.findings > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-gray-500' },
                   ].map((s) => (
-                    <div key={s.label} className={`rounded-lg p-2.5 text-center ${s.color}`}>
+                    <div key={s.label} className={`rounded-2xl p-2.5 text-center ${s.color}`}>
                       <p className="text-lg font-bold">{s.value}</p>
                       <p className="text-xs mt-0.5">{s.label}</p>
                     </div>
@@ -5872,7 +5889,7 @@ export default function Audit() {
     <div className="min-h-screen bg-gray-50">
       {toast && (
         <div
-          className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white transition-all ${
+          className={`fixed right-4 top-4 z-[100] rounded-2xl px-4 py-3 text-sm font-medium text-white shadow-lg transition-all ${
             toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
           }`}
         >

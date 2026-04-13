@@ -217,9 +217,9 @@ function Sidebar({ isOpen = false, onClose }) {
 
       <aside
         className={`
-          flex flex-col h-screen bg-[#1B6B6B] fixed left-0 top-0 overflow-hidden text-white
-          z-40 w-64 flex-shrink-0 transition-transform duration-300 ease-out
-          lg:static lg:z-auto lg:translate-x-0 lg:h-screen lg:w-56
+          fixed inset-y-0 left-0 z-40 flex h-full min-h-0 w-64 flex-shrink-0 flex-col overflow-hidden overflow-x-hidden
+          bg-[#1B6B6B] text-white transition-transform duration-300 ease-out scrollbar-none
+          lg:relative lg:inset-auto lg:z-auto lg:h-full lg:w-56 lg:translate-x-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
