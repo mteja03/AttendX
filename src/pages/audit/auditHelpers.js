@@ -1,10 +1,11 @@
+/** Order matches board columns: lead → work → corrections → review pipeline → done */
 export const AUDIT_STATUSES = [
-  { key: 'Assigned', color: '#8B5CF6', bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700', icon: '📋' },
-  { key: 'In Progress', color: '#3B82F6', bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: '✍️' },
-  { key: 'Submitted', color: '#F97316', bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-700', icon: '📤' },
-  { key: 'Sent Back', color: '#EF4444', bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: '↩' },
-  { key: 'Under Review', color: '#EC4899', bg: 'bg-pink-50', border: 'border-pink-200', badge: 'bg-pink-100 text-pink-700', icon: '👀' },
-  { key: 'Closed', color: '#10B981', bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-100 text-green-700', icon: '✅' },
+  { key: 'Assigned', color: '#8B5CF6', bg: 'bg-purple-50', border: 'border-purple-100', badge: 'bg-purple-100 text-purple-700', icon: '📋' },
+  { key: 'In Progress', color: '#3B82F6', bg: 'bg-blue-50', border: 'border-blue-100', badge: 'bg-blue-100 text-blue-700', icon: '✍️' },
+  { key: 'Sent Back', color: '#D97706', bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-100 text-amber-700', icon: '↩' },
+  { key: 'Submitted', color: '#F97316', bg: 'bg-orange-50', border: 'border-orange-100', badge: 'bg-orange-100 text-orange-700', icon: '📤' },
+  { key: 'Under Review', color: '#EC4899', bg: 'bg-pink-50', border: 'border-pink-100', badge: 'bg-pink-100 text-pink-700', icon: '👀' },
+  { key: 'Closed', color: '#10B981', bg: 'bg-green-50', border: 'border-green-100', badge: 'bg-green-100 text-green-700', icon: '✅' },
 ];
 
 export const AUDIT_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#1B6B6B', '#6366F1', '#14B8A6'];
