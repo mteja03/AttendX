@@ -218,6 +218,7 @@ export default function AdminUsers() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [companyFilter, setCompanyFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEmpDrop, setShowEmpDrop] = useState(false);
   const [empSearch, setEmpSearch] = useState('');
@@ -307,9 +308,10 @@ export default function AdminUsers() {
       if (roleFilter && u.role !== roleFilter) return false;
       if (statusFilter === 'active' && u.isActive === false) return false;
       if (statusFilter === 'inactive' && u.isActive !== false) return false;
+      if (companyFilter && u.companyId !== companyFilter) return false;
       return true;
     });
-  }, [users, search, roleFilter, statusFilter]);
+  }, [users, search, roleFilter, statusFilter, companyFilter]);
 
   const resetAddForm = () => {
     setForm({
@@ -529,6 +531,20 @@ export default function AdminUsers() {
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
+          <select
+            value={companyFilter}
+            onChange={(e) => setCompanyFilter(e.target.value)}
+            className="min-w-[150px] rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none"
+          >
+            <option value="">All Companies</option>
+            {(companies || [])
+              .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+          </select>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-500">
@@ -539,13 +555,14 @@ export default function AdminUsers() {
           <span className="text-green-600">{users.filter((u) => u.isActive !== false).length} active</span>
           <span className="text-gray-300">·</span>
           <span className="text-gray-400">{users.filter((u) => u.isActive === false).length} inactive</span>
-          {(search || roleFilter || statusFilter) && (
+          {(search || roleFilter || statusFilter || companyFilter) && (
             <button
               type="button"
               onClick={() => {
                 setSearch('');
                 setRoleFilter('');
                 setStatusFilter('');
+                setCompanyFilter('');
               }}
               className="ml-auto text-xs text-[#1B6B6B] hover:underline"
             >
@@ -578,7 +595,7 @@ export default function AdminUsers() {
             <p className="mb-3 text-4xl">👥</p>
             <p className="mb-1 text-base font-semibold text-gray-700">No users found</p>
             <p className="text-sm text-gray-400">
-              {search || roleFilter || statusFilter ? 'Try adjusting your filters' : 'Add your first platform user'}
+              {search || roleFilter || statusFilter || companyFilter ? 'Try adjusting your filters' : 'Add your first platform user'}
             </p>
           </div>
         ) : (
