@@ -4890,6 +4890,7 @@ function AuditList({
         ...m,
         email: (m.email || '').toLowerCase(),
       }));
+      const teamMemberEmails = teamMembersNorm.map((m) => m.email).filter(Boolean);
       const resolvedCategory = normaliseAuditCategory(type?.auditCategory || assignForm.category);
       await addDoc(collection(db, 'companies', companyId, 'audits'), {
         auditRefId: refId,
@@ -4906,6 +4907,7 @@ function AuditList({
         auditorName: assignForm.auditorName,
         auditorEmail: (assignForm.auditorEmail || '').toLowerCase(),
         teamMembers: teamMembersNorm,
+        teamMemberEmails,
         startDate: assignForm.startDate,
         endDate: assignForm.endDate,
         notes: assignForm.notes,

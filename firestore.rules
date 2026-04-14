@@ -1,22 +1,383 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ═══════════════════════════════
+    // HELPER FUNCTIONS
+    // ═══════════════════════════════
+
+    function userDocPathEmail() {
+      return /databases/$(database)/documents/users/$(request.auth.token.email);
+    }
+
+    function userDocPathUid() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    // Prefer users/{email}, then users/{uid} (AuthContext loads both)
+    function userDocData() {
+      return exists(userDocPathEmail())
+        ? get(userDocPathEmail()).data
+        : exists(userDocPathUid())
+          ? get(userDocPathUid()).data
+          : {};
+    }
+
+    function isAuthed() {
+      return request.auth != null
+        && request.auth.token.email != null;
+    }
+
+    function isAdmin() {
+      return isAuthed()
+        && userDocData().role == 'admin';
+    }
+
+    function isCompanyAdmin(companyId) {
+      return isAuthed()
+        && userDocData().role == 'companyadmin'
+        && userDocData().companyId == companyId;
+    }
+
+    function belongsToCompany(companyId) {
+      return isAuthed()
+        && userDocData().companyId == companyId;
+    }
+
+    function isActive() {
+      return isAuthed()
+        && userDocData().isActive != false;
+    }
+
+    function isHRManager(companyId) {
+      return belongsToCompany(companyId)
+        && userDocData().role == 'hrmanager';
+    }
+
+    function canManageCompany(companyId) {
+      return isAdmin()
+        || isCompanyAdmin(companyId)
+        || isHRManager(companyId);
+    }
+
+    function isAuditManager(companyId) {
+      return belongsToCompany(companyId)
+        && userDocData().role == 'auditmanager';
+    }
+
+    function isAuditor(companyId) {
+      return belongsToCompany(companyId)
+        && userDocData().role == 'auditor';
+    }
+
+    function canAccessAudit(companyId) {
+      return isAdmin()
+        || isCompanyAdmin(companyId)
+        || isHRManager(companyId)
+        || isAuditManager(companyId)
+        || isAuditor(companyId);
+    }
+
+    function isTeamRole(companyId) {
+      return belongsToCompany(companyId)
+        && userDocData().role in [
+          'manager', 'itmanager'
+        ];
+    }
+
+    function isAssignedAuditorTeam(companyId) {
+      return isAuditor(companyId)
+        && (
+          resource.data.auditorEmail == request.auth.token.email
+          || (
+            'teamMemberEmails' in resource.data
+            && request.auth.token.email in resource.data.teamMemberEmails
+          )
+        );
+    }
+
+    // ═══════════════════════════════
+    // TOP-LEVEL (existing app support)
+    // ═══════════════════════════════
+
     match /errorLogs/{logId} {
       allow create: if request.auth != null;
-      allow read: if request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow read: if isAdmin();
     }
 
     match /fcmTokens/{userId} {
       allow read: if request.auth != null && (
-        request.auth.token.email == userId ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        request.auth.token.email == userId
+        || isAdmin()
       );
       allow write: if request.auth != null && request.auth.token.email == userId;
     }
 
+    // ═══════════════════════════════
+    // USERS COLLECTION
+    // ═══════════════════════════════
+
+    match /users/{email} {
+      allow read: if isAuthed() && (
+        request.auth.token.email == email
+        || request.auth.uid == email
+        || isAdmin()
+        || (
+          userDocData().role == 'companyadmin'
+          && exists(/databases/$(database)/documents/users/$(email))
+          && get(/databases/$(database)/documents/users/$(email)).data.companyId
+            == userDocData().companyId
+        )
+      );
+
+      allow create: if isAdmin()
+        || (isAuthed() && userDocData().role == 'companyadmin');
+
+      allow update: if isAdmin()
+        || (
+          (request.auth.token.email == email || request.auth.uid == email)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['lastLogin', 'lastLoginAt', 'photoURL'])
+        )
+        || (
+          userDocData().role == 'companyadmin'
+          && resource.data.companyId == userDocData().companyId
+        );
+
+      allow delete: if isAdmin();
+    }
+
+
+    // ═══════════════════════════════
+    // COMPANIES COLLECTION
+    // ═══════════════════════════════
+
+    match /companies/{companyId} {
+
+      allow read: if isAdmin()
+        || (isActive() && belongsToCompany(companyId));
+
+      allow create: if isAdmin();
+
+      allow update: if isAdmin()
+        || isCompanyAdmin(companyId);
+
+      allow delete: if isAdmin();
+
+
+      match /employees/{employeeId} {
+        allow read: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+          || isTeamRole(companyId)
+          || canAccessAudit(companyId)
+        );
+
+        allow create, update: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+        );
+
+        allow delete: if isAdmin();
+      }
+
+
+      match /leave/{leaveId} {
+        allow read: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+          || isTeamRole(companyId)
+        );
+
+        allow create: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+          || isTeamRole(companyId)
+        );
+
+        allow update: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+          || isTeamRole(companyId)
+        );
+
+        allow delete: if isAdmin()
+          || canManageCompany(companyId);
+      }
+
+
+      match /assets/{assetId} {
+        allow read: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+          || (
+            belongsToCompany(companyId)
+            && userDocData().role == 'itmanager'
+          )
+        );
+
+        allow create, update: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+          || (
+            belongsToCompany(companyId)
+            && userDocData().role == 'itmanager'
+          )
+        );
+
+        allow delete: if isAdmin()
+          || canManageCompany(companyId);
+      }
+
+
+      match /audits/{auditId} {
+        allow read: if isActive()
+          && canAccessAudit(companyId);
+
+        allow create: if isActive() && (
+          isAdmin()
+          || isCompanyAdmin(companyId)
+          || isHRManager(companyId)
+          || isAuditManager(companyId)
+        );
+
+        allow update: if isActive() && (
+          isAdmin()
+          || isCompanyAdmin(companyId)
+          || isHRManager(companyId)
+          || isAuditManager(companyId)
+          || isAssignedAuditorTeam(companyId)
+        );
+
+        allow delete: if isAdmin();
+      }
+
+
+      match /auditTypes/{typeId} {
+        allow read: if isActive()
+          && canAccessAudit(companyId);
+
+        allow create, update, delete: if isActive() && (
+          isAdmin()
+          || isCompanyAdmin(companyId)
+          || isHRManager(companyId)
+          || isAuditManager(companyId)
+        );
+      }
+
+
+      match /settings/{settingId} {
+        allow read: if isActive() && (
+          isAdmin()
+          || belongsToCompany(companyId)
+        );
+
+        allow create, update: if isActive() && (
+          isAdmin()
+          || isCompanyAdmin(companyId)
+          || isHRManager(companyId)
+          || isAuditManager(companyId)
+        );
+
+        allow delete: if isAdmin()
+          || isCompanyAdmin(companyId);
+      }
+
+
+      match /teamMembers/{memberId} {
+        allow read: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+        );
+
+        allow create, update: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+        );
+
+        allow delete: if isAdmin()
+          || canManageCompany(companyId);
+      }
+
+
+      match /documents/{docId} {
+        allow read: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+        );
+
+        allow create, update: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+        );
+
+        allow delete: if isAdmin()
+          || canManageCompany(companyId);
+      }
+
+
+      // Library / org roles / calendar (not covered by named rules above)
+      match /policies/{policyId} {
+        allow read: if isActive() && (
+          isAdmin()
+          || belongsToCompany(companyId)
+        );
+        allow create, update: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+        );
+        allow delete: if isAdmin()
+          || canManageCompany(companyId);
+      }
+
+      match /roles/{roleId} {
+        allow read: if isActive() && (
+          isAdmin()
+          || belongsToCompany(companyId)
+        );
+        allow create, update, delete: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+        );
+      }
+
+      match /events/{eventId} {
+        allow read: if isActive() && (
+          isAdmin()
+          || belongsToCompany(companyId)
+        );
+        allow create, update: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+          || isTeamRole(companyId)
+        );
+        allow delete: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+        );
+      }
+
+
+      match /{collection}/{docId} {
+        allow read: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+        );
+
+        allow write: if isActive() && (
+          isAdmin()
+          || canManageCompany(companyId)
+        );
+      }
+    }
+
+
+    // ═══════════════════════════════
+    // DENY EVERYTHING ELSE
+    // ═══════════════════════════════
+
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }
