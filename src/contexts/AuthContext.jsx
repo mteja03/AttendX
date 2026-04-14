@@ -211,7 +211,30 @@ export function AuthProvider({ children }) {
             setCompanyId(null);
           }
           setUserPermissions(data.permissions ?? DEFAULT_PERMISSIONS[roleVal] ?? {});
-          setAuditScope(data.auditScope != null && data.auditScope !== '' ? data.auditScope : null);
+          // For audit managers, auditScope must exist. If missing from users doc, try teamMembers as fallback.
+          let resolvedScope = data.auditScope != null && data.auditScope !== '' ? data.auditScope : null;
+          if (!resolvedScope && roleVal === 'auditmanager') {
+            // Try to get from teamMembers
+            try {
+              const tmQuery = query(collectionGroup(db, 'teamMembers'), where('email', '==', email), limit(1));
+              const tmSnap = await getDocs(tmQuery);
+              if (!tmSnap.empty) {
+                const tmData = tmSnap.docs[0].data();
+                if (tmData.auditScope) {
+                  resolvedScope = tmData.auditScope;
+                  // Also patch the users doc so it's consistent next time
+                  if (userDocRef) {
+                    updateDoc(userDocRef, {
+                      auditScope: tmData.auditScope,
+                    }).catch(() => {});
+                  }
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+          setAuditScope(resolvedScope);
           setIsCompanyAdmin(companyAdminRole);
           setAuthError('');
           if (userDocRef) {

@@ -1062,6 +1062,14 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
   const visibleTemplates = useMemo(() => {
     return auditTypes.filter((t) => {
       if (!isAuditManager) return true;
+      // Debug — remove after confirming fix
+      if (isAuditManager && !auditScope) {
+        console.warn(
+          '[AuditSettings] auditScope is null',
+          'for auditmanager — showing all.',
+          'Check user Firestore doc.',
+        );
+      }
       if (!auditScope || auditScope === 'both') return true;
       const cat = (t.auditCategory || 'internal').toLowerCase().trim();
       if (auditScope === 'internal') return cat === 'internal';

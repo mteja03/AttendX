@@ -361,13 +361,14 @@ export default function AdminUsers() {
     }
     setSaving(true);
     try {
+      const resolvedAuditScope = form.role === 'auditmanager' ? form.auditScope || 'both' : null;
       await setDoc(doc(db, 'users', email), {
         email,
         name: form.name.trim(),
         role: form.role,
         companyId: targetCompanyId,
         isActive: true,
-        auditScope: form.auditScope || null,
+        auditScope: resolvedAuditScope,
         employeeId: form.selectedEmpId || null,
         createdAt: new Date(),
         createdBy: currentUser?.email || '',
@@ -381,7 +382,7 @@ export default function AdminUsers() {
           role: form.role,
           companyId: targetCompanyId,
           isActive: true,
-          auditScope: form.auditScope || null,
+          auditScope: resolvedAuditScope,
           employeeId: form.selectedEmpId || null,
           createdAt: new Date(),
         },
