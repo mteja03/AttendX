@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 .env
 functions/.env
+serviceAccount.json
+fixPermissions.mjs
