@@ -1058,6 +1058,7 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
 function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSuccess, showError }) {
   const { userRole, auditScope } = useAuth();
   const isAuditManager = userRole === 'auditmanager';
+  console.log('[AuditSettings Debug]', { userRole, auditScope, isAuditManager });
 
   const visibleTemplates = useMemo(() => {
     return auditTypes.filter((t) => {
@@ -5261,7 +5262,7 @@ function AuditList({
       {showAssignModal && (
         <AssignAuditModal
           auditTypes={auditTypes}
-          company={company}
+          company={effectiveCompany}
           companyId={companyId}
           employees={employees}
           assignForm={assignForm}

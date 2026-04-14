@@ -234,6 +234,14 @@ export function AuthProvider({ children }) {
               // ignore
             }
           }
+          console.log(
+            '[Auth] user data source:',
+            data ? 'users collection' : 'not found',
+            'auditScope:',
+            data?.auditScope,
+            'role:',
+            data?.role,
+          );
           setAuditScope(resolvedScope);
           setIsCompanyAdmin(companyAdminRole);
           setAuthError('');
