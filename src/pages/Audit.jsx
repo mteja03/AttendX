@@ -5262,7 +5262,7 @@ function AuditList({
       {showAssignModal && (
         <AssignAuditModal
           auditTypes={auditTypes}
-          company={effectiveCompany}
+          company={company}
           companyId={companyId}
           employees={employees}
           assignForm={assignForm}
