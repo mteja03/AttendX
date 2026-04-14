@@ -1633,51 +1633,41 @@ function AssignAuditModal({
 
   const [orgListsFromFetch, setOrgListsFromFetch] = useState(null);
 
+  // Always fetch from Firestore as the source of truth for org lists.
+  // company prop may have stale or partial data.
   useEffect(() => {
-    const hasCompanyLists =
-      localBranchesFromCompany !== null ||
-      localLocationsFromCompany !== null ||
-      localDeptsFromCompany !== null ||
-      localCategoriesFromCompany !== null;
-    if (hasCompanyLists) {
-      return;
-    }
     if (!companyId) return;
     let cancelled = false;
-    getDoc(doc(db, 'companies', companyId)).then((snap) => {
-      if (cancelled || !snap.exists()) return;
-      const d = snap.data();
-      setOrgListsFromFetch({
-        branches: d.branches || [],
-        locations: d.locations || [],
-        departments: d.departments || [],
-        categories: d.categories || [],
-      });
-    });
+    getDoc(doc(db, 'companies', companyId))
+      .then((snap) => {
+        if (cancelled || !snap.exists()) return;
+        const d = snap.data();
+        setOrgListsFromFetch({
+          branches: d.branches || [],
+          locations: d.locations || [],
+          departments: d.departments || [],
+          categories: d.categories || [],
+        });
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [
-    companyId,
-    localBranchesFromCompany,
-    localLocationsFromCompany,
-    localDeptsFromCompany,
-    localCategoriesFromCompany,
-  ]);
+  }, [companyId]);
 
   const localBranches = useMemo(() => {
-    if (localBranchesFromCompany) return localBranchesFromCompany;
-    return orgListsFromFetch?.branches ?? [];
+    if (orgListsFromFetch?.branches?.length) return orgListsFromFetch.branches;
+    return localBranchesFromCompany || [];
   }, [localBranchesFromCompany, orgListsFromFetch]);
 
   const localLocations = useMemo(() => {
-    if (localLocationsFromCompany) return localLocationsFromCompany;
-    return orgListsFromFetch?.locations ?? [];
+    if (orgListsFromFetch?.locations?.length) return orgListsFromFetch.locations;
+    return localLocationsFromCompany || [];
   }, [localLocationsFromCompany, orgListsFromFetch]);
 
   const localDepts = useMemo(() => {
-    if (localDeptsFromCompany) return localDeptsFromCompany;
-    return orgListsFromFetch?.departments ?? [];
+    if (orgListsFromFetch?.departments?.length) return orgListsFromFetch.departments;
+    return localDeptsFromCompany || [];
   }, [localDeptsFromCompany, orgListsFromFetch]);
 
   const localCategories = useMemo(() => {
