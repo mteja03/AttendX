@@ -247,6 +247,15 @@ export default function Settings() {
   const [showOffCategoryPicker, setShowOffCategoryPicker] = useState(false);
   const [policiesForOnboarding, setPoliciesForOnboarding] = useState([]);
   const [errorModal, setErrorModal] = useState(null);
+
+  // Clear error modal on re-login
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    const timer = setTimeout(() => {
+      setErrorModal(null);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [currentUser]);
   const activeTab = tab;
 
   useEffect(() => {

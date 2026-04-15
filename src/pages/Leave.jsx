@@ -160,7 +160,7 @@ function leaveTypeBadgeClass(raw, leaveTypesArr) {
 
 export default function Leave() {
   const { companyId } = useParams();
-  const { signOut } = useAuth();
+  const { currentUser, signOut } = useAuth();
   const { success, error: showError } = useToast();
   const [leaveList, setLeaveList] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -183,6 +183,15 @@ export default function Leave() {
   const [saving, setSaving] = useState(false);
   const [actioningId, setActioningId] = useState(null);
   const [errorModal, setErrorModal] = useState(null);
+
+  // Clear error modal on re-login
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    const timer = setTimeout(() => {
+      setErrorModal(null);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [currentUser]);
 
   const getEmployeeMobile = (empId) => {
     const emp = employees.find((e) => e.id === empId);

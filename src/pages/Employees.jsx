@@ -273,7 +273,7 @@ export default function Employees() {
   const { companyId } = useParams();
   const navigate = useNavigate();
   const { success, error: showError } = useToast();
-  const { role: userRole, signOut } = useAuth();
+  const { currentUser, role: userRole, signOut } = useAuth();
   const { company } = useCompany();
   const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
   const [employees, setEmployees] = useState([]);
@@ -316,6 +316,15 @@ export default function Employees() {
   const [formWarnings, setFormWarnings] = useState({});
   const [saving, setSaving] = useState(false);
   const [errorModal, setErrorModal] = useState(null);
+
+  // Clear error modal on re-login
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    const timer = setTimeout(() => {
+      setErrorModal(null);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [currentUser]);
   const [managerSearch, setManagerSearch] = useState('');
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
   const [roles, setRoles] = useState([]);

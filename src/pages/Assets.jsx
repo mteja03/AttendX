@@ -188,6 +188,15 @@ export default function Assets() {
   const [showDownload, setShowDownload] = useState(false);
   const [errorModal, setErrorModal] = useState(null);
 
+  // Clear error modal on re-login
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    const timer = setTimeout(() => {
+      setErrorModal(null);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [currentUser]);
+
   const handleSmartError = async (error, context, fallback = 'Failed to save. Please try again.') => {
     await logError(error, { companyId, ...context });
     const errType = getErrorMessage(error);
