@@ -30,7 +30,7 @@ const EMPTY_ASSET_STATS = {
 };
 
 /** Dashboard employee list: include Inactive so total count is not under-reported (max 500 docs). */
-const DASHBOARD_EMPLOYEE_STATUS_IN = ['Active', 'Notice Period', 'Offboarding', 'Inactive'];
+const DASHBOARD_EMPLOYEE_STATUS_IN = ['Active', 'Notice Period', 'Offboarding', 'Inactive', 'On Leave'];
 
 function enrichOnboarding(emp) {
   const tasks = Array.isArray(emp.onboarding?.tasks) ? emp.onboarding.tasks : [];
