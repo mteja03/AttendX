@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/config';
 import { PLATFORM_CONFIG } from '../config/constants';
-import { setSentryUser } from '../utils/sentry';
+import { captureError, setSentryUser } from '../utils/sentry';
 import { trackLogin, trackLogout } from '../utils/analytics';
 import { DEFAULT_PERMISSIONS, VALID_ROLES } from '../utils/roles';
 
@@ -72,7 +72,7 @@ export function roleNeedsDriveAccess(r) {
 /** Drive access token still within stored expiry window (55 min buffer) */
 export function isTokenValid() {
   try {
-    const expiry = localStorage.getItem('gat_expiry');
+    const expiry = sessionStorage.getItem('gat_expiry');
     if (!expiry) return false;
     return Date.now() < parseInt(expiry, 10);
   } catch {
@@ -103,8 +103,8 @@ export function AuthProvider({ children }) {
         setIsCompanyAdmin(false);
         setGoogleAccessToken(null);
         try {
-          localStorage.removeItem('gat');
-          localStorage.removeItem('gat_expiry');
+          sessionStorage.removeItem('gat');
+          sessionStorage.removeItem('gat_expiry');
         } catch {
           // ignore
         }
@@ -234,14 +234,6 @@ export function AuthProvider({ children }) {
               // ignore
             }
           }
-          console.log(
-            '[Auth] user data source:',
-            data ? 'users collection' : 'not found',
-            'auditScope:',
-            data?.auditScope,
-            'role:',
-            data?.role,
-          );
           setAuditScope(resolvedScope);
           setIsCompanyAdmin(companyAdminRole);
           setAuthError('');
@@ -266,8 +258,8 @@ export function AuthProvider({ children }) {
             const needsDrive = roleNeedsDriveAccess(userRole);
 
             if (needsDrive) {
-              const stored = localStorage.getItem('gat');
-              const expiryStr = localStorage.getItem('gat_expiry');
+              const stored = sessionStorage.getItem('gat');
+              const expiryStr = sessionStorage.getItem('gat_expiry');
               const expiry = expiryStr ? parseInt(expiryStr, 10) : null;
               const tokenStillValid = !!(stored && expiry && Date.now() < expiry);
 
@@ -275,8 +267,8 @@ export function AuthProvider({ children }) {
                 setGoogleAccessToken(stored);
               } else {
                 try {
-                  localStorage.removeItem('gat');
-                  localStorage.removeItem('gat_expiry');
+                  sessionStorage.removeItem('gat');
+                  sessionStorage.removeItem('gat_expiry');
                 } catch {
                   // ignore
                 }
@@ -284,8 +276,8 @@ export function AuthProvider({ children }) {
               }
             } else {
               try {
-                localStorage.removeItem('gat');
-                localStorage.removeItem('gat_expiry');
+                sessionStorage.removeItem('gat');
+                sessionStorage.removeItem('gat_expiry');
               } catch {
                 // ignore
               }
@@ -296,7 +288,10 @@ export function AuthProvider({ children }) {
           }
           setLoading(false);
         } catch (error) {
-          console.error('Error checking users whitelist', error);
+          captureError(error, { context: 'checkWhitelist' });
+          if (import.meta.env.DEV) {
+            console.error('Error checking users whitelist', error);
+          }
           await signOut(auth);
           setSentryUser(null);
           setCurrentUser(null);
@@ -321,9 +316,9 @@ export function AuthProvider({ children }) {
     if (!accessToken) return;
     setGoogleAccessToken(accessToken);
     try {
-      localStorage.setItem('gat', accessToken);
+      sessionStorage.setItem('gat', accessToken);
       const expiry = Date.now() + PLATFORM_CONFIG.DRIVE_TOKEN_EXPIRY_MS;
-      localStorage.setItem('gat_expiry', String(expiry));
+      sessionStorage.setItem('gat_expiry', String(expiry));
     } catch {
       // ignore
     }
@@ -335,8 +330,8 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const stored = localStorage.getItem('gat');
-      const expiryStr = localStorage.getItem('gat_expiry');
+      const stored = sessionStorage.getItem('gat');
+      const expiryStr = sessionStorage.getItem('gat_expiry');
       const expiry = expiryStr ? parseInt(expiryStr, 10) : 0;
       if (stored && expiry && Date.now() < expiry) {
         setGoogleAccessToken(stored);
@@ -404,8 +399,8 @@ export function AuthProvider({ children }) {
       persistDriveToken(accessToken);
     } else {
       try {
-        localStorage.removeItem('gat');
-        localStorage.removeItem('gat_expiry');
+        sessionStorage.removeItem('gat');
+        sessionStorage.removeItem('gat_expiry');
       } catch {
         // ignore
       }
@@ -417,8 +412,8 @@ export function AuthProvider({ children }) {
   const signOutUser = useCallback(async () => {
     trackLogout();
     try {
-      localStorage.removeItem('gat');
-      localStorage.removeItem('gat_expiry');
+      sessionStorage.removeItem('gat');
+      sessionStorage.removeItem('gat_expiry');
     } catch {
       // ignore
     }

@@ -2,12 +2,48 @@ const functions = require('firebase-functions/v1');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineString } = require('firebase-functions/params');
 const admin = require('firebase-admin');
+const { FieldValue } = require('firebase-admin/firestore');
 const { google } = require('googleapis');
 
 admin.initializeApp();
 
 const db = admin.firestore();
 const messaging = admin.messaging();
+
+/** Callable `data` must be a non-null plain object. */
+function assertCallableObjectData(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new HttpsError('invalid-argument', 'Invalid input');
+  }
+}
+
+/** Per-UID rate limit for sensitive Drive HTTPS callables (Firestore-backed). */
+async function enforceDriveCallableRateLimit(uid) {
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Must be logged in');
+  }
+  const windowMs = 60 * 1000;
+  const maxCalls = 30;
+  const userRef = db.collection('rateLimits').doc(uid);
+  const now = Date.now();
+  const snap = await userRef.get();
+
+  if (snap.exists) {
+    const d = snap.data() || {};
+    const calls = typeof d.calls === 'number' ? d.calls : 0;
+    const windowStart = typeof d.windowStart === 'number' ? d.windowStart : 0;
+    if (now - windowStart < windowMs) {
+      if (calls >= maxCalls) {
+        throw new HttpsError('resource-exhausted', 'Too many requests');
+      }
+      await userRef.update({ calls: FieldValue.increment(1) });
+    } else {
+      await userRef.set({ calls: 1, windowStart: now });
+    }
+  } else {
+    await userRef.set({ calls: 1, windowStart: now });
+  }
+}
 
 const clientEmail = defineString('DRIVE_CLIENT_EMAIL');
 const privateKey = defineString('DRIVE_PRIVATE_KEY');
@@ -218,6 +254,8 @@ exports.uploadFileToDrive = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Must be logged in');
     }
+    assertCallableObjectData(request.data);
+    await enforceDriveCallableRateLimit(request.auth.uid);
 
     const {
       fileBase64,
@@ -227,9 +265,12 @@ exports.uploadFileToDrive = onCall(
       empId,
       empName,
       category,
-    } = request.data || {};
+    } = request.data;
 
-    if (!fileBase64 || !fileName) {
+    if (typeof fileBase64 !== 'string' || !fileBase64) {
+      throw new HttpsError('invalid-argument', 'fileBase64 and fileName required');
+    }
+    if (typeof fileName !== 'string' || !fileName.trim()) {
       throw new HttpsError('invalid-argument', 'fileBase64 and fileName required');
     }
 
@@ -308,13 +349,17 @@ exports.deleteFileFromDrive = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Must be logged in');
     }
-    if (!request.data.fileId) {
+    assertCallableObjectData(request.data);
+    await enforceDriveCallableRateLimit(request.auth.uid);
+
+    const { fileId } = request.data;
+    if (typeof fileId !== 'string' || !fileId.trim()) {
       throw new HttpsError('invalid-argument', 'fileId required');
     }
     try {
       const drive = getDriveClient();
       await drive.files.delete({
-        fileId: request.data.fileId,
+        fileId: fileId.trim(),
       });
       return { success: true };
     } catch (error) {

@@ -1059,13 +1059,11 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
 function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSuccess, showError }) {
   const { userRole, auditScope } = useAuth();
   const isAuditManager = userRole === 'auditmanager';
-  console.log('[AuditSettings Debug]', { userRole, auditScope, isAuditManager });
 
   const visibleTemplates = useMemo(() => {
     return auditTypes.filter((t) => {
       if (!isAuditManager) return true;
-      // Debug — remove after confirming fix
-      if (isAuditManager && !auditScope) {
+      if (import.meta.env.DEV && isAuditManager && !auditScope) {
         console.warn(
           '[AuditSettings] auditScope is null',
           'for auditmanager — showing all.',
