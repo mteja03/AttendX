@@ -29,6 +29,9 @@ const EMPTY_ASSET_STATS = {
   consumableIssued: 0,
 };
 
+/** Dashboard employee list: include Inactive so total count is not under-reported (max 500 docs). */
+const DASHBOARD_EMPLOYEE_STATUS_IN = ['Active', 'Notice Period', 'Offboarding', 'Inactive'];
+
 function enrichOnboarding(emp) {
   const tasks = Array.isArray(emp.onboarding?.tasks) ? emp.onboarding.tasks : [];
   const done = tasks.filter((t) => t.completed).length;
@@ -205,11 +208,7 @@ export default function Dashboard() {
       let snap;
       try {
         snap = await getDocs(
-          query(
-            empCol,
-            where('status', 'in', ['Active', 'Notice Period', 'Offboarding']),
-            limit(500),
-          ),
+          query(empCol, where('status', 'in', DASHBOARD_EMPLOYEE_STATUS_IN), limit(500)),
         );
       } catch (e) {
         if (isFailedPrecondition(e)) {
@@ -217,7 +216,13 @@ export default function Dashboard() {
             snap = await getDocs(query(empCol, orderBy('createdAt', 'desc'), limit(500)));
           } catch (e2) {
             if (isFailedPrecondition(e2)) {
-              snap = await getDocs(query(empCol, limit(500)));
+              try {
+                snap = await getDocs(
+                  query(empCol, where('status', 'in', DASHBOARD_EMPLOYEE_STATUS_IN), limit(500)),
+                );
+              } catch {
+                snap = await getDocs(query(empCol, limit(500)));
+              }
             } else {
               throw e2;
             }
