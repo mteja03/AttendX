@@ -9,6 +9,8 @@ import {
   orderBy,
   serverTimestamp,
   where,
+  limit,
+  Timestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import StatCard from '../components/StatCard';
@@ -198,13 +200,28 @@ export default function Dashboard() {
 
   const fetchEmployees = useCallback(async () => {
     if (!companyId) return;
+    const empCol = collection(db, 'companies', companyId, 'employees');
     try {
       let snap;
       try {
-        snap = await getDocs(query(collection(db, 'companies', companyId, 'employees'), orderBy('createdAt', 'desc')));
+        snap = await getDocs(
+          query(
+            empCol,
+            where('status', 'in', ['Active', 'Notice Period', 'Offboarding']),
+            limit(500),
+          ),
+        );
       } catch (e) {
         if (isFailedPrecondition(e)) {
-          snap = await getDocs(collection(db, 'companies', companyId, 'employees'));
+          try {
+            snap = await getDocs(query(empCol, orderBy('createdAt', 'desc'), limit(500)));
+          } catch (e2) {
+            if (isFailedPrecondition(e2)) {
+              snap = await getDocs(query(empCol, limit(500)));
+            } else {
+              throw e2;
+            }
+          }
         } else {
           throw e;
         }
@@ -226,13 +243,26 @@ export default function Dashboard() {
 
   const fetchLeave = useCallback(async () => {
     if (!companyId) return;
+    const leaveCol = collection(db, 'companies', companyId, 'leave');
+    const currentYear = new Date().getFullYear();
+    const yearStart = Timestamp.fromDate(new Date(currentYear, 0, 1));
     try {
       let snap;
       try {
-        snap = await getDocs(query(collection(db, 'companies', companyId, 'leave'), orderBy('appliedAt', 'desc')));
+        snap = await getDocs(
+          query(leaveCol, where('startDate', '>=', yearStart), orderBy('startDate', 'desc'), limit(200)),
+        );
       } catch (e) {
         if (isFailedPrecondition(e)) {
-          snap = await getDocs(collection(db, 'companies', companyId, 'leave'));
+          try {
+            snap = await getDocs(query(leaveCol, orderBy('appliedAt', 'desc'), limit(200)));
+          } catch (e2) {
+            if (isFailedPrecondition(e2)) {
+              snap = await getDocs(query(leaveCol, limit(200)));
+            } else {
+              throw e2;
+            }
+          }
         } else {
           throw e;
         }
@@ -255,7 +285,7 @@ export default function Dashboard() {
   const fetchAssets = useCallback(async () => {
     if (!companyId) return;
     try {
-      const snap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+      const snap = await getDocs(query(collection(db, 'companies', companyId, 'assets'), limit(200)));
       const assetData = snap.docs.map((d) => d.data());
       const trackable = assetData.filter((a) => (a.mode || 'trackable') === 'trackable');
       const consumable = assetData.filter((a) => (a.mode || 'trackable') === 'consumable');
@@ -283,13 +313,17 @@ export default function Dashboard() {
 
     try {
       const snap = await getDocs(
-        query(collection(db, 'companies', companyId, 'employees'), where('onboarding.status', '==', 'in_progress')),
+        query(
+          collection(db, 'companies', companyId, 'employees'),
+          where('onboarding.status', '==', 'in_progress'),
+          limit(500),
+        ),
       );
       setOnboardingEmployees(mapAndSort(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
     } catch (e) {
       if (isFailedPrecondition(e)) {
         try {
-          const snap = await getDocs(collection(db, 'companies', companyId, 'employees'));
+          const snap = await getDocs(query(collection(db, 'companies', companyId, 'employees'), limit(500)));
           const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           const filtered = all.filter((emp) => emp.onboarding?.status === 'in_progress');
           setOnboardingEmployees(mapAndSort(filtered));
@@ -321,13 +355,17 @@ export default function Dashboard() {
 
     try {
       const snap = await getDocs(
-        query(collection(db, 'companies', companyId, 'employees'), where('offboarding.status', '==', 'in_progress')),
+        query(
+          collection(db, 'companies', companyId, 'employees'),
+          where('offboarding.status', '==', 'in_progress'),
+          limit(500),
+        ),
       );
       setOffboardingEmployees(mapAndSort(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
     } catch (e) {
       if (isFailedPrecondition(e)) {
         try {
-          const snap = await getDocs(collection(db, 'companies', companyId, 'employees'));
+          const snap = await getDocs(query(collection(db, 'companies', companyId, 'employees'), limit(500)));
           const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           const filtered = all.filter((emp) => emp.offboarding?.status === 'in_progress');
           setOffboardingEmployees(mapAndSort(filtered));

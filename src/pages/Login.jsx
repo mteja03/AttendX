@@ -112,6 +112,7 @@ export default function Login() {
             <img
               src="/logo/icon.png"
               alt="AttendX"
+              loading="lazy"
               style={{
                 width: '100%',
                 height: '100%',

@@ -1176,12 +1176,12 @@ export default function Reports() {
     XLSX.writeFile(wb, `${safeCompanyFile}_Employees_Report_${today}.xlsx`);
   };
 
-  const progressBarClass = (pct) => {
+  const progressBarClass = useCallback((pct) => {
     if (pct <= 25) return 'bg-red-500';
     if (pct <= 75) return 'bg-amber-500';
     if (pct < 100) return 'bg-blue-500';
     return 'bg-green-500';
-  };
+  }, []);
 
   const handlePrintReport = (tabId) => {
     const tabMeta = REPORT_TABS.find((t) => t.id === tabId);

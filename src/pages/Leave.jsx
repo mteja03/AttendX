@@ -19,7 +19,7 @@ import { saveAs } from 'file-saver';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
-import PageLoader from '../components/PageLoader';
+import { SkeletonTable } from '../components/SkeletonRow';
 import ErrorModal from '../components/ErrorModal';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import { toDisplayDate, toJSDate } from '../utils';
@@ -921,7 +921,7 @@ export default function Leave() {
       </div>
 
       {loading ? (
-        <PageLoader />
+        <SkeletonTable rows={8} />
       ) : (
         <>
           <div className="hidden lg:block overflow-x-auto rounded-2xl border border-slate-200 bg-white">

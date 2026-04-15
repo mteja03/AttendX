@@ -544,6 +544,7 @@ export default function Companies() {
           <img
             src="/logo/icon.png"
             alt=""
+            loading="lazy"
             className="w-10 h-10 rounded-xl object-cover shrink-0"
             onError={(e) => {
               e.target.style.display = 'none';

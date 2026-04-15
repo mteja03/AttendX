@@ -31,6 +31,7 @@ import {
 } from './audit/auditHelpers';
 import { WhatsAppButton } from '../utils/whatsapp';
 import { whatsappUrl } from '../utils/whatsappUrl';
+import { SkeletonTable } from '../components/SkeletonRow';
 
 /** Used by AuditCalendar; includes legacy keys for older documents */
 const STATUS_COLORS = {
@@ -3437,6 +3438,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                 <img
                                   src={docRecord.url}
                                   alt={docRecord.name}
+                                  loading="lazy"
                                   className="w-full max-h-32 object-cover rounded-xl border border-gray-100"
                                 />
                               </button>
@@ -3538,6 +3540,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                                 <img
                                   src={docRecord.url}
                                   alt={docRecord.name}
+                                  loading="lazy"
                                   className="w-full max-h-32 object-cover rounded-xl border border-gray-100"
                                 />
                               </button>
@@ -3702,6 +3705,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
                               <img
                                 src={docRecord.url}
                                 alt={docRecord.name}
+                                loading="lazy"
                                 className="w-full max-h-32 object-cover rounded-xl border border-gray-100"
                               />
                             </button>
@@ -5710,8 +5714,10 @@ export default function Audit() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-sm text-gray-500">Loading audit…</p>
+      <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+        <div className="max-w-4xl mx-auto">
+          <SkeletonTable rows={10} />
+        </div>
       </div>
     );
   }

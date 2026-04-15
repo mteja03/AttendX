@@ -18,7 +18,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { PLATFORM_CONFIG } from '../config/constants';
-import { SkeletonCard } from '../components/SkeletonRow';
+import { SkeletonCard, SkeletonTable } from '../components/SkeletonRow';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import ErrorModal from '../components/ErrorModal';
 import Cropper from 'react-easy-crop';
@@ -509,7 +509,7 @@ export default function Employees() {
 
   const searchAllEmployees = useCallback(
     async (term) => {
-      if (!term || term.length < 3 || !collRef) return;
+      if (!term || term.length < 2 || !collRef) return;
       setLoading(true);
       try {
         const snap = await getDocs(query(collRef, orderBy('fullName', 'asc')));
@@ -548,7 +548,7 @@ export default function Employees() {
       fetchStatsCounts();
       return;
     }
-    if (term.trim().length < 3) {
+    if (term.trim().length < 2) {
       if (searchAllMode) {
         setSearchAllMode(false);
         fetchEmployees(true);
@@ -658,7 +658,7 @@ export default function Employees() {
       if (tab === 'inactive') list = list.filter((e) => (e.status || '') === 'Inactive');
     }
     const term = search.trim().toLowerCase();
-    if (term && (!searchAllMode || term.length < 3)) {
+    if (term && (!searchAllMode || term.length < 2)) {
       list = list.filter(
         (e) =>
           e.fullName?.toLowerCase().includes(term) ||
@@ -1344,11 +1344,14 @@ export default function Employees() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+          <SkeletonTable rows={8} />
+        </>
       ) : null}
 
       {!loading && (
@@ -1709,6 +1712,7 @@ export default function Employees() {
                     <img
                       src={newEmpPhotoSrc}
                       alt="Preview"
+                      loading="lazy"
                       className="w-24 h-24 rounded-full object-cover ring-4 ring-[#E8F5F5] border-2 border-[#4ECDC4]"
                     />
                   ) : (

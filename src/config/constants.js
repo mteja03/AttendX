@@ -23,5 +23,5 @@ export const PLATFORM_CONFIG = {
   DRIVE_UPLOAD_ROLES: ['admin', 'hrmanager'],
 
   // Pagination
-  EMPLOYEES_PAGE_SIZE: 50,
+  EMPLOYEES_PAGE_SIZE: 25,
 };

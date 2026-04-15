@@ -237,6 +237,7 @@ function Sidebar({ isOpen = false, onClose }) {
           <img
             src="/logo/icon.png"
             alt="AttendX"
+            loading="lazy"
             className="w-full h-full rounded-lg object-cover"
             onError={(e) => {
               const wrap = e.target.parentElement;
@@ -353,6 +354,7 @@ function Sidebar({ isOpen = false, onClose }) {
                 `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || currentUser.email || 'User')}`
               }
               alt=""
+              loading="lazy"
               className="h-9 w-9 rounded-full object-cover"
             />
             <div className="min-w-0">

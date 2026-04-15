@@ -75,6 +75,7 @@ export default function EmployeeAvatar({ employee, size = 'md', className = '', 
         <img
           src={employee.photoURL}
           alt={name || 'Employee'}
+          loading="lazy"
           className="w-full h-full object-cover"
           onError={() => setImgError(true)}
         />

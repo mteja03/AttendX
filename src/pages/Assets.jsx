@@ -17,7 +17,7 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
-import PageLoader from '../components/PageLoader';
+import { SkeletonTable } from '../components/SkeletonRow';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { toDisplayDate } from '../utils';
@@ -1304,7 +1304,7 @@ export default function Assets() {
       </div>
 
       {loading ? (
-        <PageLoader />
+        <SkeletonTable rows={8} />
       ) : (
         <>
         <div className="hidden lg:block overflow-x-auto border border-slate-200 rounded-xl bg-white">

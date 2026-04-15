@@ -1,6 +1,7 @@
 import { memo } from 'react';
 
-export const SkeletonRow = memo(function SkeletonRow({ cols = 6 }) {
+/** Table `<tbody>` row skeleton (legacy). */
+export const SkeletonTableRow = memo(function SkeletonTableRow({ cols = 6 }) {
   return (
     <tr className="animate-pulse">
       {Array.from({ length: cols }).map((_, i) => (
@@ -12,11 +13,4 @@ export const SkeletonRow = memo(function SkeletonRow({ cols = 6 }) {
   );
 });
 
-export const SkeletonCard = memo(function SkeletonCard() {
-  return (
-    <div className="animate-pulse bg-white border rounded-2xl p-4">
-      <div className="h-8 w-16 bg-gray-100 rounded mb-2" />
-      <div className="h-3 w-24 bg-gray-100 rounded" />
-    </div>
-  );
-});
+export { SkeletonRow, SkeletonCard, SkeletonTable } from './Skeleton';
