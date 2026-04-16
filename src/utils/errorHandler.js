@@ -12,13 +12,23 @@ export const getErrorMessage = (error) => {
   const combined = `${code}${message}`.toLowerCase();
 
   if (
-    combined.includes('permission-denied') ||
     combined.includes('unauthenticated') ||
-    combined.includes('auth/') ||
-    combined.includes('unauthorized') ||
+    combined.includes('auth/id-token-expired') ||
+    combined.includes('auth/user-token-expired') ||
+    combined.includes('auth/requires-recent-login') ||
     combined.includes('not authenticated')
   ) {
     return 'auth_expired';
+  }
+
+  // Permission issue — user is logged in
+  // but lacks access to this resource
+  if (
+    combined.includes('permission-denied') ||
+    combined.includes('unauthorized') ||
+    combined.includes('missing or insufficient')
+  ) {
+    return 'permission_denied';
   }
 
   if (
@@ -53,6 +63,13 @@ export const ERROR_MESSAGES = {
     action: 'Sign Out',
     actionType: 'signout',
     icon: '🔐',
+  },
+  permission_denied: {
+    title: 'Access Restricted',
+    message: "You don't have permission to perform this action. Contact your admin if you think this is a mistake.",
+    action: 'OK',
+    actionType: 'dismiss',
+    icon: '🔒',
   },
   network_error: {
     title: 'No Connection',

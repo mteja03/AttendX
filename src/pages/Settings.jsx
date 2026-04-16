@@ -269,6 +269,10 @@ export default function Settings() {
       setErrorModal('auth_expired');
       return;
     }
+    if (errType === 'permission_denied') {
+      setErrorModal('permission_denied');
+      return;
+    }
     if (errType === 'network_error') {
       setErrorModal('network_error');
       return;

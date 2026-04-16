@@ -202,6 +202,7 @@ export default function Leave() {
     await logError(error, { companyId, ...context });
     const errType = getErrorMessage(error);
     if (error?._needsReauth || errType === 'auth_expired') return setErrorModal('auth_expired');
+    if (errType === 'permission_denied') return setErrorModal('permission_denied');
     if (errType === 'network_error') return setErrorModal('network_error');
     showError(ERROR_MESSAGES[errType]?.message || fallback);
   };
