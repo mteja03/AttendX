@@ -117,6 +117,7 @@ export const logError = async (error, context = {}) => {
 
     await addDoc(collection(db, 'errorLogs'), {
       timestamp: new Date(),
+      ttl: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
       errorCode: error?.code || 'unknown',
       errorMessage: error?.message || String(error),
       context: {

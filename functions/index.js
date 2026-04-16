@@ -710,6 +710,47 @@ exports.dailyOffboardingOverdue = functions.pubsub
     return null;
   });
 
+// Auto-delete error logs older than 30d
+exports.cleanupErrorLogs = functions.pubsub
+  .schedule('every 24 hours')
+  .onRun(async () => {
+    const now = admin.firestore.Timestamp.now();
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const cutoff = admin.firestore.Timestamp.fromDate(thirtyDaysAgo);
+
+    const [byTtl, byTimestamp] = await Promise.all([
+      db.collection('errorLogs').where('ttl', '<=', now).limit(500).get(),
+      db.collection('errorLogs').where('timestamp', '<=', cutoff).where('ttl', '==', null).limit(500).get(),
+    ]);
+
+    const batch = db.batch();
+    const seen = new Set();
+    let count = 0;
+
+    byTtl.docs.forEach((docSnap) => {
+      if (seen.has(docSnap.id)) return;
+      seen.add(docSnap.id);
+      batch.delete(docSnap.ref);
+      count += 1;
+    });
+
+    byTimestamp.docs.forEach((docSnap) => {
+      if (seen.has(docSnap.id)) return;
+      seen.add(docSnap.id);
+      batch.delete(docSnap.ref);
+      count += 1;
+    });
+
+    if (count === 0) {
+      console.log('No expired logs');
+      return null;
+    }
+
+    await batch.commit();
+    console.log(`Deleted ${count} expired logs`);
+    return null;
+  });
+
 // ─── Audit FCM notifications ───
 
 exports.onAuditAssigned = functions.firestore
