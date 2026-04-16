@@ -159,8 +159,18 @@ service cloud.firestore {
 
       allow create: if isAdmin();
 
+      // Admin and Company Admin can update
+      // anything on the company doc.
+      // HR Manager can update specific
+      // list fields only (departments,
+      // branches, locations etc) via
+      // Settings page.
       allow update: if isAdmin()
-        || isCompanyAdmin(companyId);
+        || isCompanyAdmin(companyId)
+        || (
+          isActive()
+          && isHRManager(companyId)
+        );
 
       allow delete: if isAdmin();
 
