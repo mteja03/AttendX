@@ -261,6 +261,10 @@ const initialForm = {
   pfNumber: '',
   esicNumber: '',
   customBenefits: [],
+  bankName: '',
+  accountHolderName: '',
+  ifscCode: '',
+  accountType: '',
   panNumber: '',
   aadhaarNumber: '',
   drivingLicenceNumber: '',
@@ -863,6 +867,10 @@ export default function Employees() {
         pfNumber: form.pfApplicable ? form.pfNumber?.trim() || null : null,
         esicNumber: form.esicApplicable ? form.esicNumber?.trim() || null : null,
         customBenefits: sanitizeCustomBenefitsForSave(form.customBenefits),
+        bankName: form.bankName?.trim() || null,
+        accountHolderName: form.accountHolderName?.trim() || null,
+        ifscCode: form.ifscCode?.trim() || null,
+        accountType: form.accountType || null,
         panNumber: form.panNumber?.trim() || null,
         aadhaarNumber: form.aadhaarNumber?.trim() || null,
         drivingLicenceNumber: form.drivingLicenceNumber?.trim() || null,
@@ -944,6 +952,10 @@ export default function Employees() {
       'ESIC Applicable': emp.esicApplicable ? 'Yes' : 'No',
       'ESIC Number': emp.esicNumber || '',
       'Custom Benefits': customBenefitsExportText(emp),
+      'Bank Name': emp.bankName || '',
+      'Account Holder Name': emp.accountHolderName || '',
+      'IFSC Code': emp.ifscCode || '',
+      'Account Type': emp.accountType || '',
       'Previous Company': emp.prevCompany || '',
       'Previous Designation': emp.prevDesignation || '',
       'Notice Period Days': noticePeriodDaysRemaining(emp),
@@ -2850,6 +2862,64 @@ export default function Employees() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Bank Details ── */}
+              <div className="pt-4 border-t border-gray-100 mb-6">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                  💳 Bank Details
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Bank Name</label>
+                    <input
+                      value={form.bankName}
+                      onChange={(e) => setForm((p) => ({ ...p, bankName: e.target.value }))}
+                      placeholder="e.g. State Bank of India"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Account Holder Name</label>
+                    <input
+                      value={form.accountHolderName}
+                      onChange={(e) => setForm((p) => ({ ...p, accountHolderName: e.target.value }))}
+                      placeholder="As per bank records"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">IFSC Code</label>
+                    <input
+                      value={form.ifscCode}
+                      onChange={(e) =>
+                        setForm((p) => ({
+                          ...p,
+                          ifscCode: e.target.value.toUpperCase().trim(),
+                        }))
+                      }
+                      placeholder="e.g. SBIN0001234"
+                      maxLength={11}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono uppercase focus:outline-none focus:border-[#1B6B6B]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1.5">Account Type</label>
+                    <select
+                      value={form.accountType}
+                      onChange={(e) => setForm((p) => ({ ...p, accountType: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                    >
+                      <option value="">Select account type...</option>
+                      <option value="Savings">Savings</option>
+                      <option value="Current">Current</option>
+                      <option value="Salary">Salary</option>
+                    </select>
                   </div>
                 </div>
               </div>

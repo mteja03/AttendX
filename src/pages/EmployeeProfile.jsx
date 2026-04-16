@@ -668,6 +668,10 @@ export default function EmployeeProfile() {
   const navigate = useNavigate();
   const { currentUser, getValidToken, isTokenValid, role: authRole, signOut } = useAuth();
   const userRole = authRole;
+  const isAdmin = userRole === 'admin';
+  const isHRManager = userRole === 'hrmanager';
+  const isCompanyAdmin = userRole === 'companyadmin';
+  const canViewBankDetails = isAdmin || isHRManager || isCompanyAdmin;
   const canDeleteEmployee = userRole === 'admin';
   const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
   const canUploadPhoto = userRole === 'admin' || userRole === 'hrmanager';
@@ -1266,6 +1270,10 @@ export default function EmployeeProfile() {
             notes: b.notes || '',
           }))
         : [],
+      bankName: employee.bankName || '',
+      accountHolderName: employee.accountHolderName || '',
+      ifscCode: employee.ifscCode || '',
+      accountType: employee.accountType || '',
       panNumber: employee.panNumber || '',
       aadhaarNumber: employee.aadhaarNumber || '',
       drivingLicenceNumber: employee.drivingLicenceNumber || '',
@@ -1374,6 +1382,10 @@ export default function EmployeeProfile() {
         pfNumber: form.pfApplicable ? form.pfNumber?.trim() || null : null,
         esicNumber: form.esicApplicable ? form.esicNumber?.trim() || null : null,
         customBenefits: sanitizeCustomBenefitsForSave(form.customBenefits),
+        bankName: form.bankName?.trim() || null,
+        accountHolderName: form.accountHolderName?.trim() || null,
+        ifscCode: form.ifscCode?.trim() || null,
+        accountType: form.accountType || null,
         panNumber: form.panNumber?.replace(/\s/g, '') || null,
         aadhaarNumber: form.aadhaarNumber?.replace(/\s/g, '') || null,
         drivingLicenceNumber: form.drivingLicenceNumber?.trim() || null,
@@ -3725,6 +3737,54 @@ export default function EmployeeProfile() {
               )}
             </div>
           )}
+          {canViewBankDetails &&
+            (employee.bankName ||
+              employee.accountHolderName ||
+              employee.ifscCode ||
+              employee.accountType) && (
+              <div className="bg-white border border-gray-100 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    💳 Bank Details
+                  </h3>
+                  {canEditEmployees && !isInactive && (
+                    <button
+                      type="button"
+                      onClick={openEdit}
+                      className="text-xs text-[#1B6B6B] hover:underline"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {employee.bankName && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Bank Name</p>
+                      <p className="text-sm font-medium text-gray-800">{employee.bankName}</p>
+                    </div>
+                  )}
+                  {employee.accountHolderName && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Account Holder</p>
+                      <p className="text-sm font-medium text-gray-800">{employee.accountHolderName}</p>
+                    </div>
+                  )}
+                  {employee.ifscCode && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">IFSC Code</p>
+                      <p className="text-sm font-medium text-gray-800 font-mono">{employee.ifscCode}</p>
+                    </div>
+                  )}
+                  {employee.accountType && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Account Type</p>
+                      <p className="text-sm font-medium text-gray-800">{employee.accountType}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           <div className="bg-white rounded-xl border border-slate-200 p-4">
             <h3 className="font-medium text-slate-800 mb-3">Statutory</h3>
             <p className="text-sm">PAN: {employee.panNumber || '—'}</p>
@@ -5046,6 +5106,62 @@ export default function EmployeeProfile() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="col-span-2 pt-4 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                    💳 Bank Details
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1.5">Bank Name</label>
+                      <input
+                        value={form.bankName}
+                        onChange={(e) => setForm((p) => ({ ...p, bankName: e.target.value }))}
+                        placeholder="e.g. State Bank of India"
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1.5">Account Holder Name</label>
+                      <input
+                        value={form.accountHolderName}
+                        onChange={(e) => setForm((p) => ({ ...p, accountHolderName: e.target.value }))}
+                        placeholder="As per bank records"
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1.5">IFSC Code</label>
+                      <input
+                        value={form.ifscCode}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            ifscCode: e.target.value.toUpperCase().trim(),
+                          }))
+                        }
+                        placeholder="e.g. SBIN0001234"
+                        maxLength={11}
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono uppercase focus:outline-none focus:border-[#1B6B6B]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1.5">Account Type</label>
+                      <select
+                        value={form.accountType}
+                        onChange={(e) => setForm((p) => ({ ...p, accountType: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                      >
+                        <option value="">Select account type...</option>
+                        <option value="Savings">Savings</option>
+                        <option value="Current">Current</option>
+                        <option value="Salary">Salary</option>
+                      </select>
                     </div>
                   </div>
                 </div>
