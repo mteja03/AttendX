@@ -170,6 +170,24 @@ service cloud.firestore {
         || (
           isActive()
           && isHRManager(companyId)
+          && request.resource.data
+               .diff(resource.data)
+               .affectedKeys()
+               .hasOnly([
+                 'departments',
+                 'branches',
+                 'locations',
+                 'employmentTypes',
+                 'benefits',
+                 'categories',
+                 'documentTypes',
+                 'leaveTypes',
+                 'leavePolicy',
+                 'onboardingTemplate',
+                 'offboardingTemplate',
+                 'updatedAt',
+                 'updatedBy',
+               ])
         );
 
       allow delete: if isAdmin();
