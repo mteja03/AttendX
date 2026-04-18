@@ -17,6 +17,7 @@ import {
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { db } from '../firebase/config';
+import EmptyState from '../components/EmptyState';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { SkeletonTable } from '../components/SkeletonRow';
@@ -1039,8 +1040,44 @@ export default function Leave() {
                 ))}
                 {filteredLeaves.length === 0 && (
                   <tr>
-                    <td className="px-4 py-8 text-center text-slate-500" colSpan={8}>
-                      No leave requests.
+                    <td colSpan={8} className="p-0">
+                      <EmptyState
+                        illustration={
+                          <div className="w-16 h-16 rounded-2xl bg-[#FAEEDA] flex items-center justify-center">
+                            <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                              <rect x="4" y="6" width="28" height="24" rx="4" fill="#FAC775" />
+                              <path d="M4 14h28" stroke="#854F0B" strokeWidth="1.5" />
+                              <path d="M11 6V4M25 6V4" stroke="#854F0B" strokeWidth="2" strokeLinecap="round" />
+                              <circle cx="25" cy="25" r="6" fill="#EF9F27" />
+                              <path d="M23 25h4M25 23v4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+                            </svg>
+                          </div>
+                        }
+                        title={hasActiveLeaveFilters ? 'No matching leave requests' : 'No leave requests yet'}
+                        description={
+                          hasActiveLeaveFilters
+                            ? 'Try adjusting your filters to see more results.'
+                            : 'Leave requests from your team will appear here once submitted.'
+                        }
+                        action={
+                          hasActiveLeaveFilters
+                            ? () =>
+                                setLeaveFilters({
+                                  status: '',
+                                  leaveType: '',
+                                  employeeId: '',
+                                  department: '',
+                                  branch: '',
+                                  location: '',
+                                  month: '',
+                                  year: currentYearStr,
+                                })
+                            : () => setShowAddModal(true)
+                        }
+                        actionLabel={hasActiveLeaveFilters ? 'Clear filters' : 'Add leave request'}
+                        actionColor={hasActiveLeaveFilters ? '#5F5E5A' : '#854F0B'}
+                        hint={!hasActiveLeaveFilters ? 'approvals will show here too' : undefined}
+                      />
                     </td>
                   </tr>
                 )}
@@ -1145,7 +1182,45 @@ export default function Leave() {
                 )}
               </div>
             ))}
-            {filteredLeaves.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No leave requests.</p>}
+            {filteredLeaves.length === 0 && (
+              <EmptyState
+                illustration={
+                  <div className="w-16 h-16 rounded-2xl bg-[#FAEEDA] flex items-center justify-center">
+                    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                      <rect x="4" y="6" width="28" height="24" rx="4" fill="#FAC775" />
+                      <path d="M4 14h28" stroke="#854F0B" strokeWidth="1.5" />
+                      <path d="M11 6V4M25 6V4" stroke="#854F0B" strokeWidth="2" strokeLinecap="round" />
+                      <circle cx="25" cy="25" r="6" fill="#EF9F27" />
+                      <path d="M23 25h4M25 23v4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                }
+                title={hasActiveLeaveFilters ? 'No matching leave requests' : 'No leave requests yet'}
+                description={
+                  hasActiveLeaveFilters
+                    ? 'Try adjusting your filters to see more results.'
+                    : 'Leave requests from your team will appear here once submitted.'
+                }
+                action={
+                  hasActiveLeaveFilters
+                    ? () =>
+                        setLeaveFilters({
+                          status: '',
+                          leaveType: '',
+                          employeeId: '',
+                          department: '',
+                          branch: '',
+                          location: '',
+                          month: '',
+                          year: currentYearStr,
+                        })
+                    : () => setShowAddModal(true)
+                }
+                actionLabel={hasActiveLeaveFilters ? 'Clear filters' : 'Add leave request'}
+                actionColor={hasActiveLeaveFilters ? '#5F5E5A' : '#854F0B'}
+                hint={!hasActiveLeaveFilters ? 'approvals will show here too' : undefined}
+              />
+            )}
             {loadedYears.length > 0 && Math.min(...loadedYears) > 2000 && (
               <button
                 type="button"

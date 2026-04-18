@@ -20,6 +20,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { PLATFORM_CONFIG } from '../config/constants';
 import { SkeletonCard, SkeletonTable } from '../components/SkeletonRow';
 import EmployeeAvatar from '../components/EmployeeAvatar';
+import EmptyState from '../components/EmptyState';
 import ErrorModal from '../components/ErrorModal';
 import Cropper from 'react-easy-crop';
 import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
@@ -1618,8 +1619,64 @@ export default function Employees() {
                 ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td className="px-4 py-8 text-center text-slate-500" colSpan={10}>
-                    No employees found.
+                  <td colSpan={10} className="p-0">
+                    <EmptyState
+                      illustration={
+                        <div className="w-16 h-16 rounded-2xl bg-[#E1F5EE] flex items-center justify-center">
+                          <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                            <circle cx="14" cy="11" r="5" fill="#9FE1CB" />
+                            <path
+                              d="M4 30c0-5.523 4.477-10 10-10s10 4.477 10 10"
+                              stroke="#0F6E56"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                            <circle cx="26" cy="13" r="3.5" fill="#5DCAA5" />
+                            <path
+                              d="M26 20c3.314 0 6 2.686 6 6"
+                              stroke="#1D9E75"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                            <circle cx="26" cy="26" r="5" fill="#1B6B6B" />
+                            <path d="M24 26h4M26 24v4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+                          </svg>
+                        </div>
+                      }
+                      title={
+                        search || Object.values(filters).some(Boolean)
+                          ? `No results for "${search || 'current filters'}"`
+                          : 'No employees yet'
+                      }
+                      description={
+                        search || Object.values(filters).some(Boolean)
+                          ? 'Try a different name, Emp ID, or department'
+                          : 'Add your first employee to get started with HR management.'
+                      }
+                      action={
+                        search || Object.values(filters).some(Boolean)
+                          ? () => {
+                              setSearch('');
+                              setFilters({ ...EMPTY_EMPLOYEE_FILTERS });
+                            }
+                          : canEditEmployees
+                            ? () => setShowAddModal(true)
+                            : null
+                      }
+                      actionLabel={
+                        search || Object.values(filters).some(Boolean)
+                          ? 'Clear filters'
+                          : 'Add first employee'
+                      }
+                      actionColor={
+                        search || Object.values(filters).some(Boolean) ? '#5F5E5A' : '#1B6B6B'
+                      }
+                      hint={
+                        !(search || Object.values(filters).some(Boolean)) && canEditEmployees
+                          ? 'or import from Excel'
+                          : undefined
+                      }
+                    />
                   </td>
                 </tr>
               )}
@@ -1758,7 +1815,56 @@ export default function Employees() {
               </div>
             ))}
             {filtered.length === 0 && (
-              <p className="text-center text-slate-500 py-8 text-sm">No employees found.</p>
+              <EmptyState
+                illustration={
+                  <div className="w-16 h-16 rounded-2xl bg-[#E1F5EE] flex items-center justify-center">
+                    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                      <circle cx="14" cy="11" r="5" fill="#9FE1CB" />
+                      <path
+                        d="M4 30c0-5.523 4.477-10 10-10s10 4.477 10 10"
+                        stroke="#0F6E56"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
+                      <circle cx="26" cy="13" r="3.5" fill="#5DCAA5" />
+                      <path d="M26 20c3.314 0 6 2.686 6 6" stroke="#1D9E75" strokeWidth="2" strokeLinecap="round" />
+                      <circle cx="26" cy="26" r="5" fill="#1B6B6B" />
+                      <path d="M24 26h4M26 24v4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                }
+                title={
+                  search || Object.values(filters).some(Boolean)
+                    ? `No results for "${search || 'current filters'}"`
+                    : 'No employees yet'
+                }
+                description={
+                  search || Object.values(filters).some(Boolean)
+                    ? 'Try a different name, Emp ID, or department'
+                    : 'Add your first employee to get started with HR management.'
+                }
+                action={
+                  search || Object.values(filters).some(Boolean)
+                    ? () => {
+                        setSearch('');
+                        setFilters({ ...EMPTY_EMPLOYEE_FILTERS });
+                      }
+                    : canEditEmployees
+                      ? () => setShowAddModal(true)
+                      : null
+                }
+                actionLabel={
+                  search || Object.values(filters).some(Boolean) ? 'Clear filters' : 'Add first employee'
+                }
+                actionColor={
+                  search || Object.values(filters).some(Boolean) ? '#5F5E5A' : '#1B6B6B'
+                }
+                hint={
+                  !(search || Object.values(filters).some(Boolean)) && canEditEmployees
+                    ? 'or import from Excel'
+                    : undefined
+                }
+              />
             )}
             {totalPages > 1 && (
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-2 py-3 border-t border-gray-100 bg-white rounded-b-2xl">

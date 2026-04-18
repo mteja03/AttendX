@@ -32,6 +32,7 @@ import {
 import { WhatsAppButton } from '../utils/whatsapp';
 import { whatsappUrl } from '../utils/whatsappUrl';
 import { SkeletonTable } from '../components/SkeletonRow';
+import EmptyState from '../components/EmptyState';
 
 /** Used by AuditCalendar; includes legacy keys for older documents */
 const STATUS_COLORS = {
@@ -351,7 +352,11 @@ function AuditDashboard({ audits, auditTypes }) {
               </div>
             ))}
           </div>
-          {total === 0 && <p className="text-center text-xs text-gray-400 mt-4">No audits yet</p>}
+          {total === 0 && (
+            <p className="text-center text-xs text-gray-400 mt-4 py-4">
+              No audits yet — assign one to get started
+            </p>
+          )}
         </div>
 
         <div className="bg-white border border-gray-100 rounded-2xl p-5">
@@ -493,9 +498,14 @@ function AuditDashboard({ audits, auditTypes }) {
         <div className="bg-white border border-gray-100 rounded-2xl p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">📋 Audits by Template</h3>
           {Object.keys(byType).length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-2xl mb-2">📋</p>
-              <p className="text-xs text-gray-400">No audits yet</p>
+            <div className="text-center py-6 px-4">
+              <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center mx-auto mb-2">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="2" y="3" width="12" height="11" rx="2" stroke="#D3D1C7" strokeWidth="1.2" />
+                  <path d="M5 7h6M5 10h4" stroke="#D3D1C7" strokeWidth="1.2" strokeLinecap="round" />
+                </svg>
+              </div>
+              <p className="text-xs text-gray-300">No audits here</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -538,9 +548,14 @@ function AuditDashboard({ audits, auditTypes }) {
       <div className="bg-white border border-gray-100 rounded-2xl p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">🕐 Recent Audits</h3>
         {audits.slice(0, 5).length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-2xl mb-2">🔍</p>
-            <p className="text-xs text-gray-400">No audits yet. Assign your first audit to get started.</p>
+          <div className="text-center py-6 px-4">
+            <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center mx-auto mb-2">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="2" y="3" width="12" height="11" rx="2" stroke="#D3D1C7" strokeWidth="1.2" />
+                <path d="M5 7h6M5 10h4" stroke="#D3D1C7" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+            </div>
+            <p className="text-xs text-gray-300">No audits yet — assign one to get started</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -4252,29 +4267,71 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
   );
 }
 
-function EmptyAuditState({ total, onAssign, auditTypesEmpty, canManage }) {
+function EmptyAuditState({
+  total,
+  onAssign,
+  auditTypesEmpty,
+  canManage,
+  search,
+  onClearSearch,
+}) {
+  const hasSearch = Boolean(search);
   const noAuditsAtAll = total === 0;
   return (
     <div className="overflow-hidden rounded-2xl border-2 border-dashed border-gray-100 bg-white">
-      <div className="text-center py-20 px-4">
-        <p className="text-5xl mb-4">{noAuditsAtAll ? '📋' : '🔍'}</p>
-        <p className="text-base font-semibold text-gray-700 mb-2">
-          {noAuditsAtAll ? 'No audits yet' : 'No audits match filters'}
-        </p>
-        <p className="text-sm text-gray-400 mb-6">
-          {noAuditsAtAll ? 'Assign your first audit to get started' : 'Try adjusting filters or status tabs'}
-        </p>
-        {canManage && noAuditsAtAll && (
-          <button
-            type="button"
-            onClick={onAssign}
-            disabled={auditTypesEmpty}
-            className="px-5 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium disabled:opacity-50 min-h-[44px]"
-          >
-            + Assign First Audit
-          </button>
-        )}
-      </div>
+      <EmptyState
+        illustration={
+          <div className="w-16 h-16 rounded-2xl bg-[#EEEDFE] flex items-center justify-center">
+            <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+              <rect x="4" y="8" width="20" height="24" rx="3" fill="#CECBF6" />
+              <path
+                d="M8 14h12M8 19h12M8 24h8"
+                stroke="#534AB7"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+              <circle cx="27" cy="26" r="7" fill="#7F77DD" />
+              <path
+                d="M24.5 26l2 2 4-4"
+                stroke="#fff"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+        }
+        title={
+          hasSearch
+            ? `No audits matching "${search}"`
+            : noAuditsAtAll
+              ? 'No audits assigned yet'
+              : 'No audits match filters'
+        }
+        description={
+          hasSearch
+            ? 'Try searching by branch, auditor, or audit reference ID.'
+            : noAuditsAtAll
+              ? 'Create an audit template in settings, then assign audits to your team.'
+              : 'Try adjusting filters or status tabs to see more results.'
+        }
+        action={
+          hasSearch
+            ? onClearSearch
+            : canManage && noAuditsAtAll && !auditTypesEmpty
+              ? onAssign
+              : null
+        }
+        actionLabel={hasSearch ? 'Clear search' : 'Assign first audit'}
+        actionColor={hasSearch ? '#5F5E5A' : '#534AB7'}
+        hint={
+          !hasSearch && canManage && noAuditsAtAll
+            ? auditTypesEmpty
+              ? 'set up templates in audit settings first'
+              : 'set up templates in audit settings'
+            : undefined
+        }
+      />
     </div>
   );
 }
@@ -5216,6 +5273,8 @@ function AuditList({
             onAssign={() => setShowAssignModal(true)}
             auditTypesEmpty={auditTypes.length === 0}
             canManage={canManage}
+            search={search}
+            onClearSearch={() => setSearch('')}
           />
         ) : (
           <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">

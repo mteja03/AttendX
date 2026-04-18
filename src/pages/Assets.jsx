@@ -18,6 +18,7 @@ import { saveAs } from 'file-saver';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { SkeletonTable } from '../components/SkeletonRow';
+import EmptyState from '../components/EmptyState';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { toDisplayDate } from '../utils';
@@ -1410,8 +1411,57 @@ export default function Assets() {
                 (assetView === 'trackable' ||
                   (assetView === 'all' && consumableAssets.length === 0)) && (
                 <tr>
-                  <td className="px-4 py-8 text-center text-slate-500 text-sm" colSpan={7}>
-                    No assets found.
+                  <td colSpan={7} className="p-0">
+                    <EmptyState
+                      illustration={
+                        <div className="w-16 h-16 rounded-2xl bg-[#E6F1FB] flex items-center justify-center">
+                          <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                            <rect x="6" y="10" width="14" height="18" rx="3" fill="#B5D4F4" />
+                            <rect x="16" y="6" width="14" height="18" rx="3" fill="#85B7EB" />
+                            <circle cx="27" cy="27" r="6" fill="#378ADD" />
+                            <path d="M25 27h4M27 25v4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+                          </svg>
+                        </div>
+                      }
+                      title={
+                        search || Object.values(assetFilters).some((v) => v)
+                          ? 'No assets match your filters'
+                          : 'No assets tracked yet'
+                      }
+                      description={
+                        search || Object.values(assetFilters).some((v) => v)
+                          ? 'Try adjusting the asset type or status filter.'
+                          : 'Add laptops, phones, and other company assets to track assignments.'
+                      }
+                      action={
+                        search || Object.values(assetFilters).some((v) => v)
+                          ? () => {
+                              setSearch('');
+                              setAssetFilters({
+                                assetType: '',
+                                status: '',
+                                mode: '',
+                                assignedTo: '',
+                                department: '',
+                                branch: '',
+                              });
+                            }
+                          : () => setShowAddModal(true)
+                      }
+                      actionLabel={
+                        search || Object.values(assetFilters).some((v) => v)
+                          ? 'Clear filters'
+                          : 'Add first asset'
+                      }
+                      actionColor={
+                        search || Object.values(assetFilters).some((v) => v) ? '#5F5E5A' : '#185FA5'
+                      }
+                      hint={
+                        !(search || Object.values(assetFilters).some((v) => v))
+                          ? 'trackable and consumable types'
+                          : undefined
+                      }
+                    />
                   </td>
                 </tr>
               )}
@@ -1563,7 +1613,54 @@ export default function Assets() {
           {(assetView === 'all' || assetView === 'trackable') &&
             trackableAssets.length === 0 &&
             (assetView === 'trackable' || consumableAssets.length === 0) && (
-              <p className="text-center text-slate-500 py-8 text-sm">No assets found.</p>
+              <EmptyState
+                illustration={
+                  <div className="w-16 h-16 rounded-2xl bg-[#E6F1FB] flex items-center justify-center">
+                    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                      <rect x="6" y="10" width="14" height="18" rx="3" fill="#B5D4F4" />
+                      <rect x="16" y="6" width="14" height="18" rx="3" fill="#85B7EB" />
+                      <circle cx="27" cy="27" r="6" fill="#378ADD" />
+                      <path d="M25 27h4M27 25v4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                }
+                title={
+                  search || Object.values(assetFilters).some((v) => v)
+                    ? 'No assets match your filters'
+                    : 'No assets tracked yet'
+                }
+                description={
+                  search || Object.values(assetFilters).some((v) => v)
+                    ? 'Try adjusting the asset type or status filter.'
+                    : 'Add laptops, phones, and other company assets to track assignments.'
+                }
+                action={
+                  search || Object.values(assetFilters).some((v) => v)
+                    ? () => {
+                        setSearch('');
+                        setAssetFilters({
+                          assetType: '',
+                          status: '',
+                          mode: '',
+                          assignedTo: '',
+                          department: '',
+                          branch: '',
+                        });
+                      }
+                    : () => setShowAddModal(true)
+                }
+                actionLabel={
+                  search || Object.values(assetFilters).some((v) => v) ? 'Clear filters' : 'Add first asset'
+                }
+                actionColor={
+                  search || Object.values(assetFilters).some((v) => v) ? '#5F5E5A' : '#185FA5'
+                }
+                hint={
+                  !(search || Object.values(assetFilters).some((v) => v))
+                    ? 'trackable and consumable types'
+                    : undefined
+                }
+              />
             )}
 
           {(assetView === 'all' || assetView === 'consumable') &&
