@@ -175,6 +175,30 @@ const navIcons = {
   settings: SettingsIcon,
 };
 
+const NAV_SECTIONS = {
+  dashboard: null,
+  employees: 'People',
+  leave: 'People',
+  calendar: 'People',
+  orgchart: 'People',
+  documents: 'Resources',
+  policies: 'Resources',
+  assets: 'Resources',
+  audit: 'Operations',
+  reports: 'Operations',
+  team: 'Admin',
+  settings: 'Admin',
+};
+
+function ActiveBar() {
+  return (
+    <span
+      className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full"
+      style={{ background: '#1B6B6B' }}
+    />
+  );
+}
+
 function Sidebar({ isOpen = false, onClose }) {
   const { currentUser, role, signOut, userPermissions, isTokenValid } = useAuth();
   const { companyId, company } = useCompany();
@@ -199,10 +223,10 @@ function Sidebar({ isOpen = false, onClose }) {
   };
 
   const linkClass = (isActive) =>
-    `flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors active:bg-white/10 ${
+    `flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm transition-colors relative ${
       isActive
-        ? 'bg-[#4ECDC4] text-[#1B6B6B]'
-        : 'text-white/70 hover:bg-white/[0.08] hover:text-white'
+        ? 'bg-[#E1F5EE] text-[#0F6E56] font-medium'
+        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700 font-normal'
     }`;
   const isPathActive = (path) => location.pathname.includes(`/${path}`);
 
@@ -218,7 +242,7 @@ function Sidebar({ isOpen = false, onClose }) {
       <aside
         className={`
           fixed inset-y-0 left-0 z-40 flex h-full min-h-0 w-64 flex-shrink-0 flex-col overflow-hidden overflow-x-hidden
-          bg-[#1B6B6B] text-white transition-transform duration-300 ease-out scrollbar-none
+          bg-white border-r border-gray-100 text-gray-700 transition-transform duration-300 ease-out scrollbar-none
           lg:relative lg:inset-auto lg:z-auto lg:h-full lg:w-56 lg:translate-x-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
@@ -226,14 +250,14 @@ function Sidebar({ isOpen = false, onClose }) {
       <button
         type="button"
         onClick={onClose}
-        className="absolute top-4 right-4 z-10 text-white/60 hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center lg:hidden"
+        className="absolute top-4 right-4 z-10 text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center lg:hidden"
         aria-label="Close menu"
       >
         ✕
       </button>
 
-      <div className="flex items-center gap-3 p-4 border-b border-white/10 flex-shrink-0 pr-14 lg:pr-4">
-        <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-white/10 p-0.5">
+      <div className="flex items-center gap-3 p-4 border-b border-gray-100 flex-shrink-0 pr-14 lg:pr-4">
+        <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-gray-50 border border-gray-100 p-0.5">
           <img
             src="/logo/icon.png"
             alt="AttendX"
@@ -249,65 +273,86 @@ function Sidebar({ isOpen = false, onClose }) {
         </div>
         <div
           style={{ display: 'none' }}
-          className="w-9 h-9 rounded-xl bg-[#4ECDC4] flex items-center justify-center text-[#1B6B6B] font-bold text-sm flex-shrink-0"
+          className="w-9 h-9 rounded-xl bg-[#E1F5EE] flex items-center justify-center text-[#0F6E56] font-bold text-sm flex-shrink-0"
         >
           AX
         </div>
         <div>
-          <p className="text-white font-bold text-base tracking-wide leading-none">AttendX</p>
-          <p className="text-white/40 text-xs mt-0.5">HR Platform</p>
+          <p className="text-gray-800 font-semibold text-base leading-none">AttendX</p>
+          <p className="text-gray-400 text-xs mt-0.5">HR Platform</p>
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto min-h-0 p-3 space-y-4 scrollbar-none">
+      <nav className="flex-1 overflow-y-auto min-h-0 px-3 py-2 scrollbar-none">
         {isAdmin && (
           <>
             <div>
-              <p className="px-3 text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Admin Controls</p>
+              <p className="px-2 text-xs font-medium text-gray-400 uppercase tracking-wider mb-1 mt-1">Admin Controls</p>
               <div className="space-y-0.5">
                 <NavLink to="/companies" onClick={() => onClose?.()} className={({ isActive }) => linkClass(isActive)}>
-                  <BuildingIcon className="w-5 h-5 shrink-0" />
-                  All Companies
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <ActiveBar />}
+                      <BuildingIcon className="w-4 h-4 shrink-0" />
+                      All Companies
+                    </>
+                  )}
                 </NavLink>
                 <NavLink to="/admin/users" onClick={() => onClose?.()} className={({ isActive }) => linkClass(isActive)}>
-                  <UsersIcon className="w-5 h-5 shrink-0" />
-                  Platform Users
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <ActiveBar />}
+                      <UsersIcon className="w-4 h-4 shrink-0" />
+                      Platform Users
+                    </>
+                  )}
                 </NavLink>
               </div>
             </div>
 
             {inCompany && (
-              <div>
+              <div className="mt-3">
                 <Link
                   to="/companies"
                   onClick={() => onClose?.()}
-                  className="flex items-center gap-2 px-3 py-2 min-h-[44px] text-white/60 hover:text-white active:bg-white/10 text-sm rounded-lg"
+                  className="flex items-center gap-2 px-2 py-2 text-gray-400 hover:text-gray-600 text-sm rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   ← All Companies
                 </Link>
-                <div className="flex items-center gap-2 mt-2 mb-2 px-3 py-2 rounded-lg bg-white/10">
+                <div className="flex items-center gap-2 mt-2 mb-2 px-2 py-2 rounded-xl bg-gray-50 border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors">
                   <div
                     className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-xs font-semibold shrink-0"
                     style={{ backgroundColor: company?.color || '#1B6B6B' }}
                   >
                     {company?.initials || '—'}
                   </div>
-                  <span className="text-sm font-medium text-white truncate">{company?.name || 'Company'}</span>
+                  <span className="text-sm font-medium text-gray-700 truncate">{company?.name || 'Company'}</span>
                 </div>
-                <p className="px-3 text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Current Company</p>
+                <p className="px-2 text-xs font-medium text-gray-400 uppercase tracking-wider mb-1 mt-3">Current Company</p>
                 <div className="space-y-0.5">
-                  {visibleCompanyNavItems.map(({ to, label }) => {
+                  {visibleCompanyNavItems.map(({ to, label }, index) => {
                     const Icon = navIcons[to] || NavIcon;
+                    const active = isPathActive(to);
+                    const section = NAV_SECTIONS[to];
+                    const prevSection = index > 0 ? NAV_SECTIONS[visibleCompanyNavItems[index - 1].to] : null;
+                    const showSection = section && section !== prevSection;
                     return (
-                      <NavLink
-                        key={to}
-                        to={`/company/${companyId}/${to}`}
-                        onClick={() => onClose?.()}
-                        className={linkClass(isPathActive(to))}
-                      >
-                        <Icon className="w-5 h-5 shrink-0" />
-                        {label}
-                      </NavLink>
+                      <div key={to}>
+                        {showSection && (
+                          <p className="px-2 text-xs font-medium text-gray-400 uppercase tracking-wider mb-1 mt-3 first:mt-1">
+                            {section}
+                          </p>
+                        )}
+                        <NavLink
+                          to={`/company/${companyId}/${to}`}
+                          onClick={() => onClose?.()}
+                          className={linkClass(active)}
+                        >
+                          {active && <ActiveBar />}
+                          <Icon className="w-4 h-4 shrink-0" />
+                          {label}
+                        </NavLink>
+                      </div>
                     );
                   })}
                 </div>
@@ -318,27 +363,38 @@ function Sidebar({ isOpen = false, onClose }) {
 
         {!isAdmin && inCompany && (
           <div className="space-y-0.5">
-            <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg bg-white/10">
+            <div className="flex items-center gap-2 mt-2 mb-2 px-2 py-2 rounded-xl bg-gray-50 border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors">
               <div
-                className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-xs font-semibold"
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-xs font-semibold shrink-0"
                 style={{ backgroundColor: company?.color || '#1B6B6B' }}
               >
                 {company?.initials || '—'}
               </div>
-              <span className="text-sm font-medium truncate">{company?.name || 'Company'}</span>
+              <span className="text-sm font-medium text-gray-700 truncate">{company?.name || 'Company'}</span>
             </div>
-            {visibleCompanyNavItems.map(({ to, label }) => {
+            {visibleCompanyNavItems.map(({ to, label }, index) => {
               const Icon = navIcons[to] || NavIcon;
+              const active = isPathActive(to);
+              const section = NAV_SECTIONS[to];
+              const prevSection = index > 0 ? NAV_SECTIONS[visibleCompanyNavItems[index - 1].to] : null;
+              const showSection = section && section !== prevSection;
               return (
-                <NavLink
-                  key={to}
-                  to={`/company/${companyId}/${to}`}
-                  onClick={() => onClose?.()}
-                  className={linkClass(isPathActive(to))}
-                >
-                  <Icon className="w-5 h-5 shrink-0" />
-                  {label}
-                </NavLink>
+                <div key={to}>
+                  {showSection && (
+                    <p className="px-2 text-xs font-medium text-gray-400 uppercase tracking-wider mb-1 mt-3 first:mt-1">
+                      {section}
+                    </p>
+                  )}
+                  <NavLink
+                    to={`/company/${companyId}/${to}`}
+                    onClick={() => onClose?.()}
+                    className={linkClass(active)}
+                  >
+                    {active && <ActiveBar />}
+                    <Icon className="w-4 h-4 shrink-0" />
+                    {label}
+                  </NavLink>
+                </div>
               );
             })}
           </div>
@@ -346,7 +402,7 @@ function Sidebar({ isOpen = false, onClose }) {
       </nav>
 
       {currentUser && (
-        <div className="flex-shrink-0 border-t border-white/10 p-3">
+        <div className="flex-shrink-0 border-t border-gray-100 p-3">
           <div className="flex items-center gap-3 mb-2">
             <img
               src={
@@ -358,19 +414,19 @@ function Sidebar({ isOpen = false, onClose }) {
               className="h-9 w-9 rounded-full object-cover"
             />
             <div className="min-w-0">
-              <p className="text-sm font-medium text-white truncate">{currentUser.displayName || currentUser.email}</p>
-              <p className="text-xs text-white/60 truncate">{currentUser.email}</p>
+              <p className="text-sm font-medium text-gray-800 truncate">{currentUser.displayName || currentUser.email}</p>
+              <p className="text-xs text-gray-400 truncate">{currentUser.email}</p>
             </div>
           </div>
           {role && (
             <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium mb-2 ${roleBadgeClass}`}>{roleLabel}</span>
           )}
           {PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(role) && (
-            <div className="mx-0 mb-2 px-3 py-2 rounded-lg bg-white/5 flex items-center gap-2">
+            <div className="mx-0 mb-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 flex items-center gap-2">
               <div
-                className={`w-2 h-2 rounded-full flex-shrink-0 ${isTokenValid() ? 'bg-[#4ECDC4]' : 'bg-amber-400'}`}
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${isTokenValid() ? 'bg-emerald-500' : 'bg-amber-400'}`}
               />
-              <span className="text-xs text-white/50">
+              <span className="text-xs text-gray-500">
                 Drive: {isTokenValid() ? 'Connected' : 'Session expired'}
               </span>
             </div>
@@ -378,7 +434,7 @@ function Sidebar({ isOpen = false, onClose }) {
           <button
             type="button"
             onClick={handleSignOut}
-            className="w-full text-left text-xs text-white/60 hover:text-red-200 min-h-[44px] py-2 rounded-lg active:bg-white/10"
+            className="w-full text-left text-xs text-gray-500 hover:text-red-600 min-h-[44px] py-2 px-2 rounded-lg hover:bg-gray-50 transition-colors"
           >
             Sign Out
           </button>
