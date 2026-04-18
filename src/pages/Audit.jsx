@@ -35,13 +35,13 @@ import { SkeletonTable } from '../components/SkeletonRow';
 
 /** Used by AuditCalendar; includes legacy keys for older documents */
 const STATUS_COLORS = {
-  Scheduled: 'bg-purple-100 text-purple-700',
-  Assigned: 'bg-purple-100 text-purple-700',
-  'In Progress': 'bg-blue-100 text-blue-700',
-  Submitted: 'bg-orange-100 text-orange-700',
-  'Sent Back': 'bg-amber-100 text-amber-700',
-  'Under Review': 'bg-pink-100 text-pink-700',
-  Closed: 'bg-green-100 text-green-700',
+  Scheduled: 'bg-gray-100 text-gray-600',
+  Assigned: 'bg-gray-100 text-gray-600',
+  'In Progress': 'bg-blue-100 text-blue-800',
+  Submitted: 'bg-amber-100 text-amber-800',
+  'Sent Back': 'bg-red-100 text-red-800',
+  'Under Review': 'bg-purple-100 text-purple-800',
+  Closed: 'bg-green-100 text-green-800',
   Overdue: 'bg-red-100 text-red-700',
 };
 
@@ -73,8 +73,8 @@ const STATUS_TAB_CONFIG = [
       list.filter(
         (a) => effStatus(a.status) === 'Assigned' && !isAuditOverdue({ ...a, status: effStatus(a.status) }),
       ).length,
-    activeClass: 'bg-purple-50 text-purple-700 border-purple-300',
-    countClass: 'bg-purple-200 text-purple-700',
+    activeClass: 'bg-gray-50 text-gray-700 border-gray-300',
+    countClass: 'bg-gray-200 text-gray-700',
   },
   {
     id: 'In Progress',
@@ -84,35 +84,35 @@ const STATUS_TAB_CONFIG = [
         (a) => effStatus(a.status) === 'In Progress' && !isAuditOverdue({ ...a, status: effStatus(a.status) }),
       ).length,
     activeClass: 'bg-blue-50 text-blue-700 border-blue-300',
-    countClass: 'bg-blue-200 text-blue-700',
+    countClass: 'bg-blue-200 text-blue-800',
   },
   {
     id: 'Sent Back',
     label: 'Sent Back',
     getCount: (list) => list.filter((a) => effStatus(a.status) === 'Sent Back').length,
-    activeClass: 'bg-amber-50 text-amber-800 border-amber-300',
-    countClass: 'bg-amber-200 text-amber-800',
+    activeClass: 'bg-red-50 text-red-700 border-red-300',
+    countClass: 'bg-red-200 text-red-800',
   },
   {
     id: 'Submitted',
     label: 'Submitted',
     getCount: (list) => list.filter((a) => effStatus(a.status) === 'Submitted').length,
     activeClass: 'bg-amber-50 text-amber-700 border-amber-300',
-    countClass: 'bg-amber-200 text-amber-700',
+    countClass: 'bg-amber-200 text-amber-800',
   },
   {
     id: 'Under Review',
     label: 'Under Review',
     getCount: (list) => list.filter((a) => effStatus(a.status) === 'Under Review').length,
-    activeClass: 'bg-pink-50 text-pink-700 border-pink-300',
-    countClass: 'bg-pink-200 text-pink-700',
+    activeClass: 'bg-purple-50 text-purple-700 border-purple-300',
+    countClass: 'bg-purple-200 text-purple-800',
   },
   {
     id: 'Closed',
     label: 'Closed',
     getCount: (list) => list.filter((a) => effStatus(a.status) === 'Closed').length,
     activeClass: 'bg-green-50 text-green-700 border-green-300',
-    countClass: 'bg-green-200 text-green-700',
+    countClass: 'bg-green-200 text-green-800',
   },
   {
     id: 'overdue',
@@ -256,7 +256,7 @@ function AuditDashboard({ audits, auditTypes }) {
   const pipeline = [
     { label: 'Assigned', count: assigned, color: '#8B5CF6', bg: '#EDE9FE' },
     { label: 'In Progress', count: inProgress, color: '#3B82F6', bg: '#DBEAFE' },
-    { label: 'Under Review', count: underReview, color: '#EC4899', bg: '#FCE7F3' },
+    { label: 'Under Review', count: underReview, color: '#7F77DD', bg: '#EEEDFE' },
     { label: 'Closed', count: closed, color: '#10B981', bg: '#D1FAE5' },
   ];
 
@@ -664,10 +664,10 @@ function AuditorDashboard({ audits, currentUser }) {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Assigned', count: assigned.length, icon: '📋', color: 'bg-purple-50 border-purple-100', text: 'text-purple-700' },
-          { label: 'In Progress', count: inProgress.length, icon: '✍️', color: 'bg-blue-50 border-blue-100', text: 'text-blue-700' },
-          { label: 'Submitted', count: submitted.length, icon: '📤', color: 'bg-orange-50 border-orange-100', text: 'text-orange-700' },
-          { label: 'Closed', count: closed.length, icon: '✅', color: 'bg-green-50 border-green-100', text: 'text-green-700' },
+          { label: 'Assigned', count: assigned.length, icon: '📋', color: 'bg-gray-50 border-gray-200', text: 'text-gray-700' },
+          { label: 'In Progress', count: inProgress.length, icon: '✍️', color: 'bg-blue-50 border-blue-100', text: 'text-blue-800' },
+          { label: 'Submitted', count: submitted.length, icon: '📤', color: 'bg-amber-50 border-amber-200', text: 'text-amber-800' },
+          { label: 'Closed', count: closed.length, icon: '✅', color: 'bg-green-50 border-green-100', text: 'text-green-800' },
         ].map((s) => (
           <div key={s.label} className={`border rounded-2xl p-4 ${s.color}`}>
             <div className="flex items-center justify-between mb-2">
@@ -4464,7 +4464,7 @@ function AuditTableRow({
             e.stopPropagation();
             saveStatus(e.target.value);
           }}
-          className="w-full cursor-pointer rounded-xl border border-pink-200 bg-pink-50 px-2 py-1.5 text-xs font-medium text-pink-700 focus:border-pink-300 focus:outline-none focus:ring-1 focus:ring-pink-300"
+          className="w-full cursor-pointer rounded-xl border border-purple-200 bg-purple-50 px-2 py-1.5 text-xs font-medium text-purple-800 focus:border-purple-300 focus:outline-none focus:ring-1 focus:ring-purple-300"
         >
           <option value="Under Review">👀 Under Review</option>
           <option value="Closed">✅ Close Audit</option>
@@ -4490,7 +4490,7 @@ function AuditTableRow({
           overdueAudit
             ? 'bg-red-50/30 hover:bg-red-50/40'
             : isSentBack
-              ? 'bg-amber-50/40 hover:bg-amber-50/50'
+              ? 'bg-red-50/30 hover:bg-red-50/40'
               : 'hover:bg-[#E8F5F5]/30'
         }`}
         style={gridStyle}
@@ -4500,7 +4500,7 @@ function AuditTableRow({
           <div
             className="w-0.5 h-10 rounded-full flex-shrink-0"
             style={{
-              background: overdueAudit ? '#EF4444' : audit.auditTypeColor || '#8B5CF6',
+              background: overdueAudit ? '#E24B4A' : statusCfg.topBar || audit.auditTypeColor || '#B4B2A9',
             }}
           />
           <div
@@ -4520,7 +4520,7 @@ function AuditTableRow({
             </div>
             <p className="text-sm font-semibold text-gray-800 truncate">{audit.auditTypeName}</p>
             {isSentBack && isAuditor && audit.sentBackReason && (
-              <p className="mt-1.5 flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+              <p className="mt-1.5 flex items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
                 <span>↩</span>
                 <span className="line-clamp-1">{audit.sentBackReason}</span>
               </p>
@@ -4645,14 +4645,14 @@ function AuditTableRow({
 
       <div
         className={`group border-b border-gray-100 p-4 transition-colors last:border-b-0 md:hidden ${
-          overdueAudit ? 'bg-red-50/30' : isSentBack ? 'bg-amber-50/30' : 'hover:bg-[#E8F5F5]/30'
+          overdueAudit ? 'bg-red-50/30' : isSentBack ? 'bg-red-50/30' : 'hover:bg-[#E8F5F5]/30'
         }`}
         onClick={onOpen}
       >
         <div
           className="h-0.5 rounded-full mb-3 -mx-4"
           style={{
-            background: overdueAudit ? '#EF4444' : audit.auditTypeColor || '#8B5CF6',
+            background: overdueAudit ? '#E24B4A' : statusCfg.topBar || audit.auditTypeColor || '#B4B2A9',
           }}
         />
         <div className="flex items-start gap-3">
@@ -4677,7 +4677,7 @@ function AuditTableRow({
             </div>
             <p className="text-sm font-semibold text-gray-800">{audit.auditTypeName}</p>
             {isSentBack && isAuditor && audit.sentBackReason && (
-              <p className="mt-1.5 flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+              <p className="mt-1.5 flex items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
                 <span>↩</span>
                 <span className="line-clamp-2">{audit.sentBackReason}</span>
               </p>
