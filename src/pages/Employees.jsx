@@ -230,6 +230,63 @@ function getEmployeeJoinYear(emp) {
 // - Date of birth cannot be in the future
 // - Emp ID must be unique
 
+const ADD_STEPS = [
+  {
+    id: 0,
+    label: 'Personal',
+    sub: 'Name, contact, address',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.2" />
+        <path
+          d="M2 12c0-2.761 2.239-5 5-5s5 2.239 5 5"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: 1,
+    label: 'Employment',
+    sub: 'Role, department, salary',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <rect x="2" y="4" width="10" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M5 4V3a2 2 0 014 0v1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    id: 2,
+    label: 'Bank & ID',
+    sub: 'Bank details, PAN, Aadhaar',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <rect x="1" y="3" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M1 6h12" stroke="currentColor" strokeWidth="1.2" />
+        <circle cx="4" cy="9" r="1" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    id: 3,
+    label: 'Emergency',
+    sub: 'Emergency contact',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path
+          d="M7 2l1.5 3 3.5.5-2.5 2.5.5 3.5L7 10l-3 1.5.5-3.5L2 5.5l3.5-.5z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
+];
+
 const INDIAN_STATES = [
   'Andhra Pradesh',
   'Arunachal Pradesh',
@@ -385,6 +442,7 @@ export default function Employees() {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState(() => ({ ...EMPTY_EMPLOYEE_FILTERS }));
   const [showAddModal, setShowAddModal] = useState(false);
+  const [addStep, setAddStep] = useState(0);
   const [newEmpPhoto, setNewEmpPhoto] = useState(null);
   const [newEmpPhotoSrc, setNewEmpPhotoSrc] = useState(null);
   const [newEmpRawSrc, setNewEmpRawSrc] = useState(null);
@@ -826,6 +884,7 @@ export default function Employees() {
     setNewEmpZoom(1);
     setNewEmpCroppedPixels(null);
     setShowAddModal(false);
+    setAddStep(0);
     setForm(initialForm);
     setFormErrors({});
     setFormWarnings({});
@@ -1082,7 +1141,7 @@ export default function Employees() {
             <button
               type="button"
               onClick={() => setShowDownload((o) => !o)}
-              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
+              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
             >
               Download ▾
             </button>
@@ -1153,7 +1212,7 @@ export default function Employees() {
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
           placeholder="Search (3+ chars searches all employees)..."
-          className="w-full sm:ml-auto sm:w-72 min-h-[44px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
+          className="w-full sm:ml-auto sm:w-72 min-h-[44px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
         />
       </div>
 
@@ -1795,7 +1854,7 @@ export default function Employees() {
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] min-h-0 flex flex-col overflow-hidden sm:my-8">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] min-h-0 flex flex-col overflow-hidden sm:my-8">
             {(() => {
               try {
                 return (
@@ -1803,19 +1862,68 @@ export default function Employees() {
                     <div className="flex justify-center pt-2 pb-1 sm:hidden flex-shrink-0">
                       <div className="w-10 h-1 bg-gray-200 rounded-full" />
                     </div>
-                    <div className="flex items-center justify-between px-6 py-4 sm:px-6 sm:py-5 border-b border-gray-100 flex-shrink-0">
-                      <h2 className="text-lg font-semibold text-slate-800">Add Employee</h2>
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+                      <div>
+                        <h2 className="text-base font-semibold text-gray-800">Add Employee</h2>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Step {addStep + 1} of {ADD_STEPS.length} — {ADD_STEPS[addStep].sub}
+                        </p>
+                      </div>
                       <button
                         type="button"
                         onClick={handleCloseAddModal}
-                        className="text-slate-400 hover:text-slate-600 min-h-[44px] min-w-[44px] rounded-lg flex items-center justify-center text-xl leading-none"
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors text-lg"
                         aria-label="Close"
                       >
                         ✕
                       </button>
                     </div>
+                    <div className="flex items-center px-6 py-3 gap-1 border-b border-gray-100 flex-shrink-0 bg-gray-50/50">
+                      {ADD_STEPS.map((step, i) => (
+                        <button
+                          key={step.id}
+                          type="button"
+                          onClick={() => {
+                            if (i < addStep) setAddStep(i);
+                          }}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex-1 justify-center ${
+                            i === addStep
+                              ? 'bg-[#1B6B6B] text-white'
+                              : i < addStep
+                                ? 'text-[#1B6B6B] bg-[#E1F5EE]'
+                                : 'text-gray-400 bg-transparent'
+                          }`}
+                        >
+                          <span
+                            className={
+                              i === addStep
+                                ? 'text-white'
+                                : i < addStep
+                                  ? 'text-[#0F6E56]'
+                                  : 'text-gray-300'
+                            }
+                          >
+                            {i < addStep ? (
+                              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                <path
+                                  d="M2 6l3 3 5-5"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            ) : (
+                              step.icon
+                            )}
+                          </span>
+                          <span className="hidden sm:inline">{step.label}</span>
+                        </button>
+                      ))}
+                    </div>
                     <form onSubmit={handleAddEmployee} className="flex flex-col flex-1 min-h-0">
                       <div className="flex-1 overflow-y-auto p-6 min-h-0">
+              {addStep === 0 && (<>
               <div className="flex flex-col items-center py-4 mb-6 border-b border-gray-100">
                 <div className="relative group mb-3">
                   {newEmpPhotoSrc ? (
@@ -1887,7 +1995,7 @@ export default function Employees() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-medium text-slate-600 mb-1">Full Name</label>
-                    <input name="fullName" value={form.fullName} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
+                    <input name="fullName" value={form.fullName} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
                     {formErrors.fullName && <p className="text-red-500 text-xs mt-1">{formErrors.fullName}</p>}
                   </div>
                   <div className="sm:col-span-2">
@@ -1897,17 +2005,17 @@ export default function Employees() {
                       value={form.fatherName}
                       onChange={handleFormChange}
                       placeholder="Father's full name"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
-                    <input type="email" name="email" value={form.email} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
+                    <input type="email" name="email" value={form.email} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
                     {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
-                    <input name="phone" value={form.phone} onChange={handleFormChange} placeholder="10-digit mobile number" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
+                    <input name="phone" value={form.phone} onChange={handleFormChange} placeholder="10-digit mobile number" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Alternative Mobile</label>
@@ -1918,17 +2026,17 @@ export default function Employees() {
                       value={form.alternativeMobile}
                       onChange={handleFormChange}
                       maxLength={10}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Date of Birth</label>
-                    <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
+                    <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
                     {formErrors.dateOfBirth && <p className="text-red-500 text-xs mt-1">{formErrors.dateOfBirth}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Gender</label>
-                    <select name="gender" value={form.gender} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
+                    <select name="gender" value={form.gender} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20">
                       <option value="">—</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
@@ -1941,7 +2049,7 @@ export default function Employees() {
                       name="bloodGroup"
                       value={form.bloodGroup}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     >
                       <option value="">Select blood group</option>
                       {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map((bg) => (
@@ -1957,7 +2065,7 @@ export default function Employees() {
                       name="maritalStatus"
                       value={form.maritalStatus}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     >
                       <option value="">Select status</option>
                       <option value="Single">Single</option>
@@ -1972,7 +2080,7 @@ export default function Employees() {
                       name="disability"
                       value={form.disability}
                       onChange={handleFormChange}
-                      className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     >
                       <option value="">None</option>
                       <option value="Visual Impairment">Visual Impairment</option>
@@ -1990,7 +2098,7 @@ export default function Employees() {
                         name="marriageDate"
                         value={form.marriageDate}
                         onChange={handleFormChange}
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] focus:ring-1 focus:ring-[#4ECDC4]"
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                       />
                     </div>
                   )}
@@ -2010,7 +2118,7 @@ export default function Employees() {
                       value={form.streetAddress}
                       onChange={handleFormChange}
                       placeholder="House/Flat no, Street name"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                   </div>
                   <div>
@@ -2020,7 +2128,7 @@ export default function Employees() {
                       value={form.city}
                       onChange={handleFormChange}
                       placeholder="City"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                   </div>
                   <div>
@@ -2029,7 +2137,7 @@ export default function Employees() {
                       name="state"
                       value={form.state}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     >
                       <option value="">Select state</option>
                       {INDIAN_STATES.map((s) => (
@@ -2047,7 +2155,7 @@ export default function Employees() {
                       onChange={handleFormChange}
                       placeholder="6-digit pincode"
                       maxLength={6}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                     {formErrors.pincode && <p className="text-red-500 text-xs mt-1">{formErrors.pincode}</p>}
                   </div>
@@ -2058,12 +2166,15 @@ export default function Employees() {
                       value={form.country}
                       onChange={handleFormChange}
                       placeholder="Country"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                   </div>
                 </div>
               </div>
 
+              </>)}
+
+              {addStep === 3 && (<>
               <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
                   <span className="text-base">🚨</span>
@@ -2077,7 +2188,7 @@ export default function Employees() {
                       value={form.emergencyContactName}
                       onChange={handleFormChange}
                       placeholder="Full name"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                     {formErrors.emergencyContactName && <p className="text-red-500 text-xs mt-1">{formErrors.emergencyContactName}</p>}
                   </div>
@@ -2087,7 +2198,7 @@ export default function Employees() {
                       name="emergencyRelationship"
                       value={form.emergencyRelationship}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     >
                       <option value="">—</option>
                       <option value="Father">Father</option>
@@ -2106,13 +2217,32 @@ export default function Employees() {
                       onChange={handleFormChange}
                       placeholder="10-digit mobile number"
                       maxLength={10}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                     {formErrors.emergencyPhone && <p className="text-red-500 text-xs mt-1">{formErrors.emergencyPhone}</p>}
                   </div>
                 </div>
               </div>
 
+              <div className="mt-6 p-4 bg-[#E1F5EE] rounded-xl border border-[#9FE1CB]">
+                <p className="text-xs font-medium text-[#0F6E56] mb-2">Ready to add employee</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { l: 'Name', v: form.fullName },
+                    { l: 'Emp ID', v: form.empId || '(auto)' },
+                    { l: 'Department', v: form.department || '—' },
+                    { l: 'Joining', v: form.joiningDate || '—' },
+                  ].map(({ l, v }) => (
+                    <div key={l}>
+                      <p className="text-xs text-[#0F6E56]/60">{l}</p>
+                      <p className="text-xs font-medium text-[#085041] truncate">{v || '—'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              </>)}
+
+              {addStep === 1 && (<>
               <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100 flex items-center gap-2">
                   <span className="text-base">💼</span>
@@ -2126,7 +2256,7 @@ export default function Employees() {
                       placeholder="e.g. Infosys Pvt Ltd"
                       value={form.prevCompany}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -2136,7 +2266,7 @@ export default function Employees() {
                       placeholder="e.g. Software Engineer"
                       value={form.prevDesignation}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -2148,7 +2278,7 @@ export default function Employees() {
                           name="prevFromDate"
                           value={form.prevFromDate}
                           onChange={handleFormChange}
-                          className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] focus:ring-1 focus:ring-[#4ECDC4]"
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                         />
                       </div>
                       <div>
@@ -2158,7 +2288,7 @@ export default function Employees() {
                           name="prevToDate"
                           value={form.prevToDate}
                           onChange={handleFormChange}
-                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm hover:border-[#1B6B6B] focus:ring-1 focus:ring-[#4ECDC4]"
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm hover:border-[#1B6B6B] focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                         />
                       </div>
                     </div>
@@ -2191,7 +2321,7 @@ export default function Employees() {
                       placeholder="Manager's full name"
                       value={form.prevManagerName}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                   </div>
                   <div>
@@ -2202,7 +2332,7 @@ export default function Employees() {
                       placeholder="Manager's phone number"
                       value={form.prevManagerPhone}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -2213,7 +2343,7 @@ export default function Employees() {
                       placeholder="Manager's email address"
                       value={form.prevManagerEmail}
                       onChange={handleFormChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                   </div>
                 </div>
@@ -2233,14 +2363,14 @@ export default function Employees() {
                       onChange={handleFormChange}
                       onBlur={handleEmpIdBlur}
                       placeholder={nextEmpId}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4] font-mono"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20 font-mono"
                     />
                     {formErrors.empId && <p className="text-xs text-red-500 mt-1">{formErrors.empId}</p>}
                     {!formErrors.empId && formWarnings.empId && <p className="text-xs text-amber-600 mt-1">{formWarnings.empId}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Department</label>
-                    <select name="department" value={form.department} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
+                    <select name="department" value={form.department} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20">
                       <option value="">—</option>
                       {departments.map((d) => <option key={d} value={d}>{d}</option>)}
                       {!departments.includes('Other') && <option value="Other">Other</option>}
@@ -2255,7 +2385,7 @@ export default function Employees() {
                       onKeyDown={(ev) => {
                         if (ev.key === 'Enter' || ev.key === ' ') setShowRoleDropdown(true);
                       }}
-                      className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px]"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px]"
                     >
                       {selectedRole ? (
                         <div className="flex items-center gap-2 min-w-0">
@@ -2384,7 +2514,7 @@ export default function Employees() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Branch</label>
-                    <select name="branch" value={form.branch} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
+                    <select name="branch" value={form.branch} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20">
                       <option value="">—</option>
                       {branches.map((b) => <option key={b} value={b}>{b}</option>)}
                       {!branches.includes('Other') && <option value="Other">Other</option>}
@@ -2399,7 +2529,7 @@ export default function Employees() {
                       onKeyDown={(ev) => {
                         if (ev.key === 'Enter' || ev.key === ' ') setShowLocationDropdown(true);
                       }}
-                      className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px]"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px]"
                     >
                       {form.location ? (
                         <span>{form.location}</span>
@@ -2458,14 +2588,14 @@ export default function Employees() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Employment Type</label>
-                    <select name="employmentType" value={form.employmentType} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
+                    <select name="employmentType" value={form.employmentType} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20">
                       {employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                       {!employmentTypes.includes('Other') && <option value="Other">Other</option>}
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
-                    <select name="category" value={form.category} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
+                    <select name="category" value={form.category} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20">
                       <option value="">—</option>
                       {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                       {!categories.includes('Other') && <option value="Other">Other</option>}
@@ -2473,7 +2603,7 @@ export default function Employees() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Qualification</label>
-                    <select name="qualification" value={form.qualification} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]">
+                    <select name="qualification" value={form.qualification} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20">
                       <option value="">—</option>
                       {qualifications.map((q) => <option key={q} value={q}>{q}</option>)}
                       {!qualifications.includes('Other') && <option value="Other">Other</option>}
@@ -2481,7 +2611,7 @@ export default function Employees() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Joining Date</label>
-                    <input type="date" name="joiningDate" value={form.joiningDate} onChange={handleFormChange} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]" />
+                    <input type="date" name="joiningDate" value={form.joiningDate} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Reporting Manager</label>
@@ -2496,7 +2626,7 @@ export default function Employees() {
                             setShowManagerDropdown(true);
                           }
                         }}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#4ECDC4]"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#4ECDC4]"
                       >
                         {form.reportingManagerId ? (
                           <div className="flex items-center gap-2 min-w-0">
@@ -2653,7 +2783,7 @@ export default function Employees() {
                           ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum,
                         }));
                       }}
-                      className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-slate-300"
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-gray-200"
                     />
                     {form.basicSalary ? (
                       <p className="text-xs text-gray-400 mt-1">
@@ -2678,7 +2808,7 @@ export default function Employees() {
                           ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum,
                         }));
                       }}
-                      className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-slate-300"
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-gray-200"
                     />
                     {form.hra ? (
                       <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.hra) * 12)} per annum</p>
@@ -2703,7 +2833,7 @@ export default function Employees() {
                           ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum,
                         }));
                       }}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                     {form.incentive !== '' && form.incentive != null && !Number.isNaN(Number(form.incentive)) && Number(form.incentive) !== 0 && (
                       <p className="text-xs text-gray-400 mt-1">
@@ -2721,7 +2851,7 @@ export default function Employees() {
                       placeholder="Auto-calculated from above"
                       value={form.ctcPerAnnum || ''}
                       onChange={(e) => setForm((prev) => ({ ...prev, ctcPerAnnum: e.target.value }))}
-                      className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-slate-300"
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm hover:border-[#1B6B6B] border-gray-200"
                     />
                     {form.ctcPerAnnum ? (
                       <p className="text-xs text-gray-400 mt-1">
@@ -2782,7 +2912,7 @@ export default function Employees() {
                         placeholder="PF Account Number"
                         value={form.pfNumber}
                         onChange={handleFormChange}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white focus:ring-1 focus:ring-[#4ECDC4]"
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                       />
                     )}
                   </div>
@@ -2816,7 +2946,7 @@ export default function Employees() {
                         placeholder="ESIC Number"
                         value={form.esicNumber}
                         onChange={handleFormChange}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white focus:ring-1 focus:ring-[#4ECDC4]"
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                       />
                     )}
                   </div>
@@ -2955,6 +3085,9 @@ export default function Employees() {
                 </div>
               </div>
 
+              </>)}
+
+              {addStep === 2 && (<>
               {/* ── Bank Details ── */}
               <div className="pt-4 border-t border-gray-100 mb-6">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
@@ -3026,7 +3159,7 @@ export default function Employees() {
                       value={form.panNumber}
                       onChange={handleFormChange}
                       placeholder="e.g. ABCDE1234F"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4] uppercase"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20 uppercase"
                       maxLength={20}
                     />
                   </div>
@@ -3037,7 +3170,7 @@ export default function Employees() {
                       value={form.aadhaarNumber}
                       onChange={handleFormChange}
                       placeholder="12-digit number"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                       maxLength={20}
                     />
                   </div>
@@ -3048,29 +3181,55 @@ export default function Employees() {
                       value={form.drivingLicenceNumber}
                       onChange={handleFormChange}
                       placeholder="e.g. MH0120210012345"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
                     />
                   </div>
                 </div>
               </div>
+              </>)}
                       </div>
 
-                      <div className="p-6 border-t border-gray-100 flex-shrink-0 flex gap-3 justify-end">
+                      <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-white">
                         <button
                           type="button"
-                          onClick={handleCloseAddModal}
-                          className="rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 px-4 py-2 min-h-[44px]"
+                          onClick={() => {
+                            if (addStep === 0) {
+                              handleCloseAddModal();
+                            } else {
+                              setAddStep((s) => s - 1);
+                            }
+                          }}
                           disabled={saving}
+                          className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
                         >
-                          Cancel
+                          {addStep === 0 ? 'Cancel' : '← Back'}
                         </button>
-                        <button
-                          type="submit"
-                          className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 min-h-[44px] disabled:opacity-50"
-                          disabled={saving}
-                        >
-                          {saving ? 'Saving...' : 'Add Employee'}
-                        </button>
+                        {addStep < ADD_STEPS.length - 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => setAddStep((s) => s + 1)}
+                            className="px-5 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] transition-colors flex items-center gap-2"
+                          >
+                            Next
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                              <path
+                                d="M5 3l4 4-4 4"
+                                stroke="currentColor"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        ) : (
+                          <button
+                            type="submit"
+                            disabled={saving}
+                            className="px-5 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 transition-colors"
+                          >
+                            {saving ? 'Saving...' : 'Add Employee'}
+                          </button>
+                        )}
                       </div>
                     </form>
                   </>
