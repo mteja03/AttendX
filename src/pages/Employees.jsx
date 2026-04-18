@@ -116,6 +116,100 @@ function noticePeriodDaysRemaining(emp) {
   return String(Math.max(0, diff));
 }
 
+const STATUS_BORDER_COLOR = {
+  'Notice Period': '#FBBF24',
+  Offboarding: '#F87171',
+  Inactive: '#D1D5DB',
+};
+
+function getRowTintClass(status) {
+  switch (status) {
+    case 'Notice Period':
+      return 'bg-amber-50/30';
+    case 'Offboarding':
+      return 'bg-red-50/20';
+    case 'Inactive':
+      return 'opacity-60';
+    default:
+      return '';
+  }
+}
+
+function getCardTopBorderClass(status) {
+  switch (status) {
+    case 'Notice Period':
+      return 'border-t-[3px] border-t-amber-400';
+    case 'Offboarding':
+      return 'border-t-[3px] border-t-red-400';
+    case 'Inactive':
+      return 'border-t-[3px] border-t-gray-300';
+    default:
+      return 'border-t-[3px] border-t-transparent';
+  }
+}
+
+const STATUS_BADGE_CONFIG = {
+  Active: { dot: '#16A34A', bg: 'bg-green-50', text: 'text-green-700' },
+  'Notice Period': { dot: '#EF9F27', bg: 'bg-amber-50', text: 'text-amber-700' },
+  Offboarding: { dot: '#E24B4A', bg: 'bg-red-50', text: 'text-red-600' },
+  Inactive: { dot: '#9CA3AF', bg: 'bg-gray-100', text: 'text-gray-500' },
+  'On Leave': { dot: '#3B82F6', bg: 'bg-blue-50', text: 'text-blue-600' },
+};
+
+function StatusBadge({ status }) {
+  const label = status || 'Active';
+  const c = STATUS_BADGE_CONFIG[label] || STATUS_BADGE_CONFIG.Inactive;
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium ${c.bg} ${c.text}`}
+    >
+      <span
+        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+        style={{ background: c.dot }}
+      />
+      {label}
+    </span>
+  );
+}
+
+function countOverdueOffboardingTasks(emp) {
+  const tasks = Array.isArray(emp.offboarding?.tasks) ? emp.offboarding.tasks : [];
+  if (tasks.length === 0) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return tasks.filter((t) => {
+    if (t.completed) return false;
+    const due = toJSDate(t.dueDate);
+    if (!due || Number.isNaN(due.getTime())) return false;
+    due.setHours(0, 0, 0, 0);
+    return due < today;
+  }).length;
+}
+
+function EmployeeStatusSubline({ emp }) {
+  const status = emp.status;
+  if (status === 'Notice Period') {
+    const last = toJSDate(emp.offboarding?.expectedLastDay);
+    if (!last || Number.isNaN(last.getTime())) return null;
+    return (
+      <span className="text-xs text-amber-600 font-medium">
+        · Last day{' '}
+        {last.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+      </span>
+    );
+  }
+  if (status === 'Offboarding') {
+    const overdue = countOverdueOffboardingTasks(emp);
+    if (overdue === 0) return null;
+    return (
+      <span className="text-xs text-red-500 font-medium">
+        · {overdue} task{overdue !== 1 ? 's' : ''} overdue
+      </span>
+    );
+  }
+  return null;
+}
+
 function customBenefitsExportText(emp) {
   const list = Array.isArray(emp.customBenefits) ? emp.customBenefits : [];
   return list
@@ -174,16 +268,6 @@ const INDIAN_STATES = [
   'Dadra & Nagar Haveli',
   'Lakshadweep',
 ];
-
-function employeeStatusBadgeClass(status) {
-  const s = status || 'Active';
-  if (s === 'Active') return 'bg-green-100 text-green-700';
-  if (s === 'Notice Period') return 'bg-amber-100 text-amber-700';
-  if (s === 'On Leave') return 'bg-blue-100 text-blue-700';
-  if (s === 'Offboarding') return 'bg-orange-100 text-orange-700';
-  if (s === 'Inactive') return 'bg-gray-100 text-gray-500';
-  return 'bg-slate-100 text-slate-600';
-}
 
 const getDeptColor = (dept) => {
   const colors = {
@@ -1425,9 +1509,11 @@ export default function Employees() {
               {paginatedEmployees.map((emp) => (
                   <tr
                     key={emp.id}
-                    className="border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-all"
+                    className={`border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-all ${getRowTintClass(emp.status)}`}
                     onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
-                    style={{ borderLeft: `3px solid ${getDeptColor(emp.department)}` }}
+                    style={{
+                      borderLeft: `3px solid ${STATUS_BORDER_COLOR[emp.status] || getDeptColor(emp.department)}`,
+                    }}
                   >
                     <td className="px-4 py-3 font-mono text-slate-700">{emp.empId || '—'}</td>
                     <td className="px-4 py-3">
@@ -1440,17 +1526,18 @@ export default function Employees() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-700">{emp.department || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700">{emp.designation || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>{emp.designation || '—'}</span>
+                        <EmployeeStatusSubline emp={emp} />
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-slate-700">{emp.phone || '—'}</td>
                     <td className="px-4 py-3 text-slate-700">{toDisplayDate(emp.joiningDate)}</td>
                     <td className="px-4 py-3 text-slate-700">{emp.branch || '—'}</td>
                     <td className="px-4 py-3 text-slate-700">{emp.location || '—'}</td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${employeeStatusBadgeClass(emp.status)}`}
-                      >
-                        {emp.status || 'Active'}
-                      </span>
+                      <StatusBadge status={emp.status || 'Active'} />
                       {(emp.offboarding?.phase === 'exit_tasks' || emp.offboarding?.status === 'in_progress') && (
                         <div className="flex items-center gap-1 mt-1">
                           <div className="w-16 bg-gray-100 rounded-full h-1">
@@ -1559,7 +1646,7 @@ export default function Employees() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') navigate(`/company/${companyId}/employees/${emp.id}`);
                 }}
-                className="bg-white border border-gray-100 rounded-2xl p-4 cursor-pointer hover:border-gray-200 active:bg-gray-50"
+                className={`bg-white border border-gray-100 rounded-2xl overflow-hidden p-4 cursor-pointer hover:border-gray-200 active:bg-gray-50 ${getCardTopBorderClass(emp.status)} ${getRowTintClass(emp.status)}`}
               >
                 <div className="flex items-center gap-3 mb-3">
                   <EmployeeAvatar employee={emp} size="md" />
@@ -1569,17 +1656,18 @@ export default function Employees() {
                       {emp.empId || '—'} · {emp.department || '—'}
                     </p>
                   </div>
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${employeeStatusBadgeClass(emp.status)}`}
-                  >
-                    {emp.status || 'Active'}
-                  </span>
+                  <div className="flex-shrink-0">
+                    <StatusBadge status={emp.status || 'Active'} />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
                   <div>
                     <span className="text-gray-400">Designation</span>
-                    <p className="text-gray-700 font-medium truncate">{emp.designation || '—'}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-gray-700 font-medium truncate">{emp.designation || '—'}</p>
+                      <EmployeeStatusSubline emp={emp} />
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-400">Joined</span>
