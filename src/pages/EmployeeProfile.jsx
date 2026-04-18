@@ -331,6 +331,49 @@ function getTenure(joiningDate) {
   return `${days} day${days > 1 ? 's' : ''}`;
 }
 
+const HEADER_STATUS_CONFIG = {
+  Active: {
+    topBar: '#1B6B6B',
+    badgeBg: '#EAF3DE',
+    badgeColor: '#3B6D11',
+    dotColor: '#3B6D11',
+  },
+  'Notice Period': {
+    topBar: '#EF9F27',
+    badgeBg: '#FAEEDA',
+    badgeColor: '#854F0B',
+    dotColor: '#EF9F27',
+  },
+  Offboarding: {
+    topBar: '#E24B4A',
+    badgeBg: '#FCEBEB',
+    badgeColor: '#A32D2D',
+    dotColor: '#E24B4A',
+  },
+  Inactive: {
+    topBar: '#B4B2A9',
+    badgeBg: '#F1EFE8',
+    badgeColor: '#5F5E5A',
+    dotColor: '#9CA3AF',
+  },
+  'On Leave': {
+    topBar: '#378ADD',
+    badgeBg: '#E6F1FB',
+    badgeColor: '#185FA5',
+    dotColor: '#378ADD',
+  },
+};
+
+function formatHeaderDate(value) {
+  const d = toJSDate(value);
+  if (!d || Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 const TIMELINE_COLORS = {
   green: {
     dot: 'bg-green-500',
@@ -691,6 +734,27 @@ export default function EmployeeProfile() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errorModal, setErrorModal] = useState(null);
+
+  const headerStatus = employee?.status || 'Active';
+  const sc = HEADER_STATUS_CONFIG[headerStatus] || HEADER_STATUS_CONFIG.Active;
+
+  const noticeDaysRemaining = useMemo(() => {
+    if (!employee || employee.status !== 'Notice Period') return null;
+    const last = toJSDate(employee.offboarding?.expectedLastDay);
+    if (!last || Number.isNaN(last.getTime())) return null;
+    const diff = Math.ceil((last.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diff);
+  }, [employee]);
+
+  const offboardingTasksDone = useMemo(() => {
+    const tasks = Array.isArray(employee?.offboarding?.tasks)
+      ? employee.offboarding.tasks
+      : [];
+    return {
+      done: tasks.filter((t) => t.completed).length,
+      total: tasks.length,
+    };
+  }, [employee]);
 
   // Clear error modal on re-login
   useEffect(() => {
@@ -3304,154 +3368,367 @@ export default function EmployeeProfile() {
         ← Employees
       </Link>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="relative group flex-shrink-0">
-              <EmployeeAvatar employee={employee} size="huge" className="ring-4 ring-white shadow-lg" />
+      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden mb-6">
+        <div className="h-1.5 w-full" style={{ background: sc.topBar }} />
 
-              {canUploadPhoto && !uploadingPhoto && (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => document.getElementById('emp-photo-input')?.click()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      document.getElementById('emp-photo-input')?.click();
-                    }
-                  }}
-                  className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/50 transition-all flex items-center justify-center cursor-pointer"
-                >
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity text-center pointer-events-none">
-                    <p className="text-white text-lg">📷</p>
-                    <p className="text-white text-xs font-medium mt-0.5">
-                      {employee.photoURL ? 'Change' : 'Add Photo'}
-                    </p>
+        <div className="p-5">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-start gap-4 min-w-0 flex-1">
+              <div className="relative group flex-shrink-0">
+                <EmployeeAvatar
+                  employee={employee}
+                  size="xl"
+                  className="border-2 border-white ring-2 ring-gray-100 shadow-sm"
+                />
+
+                {canUploadPhoto && !uploadingPhoto && (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => document.getElementById('emp-photo-input')?.click()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        document.getElementById('emp-photo-input')?.click();
+                      }
+                    }}
+                    className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/50 transition-all flex items-center justify-center cursor-pointer"
+                  >
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity text-center pointer-events-none">
+                      <p className="text-white text-base leading-none">📷</p>
+                      <p className="text-white text-[10px] font-medium mt-0.5">
+                        {employee.photoURL ? 'Change' : 'Add'}
+                      </p>
+                    </div>
                   </div>
+                )}
+
+                {uploadingPhoto && (
+                  <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
+                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+
+                {canUploadPhoto && employee.photoURL && !uploadingPhoto && (
+                  <button
+                    type="button"
+                    title="Remove photo"
+                    onClick={() => setShowRemovePhotoConfirm(true)}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-red-500 text-white text-xs flex items-center justify-center shadow-md hover:bg-red-600 transition-colors border-2 border-white z-10"
+                  >
+                    ✕
+                  </button>
+                )}
+
+                {canUploadPhoto && (
+                  <input
+                    id="emp-photo-input"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/jpg"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      e.target.value = '';
+
+                      if (!file.type.startsWith('image/')) {
+                        showError('Please select an image file');
+                        return;
+                      }
+                      if (file.size > 10 * 1024 * 1024) {
+                        showError('Image must be under 10MB');
+                        return;
+                      }
+
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        setRawImageSrc(ev.target?.result || null);
+                        setCrop({ x: 0, y: 0 });
+                        setZoom(1);
+                        setCroppedAreaPixels(null);
+                        setCropModalOpen(true);
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                )}
+
+                {employee.status === 'Active' && !uploadingPhoto && (
+                  <span className="absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-white pointer-events-none" />
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <h1 className="text-lg font-semibold text-gray-800 leading-tight truncate">
+                    {employee.fullName || '—'}
+                  </h1>
+                  {employee.rehireCount > 0 && (
+                    <span className="text-xs font-medium bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                      Rehired ×{employee.rehireCount}
+                    </span>
+                  )}
                 </div>
+
+                <p className="text-sm text-gray-500 mb-3">
+                  {employee.designation || '—'}
+                  {employee.department && (
+                    <>
+                      <span className="text-gray-300"> · </span>
+                      {employee.department}
+                    </>
+                  )}
+                </p>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
+                    style={{ background: sc.badgeBg, color: sc.badgeColor }}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ background: sc.dotColor }}
+                    />
+                    {employee.status || 'Active'}
+                  </span>
+
+                  {toJSDate(employee.joiningDate) && (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 px-2.5 py-1 rounded-full">
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                        <rect
+                          x="1"
+                          y="1"
+                          width="9"
+                          height="9"
+                          rx="1.5"
+                          stroke="currentColor"
+                          strokeWidth="1.1"
+                        />
+                        <path
+                          d="M3.5 1v1.5M7.5 1v1.5M1 4.5h9"
+                          stroke="currentColor"
+                          strokeWidth="1.1"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      Joined {formatHeaderDate(employee.joiningDate)}
+                    </span>
+                  )}
+
+                  {getTenure(employee.joiningDate) && (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 px-2.5 py-1 rounded-full">
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                        <circle
+                          cx="5.5"
+                          cy="5.5"
+                          r="4"
+                          stroke="currentColor"
+                          strokeWidth="1.1"
+                        />
+                        <path
+                          d="M5.5 3v2.5l1.5 1"
+                          stroke="currentColor"
+                          strokeWidth="1.1"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      {getTenure(employee.joiningDate)}
+                    </span>
+                  )}
+
+                  {employee.empId && (
+                    <span className="text-xs text-gray-400 bg-gray-50 px-2.5 py-1 rounded-full font-mono">
+                      {employee.empId}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+              {isInactive ? (
+                <span className="inline-flex items-center justify-center min-h-[36px] px-3 bg-gray-100 text-gray-400 rounded-xl text-sm cursor-not-allowed">
+                  🔒 Locked
+                </span>
+              ) : (
+                canEditEmployees && (
+                  <button
+                    type="button"
+                    onClick={openEdit}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] transition-colors"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path
+                        d="M2 9l2-.5L10 3a1 1 0 00-1.5-1.5L2.5 7.5 2 9z"
+                        stroke="#fff"
+                        strokeWidth="1.1"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    Edit profile
+                  </button>
+                )
               )}
 
-              {uploadingPhoto && (
-                <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
-                  <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-
-              {canUploadPhoto && employee.photoURL && !uploadingPhoto && (
+              {isInactive && canEditEmployees && (
                 <button
                   type="button"
-                  title="Remove photo"
-                  onClick={() => setShowRemovePhotoConfirm(true)}
-                  className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-red-500 text-white text-sm flex items-center justify-center shadow-md hover:bg-red-600 transition-colors border-2 border-white z-10"
+                  onClick={() => setShowRehireModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors"
                 >
-                  ✕
+                  🔄 Rehire
                 </button>
               )}
 
-              {canUploadPhoto && (
-                <input
-                  id="emp-photo-input"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/jpg"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    e.target.value = '';
-
-                    if (!file.type.startsWith('image/')) {
-                      showError('Please select an image file');
-                      return;
-                    }
-                    if (file.size > 10 * 1024 * 1024) {
-                      showError('Image must be under 10MB');
-                      return;
-                    }
-
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      setRawImageSrc(ev.target?.result || null);
-                      setCrop({ x: 0, y: 0 });
-                      setZoom(1);
-                      setCroppedAreaPixels(null);
-                      setCropModalOpen(true);
-                    };
-                    reader.readAsDataURL(file);
-                  }}
-                />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold text-slate-800">{employee.fullName || '—'}</h1>
-            <div className="flex flex-wrap gap-2 mt-2">
-              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">{employee.designation || '—'}</span>
-              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">{employee.department || '—'}</span>
-              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">{employee.employmentType || 'Full-time'}</span>
-              <span
-                className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                  employee.status === 'Active'
-                    ? 'bg-green-100 text-green-700'
-                    : employee.status === 'Notice Period'
-                      ? 'bg-amber-100 text-amber-700'
-                      : employee.status === 'On Leave'
-                        ? 'bg-blue-100 text-blue-700'
-                        : employee.status === 'Offboarding'
-                          ? 'bg-orange-100 text-orange-700'
-                          : employee.status === 'Inactive'
-                            ? 'bg-gray-100 text-gray-500'
-                            : 'bg-slate-100 text-slate-600'
-                }`}
+              <button
+                type="button"
+                onClick={handlePrintProfile}
+                title="Print profile"
+                className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
               >
-                {employee.status || 'Active'}
-              </span>
-              {employee.rehireCount > 0 && (
-                <span className="inline-flex rounded-full px-2.5 py-1 bg-green-100 text-green-700 text-xs font-medium">
-                  🔄 Rehired ({employee.rehireCount}x)
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path
+                    d="M3 5V2h8v3"
+                    stroke="#6B7280"
+                    strokeWidth="1.2"
+                    strokeLinecap="round"
+                  />
+                  <rect
+                    x="1"
+                    y="5"
+                    width="12"
+                    height="6"
+                    rx="1"
+                    stroke="#6B7280"
+                    strokeWidth="1.2"
+                  />
+                  <path
+                    d="M3 8h8M3 11h8"
+                    stroke="#6B7280"
+                    strokeWidth="1.2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {employee.status === 'Notice Period' && (
+          <div className="px-5 py-2.5 bg-amber-50 border-t border-amber-100 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 text-xs text-amber-700">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                <circle cx="6.5" cy="6.5" r="5" stroke="#854F0B" strokeWidth="1.2" />
+                <path
+                  d="M6.5 4v3M6.5 9v.3"
+                  stroke="#854F0B"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+              Resignation recorded
+              {formatHeaderDate(employee.offboarding?.expectedLastDay) && (
+                <span>
+                  · Last working day{' '}
+                  <span className="font-medium">
+                    {formatHeaderDate(employee.offboarding?.expectedLastDay)}
+                  </span>
                 </span>
               )}
             </div>
-            <p className="text-sm text-gray-500 mt-1">
-              Joined {toDisplayDate(employee.joiningDate)}
-              <span className="mx-2 text-gray-300">·</span>
-              <span className="text-[#1B6B6B] font-medium">
-                {getTenure(employee.joiningDate)}
+            {noticeDaysRemaining !== null && (
+              <span className="text-xs font-medium text-amber-700">
+                {noticeDaysRemaining === 0
+                  ? 'Last day today'
+                  : `${noticeDaysRemaining} day${noticeDaysRemaining !== 1 ? 's' : ''} remaining`}
               </span>
-            </p>
+            )}
+          </div>
+        )}
+
+        {employee.status === 'Offboarding' && (
+          <div className="px-5 py-2.5 bg-red-50 border-t border-red-100 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 text-xs text-red-700">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                <circle cx="6.5" cy="6.5" r="5" stroke="#A32D2D" strokeWidth="1.2" />
+                <path
+                  d="M6.5 4v3M6.5 9v.3"
+                  stroke="#A32D2D"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+              Exit in progress
+              {formatHeaderDate(employee.offboarding?.expectedLastDay) && (
+                <span>
+                  · Exit date{' '}
+                  <span className="font-medium">
+                    {formatHeaderDate(employee.offboarding?.expectedLastDay)}
+                  </span>
+                </span>
+              )}
             </div>
+            <span className="text-xs font-medium text-red-600">
+              {offboardingTasksDone.done} of {offboardingTasksDone.total} tasks done
+            </span>
           </div>
-          <div className="flex flex-wrap gap-2 sm:ml-auto">
-            {canEditEmployees && employee.status !== 'Inactive' && (
-              <button
-                type="button"
-                onClick={openEdit}
-                className="rounded-lg min-h-[44px] px-4 inline-flex items-center justify-center bg-[#1B6B6B] hover:bg-[#155858] active:bg-[#0f4444] text-white text-sm font-medium"
-              >
-                Edit
-              </button>
-            )}
-            {employee.status === 'Inactive' && (
-              <span className="inline-flex items-center justify-center min-h-[44px] px-4 bg-gray-100 text-gray-400 rounded-lg text-sm cursor-not-allowed">
-                🔒 Locked
-              </span>
-            )}
-            {employee.status === 'Inactive' && canEditEmployees && (
-              <button
-                type="button"
-                onClick={() => setShowRehireModal(true)}
-                className="flex items-center gap-2 min-h-[44px] px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700"
-              >
-                🔄 Rehire Employee
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handlePrintProfile}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 min-h-[44px]"
-            >
-              🖨️ Print
-            </button>
-          </div>
+        )}
+
+        <div className="border-t border-gray-100 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 divide-x divide-gray-100">
+          {[
+            {
+              label: 'Department',
+              value: employee.department || '—',
+            },
+            {
+              label: 'Location',
+              value: employee.location || employee.branch || '—',
+            },
+            {
+              label: 'Reporting to',
+              value: employee.reportingManagerName || '—',
+            },
+            {
+              label:
+                employee.status === 'Notice Period'
+                  ? 'Notice period'
+                  : employee.status === 'Offboarding'
+                    ? 'Exit tasks'
+                    : 'Employment',
+              value:
+                employee.status === 'Notice Period'
+                  ? `${employee.offboarding?.noticePeriodDays ?? 60} days`
+                  : employee.status === 'Offboarding'
+                    ? `${offboardingTasksDone.done} of ${offboardingTasksDone.total} done`
+                    : employee.employmentType || 'Full-time',
+              valueColor:
+                employee.status === 'Notice Period'
+                  ? '#854F0B'
+                  : employee.status === 'Offboarding'
+                    ? '#A32D2D'
+                    : undefined,
+            },
+            {
+              label: 'Annual CTC',
+              value:
+                employee.ctcPerAnnum != null || employee.ctc != null
+                  ? `₹${Number(employee.ctcPerAnnum ?? employee.ctc).toLocaleString('en-IN')}`
+                  : '—',
+              hidden: !(isAdmin || isHRManager || isCompanyAdmin),
+            },
+          ]
+            .filter((s) => !s.hidden)
+            .map((s) => (
+              <div key={s.label} className="px-4 py-3">
+                <p className="text-xs text-gray-400 mb-0.5">{s.label}</p>
+                <p
+                  className="text-sm font-medium text-gray-800 truncate"
+                  style={s.valueColor ? { color: s.valueColor } : undefined}
+                >
+                  {s.value}
+                </p>
+              </div>
+            ))}
         </div>
       </div>
 
