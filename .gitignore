@@ -26,3 +26,4 @@ dist-ssr
 functions/.env
 serviceAccount.json
 fixPermissions.mjs
+.claude/
