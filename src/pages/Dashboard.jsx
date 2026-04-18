@@ -13,7 +13,6 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import StatCard from '../components/StatCard';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -52,13 +51,6 @@ function isFailedPrecondition(err) {
   return err?.code === 'failed-precondition' || String(err?.message || '').toLowerCase().includes('index');
 }
 
-function UsersIcon({ className }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  );
-}
 function CalendarIcon({ className }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -175,6 +167,114 @@ function CelebrationItem({ item, showDate, companyId, employees, navigate }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+const STAT_TREND_COLORS = {
+  up: { bg: '#EAF3DE', color: '#3B6D11' },
+  down: { bg: '#FCEBEB', color: '#A32D2D' },
+  neutral: { bg: '#F1EFE8', color: '#5F5E5A' },
+};
+
+function TrendArrow({ dir }) {
+  if (dir === 'up') {
+    return (
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <path
+          d="M2 7L5 3L8 7"
+          stroke="#3B6D11"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (dir === 'down') {
+    return (
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <path
+          d="M2 3L5 7L8 3"
+          stroke="#A32D2D"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  return null;
+}
+
+function StatCard({
+  icon,
+  iconBg,
+  trend,
+  trendDir,
+  number,
+  label,
+  subLabel,
+  subLabelColor,
+  rightLabel,
+  sparkData,
+}) {
+  const tc = STAT_TREND_COLORS[trendDir] || STAT_TREND_COLORS.neutral;
+  const maxBar = sparkData ? Math.max(...sparkData) : 0;
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-2xl p-4 flex flex-col gap-3">
+      <div className="flex items-start justify-between">
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ background: iconBg }}
+        >
+          {icon}
+        </div>
+        {trend !== undefined && (
+          <span
+            className="text-xs font-medium px-2 py-1 rounded-full flex items-center gap-1"
+            style={{ background: tc.bg, color: tc.color }}
+          >
+            <TrendArrow dir={trendDir} />
+            {trend}
+          </span>
+        )}
+      </div>
+
+      <div className="text-3xl font-semibold text-gray-800 leading-none">{number}</div>
+
+      <div className="border-t border-gray-100" />
+
+      <div className="flex flex-col gap-1">
+        <p className="text-xs text-gray-500">{label}</p>
+        {(subLabel || rightLabel) && (
+          <div className="flex items-center justify-between">
+            {subLabel && (
+              <p className="text-xs" style={{ color: subLabelColor || '#6B7280' }}>
+                {subLabel}
+              </p>
+            )}
+            {rightLabel && <p className="text-xs text-gray-400">{rightLabel}</p>}
+          </div>
+        )}
+      </div>
+
+      {sparkData && (
+        <div className="flex items-end gap-0.5 h-6 mt-1">
+          {sparkData.map((val, i) => (
+            <div
+              key={i}
+              className="flex-1"
+              style={{
+                height: maxBar > 0 ? `${Math.round((val / maxBar) * 100)}%` : '20%',
+                background: i === sparkData.length - 1 ? '#EF9F27' : '#FAC775',
+                borderRadius: '2px 2px 0 0',
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -398,34 +498,134 @@ export default function Dashboard() {
 
   const activeEmployeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
 
-  const stats = useMemo(() => {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const total = employees.length;
-    const active = employees.filter((e) => (e.status || 'Active') !== 'Inactive').length;
-    const newJoiners = employees.filter((e) => {
-      const d = toJSDate(e.joiningDate);
-      if (!d || Number.isNaN(d.getTime())) return false;
-      return d >= thirtyDaysAgo;
-    }).length;
-    const leavesForActive = leaveList.filter((l) => activeEmployeeIds.has(l.employeeId));
-    const pendingLeaves = leavesForActive.filter((l) => l.status === 'Pending').length;
+  const totalEmployees = useMemo(() => employees.length, [employees]);
+
+  const activeCount = useMemo(
+    () => employees.filter((e) => (e.status || 'Active') === 'Active').length,
+    [employees],
+  );
+
+  const inactiveCount = useMemo(
+    () => employees.filter((e) => e.status === 'Inactive').length,
+    [employees],
+  );
+
+  const onLeaveToday = useMemo(() => {
     const today = toDateString(new Date());
-    const onLeaveToday = leavesForActive.filter((l) => {
+    return leaveList.filter((l) => {
       if (l.status !== 'Approved') return false;
+      if (!activeEmployeeIds.has(l.employeeId)) return false;
       const start = toDateString(l.startDate);
       const end = toDateString(l.endDate);
       if (!start || !end) return false;
       return today >= start && today <= end;
     }).length;
-    return {
-      totalEmployees: total,
-      activeEmployees: active,
-      newJoiners,
-      onLeaveToday,
-      pendingLeaves,
-    };
-  }, [employees, leaveList, activeEmployeeIds]);
+  }, [leaveList, activeEmployeeIds]);
+
+  const leaveSparkData = useMemo(() => {
+    const days = [];
+    for (let i = 5; i >= 0; i -= 1) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = toDateString(d);
+      const count = leaveList.filter((l) => {
+        if (l.status !== 'Approved') return false;
+        if (!activeEmployeeIds.has(l.employeeId)) return false;
+        const start = toDateString(l.startDate);
+        const end = toDateString(l.endDate);
+        if (!start || !end) return false;
+        return dateStr >= start && dateStr <= end;
+      }).length;
+      days.push(count);
+    }
+    return days;
+  }, [leaveList, activeEmployeeIds]);
+
+  const newJoinersThisMonth = useMemo(() => {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
+    return employees.filter((e) => {
+      if ((e.status || 'Active') === 'Inactive') return false;
+      const d = toJSDate(e.joiningDate);
+      if (!d || Number.isNaN(d.getTime())) return false;
+      return d >= monthStart;
+    }).length;
+  }, [employees]);
+
+  const onboardingCount = useMemo(
+    () =>
+      employees.filter(
+        (e) => e.onboarding?.status === 'in_progress' && (e.status || 'Active') === 'Active',
+      ).length,
+    [employees],
+  );
+
+  const avgOnboardingPct = useMemo(() => {
+    const inProgress = employees.filter(
+      (e) => e.onboarding?.status === 'in_progress' && (e.status || 'Active') === 'Active',
+    );
+    if (inProgress.length === 0) return 0;
+    const total = inProgress.reduce((sum, e) => {
+      const items = Array.isArray(e.onboarding?.tasks) ? e.onboarding.tasks : [];
+      if (items.length === 0) return sum + (e.onboarding?.completionPct || 0);
+      const done = items.filter((t) => t.completed).length;
+      return sum + Math.round((done / items.length) * 100);
+    }, 0);
+    return Math.round(total / inProgress.length);
+  }, [employees]);
+
+  const offboardingCount = useMemo(
+    () => employees.filter((e) => e.status === 'Notice Period' || e.status === 'Offboarding').length,
+    [employees],
+  );
+
+  const overdueOffboardingTasks = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return employees
+      .filter((e) => e.offboarding?.status === 'in_progress')
+      .reduce((sum, e) => {
+        const tasks = Array.isArray(e.offboarding?.tasks) ? e.offboarding.tasks : [];
+        return (
+          sum +
+          tasks.filter((t) => {
+            if (t.completed) return false;
+            const due = toJSDate(t.dueDate);
+            if (!due || Number.isNaN(due.getTime())) return false;
+            due.setHours(0, 0, 0, 0);
+            return due < today;
+          }).length
+        );
+      }, 0);
+  }, [employees]);
+
+  const birthdaysThisWeek = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(today);
+    weekEnd.setDate(today.getDate() + 7);
+    return employees.filter((emp) => {
+      if (!emp.dateOfBirth) return false;
+      if (emp.status === 'Inactive') return false;
+      const dob = toJSDate(emp.dateOfBirth);
+      if (!dob || Number.isNaN(dob.getTime())) return false;
+      const thisYear = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+      thisYear.setHours(0, 0, 0, 0);
+      return thisYear >= today && thisYear <= weekEnd;
+    }).length;
+  }, [employees]);
+
+  const birthdaysToday = useMemo(() => {
+    const today = new Date();
+    return employees.filter((emp) => {
+      if (!emp.dateOfBirth) return false;
+      if (emp.status === 'Inactive') return false;
+      const dob = toJSDate(emp.dateOfBirth);
+      if (!dob || Number.isNaN(dob.getTime())) return false;
+      return dob.getMonth() === today.getMonth() && dob.getDate() === today.getDate();
+    }).length;
+  }, [employees]);
 
   const recentLeave = useMemo(
     () => leaveList.filter((l) => activeEmployeeIds.has(l.employeeId)).slice(0, 5),
@@ -655,13 +855,6 @@ export default function Dashboard() {
     );
   }
 
-  const statCards = [
-    { title: 'On Leave Today', value: String(stats.onLeaveToday), icon: CalendarIcon, subtitle: 'Approved leaves' },
-    { title: 'New Joiners (30 days)', value: String(stats.newJoiners), icon: UserAddIcon, subtitle: 'Last 30 days' },
-  ];
-
-  const activeEmployeeCount = employees.filter((e) => (e.status || 'Active') === 'Active').length;
-
   const statsLoading = !employeesLoaded || !leaveLoaded;
 
   return (
@@ -674,29 +867,154 @@ export default function Dashboard() {
       </div>
 
       {statsLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-slate-200 p-6 animate-pulse">
-              <div className="h-4 bg-slate-200 rounded w-24 mb-2" />
-              <div className="h-8 bg-slate-200 rounded w-12" />
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 animate-pulse">
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-9 h-9 rounded-xl bg-slate-200" />
+                <div className="h-5 w-10 bg-slate-200 rounded-full" />
+              </div>
+              <div className="h-7 bg-slate-200 rounded w-12 mb-3" />
+              <div className="h-px bg-slate-100 mb-3" />
+              <div className="h-3 bg-slate-200 rounded w-20" />
             </div>
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          <div className="bg-white border border-gray-100 rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-gray-500">Active Employees</p>
-              <div className="w-10 h-10 rounded-xl bg-[#E8F5F5] flex items-center justify-center">
-                <UsersIcon className="w-5 h-5 text-[#1B6B6B]" />
-              </div>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{activeEmployeeCount}</p>
-            <p className="text-xs text-gray-400 mt-1">{employees.length} total employees</p>
-          </div>
-          {statCards.map((stat) => (
-            <StatCard key={stat.title} {...stat} />
-          ))}
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+          <StatCard
+            iconBg="#E1F5EE"
+            icon={
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <circle cx="7" cy="5" r="3" fill="#0F6E56" />
+                <path
+                  d="M1 15c0-3.314 2.686-6 6-6s6 2.686 6 6"
+                  stroke="#0F6E56"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <circle cx="13" cy="6" r="2" fill="#5DCAA5" />
+                <path
+                  d="M13 10c1.657 0 3 1.343 3 3"
+                  stroke="#5DCAA5"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            }
+            number={totalEmployees}
+            trend={newJoinersThisMonth > 0 ? `+${newJoinersThisMonth}` : '—'}
+            trendDir={newJoinersThisMonth > 0 ? 'up' : 'neutral'}
+            label="Total employees"
+            subLabel={`${activeCount} active`}
+            subLabelColor="#0F6E56"
+            rightLabel={`${inactiveCount} inactive`}
+          />
+
+          <StatCard
+            iconBg="#FAEEDA"
+            icon={
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2" y="3" width="14" height="13" rx="2" stroke="#854F0B" strokeWidth="1.5" />
+                <path
+                  d="M6 2v2M12 2v2M2 8h14"
+                  stroke="#854F0B"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <circle cx="9" cy="12" r="1.5" fill="#EF9F27" />
+              </svg>
+            }
+            number={onLeaveToday}
+            trend="—"
+            trendDir="neutral"
+            label="On leave today"
+            sparkData={leaveSparkData}
+          />
+
+          <StatCard
+            iconBg="#E6F1FB"
+            icon={
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <circle cx="9" cy="9" r="7" stroke="#185FA5" strokeWidth="1.5" />
+                <path d="M9 5v4l3 2" stroke="#185FA5" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            }
+            number={newJoinersThisMonth}
+            trend={newJoinersThisMonth > 0 ? `+${newJoinersThisMonth}` : '0'}
+            trendDir={newJoinersThisMonth > 0 ? 'up' : 'neutral'}
+            label="New joiners"
+            subLabel="this month"
+          />
+
+          <StatCard
+            iconBg="#FCEBEB"
+            icon={
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path
+                  d="M9 2v8M9 10L6 7M9 10L12 7"
+                  stroke="#A32D2D"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M3 13h12M3 16h12"
+                  stroke="#E24B4A"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            }
+            number={offboardingCount}
+            trend={offboardingCount > 0 ? `${offboardingCount}` : '—'}
+            trendDir={offboardingCount > 0 ? 'down' : 'neutral'}
+            label="Offboarding"
+            subLabel={
+              overdueOffboardingTasks > 0
+                ? `${overdueOffboardingTasks} overdue tasks`
+                : 'All on track'
+            }
+            subLabelColor={overdueOffboardingTasks > 0 ? '#A32D2D' : '#3B6D11'}
+          />
+
+          <StatCard
+            iconBg="#EEEDFE"
+            icon={
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2" y="10" width="3" height="6" rx="1" fill="#534AB7" />
+                <rect x="7.5" y="6" width="3" height="10" rx="1" fill="#7F77DD" />
+                <rect x="13" y="2" width="3" height="14" rx="1" fill="#AFA9EC" />
+              </svg>
+            }
+            number={onboardingCount}
+            trend={avgOnboardingPct > 0 ? `${avgOnboardingPct}%` : '—'}
+            trendDir={avgOnboardingPct >= 80 ? 'up' : 'neutral'}
+            label="Onboarding"
+            subLabel={
+              avgOnboardingPct > 0 ? `avg ${avgOnboardingPct}% complete` : 'None in progress'
+            }
+            subLabelColor="#534AB7"
+          />
+
+          <StatCard
+            iconBg="#E1F5EE"
+            icon={
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path
+                  d="M9 2l1.8 3.6L15 6.5l-3 2.9.7 4.1L9 11.4 6.3 13.5l.7-4.1-3-2.9 4.2-.9z"
+                  stroke="#0F6E56"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            }
+            number={birthdaysThisWeek}
+            trend="—"
+            trendDir="neutral"
+            label="Birthdays this week"
+            subLabel={birthdaysToday > 0 ? `${birthdaysToday} today` : 'None today'}
+          />
         </div>
       )}
 
