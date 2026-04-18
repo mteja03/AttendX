@@ -364,16 +364,6 @@ const HEADER_STATUS_CONFIG = {
   },
 };
 
-function formatHeaderDate(value) {
-  const d = toJSDate(value);
-  if (!d || Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
 const TIMELINE_COLORS = {
   green: {
     dot: 'bg-green-500',
@@ -755,6 +745,34 @@ export default function EmployeeProfile() {
       total: tasks.length,
     };
   }, [employee]);
+
+  const tenure = useMemo(() => getTenure(employee?.joiningDate), [employee?.joiningDate]);
+
+  const formattedJoiningDate = useMemo(() => {
+    const d = toJSDate(employee?.joiningDate);
+    if (!d || Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  }, [employee?.joiningDate]);
+
+  const formattedLastDay = useMemo(() => {
+    const d = toJSDate(employee?.offboarding?.expectedLastDay);
+    if (!d || Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  }, [employee?.offboarding?.expectedLastDay]);
+
+  const formattedSalary = useMemo(() => {
+    const val = employee?.ctcPerAnnum ?? employee?.ctc;
+    if (val == null || val === '') return '—';
+    return `₹${Number(val).toLocaleString('en-IN')}/yr`;
+  }, [employee?.ctcPerAnnum, employee?.ctc]);
 
   // Clear error modal on re-login
   useEffect(() => {
@@ -3375,11 +3393,26 @@ export default function EmployeeProfile() {
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex items-start gap-4 min-w-0 flex-1">
               <div className="relative group flex-shrink-0">
-                <EmployeeAvatar
-                  employee={employee}
-                  size="xl"
-                  className="border-2 border-white ring-2 ring-gray-100 shadow-sm"
-                />
+                {employee.photoURL ? (
+                  <img
+                    src={employee.photoURL}
+                    alt={employee.fullName || 'Employee'}
+                    loading="lazy"
+                    className="w-16 h-16 rounded-full object-cover border-2 border-white ring-2 ring-gray-100"
+                  />
+                ) : (
+                  <div
+                    className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-semibold border-2 border-white ring-2 ring-gray-100"
+                    style={{ background: sc.badgeBg, color: sc.badgeColor }}
+                  >
+                    {(employee.fullName || '')
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .slice(0, 2)
+                      .toUpperCase() || '?'}
+                  </div>
+                )}
 
                 {canUploadPhoto && !uploadingPhoto && (
                   <div
@@ -3492,7 +3525,7 @@ export default function EmployeeProfile() {
                     {employee.status || 'Active'}
                   </span>
 
-                  {toJSDate(employee.joiningDate) && (
+                  {formattedJoiningDate && (
                     <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 px-2.5 py-1 rounded-full">
                       <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
                         <rect
@@ -3511,11 +3544,11 @@ export default function EmployeeProfile() {
                           strokeLinecap="round"
                         />
                       </svg>
-                      Joined {formatHeaderDate(employee.joiningDate)}
+                      Joined {formattedJoiningDate}
                     </span>
                   )}
 
-                  {getTenure(employee.joiningDate) && (
+                  {tenure && (
                     <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 px-2.5 py-1 rounded-full">
                       <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
                         <circle
@@ -3532,7 +3565,7 @@ export default function EmployeeProfile() {
                           strokeLinecap="round"
                         />
                       </svg>
-                      {getTenure(employee.joiningDate)}
+                      {tenure}
                     </span>
                   )}
 
@@ -3546,45 +3579,11 @@ export default function EmployeeProfile() {
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-              {isInactive ? (
-                <span className="inline-flex items-center justify-center min-h-[36px] px-3 bg-gray-100 text-gray-400 rounded-xl text-sm cursor-not-allowed">
-                  🔒 Locked
-                </span>
-              ) : (
-                canEditEmployees && (
-                  <button
-                    type="button"
-                    onClick={openEdit}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] transition-colors"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <path
-                        d="M2 9l2-.5L10 3a1 1 0 00-1.5-1.5L2.5 7.5 2 9z"
-                        stroke="#fff"
-                        strokeWidth="1.1"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    Edit profile
-                  </button>
-                )
-              )}
-
-              {isInactive && canEditEmployees && (
-                <button
-                  type="button"
-                  onClick={() => setShowRehireModal(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors"
-                >
-                  🔄 Rehire
-                </button>
-              )}
-
               <button
                 type="button"
                 onClick={handlePrintProfile}
                 title="Print profile"
-                className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path
@@ -3603,13 +3602,41 @@ export default function EmployeeProfile() {
                     strokeWidth="1.2"
                   />
                   <path
-                    d="M3 8h8M3 11h8"
+                    d="M3 8h8M3 11h4"
                     stroke="#6B7280"
                     strokeWidth="1.2"
                     strokeLinecap="round"
                   />
                 </svg>
               </button>
+
+              {canEditEmployees && !isInactive && (
+                <button
+                  type="button"
+                  onClick={openEdit}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] transition-colors"
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path
+                      d="M2 9l2-.5L10 3a1 1 0 00-1.5-1.5L2.5 7.5 2 9z"
+                      stroke="#fff"
+                      strokeWidth="1.1"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  Edit profile
+                </button>
+              )}
+
+              {isInactive && canEditEmployees && (
+                <button
+                  type="button"
+                  onClick={() => setShowRehireModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors"
+                >
+                  🔄 Rehire
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -3627,12 +3654,10 @@ export default function EmployeeProfile() {
                 />
               </svg>
               Resignation recorded
-              {formatHeaderDate(employee.offboarding?.expectedLastDay) && (
+              {formattedLastDay && (
                 <span>
                   · Last working day{' '}
-                  <span className="font-medium">
-                    {formatHeaderDate(employee.offboarding?.expectedLastDay)}
-                  </span>
+                  <span className="font-medium">{formattedLastDay}</span>
                 </span>
               )}
             </div>
@@ -3659,12 +3684,10 @@ export default function EmployeeProfile() {
                 />
               </svg>
               Exit in progress
-              {formatHeaderDate(employee.offboarding?.expectedLastDay) && (
+              {formattedLastDay && (
                 <span>
                   · Exit date{' '}
-                  <span className="font-medium">
-                    {formatHeaderDate(employee.offboarding?.expectedLastDay)}
-                  </span>
+                  <span className="font-medium">{formattedLastDay}</span>
                 </span>
               )}
             </div>
@@ -3674,7 +3697,7 @@ export default function EmployeeProfile() {
           </div>
         )}
 
-        <div className="border-t border-gray-100 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 divide-x divide-gray-100">
+        <div className="border-t border-gray-100 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 divide-x divide-y divide-gray-100">
           {[
             {
               label: 'Department',
@@ -3694,10 +3717,10 @@ export default function EmployeeProfile() {
                   ? 'Notice period'
                   : employee.status === 'Offboarding'
                     ? 'Exit tasks'
-                    : 'Employment',
+                    : 'Employment type',
               value:
                 employee.status === 'Notice Period'
-                  ? `${employee.offboarding?.noticePeriodDays ?? 60} days`
+                  ? `${employee.offboarding?.noticePeriodDays ?? '—'} days`
                   : employee.status === 'Offboarding'
                     ? `${offboardingTasksDone.done} of ${offboardingTasksDone.total} done`
                     : employee.employmentType || 'Full-time',
@@ -3709,12 +3732,9 @@ export default function EmployeeProfile() {
                     : undefined,
             },
             {
-              label: 'Annual CTC',
-              value:
-                employee.ctcPerAnnum != null || employee.ctc != null
-                  ? `₹${Number(employee.ctcPerAnnum ?? employee.ctc).toLocaleString('en-IN')}`
-                  : '—',
-              hidden: !(isAdmin || isHRManager || isCompanyAdmin),
+              label: 'CTC per annum',
+              value: formattedSalary,
+              hidden: !canViewBankDetails,
             },
           ]
             .filter((s) => !s.hidden)
