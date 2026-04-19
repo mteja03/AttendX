@@ -58,7 +58,7 @@ async function resolveUserFromTeamMembers(emailNorm) {
       usersRef: null,
     };
   } catch (e) {
-    console.warn('Team member lookup failed', e);
+    if (import.meta.env.DEV) console.warn('Team member lookup failed', e);
     return { data: null, usersRef: null };
   }
 }
@@ -143,7 +143,7 @@ export function AuthProvider({ children }) {
                 data = d.data();
               }
             } catch (lookupErr) {
-              console.warn('users collection email field lookup failed', lookupErr);
+              if (import.meta.env.DEV) console.warn('users collection email field lookup failed', lookupErr);
             }
           }
 
@@ -251,7 +251,7 @@ export function AuthProvider({ children }) {
             try {
               await firebaseUser.getIdTokenResult();
             } catch (tokenErr) {
-              console.warn('Could not refresh ID token:', tokenErr);
+              if (import.meta.env.DEV) console.warn('Could not refresh ID token:', tokenErr);
             }
 
             const userRole = data.role || null;
@@ -290,7 +290,7 @@ export function AuthProvider({ children }) {
         } catch (error) {
           captureError(error, { context: 'checkWhitelist' });
           if (import.meta.env.DEV) {
-            console.error('Error checking users whitelist', error);
+            if (import.meta.env.DEV) console.error('Error checking users whitelist', error);
           }
           await signOut(auth);
           setSentryUser(null);
@@ -352,7 +352,7 @@ export function AuthProvider({ children }) {
         return accessToken;
       }
     } catch (e) {
-      console.error('Token refresh failed:', e);
+      if (import.meta.env.DEV) console.error('Token refresh failed:', e);
       return null;
     }
     return null;

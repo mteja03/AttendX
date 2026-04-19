@@ -201,6 +201,7 @@ export default function Companies() {
     const q = query(
       collection(db, 'companies'),
       orderBy('createdAt', 'desc'),
+      limit(100),
     );
     const unsubscribe = onSnapshot(
       q,

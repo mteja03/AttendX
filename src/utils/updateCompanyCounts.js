@@ -17,6 +17,6 @@ export async function updateCompanyCounts(companyId) {
     await updateDoc(doc(db, 'companies', companyId), counts);
     return counts;
   } catch (e) {
-    console.error('Failed to update counts:', e);
+    if (import.meta.env.DEV) console.error('Failed to update counts:', e);
   }
 }

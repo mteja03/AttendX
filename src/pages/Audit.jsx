@@ -2331,7 +2331,7 @@ function AuditDetail({ audit, companyId, currentUser, employees, onClose, showSu
           };
           setLastSaved(new Date());
         } catch (e) {
-          console.error('Auto-save failed:', e);
+          if (import.meta.env.DEV) console.error('Auto-save failed:', e);
         } finally {
           isSavingRef.current = false;
           if (isMountedRef.current) setAutoSaving(false);

@@ -23,7 +23,7 @@ export const requestNotificationPermission = async (userId, companyId) => {
   try {
     const supported = await isSupported();
     if (!supported) {
-      console.warn('FCM not supported in this browser');
+      if (import.meta.env.DEV) console.warn('FCM not supported in this browser');
       return null;
     }
 
@@ -37,7 +37,7 @@ export const requestNotificationPermission = async (userId, companyId) => {
 
     const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
     if (!vapidKey) {
-      console.warn('VITE_FIREBASE_VAPID_KEY is not set');
+      if (import.meta.env.DEV) console.warn('VITE_FIREBASE_VAPID_KEY is not set');
       return null;
     }
 
@@ -62,7 +62,7 @@ export const requestNotificationPermission = async (userId, companyId) => {
 
     return null;
   } catch (e) {
-    console.error('FCM token error:', e);
+    if (import.meta.env.DEV) console.error('FCM token error:', e);
     return null;
   }
 };
@@ -72,7 +72,7 @@ export const deleteFCMToken = async (userId) => {
   try {
     await deleteDoc(doc(db, 'fcmTokens', userId));
   } catch (e) {
-    console.error('Failed to delete FCM token:', e);
+    if (import.meta.env.DEV) console.error('Failed to delete FCM token:', e);
   }
 };
 

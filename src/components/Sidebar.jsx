@@ -218,7 +218,7 @@ function Sidebar({ isOpen = false, onClose }) {
     try {
       await signOut();
     } catch (err) {
-      console.error('Error signing out', err);
+      if (import.meta.env.DEV) console.error('Error signing out', err);
     }
   };
 

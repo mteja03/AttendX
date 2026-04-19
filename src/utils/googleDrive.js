@@ -158,6 +158,6 @@ export async function findAndDeleteFolder(accessToken, folderName, parentName) {
       },
     );
   } catch (e) {
-    console.warn('Could not delete Drive folder:', folderName, e.message);
+    if (import.meta.env.DEV) console.warn('Could not delete Drive folder:', folderName, e.message);
   }
 }
