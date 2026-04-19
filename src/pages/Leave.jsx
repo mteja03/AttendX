@@ -18,6 +18,7 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { db } from '../firebase/config';
 import EmptyState from '../components/EmptyState';
+import PageHeader from '../components/PageHeader';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { SkeletonTable } from '../components/SkeletonRow';
@@ -594,54 +595,59 @@ export default function Leave() {
 
   return (
     <div>
-      <div className="flex flex-col gap-3 mb-6 sm:flex-row items-start sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-lg sm:text-xl font-semibold text-slate-800">Leave</h1>
-          <p className="text-sm text-gray-500 mt-1">Leave requests and balance</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
-            {hasActiveLeaveFilters && (
-              <p className="text-xs text-amber-600 mb-2">
-                ⚠️ Download will include only filtered results ({filteredLeaves.length} records)
-              </p>
-            )}
-            <button
-              type="button"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => setShowDownload((v) => !v)}
-              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 active:bg-gray-100"
-            >
-              Download ▾
-            </button>
-            {showDownload && (
-              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-40" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="-mt-4 -mx-4 md:-mt-6 md:-mx-6 lg:-mt-8 lg:-mx-8 mb-6">
+        <PageHeader
+          title="Leave"
+          subtitle="Manage and approve team leave requests"
+          actions={
+            <>
+              <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
                 <button
                   type="button"
-                  onClick={() => downloadLeaveReport('csv')}
-                  className="block w-full text-left min-h-[44px] px-4 py-2.5 text-sm hover:bg-gray-50 active:bg-gray-100"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => setShowDownload((v) => !v)}
+                  className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 active:bg-gray-100"
                 >
-                  Download CSV
+                  Download ▾
                 </button>
-                <button
-                  type="button"
-                  onClick={() => downloadLeaveReport('excel')}
-                  className="block w-full text-left min-h-[44px] px-4 py-2.5 text-sm hover:bg-gray-50 active:bg-gray-100 border-t border-gray-100"
-                >
-                  Download Excel
-                </button>
+                {showDownload && (
+                  <div
+                    className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-40"
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => downloadLeaveReport('csv')}
+                      className="block w-full text-left min-h-[44px] px-4 py-2.5 text-sm hover:bg-gray-50 active:bg-gray-100"
+                    >
+                      Download CSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadLeaveReport('excel')}
+                      className="block w-full text-left min-h-[44px] px-4 py-2.5 text-sm hover:bg-gray-50 active:bg-gray-100 border-t border-gray-100"
+                    >
+                      Download Excel
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="inline-flex items-center justify-center min-h-[44px] rounded-lg bg-[#1B6B6B] hover:bg-[#155858] active:bg-[#0f4444] text-white text-sm font-medium px-4 py-2"
-          >
-            Add Leave
-          </button>
-        </div>
+              <button
+                type="button"
+                onClick={openAddModal}
+                className="inline-flex items-center justify-center min-h-[44px] rounded-lg bg-[#1B6B6B] hover:bg-[#155858] active:bg-[#0f4444] text-white text-sm font-medium px-4 py-2"
+              >
+                Add Leave
+              </button>
+            </>
+          }
+        />
       </div>
+      {hasActiveLeaveFilters && (
+        <p className="text-xs text-amber-600 mb-3">
+          ⚠️ Download will include only filtered results ({filteredLeaves.length} records)
+        </p>
+      )}
 
       <button
         type="button"

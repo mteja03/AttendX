@@ -19,6 +19,7 @@ import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { SkeletonTable } from '../components/SkeletonRow';
 import EmptyState from '../components/EmptyState';
+import PageHeader from '../components/PageHeader';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { toDisplayDate } from '../utils';
@@ -1056,60 +1057,62 @@ export default function Assets() {
   if (!companyId) return null;
 
   return (
-    <div className="p-4 sm:p-8">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-800">Assets</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage company assets and assignments</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="relative">
-            {Object.values(assetFilters).some((v) => v) && (
-              <p className="text-xs text-amber-600 mb-2">
-                ⚠️ Download will include only filtered results ({filteredAssets.length} records)
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowDownload((o) => !o)}
-              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
-            >
-              Download ▾
-            </button>
-            {showDownload && (
-              <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[10rem]">
+    <div className="px-4 sm:px-8 pb-8">
+      <div className="-mx-4 sm:-mx-8 mb-4">
+        <PageHeader
+          title="Assets"
+          subtitle="Track and manage company equipment"
+          actions={
+            <>
+              <div className="relative">
                 <button
                   type="button"
-                  onClick={() => {
-                    downloadAssets('csv');
-                    setShowDownload(false);
-                  }}
-                  className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100"
+                  onClick={() => setShowDownload((o) => !o)}
+                  className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
                 >
-                  Download CSV
+                  Download ▾
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    downloadAssets('excel');
-                    setShowDownload(false);
-                  }}
-                  className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100 rounded-b-lg"
-                >
-                  Download Excel
-                </button>
+                {showDownload && (
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[10rem]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        downloadAssets('csv');
+                        setShowDownload(false);
+                      }}
+                      className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100"
+                    >
+                      Download CSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        downloadAssets('excel');
+                        setShowDownload(false);
+                      }}
+                      className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100 rounded-b-lg"
+                    >
+                      Download Excel
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={handleOpenAdd}
-            className="inline-flex items-center justify-center gap-2 min-h-[44px] rounded-lg bg-[#1B6B6B] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#155858] active:bg-[#0f4444]"
-          >
-            + Add Asset
-          </button>
-        </div>
+              <button
+                type="button"
+                onClick={handleOpenAdd}
+                className="inline-flex items-center justify-center gap-2 min-h-[44px] rounded-lg bg-[#1B6B6B] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#155858] active:bg-[#0f4444]"
+              >
+                + Add Asset
+              </button>
+            </>
+          }
+        />
       </div>
+      {Object.values(assetFilters).some((v) => v) && (
+        <p className="text-xs text-amber-600 mb-3">
+          ⚠️ Download will include only filtered results ({filteredAssets.length} records)
+        </p>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <div className="bg-white border rounded-lg p-3 text-center">

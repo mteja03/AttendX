@@ -22,6 +22,7 @@ import { SkeletonCard, SkeletonTable } from '../components/SkeletonRow';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import EmptyState from '../components/EmptyState';
 import ErrorModal from '../components/ErrorModal';
+import PageHeader from '../components/PageHeader';
 import Cropper from 'react-easy-crop';
 import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
 import { updateCompanyCounts } from '../utils/updateCompanyCounts';
@@ -1131,56 +1132,58 @@ export default function Employees() {
   if (!companyId) return null;
 
   return (
-    <div className="p-4 sm:p-8">
-      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-800">Employees</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage employee records and directory</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowDownload((o) => !o)}
-              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
-            >
-              Download ▾
-            </button>
-            {showDownload && (
-              <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[10rem]">
+    <div className="px-4 sm:px-8 pb-8">
+      <div className="-mx-4 sm:-mx-8 mb-4">
+        <PageHeader
+          title="Employees"
+          subtitle={`${totalCount} total · ${statsCounts.active || 0} active`}
+          actions={
+            <>
+              <div className="relative">
                 <button
                   type="button"
-                  onClick={downloadCSV}
-                  className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100"
+                  onClick={() => setShowDownload((o) => !o)}
+                  className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
                 >
-                  Download CSV
+                  Download ▾
                 </button>
-                <button
-                  type="button"
-                  onClick={downloadExcel}
-                  className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100 rounded-b-lg"
-                >
-                  Download Excel
-                </button>
+                {showDownload && (
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[10rem]">
+                    <button
+                      type="button"
+                      onClick={downloadCSV}
+                      className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100"
+                    >
+                      Download CSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={downloadExcel}
+                      className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100 rounded-b-lg"
+                    >
+                      Download Excel
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          {canEditEmployees && (
-            <button
-              type="button"
-              onClick={() => {
-                setForm({ ...initialForm, empId: nextEmpId });
-                setSelectedRole(null);
-                setRoleSearch('');
-                setShowRoleDropdown(false);
-                setShowAddModal(true);
-              }}
-              className="inline-flex items-center justify-center min-h-[44px] rounded-lg bg-[#1B6B6B] hover:bg-[#155858] active:bg-[#0f4444] text-white text-sm font-medium px-4 py-2"
-            >
-              Add Employee
-            </button>
-          )}
-        </div>
+              {canEditEmployees && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm({ ...initialForm, empId: nextEmpId });
+                    setSelectedRole(null);
+                    setRoleSearch('');
+                    setShowRoleDropdown(false);
+                    setShowAddModal(true);
+                  }}
+                  className="inline-flex items-center justify-center min-h-[44px] rounded-lg bg-[#1B6B6B] hover:bg-[#155858] active:bg-[#0f4444] text-white text-sm font-medium px-4 py-2"
+                >
+                  Add Employee
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center mb-4">

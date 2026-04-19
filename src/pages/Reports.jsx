@@ -20,6 +20,8 @@ import {
 } from 'recharts';
 import PageLoader from '../components/PageLoader';
 import EmployeeAvatar from '../components/EmployeeAvatar';
+import EmptyState from '../components/EmptyState';
+import PageHeader from '../components/PageHeader';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
@@ -1562,26 +1564,15 @@ export default function Reports() {
   }
 
   return (
-    <div className="p-4 sm:p-8">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
-        <p className="text-sm text-gray-500 mt-1">Analytics and insights for {companyDisplayName}</p>
-      </div>
-
-      <div className="flex gap-1 overflow-x-auto scrollbar-none pb-2 mb-6 border-b border-gray-100 -mx-4 px-4 lg:mx-0 lg:px-0">
-        {REPORT_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => handleTabSwitch(tab.id)}
-            className={`flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg text-sm whitespace-nowrap font-medium flex-shrink-0 transition-all active:opacity-90 ${
-              activeTab === tab.id ? 'bg-[#1B6B6B] text-white' : 'text-gray-500 hover:bg-gray-100 active:bg-gray-200'
-            }`}
-          >
-            <span>{tab.icon}</span>
-            {tab.label}
-          </button>
-        ))}
+    <div className="px-4 sm:px-8 pb-8">
+      <div className="-mx-4 sm:-mx-8 mb-6">
+        <PageHeader
+          title="Reports"
+          subtitle={`Analytics and insights for ${companyDisplayName}`}
+          tabs={REPORT_TABS}
+          activeTab={activeTab}
+          onTabChange={handleTabSwitch}
+        />
       </div>
 
       {tabLoading ? (
@@ -1592,6 +1583,22 @@ export default function Reports() {
         <>
       {/* HEADCOUNT */}
       {activeTab === 'headcount' && (
+        employees.length === 0 ? (
+          <EmptyState
+            illustration={
+              <div className="w-16 h-16 rounded-2xl bg-[#E1F5EE] flex items-center justify-center">
+                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                  <rect x="4" y="20" width="6" height="12" rx="2" fill="#9FE1CB" />
+                  <rect x="13" y="12" width="6" height="20" rx="2" fill="#5DCAA5" />
+                  <rect x="22" y="6" width="6" height="26" rx="2" fill="#1B6B6B" />
+                </svg>
+              </div>
+            }
+            title="No headcount data yet"
+            description="Add employees to see department breakdown, location distribution and headcount trends."
+            actionColor="#1B6B6B"
+          />
+        ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={headcountStats.total} label="Total Employees" />
@@ -1787,6 +1794,7 @@ export default function Reports() {
             <DownloadExcelButton onClick={handleHeadcountExcel} />
           </div>
         </>
+        )
       )}
 
       {/* EMPLOYEES */}
@@ -1897,6 +1905,27 @@ export default function Reports() {
 
       {/* COMPENSATION */}
       {activeTab === 'compensation' && (
+        employees.filter((e) => e.ctcPerAnnum || e.ctc).length === 0 ? (
+          <EmptyState
+            illustration={
+              <div className="w-16 h-16 rounded-2xl bg-[#EEEDFE] flex items-center justify-center">
+                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                  <circle cx="18" cy="18" r="12" fill="#CECBF6" />
+                  <path d="M18 11v2M18 23v2" stroke="#534AB7" strokeWidth="1.8" strokeLinecap="round" />
+                  <path
+                    d="M14 15c0-1.1.9-2 2-2h4a2 2 0 010 4H16a2 2 0 000 4h4a2 2 0 002-2"
+                    stroke="#534AB7"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </div>
+            }
+            title="No salary data yet"
+            description="Add CTC per annum to employee profiles to see compensation breakdowns."
+            actionColor="#534AB7"
+          />
+        ) : (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
@@ -2078,10 +2107,28 @@ export default function Reports() {
             </button>
           </div>
         </div>
+        )
       )}
 
       {/* LEAVE */}
       {activeTab === 'leave' && (
+        leaveList.length === 0 ? (
+          <EmptyState
+            illustration={
+              <div className="w-16 h-16 rounded-2xl bg-[#FAEEDA] flex items-center justify-center">
+                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                  <rect x="4" y="6" width="28" height="24" rx="4" fill="#FAC775" />
+                  <path d="M4 14h28" stroke="#854F0B" strokeWidth="1.5" />
+                  <path d="M11 6V4M25 6V4" stroke="#854F0B" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M10 22h16M10 26h10" stroke="#EF9F27" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </div>
+            }
+            title="No leave data yet"
+            description="Leave requests will appear here once your team starts submitting them."
+            actionColor="#854F0B"
+          />
+        ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={leaveStats.total} label={`Leave requests (${currentYear})`} />
@@ -2221,10 +2268,27 @@ export default function Reports() {
             />
           </div>
         </>
+        )
       )}
 
       {/* ASSETS */}
       {activeTab === 'asset' && (
+        assets.length === 0 ? (
+          <EmptyState
+            illustration={
+              <div className="w-16 h-16 rounded-2xl bg-[#E6F1FB] flex items-center justify-center">
+                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                  <rect x="6" y="10" width="14" height="18" rx="3" fill="#B5D4F4" />
+                  <rect x="16" y="6" width="14" height="18" rx="3" fill="#85B7EB" />
+                  <path d="M8 18h10M8 23h6" stroke="#185FA5" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </div>
+            }
+            title="No assets tracked yet"
+            description="Add assets on the Assets page to see assignment stats and utilisation here."
+            actionColor="#185FA5"
+          />
+        ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={assetStats.total} label="Total assets" />
@@ -2327,10 +2391,26 @@ export default function Reports() {
             />
           </div>
         </>
+        )
       )}
 
       {/* DOCUMENTS */}
       {activeTab === 'document' && (
+        employees.length === 0 ? (
+          <EmptyState
+            illustration={
+              <div className="w-16 h-16 rounded-2xl bg-[#F1EFE8] flex items-center justify-center">
+                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                  <rect x="8" y="4" width="20" height="28" rx="3" fill="#D3D1C7" />
+                  <path d="M13 12h10M13 17h10M13 22h7" stroke="#5F5E5A" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </div>
+            }
+            title="No document data yet"
+            description="Document completion stats will appear once employees and document types are set up."
+            actionColor="#5F5E5A"
+          />
+        ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={docStats.full} label="100% mandatory docs" />
@@ -2434,10 +2514,39 @@ export default function Reports() {
             />
           </div>
         </>
+        )
       )}
 
       {/* ONBOARDING */}
       {activeTab === 'onboarding' && (
+        employees.length === 0 ? (
+          <EmptyState
+            illustration={
+              <div className="w-16 h-16 rounded-2xl bg-[#EAF3DE] flex items-center justify-center">
+                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                  <circle cx="18" cy="13" r="6" fill="#C0DD97" />
+                  <path
+                    d="M8 32c0-5.523 4.477-10 10-10s10 4.477 10 10"
+                    stroke="#3B6D11"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <circle cx="27" cy="24" r="5" fill="#639922" />
+                  <path
+                    d="M25 24l1.5 1.5 3-3"
+                    stroke="#fff"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+            }
+            title="No onboarding data yet"
+            description="Start employee onboarding from the employee profile to see progress here."
+            actionColor="#3B6D11"
+          />
+        ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={onboardingStats.started} label="Onboardings started" />
@@ -2545,10 +2654,39 @@ export default function Reports() {
             />
           </div>
         </>
+        )
       )}
 
       {/* OFFBOARDING */}
       {activeTab === 'offboarding' && (
+        employees.length === 0 ? (
+          <EmptyState
+            illustration={
+              <div className="w-16 h-16 rounded-2xl bg-[#EAF3DE] flex items-center justify-center">
+                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                  <circle cx="18" cy="13" r="6" fill="#C0DD97" />
+                  <path
+                    d="M8 32c0-5.523 4.477-10 10-10s10 4.477 10 10"
+                    stroke="#3B6D11"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <circle cx="27" cy="24" r="5" fill="#639922" />
+                  <path
+                    d="M25 24l1.5 1.5 3-3"
+                    stroke="#fff"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+            }
+            title="No offboarding data yet"
+            description="Employees in notice period or with exit tasks will show up here."
+            actionColor="#3B6D11"
+          />
+        ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={offboardingReportStats.inNotice} label="Currently in Notice Period" />
@@ -2745,6 +2883,7 @@ export default function Reports() {
             <DownloadExcelButton onClick={handleOffboardingExcel} label="Download offboarding report (Excel)" />
           </div>
         </>
+        )
       )}
         </>
       )}
