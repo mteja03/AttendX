@@ -20,6 +20,7 @@ import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebas
 import { db, storage } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
+import { useToast } from '../contexts/ToastContext';
 import { trackPageView } from '../utils/analytics';
 import {
   AUDIT_COLORS,
@@ -255,10 +256,10 @@ function AuditDashboard({ audits, auditTypes }) {
   });
 
   const pipeline = [
-    { label: 'Assigned', count: assigned, color: '#8B5CF6', bg: '#EDE9FE' },
-    { label: 'In Progress', count: inProgress, color: '#3B82F6', bg: '#DBEAFE' },
+    { label: 'Assigned', count: assigned, color: '#888780', bg: '#F1EFE8' },
+    { label: 'In Progress', count: inProgress, color: '#378ADD', bg: '#E6F1FB' },
     { label: 'Under Review', count: underReview, color: '#7F77DD', bg: '#EEEDFE' },
-    { label: 'Closed', count: closed, color: '#10B981', bg: '#D1FAE5' },
+    { label: 'Closed', count: closed, color: '#639922', bg: '#EAF3DE' },
   ];
 
   const maxPipeline = Math.max(...pipeline.map((p) => p.count), 1);
@@ -5670,16 +5671,7 @@ export default function Audit() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedAudit, setSelectedAudit] = useState(null);
-  const [toast, setToast] = useState(null);
-
-  const showSuccess = (msg) => {
-    setToast({ type: 'success', msg });
-    setTimeout(() => setToast(null), 3000);
-  };
-  const showError = (msg) => {
-    setToast({ type: 'error', msg });
-    setTimeout(() => setToast(null), 4000);
-  };
+  const { success: showSuccess, error: showError } = useToast();
 
   useEffect(() => {
     trackPageView('Audit');
@@ -5728,7 +5720,7 @@ export default function Audit() {
   useEffect(() => {
     if (!companyId) return undefined;
     const unsub = onSnapshot(
-      query(collection(db, 'companies', companyId, 'auditTypes'), orderBy('createdAt', 'asc')),
+      query(collection(db, 'companies', companyId, 'auditTypes'), orderBy('createdAt', 'asc'), limit(100)),
       (snap) => {
         setAuditTypes(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setLoading(false);
@@ -5752,7 +5744,7 @@ export default function Audit() {
   useEffect(() => {
     if (!companyId) return;
     if (empLoaded && employeesLoadedForRef.current === companyId && employees.length > 0) return;
-    getDocs(query(collection(db, 'companies', companyId, 'employees'), where('status', '==', 'Active')))
+    getDocs(query(collection(db, 'companies', companyId, 'employees'), where('status', '==', 'Active'), limit(500)))
       .then((snap) => {
         setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setEmpLoaded(true);
@@ -5781,16 +5773,6 @@ export default function Audit() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {toast && (
-        <div
-          className={`fixed right-4 top-4 z-[100] rounded-2xl px-4 py-3 text-sm font-medium text-white shadow-lg transition-all ${
-            toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-          }`}
-        >
-          {toast.msg}
-        </div>
-      )}
-
       <div className="bg-white border-b border-gray-100 px-4 md:px-6 py-4 sticky top-0 z-10">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <div>
