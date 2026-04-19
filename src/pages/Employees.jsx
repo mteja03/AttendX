@@ -1034,10 +1034,6 @@ export default function Employees() {
       );
       const newEmpId = newEmpRef.id;
 
-      if (newEmpPhotoSrc && !newEmpPhoto) {
-        console.warn('No photo blob to upload');
-      }
-
       if (newEmpPhoto) {
         try {
           const { getStorage, ref: storageRef, uploadString, getDownloadURL } = await import('firebase/storage');
@@ -1050,7 +1046,7 @@ export default function Employees() {
           const photoURL = await getDownloadURL(snapshot.ref);
           await firestoreUpdateDoc(firestoreDoc(db, 'companies', companyId, 'employees', newEmpId), { photoURL });
         } catch (photoErr) {
-          console.error('Photo upload failed:', photoErr);
+          if (import.meta.env.DEV) console.error('Photo upload failed:', photoErr);
           showError(
             'Employee added but photo upload failed. You can add photo from the profile.',
           );
@@ -3441,7 +3437,7 @@ export default function Employees() {
                     setNewEmpCropOpen(false);
                     setNewEmpRawSrc(null);
                   } catch (err) {
-                    console.error('Crop failed:', err);
+                    if (import.meta.env.DEV) console.error('Crop failed:', err);
                     showError('Failed to crop image');
                   }
                 }}

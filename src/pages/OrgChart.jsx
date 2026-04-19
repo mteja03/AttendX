@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { trackPageView } from '../utils/analytics';
 import { useCompany } from '../contexts/CompanyContext';
@@ -97,11 +97,18 @@ export default function OrgChart() {
   }, []);
 
   useEffect(() => {
-    if (!companyId) return () => {};
-    const unsub = onSnapshot(collection(db, 'companies', companyId, 'employees'), (snap) => {
-      setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
+    if (!companyId) return;
+    getDocs(
+      query(
+        collection(db, 'companies', companyId, 'employees'),
+        where('status', '!=', 'Inactive'),
+        limit(500),
+      ),
+    )
+      .then((snap) => {
+        setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      })
+      .catch(() => {});
   }, [companyId]);
 
   const activeEmployees = useMemo(

@@ -103,7 +103,7 @@ export default function Documents() {
         if (companySnap.exists()) setCompany({ id: companySnap.id, ...companySnap.data() });
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
-        console.error(err);
+        if (import.meta.env.DEV) console.error(err);
       }
       setLoading(false);
     };

@@ -6,9 +6,11 @@ import {
   deleteDoc,
   doc,
   getDocs,
-  onSnapshot,
+  limit,
+  query,
   serverTimestamp,
   updateDoc,
+  where,
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -527,6 +529,7 @@ export default function Library() {
   const [roles, setRoles] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [viewingPolicy, setViewingPolicy] = useState(null);
@@ -701,7 +704,7 @@ export default function Library() {
         await seedPoliciesIfEmpty();
         await seedRolesIfEmpty();
       } catch (e) {
-        console.error(e);
+        if (import.meta.env.DEV) console.error(e);
       }
       if (!cancelled) setLoading(false);
     })();
@@ -711,28 +714,37 @@ export default function Library() {
   }, [companyId, seedPoliciesIfEmpty, seedRolesIfEmpty]);
 
   useEffect(() => {
-    if (!companyId) return () => {};
-    const unsub = onSnapshot(collection(db, 'companies', companyId, 'policies'), (snap) => {
-      setPolicies(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
-  }, [companyId]);
+    if (!companyId) return;
+    getDocs(query(collection(db, 'companies', companyId, 'policies'), limit(200)))
+      .then((snap) => {
+        setPolicies(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      })
+      .catch(() => {});
+  }, [companyId, refreshKey]);
 
   useEffect(() => {
-    if (!companyId) return () => {};
-    const unsub = onSnapshot(collection(db, 'companies', companyId, 'roles'), (snap) => {
-      setRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
-  }, [companyId]);
+    if (!companyId) return;
+    getDocs(query(collection(db, 'companies', companyId, 'roles'), limit(200)))
+      .then((snap) => {
+        setRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      })
+      .catch(() => {});
+  }, [companyId, refreshKey]);
 
   useEffect(() => {
-    if (!companyId) return () => {};
-    const unsub = onSnapshot(collection(db, 'companies', companyId, 'employees'), (snap) => {
-      setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
-  }, [companyId]);
+    if (!companyId) return;
+    getDocs(
+      query(
+        collection(db, 'companies', companyId, 'employees'),
+        where('status', '!=', 'Inactive'),
+        limit(500),
+      ),
+    )
+      .then((snap) => {
+        setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      })
+      .catch(() => {});
+  }, [companyId, refreshKey]);
 
   const rolesWithHeadcount = useMemo(
     () =>
@@ -842,7 +854,7 @@ export default function Library() {
       setShowAddModal(false);
       setEditingPolicy(null);
     } catch (err) {
-      console.error(err);
+      if (import.meta.env.DEV) console.error(err);
       showError('Failed to save policy');
     }
     setSaving(false);
@@ -1096,7 +1108,7 @@ export default function Library() {
       setShowRoleModal(false);
       setEditingRoleId(null);
     } catch (err) {
-      console.error(err);
+      if (import.meta.env.DEV) console.error(err);
       showError('Failed to save designation');
     }
     setSavingRole(false);
@@ -1148,15 +1160,28 @@ export default function Library() {
           <h1 className="text-xl font-semibold text-slate-800">Library</h1>
           <p className="text-sm text-gray-500 mt-1">Policies and designation definitions</p>
         </div>
-        {libraryTab === 'policies' && canEdit && (
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={openAddPolicy}
-            className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-xl bg-[#1B6B6B] text-white text-sm font-medium hover:bg-[#155858] active:bg-[#0f4444]"
+            onClick={() => setRefreshKey((k) => k + 1)}
+            className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
+            title="Refresh"
           >
-            + Add Policy
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 7A5 5 0 1 0 7 2" stroke="#6B7280" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M2 3v4h4" stroke="#6B7280" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </button>
-        )}
+          {libraryTab === 'policies' && canEdit && (
+            <button
+              type="button"
+              onClick={openAddPolicy}
+              className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-xl bg-[#1B6B6B] text-white text-sm font-medium hover:bg-[#155858] active:bg-[#0f4444]"
+            >
+              + Add Policy
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit flex-wrap">

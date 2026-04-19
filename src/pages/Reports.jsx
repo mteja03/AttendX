@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import {
@@ -252,12 +252,24 @@ export default function Reports() {
     if (!companyId) return;
     setLoading(true);
     try {
+      const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
       const [empSnap, leaveSnap, assetSnap, compSnap, rolesSnap] = await Promise.all([
-        getDocs(collection(db, 'companies', companyId, 'employees')),
-        getDocs(collection(db, 'companies', companyId, 'leave')),
-        getDocs(collection(db, 'companies', companyId, 'assets')),
+        getDocs(query(collection(db, 'companies', companyId, 'employees'), limit(1000))),
+        getDocs(
+          query(
+            collection(db, 'companies', companyId, 'leave'),
+            where('startDate', '>=', yearStart),
+            orderBy('startDate', 'desc'),
+            limit(500),
+          ),
+        ).catch(() =>
+          getDocs(query(collection(db, 'companies', companyId, 'leave'), limit(500))),
+        ),
+        getDocs(query(collection(db, 'companies', companyId, 'assets'), limit(500))),
         getDoc(doc(db, 'companies', companyId)),
-        getDocs(collection(db, 'companies', companyId, 'roles')).catch(() => ({ docs: [] })),
+        getDocs(query(collection(db, 'companies', companyId, 'roles'), limit(200))).catch(() => ({
+          docs: [],
+        })),
       ]);
       setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setLeaveList(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));

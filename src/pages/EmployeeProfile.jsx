@@ -947,7 +947,7 @@ export default function EmployeeProfile() {
       if (empSnap.exists()) setEmployee({ id: empSnap.id, ...empSnap.data() });
       else setEmployee(null);
     } catch (err) {
-      console.error('EmployeeProfile refresh error:', err);
+      if (import.meta.env.DEV) console.error('EmployeeProfile refresh error:', err);
       showError('Failed to refresh employee');
     }
   }, [companyId, empId, showError]);
@@ -965,7 +965,7 @@ export default function EmployeeProfile() {
         if (empSnap.exists()) setEmployee({ id: empSnap.id, ...empSnap.data() });
         else setEmployee(null);
       } catch (err) {
-        console.error('EmployeeProfile load error:', err);
+        if (import.meta.env.DEV) console.error('EmployeeProfile load error:', err);
         showError('Failed to load profile');
       }
       setLoading(false);
@@ -1071,7 +1071,7 @@ export default function EmployeeProfile() {
         const snap = await getDocs(collection(db, 'companies', companyId, 'roles'));
         if (!cancelled) setRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (e) {
-        console.error('Failed to fetch roles:', e);
+        if (import.meta.env.DEV) console.error('Failed to fetch roles:', e);
         if (!cancelled) setRoles([]);
       }
     })();
@@ -1523,7 +1523,7 @@ export default function EmployeeProfile() {
         const leavesSnap = await getDocs(leavesQuery);
         await Promise.all(leavesSnap.docs.map((d) => deleteDoc(d.ref)));
       } catch (leaveErr) {
-        console.warn('Leave cleanup failed:', leaveErr);
+        if (import.meta.env.DEV) console.warn('Leave cleanup failed:', leaveErr);
       }
 
       try {
@@ -1543,7 +1543,7 @@ export default function EmployeeProfile() {
           ),
         );
       } catch (assetErr) {
-        console.warn('Asset cleanup failed:', assetErr);
+        if (import.meta.env.DEV) console.warn('Asset cleanup failed:', assetErr);
       }
 
       try {
@@ -1557,20 +1557,20 @@ export default function EmployeeProfile() {
           );
         }
       } catch (driveErr) {
-        console.warn('Drive cleanup failed:', driveErr);
+        if (import.meta.env.DEV) console.warn('Drive cleanup failed:', driveErr);
       }
 
       try {
         const { deleteEmployeePhoto } = await import('../utils/photoUpload');
         await deleteEmployeePhoto(companyId, empId);
       } catch (storageErr) {
-        console.warn('Storage cleanup failed:', storageErr);
+        if (import.meta.env.DEV) console.warn('Storage cleanup failed:', storageErr);
       }
 
       try {
         await updateCompanyCounts(companyId);
       } catch (countErr) {
-        console.warn('Count update failed:', countErr);
+        if (import.meta.env.DEV) console.warn('Count update failed:', countErr);
       }
 
       trackEmployeeDeleted();
@@ -2107,7 +2107,7 @@ export default function EmployeeProfile() {
       success(`Resignation recorded. Last day: ${toDisplayDate(expectedTs)}`);
       setShowResignationModal(false);
     } catch (e) {
-      console.error(e);
+      if (import.meta.env.DEV) console.error(e);
       await handleSmartError(e, { action: 'recordResignation' }, 'Failed to record resignation');
     }
     setSaving(false);
@@ -2143,14 +2143,14 @@ export default function EmployeeProfile() {
       try {
         await updateCompanyCounts(companyId);
       } catch (countErr) {
-        console.warn('Count update failed:', countErr);
+        if (import.meta.env.DEV) console.warn('Count update failed:', countErr);
       }
       trackResignationWithdrawn();
       success(`${employee.fullName} is back to Active!`);
       setShowWithdrawModal(false);
       setWithdrawNotes('');
     } catch (e) {
-      console.error(e);
+      if (import.meta.env.DEV) console.error(e);
       await handleSmartError(e, { action: 'withdrawResignation' }, 'Failed to withdraw resignation');
     }
     setSaving(false);
@@ -2213,7 +2213,7 @@ export default function EmployeeProfile() {
       setShowBuyoutModal(false);
       setBuyoutForm({ actualLastDay: '', buyoutDays: 0, notes: '' });
     } catch (e) {
-      console.error(e);
+      if (import.meta.env.DEV) console.error(e);
       showError('Failed to process buyout');
     }
     setSaving(false);
@@ -2469,7 +2469,7 @@ export default function EmployeeProfile() {
       try {
         await updateCompanyCounts(companyId);
       } catch (countErr) {
-        console.warn('Count update failed:', countErr);
+        if (import.meta.env.DEV) console.warn('Count update failed:', countErr);
       }
       trackOffboardingCompleted();
       success(`✅ ${employee.fullName} offboarding complete. Marked as Inactive.`);
@@ -2536,7 +2536,7 @@ export default function EmployeeProfile() {
       try {
         await updateCompanyCounts(companyId);
       } catch (countErr) {
-        console.warn('Count update failed:', countErr);
+        if (import.meta.env.DEV) console.warn('Count update failed:', countErr);
       }
     } catch (e) {
       await handleSmartError(e, { action: 'rehireEmployee' }, `Failed to rehire: ${e?.message || 'Unknown error'}`);

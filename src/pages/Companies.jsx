@@ -213,7 +213,7 @@ export default function Companies() {
         setLoading(false);
       },
       (error) => {
-        console.error('Companies listener error:', error);
+        if (import.meta.env.DEV) console.error('Companies listener error:', error);
         setLoading(false);
         showError('Failed to load companies');
       },
@@ -229,7 +229,7 @@ export default function Companies() {
         if (!cancelled) setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       })
       .catch((err) => {
-        if (!cancelled) console.error('[Companies] users fetch error', err);
+        if (!cancelled && import.meta.env.DEV) console.error('[Companies] users fetch error', err);
       });
     return () => { cancelled = true; };
   }, []);
@@ -381,7 +381,7 @@ export default function Companies() {
       }
       closeModal();
     } catch (err) {
-      console.error(err);
+      if (import.meta.env.DEV) console.error(err);
       showError(editingCompany ? 'Failed to update company' : 'Failed to add company');
     }
     setSaving(false);
@@ -516,7 +516,7 @@ export default function Companies() {
         );
       }
     } catch (err) {
-      console.error(err);
+      if (import.meta.env.DEV) console.error(err);
       showError(`Failed to delete company: ${err?.message || 'Unknown error'}`);
     } finally {
       setDeleting(false);
@@ -531,7 +531,7 @@ export default function Companies() {
       );
       setErrorLogs(logsSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (e) {
-      console.error('Failed to fetch logs:', e);
+      if (import.meta.env.DEV) console.error('Failed to fetch logs:', e);
     } finally {
       setLogsLoading(false);
     }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   collection,
@@ -339,7 +339,7 @@ export default function Dashboard() {
       });
       setEmployees(rows);
     } catch (e) {
-      console.error('Employees fetch:', e);
+      if (import.meta.env.DEV) console.error('Employees fetch:', e);
       setEmployees([]);
     } finally {
       setEmployeesLoaded(true);
@@ -380,7 +380,7 @@ export default function Dashboard() {
       });
       setLeaveList(rows);
     } catch (e) {
-      console.error('Leave fetch:', e);
+      if (import.meta.env.DEV) console.error('Leave fetch:', e);
       setLeaveList([]);
     } finally {
       setLeaveLoaded(true);
@@ -403,7 +403,7 @@ export default function Dashboard() {
         consumableIssued: consumable.reduce((sum, a) => sum + (Number(a.issuedCount) || 0), 0),
       });
     } catch (e) {
-      console.error('Assets fetch:', e);
+      if (import.meta.env.DEV) console.error('Assets fetch:', e);
       setAssetStats({ ...EMPTY_ASSET_STATS });
     }
   }, [companyId]);
@@ -433,11 +433,11 @@ export default function Dashboard() {
           const filtered = all.filter((emp) => emp.onboarding?.status === 'in_progress');
           setOnboardingEmployees(mapAndSort(filtered));
         } catch (e2) {
-          console.error('Onboarding fallback:', e2);
+          if (import.meta.env.DEV) console.error('Onboarding fallback:', e2);
           setOnboardingEmployees([]);
         }
       } else {
-        console.error('Onboarding fetch:', e);
+        if (import.meta.env.DEV) console.error('Onboarding fetch:', e);
         setOnboardingEmployees([]);
       }
     }
@@ -475,26 +475,43 @@ export default function Dashboard() {
           const filtered = all.filter((emp) => emp.offboarding?.status === 'in_progress');
           setOffboardingEmployees(mapAndSort(filtered));
         } catch (e2) {
-          console.error('Offboarding fallback:', e2);
+          if (import.meta.env.DEV) console.error('Offboarding fallback:', e2);
           setOffboardingEmployees([]);
         }
       } else {
-        console.error('Offboarding fetch:', e);
+        if (import.meta.env.DEV) console.error('Offboarding fetch:', e);
         setOffboardingEmployees([]);
       }
     }
   }, [companyId]);
 
+  const dataFetchedAt = useRef(null);
+  const DASHBOARD_CACHE_MS = 5 * 60 * 1000;
+
+  const refreshAll = useCallback(
+    (force = false) => {
+      if (!companyId) return;
+      if (
+        !force &&
+        dataFetchedAt.current &&
+        Date.now() - dataFetchedAt.current < DASHBOARD_CACHE_MS
+      ) {
+        return;
+      }
+      setEmployeesLoaded(false);
+      setLeaveLoaded(false);
+      Promise.all([fetchEmployees(), fetchLeave(), fetchAssets(), fetchOnboarding(), fetchOffboarding()])
+        .then(() => {
+          dataFetchedAt.current = Date.now();
+        })
+        .catch(() => {});
+    },
+    [companyId, fetchEmployees, fetchLeave, fetchAssets, fetchOnboarding, fetchOffboarding, DASHBOARD_CACHE_MS],
+  );
+
   useEffect(() => {
-    if (!companyId) return;
-    setEmployeesLoaded(false);
-    setLeaveLoaded(false);
-    fetchEmployees();
-    fetchLeave();
-    fetchAssets();
-    fetchOnboarding();
-    fetchOffboarding();
-  }, [companyId, fetchEmployees, fetchLeave, fetchAssets, fetchOnboarding, fetchOffboarding]);
+    refreshAll();
+  }, [refreshAll]);
 
   const activeEmployeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
 
@@ -839,10 +856,7 @@ export default function Dashboard() {
   };
 
   const handleEmployeeClick = (employeeId) => {
-    if (!employeeId || !companyId) {
-      console.warn('Missing employeeId or companyId', { employeeId, companyId });
-      return;
-    }
+    if (!employeeId || !companyId) return;
     navigate(`/company/${companyId}/employees/${employeeId}`);
   };
 
@@ -863,6 +877,19 @@ export default function Dashboard() {
         <div>
           <h1 className="text-lg sm:text-xl font-semibold text-slate-800">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">Company overview</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => refreshAll(true)}
+            className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
+            title="Refresh dashboard"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 7A5 5 0 1 0 7 2" stroke="#6B7280" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M2 3v4h4" stroke="#6B7280" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         </div>
       </div>
 

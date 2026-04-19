@@ -21,7 +21,7 @@ export default function Unauthorized() {
     try {
       await signOut();
     } catch (err) {
-      console.error('Sign out failed', err);
+      if (import.meta.env.DEV) console.error('Sign out failed', err);
     }
     navigate('/login', { replace: true });
   };

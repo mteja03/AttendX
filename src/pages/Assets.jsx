@@ -221,7 +221,7 @@ export default function Assets() {
         const companySnap = await getDoc(doc(db, 'companies', companyId));
         if (companySnap.exists()) setCompany({ id: companySnap.id, ...companySnap.data() });
       } catch (err) {
-        console.error('Company load error:', err?.code, err?.message);
+        if (import.meta.env.DEV) console.error('Company load error:', err?.code, err?.message);
       }
 
       try {
@@ -239,7 +239,7 @@ export default function Assets() {
           })),
         );
       } catch (error) {
-        console.error('Assets fetch error:', error?.code, error?.message);
+        if (import.meta.env.DEV) console.error('Assets fetch error:', error?.code, error?.message);
         if (error?.code === 'permission-denied') {
           showError('Permission denied. Contact admin.');
         } else if (error?.code === 'failed-precondition') {
@@ -254,7 +254,7 @@ export default function Assets() {
         const empSnap = await getDocs(collection(db, 'companies', companyId, 'employees'));
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
-        console.error('Employees load error:', err?.code, err?.message);
+        if (import.meta.env.DEV) console.error('Employees load error:', err?.code, err?.message);
         setEmployees([]);
       }
 

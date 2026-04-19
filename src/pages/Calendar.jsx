@@ -6,8 +6,11 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  limit,
   onSnapshot,
+  query,
   serverTimestamp,
+  where,
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -86,33 +89,51 @@ export default function Calendar() {
       try {
         await seedHolidaysIfNeeded();
       } catch (e) {
-        console.error(e);
+        if (import.meta.env.DEV) console.error(e);
       }
     })();
   }, [companyId, seedHolidaysIfNeeded]);
 
   useEffect(() => {
     if (!companyId) return () => {};
-    const unsub = onSnapshot(collection(db, 'companies', companyId, 'events'), (snap) => {
-      setFsEvents(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      query(collection(db, 'companies', companyId, 'events'), limit(500)),
+      (snap) => {
+        setFsEvents(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+    );
     return unsub;
   }, [companyId]);
 
   useEffect(() => {
-    if (!companyId) return () => {};
-    const unsub = onSnapshot(collection(db, 'companies', companyId, 'employees'), (snap) => {
-      setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
+    if (!companyId) return;
+    getDocs(
+      query(
+        collection(db, 'companies', companyId, 'employees'),
+        where('status', 'in', ['Active', 'Notice Period', 'Offboarding', 'On Leave']),
+        limit(300),
+      ),
+    )
+      .then((snap) => {
+        setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      })
+      .catch(() => {});
   }, [companyId]);
 
   useEffect(() => {
     if (!companyId) return () => {};
-    const unsub = onSnapshot(collection(db, 'companies', companyId, 'leave'), (snap) => {
-      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setLeaveList(rows.filter((l) => l.status === 'Approved'));
-    });
+    const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
+    const unsub = onSnapshot(
+      query(
+        collection(db, 'companies', companyId, 'leave'),
+        where('status', '==', 'Approved'),
+        where('startDate', '>=', yearStart),
+        limit(300),
+      ),
+      (snap) => {
+        setLeaveList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+    );
     return unsub;
   }, [companyId]);
 
@@ -247,7 +268,7 @@ export default function Calendar() {
         color: '#1B6B6B',
       });
     } catch (err) {
-      console.error(err);
+      if (import.meta.env.DEV) console.error(err);
       showError('Failed to save event');
     }
   };
@@ -265,7 +286,7 @@ export default function Calendar() {
       success('Event removed');
       setSelectedEvent(null);
     } catch (err) {
-      console.error(err);
+      if (import.meta.env.DEV) console.error(err);
       showError('Failed to delete');
     }
     setDeleting(false);

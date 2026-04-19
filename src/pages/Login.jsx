@@ -17,7 +17,7 @@ export default function Login() {
       setIsSigningIn(true);
       await signInWithGoogle();
     } catch (error) {
-      console.error('Sign in error:', error);
+      if (import.meta.env.DEV) console.error('Sign in error:', error);
     } finally {
       setIsSigningIn(false);
     }
