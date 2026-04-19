@@ -1549,7 +1549,7 @@ export default function Employees() {
           </div>
 
           <div className="hidden lg:block overflow-x-auto overflow-y-auto max-h-[70vh] border border-slate-200 rounded-xl bg-white">
-          <table className="min-w-full text-sm">
+          <table className="min-w-[1400px] w-full text-sm">
             <thead className="bg-slate-50 text-slate-500 sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Emp ID</th>
