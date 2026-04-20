@@ -3110,19 +3110,36 @@ export default function EmployeeProfile() {
     if (!employee) return;
     const e = escapeHtml;
     const companyName = getCompanyName() || '';
-    const addrRaw =
-      [employee.streetAddress, employee.city, employee.state, employee.pincode, employee.country].filter(Boolean).join(', ') ||
-      employee.address ||
-      '';
-    const addr = addrRaw ? e(addrRaw) : '—';
-    const ctcVal =
-      employee.ctcPerAnnum != null || employee.ctc != null
-        ? `₹${(employee.ctcPerAnnum ?? employee.ctc).toLocaleString('en-IN')}`
-        : '—';
+
+    const field = (label, value) => {
+      if (value == null || value === '' || value === '—') return '';
+      return `<div><div class="print-field-label">${e(label)}</div><div class="print-field-value">${e(String(value))}</div></div>`;
+    };
+
+    const section = (title, rowsHtml) => {
+      if (!rowsHtml || !rowsHtml.trim()) return '';
+      return `<div class="print-section"><div class="print-section-title">${e(title)}</div><div class="print-grid-2">${rowsHtml}</div></div>`;
+    };
+
+    const addrParts = [
+      employee.streetAddress,
+      employee.city,
+      employee.state,
+      employee.pincode,
+      employee.country,
+    ].filter(Boolean);
+    const fullAddress = addrParts.length > 0 ? addrParts.join(', ') : employee.address || '';
+
+    const ctcNum = employee.ctcPerAnnum ?? employee.ctc;
+    const ctcVal = ctcNum != null && ctcNum !== '' ? `₹${Number(ctcNum).toLocaleString('en-IN')}` : '';
     const basicVal =
-      employee.basicSalary != null ? `₹${employee.basicSalary.toLocaleString('en-IN')}/month` : '—';
+      employee.basicSalary != null && employee.basicSalary !== ''
+        ? `₹${Number(employee.basicSalary).toLocaleString('en-IN')}/month`
+        : '';
     const hraVal =
-      employee.hra != null ? `₹${employee.hra.toLocaleString('en-IN')}/month` : '—';
+      employee.hra != null && employee.hra !== ''
+        ? `₹${Number(employee.hra).toLocaleString('en-IN')}/month`
+        : '';
     const incNum =
       employee.incentive != null && employee.incentive !== '' && !Number.isNaN(Number(employee.incentive))
         ? Number(employee.incentive)
@@ -3130,19 +3147,43 @@ export default function EmployeeProfile() {
     const incentiveVal =
       incNum != null
         ? `₹${incNum.toLocaleString('en-IN')}/month · ₹${(incNum * 12).toLocaleString('en-IN')} p.a.`
-        : '—';
-    const aadhaarDisp = employee.aadhaarNumber ? e(`XXXX XXXX ${String(employee.aadhaarNumber).slice(-4)}`) : '—';
-    const pfOn = employee.pfApplicable ?? !!String(employee.pfNumber || '').trim();
-    const esicOn = employee.esicApplicable ?? !!String(employee.esicNumber || '').trim();
-    const pfPrint = `${employee.pfApplicable ? 'Yes' : 'No'}${employee.pfNumber ? ` · ${e(employee.pfNumber)}` : ''}`;
-    const esicPrint = `${employee.esicApplicable ? 'Yes' : 'No'}${employee.esicNumber ? ` · ${e(employee.esicNumber)}` : ''}`;
-    const maritalPrint = e(employee.maritalStatus || '—');
-    const weddingDatePrint =
-      employee.maritalStatus === 'Married' && employee.marriageDate
-        ? e(toDisplayDate(employee.marriageDate) || '—')
-        : null;
+        : '';
 
-    const prevDurationPrint =
+    const aadhaarDisp = employee.aadhaarNumber
+      ? `XXXX XXXX ${String(employee.aadhaarNumber).slice(-4)}`
+      : '';
+    const pfDisplay = employee.pfApplicable
+      ? employee.pfNumber
+        ? `Applicable · ${employee.pfNumber}`
+        : 'Applicable'
+      : '';
+    const esicDisplay = employee.esicApplicable
+      ? employee.esicNumber
+        ? `Applicable · ${employee.esicNumber}`
+        : 'Applicable'
+      : '';
+
+    const weddingDate =
+      employee.maritalStatus === 'Married' && employee.marriageDate
+        ? toDisplayDate(employee.marriageDate)
+        : '';
+
+    const joiningDisplay = employee.joiningDate
+      ? tenure
+        ? `${toDisplayDate(employee.joiningDate)} · ${tenure} tenure`
+        : toDisplayDate(employee.joiningDate)
+      : '';
+
+    const reportsToDisplay = employee.reportingManagerName
+      ? employee.reportingManagerEmpId
+        ? `${employee.reportingManagerName} (${employee.reportingManagerEmpId})`
+        : employee.reportingManagerName
+      : '';
+
+    const disabilityDisplay =
+      employee.disability && employee.disability !== 'None' ? employee.disability : '';
+
+    const prevDurationStr =
       employee.prevFromDate && employee.prevToDate
         ? (() => {
             const from = new Date(toDateString(employee.prevFromDate));
@@ -3158,59 +3199,174 @@ export default function EmployeeProfile() {
             return dur.trim();
           })()
         : '';
-    const prevExpBlock =
-      employee.prevCompany ||
-      employee.prevDesignation ||
-      employee.prevFromDate ||
-      employee.prevToDate ||
-      employee.prevManagerName
-        ? `<div class="print-section">
-        <div class="print-section-title">Previous experience</div>
-        <div class="print-grid-2">
-          <div><div class="print-field-label">Previous company</div><div class="print-field-value">${e(employee.prevCompany || '—')}</div></div>
-          <div><div class="print-field-label">Previous designation</div><div class="print-field-value">${e(employee.prevDesignation || '—')}</div></div>
-          <div><div class="print-field-label">From / To</div><div class="print-field-value">${e(
-            [employee.prevFromDate && toDisplayDate(employee.prevFromDate), employee.prevToDate && toDisplayDate(employee.prevToDate)]
-              .filter(Boolean)
-              .join(' — ') || '—',
-          )}${prevDurationPrint ? ` · ${e(prevDurationPrint)}` : ''}</div></div>
-          <div><div class="print-field-label">Previous manager</div><div class="print-field-value">${e(employee.prevManagerName || '—')}</div></div>
-          <div><div class="print-field-label">Manager phone</div><div class="print-field-value">${e(employee.prevManagerPhone || '—')}</div></div>
-          <div style="grid-column:1/-1"><div class="print-field-label">Manager email</div><div class="print-field-value">${e(employee.prevManagerEmail || '—')}</div></div>
-        </div>
-      </div>`
-        : '';
+    const prevDatesStr = [
+      employee.prevFromDate && toDisplayDate(employee.prevFromDate),
+      employee.prevToDate && toDisplayDate(employee.prevToDate),
+    ]
+      .filter(Boolean)
+      .join(' — ');
+    const prevDatesCombined = prevDatesStr
+      ? prevDurationStr
+        ? `${prevDatesStr} · ${prevDurationStr}`
+        : prevDatesStr
+      : '';
 
-    const customBenefitsPrintRows = (employee.customBenefits || [])
+    const customBenefitsRows = (employee.customBenefits || [])
       .filter((b) => (b?.name || '').trim())
-      .map(
-        (b) =>
-          `<div><div class="print-field-label">${e(b.name)}</div><div class="print-field-value">${e(
-            [b.value, b.notes].filter(Boolean).join(' · ') || '—',
-          )}</div></div>`,
-      )
+      .map((b) => {
+        const combined = [b.value, b.notes].filter(Boolean).join(' · ');
+        return field(b.name, combined);
+      })
       .join('');
-    const benefitsBlock =
-      pfOn || esicOn || customBenefitsPrintRows
-        ? `<div class="print-section">
-        <div class="print-section-title">Benefits</div>
-        <div class="print-grid-2">
-          <div><div class="print-field-label">PF</div><div class="print-field-value">${pfPrint}</div></div>
-          <div><div class="print-field-label">ESIC</div><div class="print-field-value">${esicPrint}</div></div>
-          ${customBenefitsPrintRows}
+
+    const status = employee.status || 'Active';
+    const statusClass =
+      status === 'Active'
+        ? 'print-badge-green'
+        : status === 'Inactive'
+          ? 'print-badge-red'
+          : status === 'Notice Period' || status === 'Offboarding'
+            ? 'print-badge-amber'
+            : 'print-badge-teal';
+
+    const printInitials =
+      (employee.fullName || '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((n) => n[0])
+        .join('')
+        .substring(0, 2)
+        .toUpperCase() || '?';
+    const avatarHtml = employee.photoURL
+      ? `<img src="${e(employee.photoURL)}" alt="${e(employee.fullName || '')}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #9FE1CB;flex-shrink:0;" onerror="this.outerHTML='<div style=&quot;width:64px;height:64px;border-radius:50%;background:#E1F5EE;color:#0F6E56;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;border:2px solid #9FE1CB;flex-shrink:0;&quot;>${e(printInitials)}</div>'"/>`
+      : `<div style="width:64px;height:64px;border-radius:50%;background:#E1F5EE;color:#0F6E56;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;border:2px solid #9FE1CB;flex-shrink:0;">${e(printInitials)}</div>`;
+
+    const headerCard = `<div class="print-highlight-card" style="display:flex;align-items:center;gap:16px;">
+      ${avatarHtml}
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:20px;font-weight:700;color:#1B6B6B;line-height:1.2;margin-bottom:4px;">${e(employee.fullName || '—')}</div>
+        <div style="font-size:13px;color:#4b5563;margin-bottom:8px;">${e(employee.designation || '')}${employee.department ? ` · ${e(employee.department)}` : ''}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${employee.empId ? `<span style="font-size:11px;font-family:monospace;background:#F3F4F6;color:#4b5563;padding:3px 8px;border-radius:4px;">${e(employee.empId)}</span>` : ''}
+          <span class="print-badge ${statusClass}">${e(status)}</span>
+          ${tenure ? `<span style="font-size:11px;background:#F3F4F6;color:#4b5563;padding:3px 8px;border-radius:4px;">${e(tenure)} tenure</span>` : ''}
         </div>
+      </div>
+    </div>`;
+
+    const statParts = [];
+    if (employee.department) statParts.push({ label: 'Department', value: employee.department });
+    if (employee.location || employee.branch) statParts.push({ label: 'Location', value: employee.location || employee.branch });
+    if (employee.joiningDate) statParts.push({ label: 'Joined', value: toDisplayDate(employee.joiningDate) });
+    if (employee.reportingManagerName) statParts.push({ label: 'Reports to', value: employee.reportingManagerName });
+    const statStrip =
+      statParts.length > 0
+        ? `<div style="display:grid;grid-template-columns:repeat(${statParts.length},1fr);gap:12px;margin-bottom:20px;padding:12px 16px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;">
+        ${statParts
+          .map(
+            (s) =>
+              `<div><div style="font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">${e(s.label)}</div><div style="font-size:12px;color:#1f2937;font-weight:500;">${e(s.value)}</div></div>`,
+          )
+          .join('')}
       </div>`
         : '';
 
-    const emergencyBlock = employee.emergencyContact?.name
-      ? `<div class="print-section">
-        <div class="print-section-title">Emergency contact</div>
-        <div class="print-grid-2">
-          <div><div class="print-field-label">Name</div><div class="print-field-value">${e(employee.emergencyContact.name)}</div></div>
-          <div><div class="print-field-label">Relationship</div><div class="print-field-value">${e(employee.emergencyContact.relationship || '—')}</div></div>
-          <div><div class="print-field-label">Phone</div><div class="print-field-value">${e(employee.emergencyContact.phone || '—')}</div></div>
-        </div>
-      </div>`
+    const noticePrint =
+      status === 'Notice Period' && employee.offboarding
+        ? section(
+            'Notice period',
+            field('Notice (days)', employee.offboarding.noticePeriodDays ?? '') +
+              field('Expected last day', toDisplayDate(employee.offboarding.expectedLastDay) || '') +
+              field('Resignation date', toDisplayDate(employee.offboarding.resignationDate) || '') +
+              field('Reason', employee.offboarding.reason || ''),
+          )
+        : '';
+
+    const identitySection = section(
+      'Identity',
+      field('Full name', employee.fullName) +
+        field('Emp ID', employee.empId) +
+        field("Father's name", employee.fatherName) +
+        field('Gender', employee.gender) +
+        field('Date of birth', toDisplayDate(employee.dateOfBirth)) +
+        field('Blood group', employee.bloodGroup) +
+        field('Marital status', employee.maritalStatus) +
+        field('Wedding date', weddingDate) +
+        field('Disability', disabilityDisplay) +
+        field('Qualification', employee.qualification),
+    );
+
+    const contactRows =
+      field('Email', employee.email) +
+      field('Phone', employee.phone) +
+      field('Alternative mobile', employee.alternativeMobile) +
+      (fullAddress
+        ? `<div style="grid-column:1/-1"><div class="print-field-label">Address</div><div class="print-field-value">${e(fullAddress)}</div></div>`
+        : '');
+    const contactSection = contactRows.trim()
+      ? `<div class="print-section"><div class="print-section-title">Contact</div><div class="print-grid-2">${contactRows}</div></div>`
+      : '';
+
+    const prevExpRows =
+      field('Company', employee.prevCompany) +
+      field('Designation', employee.prevDesignation) +
+      (prevDatesCombined
+        ? `<div style="grid-column:1/-1"><div class="print-field-label">Duration</div><div class="print-field-value">${e(prevDatesCombined)}</div></div>`
+        : '') +
+      field('Manager', employee.prevManagerName) +
+      field('Manager phone', employee.prevManagerPhone) +
+      (employee.prevManagerEmail
+        ? `<div style="grid-column:1/-1"><div class="print-field-label">Manager email</div><div class="print-field-value">${e(employee.prevManagerEmail)}</div></div>`
+        : '');
+    const prevExpSection = prevExpRows.trim()
+      ? `<div class="print-section"><div class="print-section-title">Previous experience</div><div class="print-grid-2">${prevExpRows}</div></div>`
+      : '';
+
+    const employmentSection = section(
+      'Employment',
+      field('Department', employee.department) +
+        field('Designation', employee.designation) +
+        field('Branch', employee.branch) +
+        field('Location', employee.location) +
+        field('Employment type', employee.employmentType) +
+        field('Category', employee.category) +
+        field('Joining date', joiningDisplay) +
+        field('Reports to', reportsToDisplay),
+    );
+
+    const compensationSection = section(
+      'Compensation & benefits',
+      field('Annual gross salary', ctcVal) +
+        field('Basic salary', basicVal) +
+        field('HRA', hraVal) +
+        field('Incentive', incentiveVal) +
+        field('PF', pfDisplay) +
+        field('ESIC', esicDisplay) +
+        customBenefitsRows,
+    );
+
+    const bankSection = section(
+      'Bank details',
+      field('Bank name', employee.bankName) +
+        field('Account holder', employee.accountHolderName) +
+        field('IFSC code', employee.ifscCode) +
+        field('Account type', employee.accountType),
+    );
+
+    const statutorySection = section(
+      'Statutory & identity',
+      field('PAN', employee.panNumber ? String(employee.panNumber).toUpperCase() : '') +
+        field('Aadhaar', aadhaarDisp) +
+        field('Driving licence', employee.drivingLicenceNumber),
+    );
+
+    const emergencySection = employee.emergencyContact?.name
+      ? section(
+          'Emergency contact',
+          field('Name', employee.emergencyContact.name) +
+            field('Relationship', employee.emergencyContact.relationship) +
+            field('Phone', employee.emergencyContact.phone),
+        )
       : '';
 
     const assetsBlock =
@@ -3231,129 +3387,24 @@ export default function EmployeeProfile() {
       </div>`
         : '';
 
-    const status = employee.status || 'Active';
-    const statusClass =
-      status === 'Active' ? 'print-badge-green' : status === 'Inactive' ? 'print-badge-red' : 'print-badge-amber';
-
-    const printInitials =
-      (employee.fullName || '')
-        .split(/\s+/)
-        .filter(Boolean)
-        .map((n) => n[0])
-        .join('')
-        .substring(0, 2)
-        .toUpperCase() || '?';
-
-    const initialsSection = `<div style="display:flex;align-items:center;gap:20px;margin-bottom:28px;padding-bottom:24px;border-bottom:2px solid #E8F5F5;">
-    <div style="width:80px;height:80px;border-radius:50%;background:#1B6B6B;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:white;flex-shrink:0;">
-      ${e(printInitials)}
-    </div>
-    <div>
-      <h2 style="font-size:24px;font-weight:700;color:#1B6B6B;margin:0 0 6px 0;">${e(employee.fullName || '—')}</h2>
-      <p style="font-size:14px;color:#6b7280;margin:0 0 4px 0;">${e(employee.designation || '')}${
-        employee.department ? ` · ${e(employee.department)}` : ''
-      }</p>
-      <p style="font-size:13px;color:#9ca3af;margin:0;">${e(employee.empId || '')}${
-        status ? ` · ${e(status)}` : ''
-      }</p>
-    </div>
-  </div>`;
-
-    const noticePrint =
-      status === 'Notice Period' && employee.offboarding
-        ? `<div class="print-section">
-        <div class="print-section-title">Notice Period</div>
-        <div class="print-grid-2">
-          <div><div class="print-field-label">Notice (days)</div><div class="print-field-value">${e(String(employee.offboarding.noticePeriodDays ?? '—'))}</div></div>
-          <div><div class="print-field-label">Expected last day</div><div class="print-field-value">${e(toDisplayDate(employee.offboarding.expectedLastDay) || '—')}</div></div>
-          <div><div class="print-field-label">Resignation date</div><div class="print-field-value">${e(toDisplayDate(employee.offboarding.resignationDate) || '—')}</div></div>
-          <div><div class="print-field-label">Reason</div><div class="print-field-value">${e(employee.offboarding.reason || '—')}</div></div>
-        </div>
-      </div>`
-        : '';
-
     const content = `
-      ${initialsSection}
-
-      <div class="print-highlight-card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
-        <div>
-          <div class="print-field-label">Employee</div>
-          <div class="print-field-value" style="font-size:18px">${e(employee.fullName || '—')}</div>
-          <p class="print-meta" style="margin-top:6px">${e(employee.designation || '—')} · ${e(employee.department || '—')}</p>
-          <p class="print-meta">${e(companyName)} · ${e(employee.empId || '—')}</p>
-        </div>
-        <span class="print-badge ${statusClass}">${e(status)}</span>
-      </div>
-
+      ${headerCard}
+      ${statStrip}
       ${noticePrint}
-
-      <div class="print-section">
-        <div class="print-section-title">Personal information</div>
-        <div class="print-grid-2">
-          <div><div class="print-field-label">Full name</div><div class="print-field-value">${e(employee.fullName || '—')}</div></div>
-          <div><div class="print-field-label">Father's name</div><div class="print-field-value">${e(employee.fatherName || '—')}</div></div>
-          <div><div class="print-field-label">Email</div><div class="print-field-value">${e(employee.email || '—')}</div></div>
-          <div><div class="print-field-label">Phone</div><div class="print-field-value">${e(employee.phone || '—')}</div></div>
-          <div><div class="print-field-label">Alternative mobile</div><div class="print-field-value">${e(employee.alternativeMobile || '—')}</div></div>
-          <div><div class="print-field-label">Date of birth</div><div class="print-field-value">${e(toDisplayDate(employee.dateOfBirth) || '—')}</div></div>
-          <div><div class="print-field-label">Gender</div><div class="print-field-value">${e(employee.gender || '—')}</div></div>
-          <div><div class="print-field-label">Blood group</div><div class="print-field-value">${e(employee.bloodGroup || '—')}</div></div>
-          <div><div class="print-field-label">Marital status</div><div class="print-field-value">${maritalPrint}</div></div>
-          ${
-            weddingDatePrint
-              ? `<div><div class="print-field-label">Marriage date</div><div class="print-field-value">${weddingDatePrint}</div></div>`
-              : ''
-          }
-          <div><div class="print-field-label">Disability</div><div class="print-field-value">${e(employee.disability || '—')}</div></div>
-          <div style="grid-column:1/-1"><div class="print-field-label">Address</div><div class="print-field-value">${addr}</div></div>
-          <div><div class="print-field-label">Qualification</div><div class="print-field-value">${e(employee.qualification || '—')}</div></div>
-        </div>
-      </div>
-
-      ${prevExpBlock}
-
-      <div class="print-section">
-        <div class="print-section-title">Employment details</div>
-        <div class="print-grid-2">
-          <div><div class="print-field-label">Emp ID</div><div class="print-field-value">${e(employee.empId || '—')}</div></div>
-          <div><div class="print-field-label">Department</div><div class="print-field-value">${e(employee.department || '—')}</div></div>
-          <div><div class="print-field-label">Designation</div><div class="print-field-value">${e(employee.designation || '—')}</div></div>
-          <div><div class="print-field-label">Branch</div><div class="print-field-value">${e(employee.branch || '—')}</div></div>
-          <div><div class="print-field-label">Location</div><div class="print-field-value">${e(employee.location || '—')}</div></div>
-          <div><div class="print-field-label">Employment type</div><div class="print-field-value">${e(employee.employmentType || '—')}</div></div>
-          <div><div class="print-field-label">Category</div><div class="print-field-value">${e(employee.category || '—')}</div></div>
-          <div><div class="print-field-label">Joining Date</div><div class="print-field-value">${e(toDisplayDate(employee.joiningDate) || '—')}</div></div>
-          <div><div class="print-field-label">Reporting manager</div><div class="print-field-value">${e(employee.reportingManagerName || '—')}</div></div>
-        </div>
-      </div>
-
-      <div class="print-section">
-        <div class="print-section-title">Compensation</div>
-        <div class="print-grid-2">
-          <div><div class="print-field-label">Annual Gross Salary</div><div class="print-field-value">${e(ctcVal)}</div></div>
-          <div><div class="print-field-label">Incentive (per month)</div><div class="print-field-value">${e(incentiveVal)}</div></div>
-          <div><div class="print-field-label">Basic salary</div><div class="print-field-value">${e(basicVal)}</div></div>
-          <div><div class="print-field-label">HRA</div><div class="print-field-value">${e(hraVal)}</div></div>
-        </div>
-      </div>
-
-      ${benefitsBlock}
-
-      <div class="print-section">
-        <div class="print-section-title">Statutory</div>
-        <div class="print-grid-2">
-          <div><div class="print-field-label">PAN</div><div class="print-field-value">${e(employee.panNumber || '—')}</div></div>
-          <div><div class="print-field-label">Aadhaar</div><div class="print-field-value">${aadhaarDisp}</div></div>
-          <div><div class="print-field-label">Driving licence</div><div class="print-field-value">${e(employee.drivingLicenceNumber || '—')}</div></div>
-        </div>
-      </div>
-      ${emergencyBlock}
+      ${identitySection}
+      ${contactSection}
+      ${prevExpSection}
+      ${employmentSection}
+      ${compensationSection}
+      ${bankSection}
+      ${statutorySection}
+      ${emergencySection}
       ${assetsBlock}
     `;
 
     const html = createPrintDocument({
       title: `${employee.fullName || 'Employee'} — Employee profile`,
-      subtitle: `${employee.designation || ''} · ${employee.department || ''}`,
+      subtitle: `${employee.designation || ''}${employee.department ? ` · ${employee.department}` : ''}`,
       companyName,
       generatedBy: currentUser?.email || '',
       content,
