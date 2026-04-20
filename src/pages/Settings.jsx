@@ -141,12 +141,95 @@ const SECTIONS = [
 ];
 
 const TABS = [
-  { id: 'lists', label: 'Manage Lists', icon: '📋' },
-  { id: 'leave', label: 'Leave', icon: '🏖️' },
-  { id: 'documents', label: 'Document Types', icon: '📄' },
-  { id: 'onboarding', label: 'Onboarding', icon: '🎯' },
-  { id: 'offboarding', label: 'Offboarding', icon: '👋' },
+  { id: 'organization', label: 'Organization' },
+  { id: 'people', label: 'People' },
+  { id: 'leave', label: 'Leave' },
+  { id: 'documents', label: 'Documents' },
+  { id: 'onboarding', label: 'Onboarding' },
+  { id: 'offboarding', label: 'Offboarding' },
 ];
+
+const SECTION_META = {
+  departments: {
+    description: 'Business units and teams',
+    placeholder: 'Add department...',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1M9 13h1M9 17h1M14 9h1M14 13h1M14 17h1" />
+      </svg>
+    ),
+  },
+  branches: {
+    description: 'Registered office branches',
+    placeholder: 'Add branch...',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18" />
+        <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+        <path d="M10 6h4M10 10h4M10 14h4M10 18h4" />
+      </svg>
+    ),
+  },
+  locations: {
+    description: 'Work sites and field offices',
+    placeholder: 'Add location...',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M20 10c0 7-8 13-8 13s-8-6-8-13a8 8 0 1 1 16 0z" />
+        <circle cx="12" cy="10" r="3" />
+      </svg>
+    ),
+  },
+  categories: {
+    description: 'Business verticals and segments',
+    placeholder: 'Add category...',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+        <circle cx="7" cy="7" r="1.5" />
+      </svg>
+    ),
+  },
+  employmentTypes: {
+    description: 'Full-time, part-time, contract',
+    placeholder: 'Add employment type...',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <rect x="2" y="7" width="20" height="14" rx="2" />
+        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+      </svg>
+    ),
+  },
+  qualifications: {
+    description: 'Educational qualifications',
+    placeholder: 'Add qualification...',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+        <path d="M6 12v5c0 1.66 3.58 3 6 3s6-1.34 6-3v-5" />
+      </svg>
+    ),
+  },
+  benefits: {
+    description: 'Non-cash compensation components',
+    placeholder: 'Add benefit...',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+      </svg>
+    ),
+  },
+  assetTypes: {
+    description: 'Issuable asset categories',
+    placeholder: 'Asset type name...',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <path d="M8 21h8M12 17v4" />
+      </svg>
+    ),
+  },
+};
 
 const DEFAULT_ONBOARDING_TEMPLATE = {
   tasks: [
@@ -231,7 +314,7 @@ export default function Settings() {
   const [addingSection, setAddingSection] = useState(null);
   const [addValue, setAddValue] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [tab, setTab] = useState('lists');
+  const [tab, setTab] = useState('organization');
   const [newAssetType, setNewAssetType] = useState('');
   const [newAssetMode, setNewAssetMode] = useState('trackable');
   const [docSections, setDocSections] = useState([]);
@@ -284,9 +367,9 @@ export default function Settings() {
     if (!companyId) return;
     const stored = localStorage.getItem(`settings_tab_${companyId}`);
     if (!stored) return;
-    if (stored === 'company' || stored === 'danger') {
-      setTab('lists');
-      localStorage.setItem(`settings_tab_${companyId}`, 'lists');
+    if (stored === 'company' || stored === 'danger' || stored === 'lists') {
+      setTab('organization');
+      localStorage.setItem(`settings_tab_${companyId}`, 'organization');
       return;
     }
     if (TABS.some((t) => t.id === stored)) setTab(stored);
@@ -732,30 +815,7 @@ export default function Settings() {
     );
   }
 
-  const renderListsTab = () => {
-    const getItems = (key, defaults) => getList(key, defaults);
-
-    const cards = SECTIONS.map((section) => {
-      const items = getItems(section.key, section.defaults);
-      const countFn =
-        section.key === 'benefits'
-          ? (value) =>
-              employees.filter((e) => (e.customBenefits || []).some((b) => (b?.name || '').trim() === value)).length
-          : getCount(section.field);
-      const [newVal, setNewVal] = [
-        addValue && addingSection === section.key ? addValue : '',
-        (val) => {
-          setAddingSection(section.key);
-          setAddValue(val);
-        },
-      ];
-      return { section, items, countFn, newVal, setNewVal };
-    });
-
-    const left = cards.filter((c) =>
-      ['departments', 'branches', 'locations', 'employmentTypes', 'benefits'].includes(c.section.key),
-    );
-    const right = cards.filter((c) => ['categories', 'qualifications'].includes(c.section.key));
+  const renderSectionsGrid = (keys, includeAssetTypes = false) => {
 
     const handleToggleAssetTypeMode = async (typeName) => {
       const current = normalizedAssetTypes.find((t) => t.name === typeName);
@@ -804,21 +864,40 @@ export default function Settings() {
       }
     };
 
-    const renderAssetTypesCard = () => (
-      <div className="bg-white border rounded-xl p-4">
-        <div className="flex justify-between mb-3">
-          <h3 className="font-medium text-sm">Asset Types</h3>
-          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-            {normalizedAssetTypes.length} types
+    const renderCardHeader = (sectionKey, title, count) => {
+      const meta = SECTION_META[sectionKey] || {};
+      return (
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-[#E1F5EE] flex items-center justify-center text-[#0F6E56] flex-shrink-0">
+              {meta.icon}
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-medium text-sm text-gray-800 truncate">{title}</h3>
+              {meta.description && (
+                <p className="text-xs text-gray-400 mt-0.5 truncate">{meta.description}</p>
+              )}
+            </div>
+          </div>
+          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full font-medium flex-shrink-0 ml-2">
+            {count}
           </span>
         </div>
+      );
+    };
 
-        <div className="flex gap-3 mb-3 p-2 bg-gray-50 rounded-lg">
-          <span className="text-xs text-gray-500 flex items-center gap-1">
-            🔵 <span>Trackable — unique items with individual IDs</span>
+    const renderAssetTypesCard = () => (
+      <div className="bg-white border border-gray-100 rounded-2xl p-4">
+        {renderCardHeader('assetTypes', 'Asset Types', normalizedAssetTypes.length)}
+
+        <div className="flex flex-wrap gap-3 mb-3 p-2 bg-gray-50 rounded-lg">
+          <span className="text-xs text-gray-500 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#1B6B6B] inline-block" />
+            Trackable — unique items with individual IDs
           </span>
-          <span className="text-xs text-gray-500 flex items-center gap-1 ml-3">
-            🟢 <span>Consumable — stock quantity issued to multiple employees</span>
+          <span className="text-xs text-gray-500 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+            Consumable — stock quantity issued in bulk
           </span>
         </div>
 
@@ -888,85 +967,91 @@ export default function Settings() {
       </div>
     );
 
-    const renderCard = ({ section, items, countFn }) => (
-      <div key={section.key} className="bg-white border rounded-xl p-4">
-        <div className="flex justify-between mb-3">
-          <div>
-            <h3 className="font-medium text-sm flex items-center gap-2">
-              {section.icon && <span aria-hidden>{section.icon}</span>}
-              {section.plural}
-            </h3>
-            {section.description && <p className="text-xs text-gray-400 mt-0.5">{section.description}</p>}
-          </div>
-          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-            {items.length} items
-          </span>
-        </div>
-        <div className="max-h-48 overflow-y-auto space-y-1 mb-3 pr-1 settings-list">
-          {items.map((item) => (
-            <div
-              key={item}
-              className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-50 mr-1"
-            >
-              <span className="flex-1 text-sm truncate mr-2">
-                {item}
-              </span>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <span className="text-xs text-gray-400 whitespace-nowrap">
-                  {countFn(item)} emp
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirm({ section: section.key, name: item, defaults: section.defaults })}
-                  className="w-5 h-5 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded text-xs flex-shrink-0"
-                  disabled={countFn(item) > 0}
+    const renderCard = (sectionKey) => {
+      const section = SECTIONS.find((s) => s.key === sectionKey);
+      if (!section) return null;
+      const items = getList(section.key, section.defaults);
+      const countFn =
+        section.key === 'benefits'
+          ? (value) =>
+              employees.filter((e) => (e.customBenefits || []).some((b) => (b?.name || '').trim() === value)).length
+          : getCount(section.field);
+      const meta = SECTION_META[section.key] || {};
+
+      return (
+        <div key={section.key} className="bg-white border border-gray-100 rounded-2xl p-4">
+          {renderCardHeader(section.key, section.plural, items.length)}
+
+          <div className="max-h-48 overflow-y-auto space-y-0.5 mb-3 pr-1 settings-list">
+            {items.map((item) => {
+              const empCount = countFn(item);
+              return (
+                <div
+                  key={item}
+                  className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-gray-50"
                 >
-                  ✕
-                </button>
-              </div>
-            </div>
-          ))}
-          {items.length === 0 && (
-            <p className="text-xs text-slate-400">No items yet</p>
-          )}
+                  <span className="flex-1 text-sm text-gray-800 truncate mr-2">{item}</span>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className={`text-xs whitespace-nowrap ${empCount > 0 ? 'text-gray-600' : 'text-gray-300'}`}>
+                      {empCount} emp
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirm({ section: section.key, name: item, defaults: section.defaults })}
+                      className="w-5 h-5 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded text-xs flex-shrink-0 disabled:opacity-30"
+                      disabled={empCount > 0}
+                      title={empCount > 0 ? `Cannot delete — used by ${empCount} employees` : 'Remove'}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {items.length === 0 && (
+              <p className="text-xs text-gray-300 text-center py-4">No {section.plural.toLowerCase()} yet</p>
+            )}
+          </div>
+
+          <div className="flex gap-2 pt-3 border-t border-gray-100">
+            <input
+              value={addingSection === section.key ? addValue : ''}
+              onChange={(e) => {
+                setAddingSection(section.key);
+                setAddValue(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAdd(section.key, section.defaults);
+              }}
+              placeholder={meta.placeholder || section.placeholder || 'Add new...'}
+              className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-1.5 focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
+            />
+            <button
+              type="button"
+              onClick={() => handleAdd(section.key, section.defaults)}
+              className="text-sm bg-[#1B6B6B] text-white px-4 py-1.5 rounded-xl hover:bg-[#155858] disabled:opacity-50"
+              disabled={saving || (addingSection === section.key && !addValue.trim())}
+            >
+              Add
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <input
-            value={addingSection === section.key ? addValue : ''}
-            onChange={(e) => {
-              setAddingSection(section.key);
-              setAddValue(e.target.value);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleAdd(section.key, section.defaults);
-            }}
-            placeholder={section.placeholder || 'Add new...'}
-            className="flex-1 text-sm border rounded px-2 py-1"
-          />
-          <button
-            type="button"
-            onClick={() => handleAdd(section.key, section.defaults)}
-            className="text-sm bg-[#1B6B6B] text-white px-3 py-1 rounded hover:bg-[#155858] disabled:opacity-50"
-            disabled={saving || (addingSection === section.key && !addValue.trim())}
-          >
-            Add
-          </button>
-        </div>
-      </div>
-    );
+      );
+    };
 
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="space-y-4">
-          {left.map(renderCard)}
-        </div>
-        <div className="space-y-4">
-          {right.map(renderCard)}
-          {renderAssetTypesCard()}
-        </div>
+        {keys.map((key) => renderCard(key))}
+        {includeAssetTypes && renderAssetTypesCard()}
       </div>
     );
   };
+
+  const renderOrganizationTab = () =>
+    renderSectionsGrid(['departments', 'branches', 'locations', 'categories']);
+
+  const renderPeopleTab = () =>
+    renderSectionsGrid(['employmentTypes', 'qualifications', 'benefits'], true);
 
   const renderLeaveTab = () => (
     <div className="space-y-4">
@@ -1844,7 +1929,8 @@ export default function Settings() {
         ))}
       </div>
 
-      {tab === 'lists' && renderListsTab()}
+      {tab === 'organization' && renderOrganizationTab()}
+      {tab === 'people' && renderPeopleTab()}
       {tab === 'leave' && renderLeaveTab()}
       {tab === 'documents' && renderDocumentsTab()}
       {tab === 'onboarding' && renderOnboardingTab()}
