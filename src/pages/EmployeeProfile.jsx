@@ -1288,6 +1288,32 @@ export default function EmployeeProfile() {
       ? Math.round((uploadedMandatory.length / mandatoryDocs.length) * 100)
       : 100;
   }, [employee, activeChecklist]);
+
+  const profileCompleteness = useMemo(() => {
+    if (!employee) return { pct: 0, missing: [] };
+    const checks = [
+      { key: 'fullName', label: 'Full name', present: !!employee.fullName },
+      { key: 'email', label: 'Email', present: !!employee.email },
+      { key: 'phone', label: 'Phone', present: !!employee.phone },
+      { key: 'dateOfBirth', label: 'Date of birth', present: !!employee.dateOfBirth },
+      { key: 'gender', label: 'Gender', present: !!employee.gender },
+      { key: 'fatherName', label: "Father's name", present: !!employee.fatherName },
+      { key: 'streetAddress', label: 'Address', present: !!(employee.streetAddress || employee.address) },
+      { key: 'empId', label: 'Emp ID', present: !!employee.empId },
+      { key: 'department', label: 'Department', present: !!employee.department },
+      { key: 'designation', label: 'Designation', present: !!employee.designation },
+      { key: 'joiningDate', label: 'Joining date', present: !!employee.joiningDate },
+      { key: 'category', label: 'Category', present: !!employee.category },
+      { key: 'ctcPerAnnum', label: 'CTC', present: !!(employee.ctcPerAnnum ?? employee.ctc) },
+      { key: 'panNumber', label: 'PAN', present: !!employee.panNumber },
+      { key: 'aadhaarNumber', label: 'Aadhaar', present: !!employee.aadhaarNumber },
+      { key: 'emergencyContact', label: 'Emergency contact', present: !!employee.emergencyContact?.name },
+    ];
+    const done = checks.filter((c) => c.present).length;
+    const pct = Math.round((done / checks.length) * 100);
+    const missing = checks.filter((c) => !c.present).map((c) => c.label);
+    return { pct, missing };
+  }, [employee]);
   const progressColor = documentCompletion <= 40 ? 'bg-red-500' : documentCompletion < 80 ? 'bg-amber-500' : 'bg-green-500';
 
   const refreshEmployee = async () => {
@@ -3387,22 +3413,42 @@ export default function EmployeeProfile() {
       </Link>
 
       <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden mb-6">
-        <div className="h-1.5 w-full" style={{ background: sc.topBar }} />
+        <div className="h-0.5 w-full" style={{ background: sc.topBar }} />
 
         <div className="p-5">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex items-start gap-4 min-w-0 flex-1">
-              <div className="relative group flex-shrink-0">
+              <div className="relative group flex-shrink-0" style={{ width: 72, height: 72 }}>
+                <svg
+                  width="72"
+                  height="72"
+                  viewBox="0 0 72 72"
+                  className="absolute inset-0 -rotate-90 pointer-events-none"
+                  aria-hidden
+                >
+                  <circle cx="36" cy="36" r="34" fill="none" stroke="#F1EFE8" strokeWidth="2" />
+                  <circle
+                    cx="36"
+                    cy="36"
+                    r="34"
+                    fill="none"
+                    stroke={sc.topBar}
+                    strokeWidth="2"
+                    strokeDasharray={`${(profileCompleteness.pct / 100) * 213.63} 213.63`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-1.5">
                 {employee.photoURL ? (
                   <img
                     src={employee.photoURL}
                     alt={employee.fullName || 'Employee'}
                     loading="lazy"
-                    className="w-16 h-16 rounded-full object-cover border-2 border-white ring-2 ring-gray-100"
+                    className="w-full h-full rounded-full object-cover"
                   />
                 ) : (
                   <div
-                    className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-semibold border-2 border-white ring-2 ring-gray-100"
+                    className="w-full h-full rounded-full flex items-center justify-center text-xl font-semibold"
                     style={{ background: sc.badgeBg, color: sc.badgeColor }}
                   >
                     {(employee.fullName || '')
@@ -3413,6 +3459,7 @@ export default function EmployeeProfile() {
                       .toUpperCase() || '?'}
                   </div>
                 )}
+                </div>
 
                 {canUploadPhoto && !uploadingPhoto && (
                   <div
@@ -3575,10 +3622,60 @@ export default function EmployeeProfile() {
                     </span>
                   )}
                 </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                  {employee.phone && (
+                    <a
+                      href={`tel:${employee.phone}`}
+                      className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 px-2.5 py-1 rounded-full transition-colors"
+                      title="Call"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
+                      </svg>
+                      Call
+                    </a>
+                  )}
+                  {employee.email && (
+                    <a
+                      href={`mailto:${employee.email}`}
+                      className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 px-2.5 py-1 rounded-full transition-colors"
+                      title="Send email"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                        <polyline points="22,6 12,13 2,6"/>
+                      </svg>
+                      Email
+                    </a>
+                  )}
+                  {employee.phone && whatsappUrl(employee.phone, `Dear ${employee.fullName} Garu,\n\n`) && (
+                    <a
+                      href={whatsappUrl(employee.phone, `Dear ${employee.fullName} Garu,\n\n`)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-[#27500A] bg-[#EAF3DE] hover:bg-[#C0DD97] px-2.5 py-1 rounded-full transition-colors font-medium"
+                      title="Open WhatsApp"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="#25D366">
+                        <path d="M17.5 14.4c-.3-.2-1.8-.9-2-1-.3-.1-.5-.2-.7.2s-.8 1-1 1.2c-.2.2-.4.2-.6.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6.1-.1.3-.4.4-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5-.1-.1-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1 2.8 1.2 3c.1.2 2 3 4.8 4.2.7.3 1.2.5 1.6.6.7.2 1.3.2 1.8.1.5-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.1-.3-.2-.6-.3zM12 2a10 10 0 00-8.5 15.3L2 22l4.8-1.4A10 10 0 1012 2z"/>
+                      </svg>
+                      WhatsApp
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+              <div className="flex items-center gap-3 pr-3 border-r border-gray-100">
+                <div className="text-center">
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-1">Profile</p>
+                  <p className="text-lg font-semibold leading-none" style={{ color: sc.topBar }}>
+                    {profileCompleteness.pct}%
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={handlePrintProfile}
@@ -3639,6 +3736,27 @@ export default function EmployeeProfile() {
               )}
             </div>
           </div>
+
+          {profileCompleteness.pct < 100 && canEditEmployees && !isInactive && profileCompleteness.missing.length > 0 && (
+            <div className="mt-4 flex items-center gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#854F0B" strokeWidth="2" className="flex-shrink-0">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <span className="flex-1 truncate">
+                Missing: {profileCompleteness.missing.slice(0, 4).join(' · ')}
+                {profileCompleteness.missing.length > 4 && ` · +${profileCompleteness.missing.length - 4} more`}
+              </span>
+              <button
+                type="button"
+                onClick={openEdit}
+                className="bg-[#854F0B] hover:bg-[#633806] text-white px-2.5 py-1 rounded-lg text-xs font-medium flex-shrink-0 transition-colors"
+              >
+                Complete now
+              </button>
+            </div>
+          )}
         </div>
 
         {employee.status === 'Notice Period' && (
