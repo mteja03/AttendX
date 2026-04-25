@@ -105,14 +105,14 @@ export default function GlobalHeader() {
   const cardShadow = '0 4px 24px 0 rgba(0,0,0,0.08)';
 
   return (
-    <header className="hidden lg:flex h-14 bg-white border-b border-gray-100 items-center justify-between px-6 flex-shrink-0 relative z-30">
+    <header className="hidden lg:flex h-16 bg-white border-b border-gray-100 items-center justify-between px-6 flex-shrink-0 relative z-30">
       <button
         type="button"
         onClick={() => navigate(`/company/${effectiveCompanyId}/dashboard`)}
-        className="flex items-center gap-2.5 pl-1.5 pr-3 py-1.5 rounded-xl hover:bg-gray-50 transition-colors"
+        className="flex items-center gap-3 pl-2 pr-3.5 py-2 rounded-xl hover:bg-gray-50 transition-colors"
       >
         <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0"
+          className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
           style={{ backgroundColor: company?.color || '#1B6B6B' }}
         >
           {company?.initials || '—'}
@@ -124,11 +124,11 @@ export default function GlobalHeader() {
         <button
           type="button"
           onClick={() => navigate(`/company/${effectiveCompanyId}/calendar`)}
-          className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+          className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
           title="Calendar"
           aria-label="Calendar"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" />
             <path d="M16 2v4M8 2v4M3 10h18" />
           </svg>
@@ -138,11 +138,11 @@ export default function GlobalHeader() {
           <button
             type="button"
             onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors relative"
+            className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors relative"
             title="Notifications"
             aria-label="Notifications"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
@@ -211,13 +211,13 @@ export default function GlobalHeader() {
           )}
         </div>
 
-        <div className="w-px h-5 bg-gray-200 mx-1.5" />
+        <div className="w-px h-6 bg-gray-200 mx-2" />
 
         <div className="relative" ref={userRef}>
           <button
             type="button"
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="w-8 h-8 rounded-full overflow-hidden hover:ring-2 hover:ring-gray-100 transition-all flex-shrink-0"
+            className="w-9 h-9 rounded-full overflow-hidden hover:ring-2 hover:ring-gray-100 transition-all flex-shrink-0"
             title={currentUser?.displayName || currentUser?.email}
             aria-label="User menu"
           >
