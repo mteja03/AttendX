@@ -2,8 +2,7 @@ import { memo } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
-import { PLATFORM_CONFIG } from '../config/constants';
-import { ROLE_COLORS, ROLE_LABELS, ALL_NAV_ITEMS, DEFAULT_PERMISSIONS } from '../utils/roles';
+import { ALL_NAV_ITEMS, DEFAULT_PERMISSIONS } from '../utils/roles';
 
 function NavIcon({ className }) {
   return (
@@ -200,8 +199,8 @@ function ActiveBar() {
 }
 
 function Sidebar({ isOpen = false, onClose }) {
-  const { currentUser, role, signOut, userPermissions, isTokenValid } = useAuth();
-  const { companyId, company } = useCompany();
+  const { role, userPermissions } = useAuth();
+  const { companyId } = useCompany();
   const location = useLocation();
   const isAdmin = role === 'admin';
   const isCompanyAdmin = role === 'companyadmin';
@@ -209,18 +208,11 @@ function Sidebar({ isOpen = false, onClose }) {
 
   const effectivePermissions = userPermissions || DEFAULT_PERMISSIONS[role] || {};
   const visibleCompanyNavItems = ALL_NAV_ITEMS.filter((item) => {
+    if (item.to === 'calendar') return false; // Moved to GlobalHeader
     if (isAdmin || isCompanyAdmin) return true;
     if (item.to === 'dashboard') return true;
     return effectivePermissions[item.to] !== false;
   });
-
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-    } catch (err) {
-      if (import.meta.env.DEV) console.error('Error signing out', err);
-    }
-  };
 
   const linkClass = (isActive) =>
     `flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm transition-colors relative ${
@@ -229,9 +221,6 @@ function Sidebar({ isOpen = false, onClose }) {
         : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700 font-normal'
     }`;
   const isPathActive = (path) => location.pathname.includes(`/${path}`);
-
-  const roleBadgeClass = ROLE_COLORS[role] || 'bg-slate-100 text-slate-700';
-  const roleLabel = ROLE_LABELS[role] || role || 'User';
 
   return (
     <>
@@ -315,20 +304,11 @@ function Sidebar({ isOpen = false, onClose }) {
                 <Link
                   to="/companies"
                   onClick={() => onClose?.()}
-                  className="flex items-center gap-2 px-2 py-2 text-gray-400 hover:text-gray-600 text-sm rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex items-center gap-2 px-2 py-2 text-gray-400 hover:text-gray-600 text-sm rounded-lg hover:bg-gray-50 transition-colors mb-2"
                 >
                   ← All Companies
                 </Link>
-                <div className="flex items-center gap-2 mt-2 mb-2 px-2 py-2 rounded-xl bg-gray-50 border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors">
-                  <div
-                    className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-xs font-semibold shrink-0"
-                    style={{ backgroundColor: company?.color || '#1B6B6B' }}
-                  >
-                    {company?.initials || '—'}
-                  </div>
-                  <span className="text-sm font-medium text-gray-700 truncate">{company?.name || 'Company'}</span>
-                </div>
-                {/* Section headers removed */}
+                {/* Company pill removed — now in GlobalHeader */}
                 <div className="space-y-0.5">
                   {visibleCompanyNavItems.map(({ to, label }) => {
                     const Icon = navIcons[to] || NavIcon;
@@ -355,15 +335,7 @@ function Sidebar({ isOpen = false, onClose }) {
 
         {!isAdmin && inCompany && (
           <div className="space-y-0.5">
-            <div className="flex items-center gap-2 mt-2 mb-2 px-2 py-2 rounded-xl bg-gray-50 border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors">
-              <div
-                className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-xs font-semibold shrink-0"
-                style={{ backgroundColor: company?.color || '#1B6B6B' }}
-              >
-                {company?.initials || '—'}
-              </div>
-              <span className="text-sm font-medium text-gray-700 truncate">{company?.name || 'Company'}</span>
-            </div>
+            {/* Company pill removed — now in GlobalHeader */}
             {visibleCompanyNavItems.map(({ to, label }) => {
               const Icon = navIcons[to] || NavIcon;
               const active = isPathActive(to);
@@ -385,45 +357,7 @@ function Sidebar({ isOpen = false, onClose }) {
         )}
       </nav>
 
-      {currentUser && (
-        <div className="flex-shrink-0 border-t border-gray-100 p-3">
-          <div className="flex items-center gap-3 mb-2">
-            <img
-              src={
-                currentUser.photoURL ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || currentUser.email || 'User')}`
-              }
-              alt=""
-              loading="lazy"
-              className="h-9 w-9 rounded-full object-cover"
-            />
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-800 truncate">{currentUser.displayName || currentUser.email}</p>
-              <p className="text-xs text-gray-400 truncate">{currentUser.email}</p>
-            </div>
-          </div>
-          {role && (
-            <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium mb-2 ${roleBadgeClass}`}>{roleLabel}</span>
-          )}
-          {PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(role) && (
-            <div className="mx-0 mb-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 flex items-center gap-2">
-              <div
-                className={`w-2 h-2 rounded-full flex-shrink-0 ${isTokenValid() ? 'bg-emerald-500' : 'bg-amber-400'}`}
-              />
-              <span className="text-xs text-gray-500">
-                Drive: {isTokenValid() ? 'Connected' : 'Session expired'}
-              </span>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="w-full text-left text-xs text-gray-500 hover:text-red-600 min-h-[44px] py-2 px-2 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Sign Out
-          </button>
-        </div>
-      )}
+      {/* User section removed — now in GlobalHeader */}
     </aside>
     </>
   );
