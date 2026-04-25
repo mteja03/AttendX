@@ -5,7 +5,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
-export default function GlobalHeader() {
+export default function GlobalHeader({ onOpenMenu } = {}) {
   const navigate = useNavigate();
   const { currentUser, role, signOut, companyId: authCompanyId } = useAuth();
   const { companyId, company } = useCompany();
@@ -105,26 +105,44 @@ export default function GlobalHeader() {
   const cardShadow = '0 4px 24px 0 rgba(0,0,0,0.08)';
 
   return (
-    <header className="hidden lg:flex h-[69px] bg-white border-b border-gray-100 items-center justify-between px-6 flex-shrink-0 relative z-30">
-      <button
-        type="button"
-        onClick={() => navigate(`/company/${effectiveCompanyId}/dashboard`)}
-        className="flex items-center gap-3 pl-2 pr-3.5 py-2 rounded-xl hover:bg-gray-50 transition-colors"
-      >
+    <header className="flex min-h-[56px] h-auto shrink-0 items-center justify-between gap-2 border-b border-gray-100 bg-white lg:h-[69px] relative z-30 safe-top safe-x px-3 sm:px-4 lg:px-6 py-2 lg:py-0">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+        {onOpenMenu && (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            className="lg:hidden flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100 active:bg-gray-200"
+            aria-label="Open menu"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => navigate(`/company/${effectiveCompanyId}/dashboard`)}
+          className="flex min-w-0 max-w-full items-center gap-2 sm:gap-3 rounded-xl py-1.5 pl-1 pr-2 sm:pl-2 sm:pr-3.5 hover:bg-gray-50 transition-colors"
+        >
         <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
+          className="h-8 w-8 sm:h-9 sm:w-9 flex shrink-0 items-center justify-center rounded-lg text-white text-xs font-semibold"
           style={{ backgroundColor: company?.color || '#1B6B6B' }}
         >
           {company?.initials || '—'}
         </div>
-        <span className="text-sm font-medium text-gray-800">{company?.name || 'Company'}</span>
-      </button>
+        <span className="min-w-0 truncate text-left text-sm font-medium text-gray-800 sm:max-w-[min(12rem,40vw)] lg:max-w-[min(20rem,40vw)]">
+          {company?.name || 'Company'}
+        </span>
+        </button>
+      </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
         <button
           type="button"
           onClick={() => navigate(`/company/${effectiveCompanyId}/calendar`)}
-          className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+          className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
           title="Calendar"
           aria-label="Calendar"
         >
@@ -138,7 +156,7 @@ export default function GlobalHeader() {
           <button
             type="button"
             onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors relative"
+            className="relative flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
             title="Notifications"
             aria-label="Notifications"
           >
@@ -155,7 +173,7 @@ export default function GlobalHeader() {
 
           {notificationsOpen && (
             <div
-              className="absolute right-0 top-12 w-80 bg-white border border-gray-100 rounded-2xl py-1 z-50 overflow-hidden"
+              className="absolute right-0 top-12 z-50 w-[min(20rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] border border-gray-100 rounded-2xl bg-white py-1 overflow-hidden"
               style={{ boxShadow: cardShadow }}
             >
               <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
@@ -217,7 +235,7 @@ export default function GlobalHeader() {
           <button
             type="button"
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="w-9 h-9 rounded-full overflow-hidden hover:ring-2 hover:ring-gray-100 transition-all flex-shrink-0"
+            className="h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 overflow-hidden rounded-full hover:ring-2 hover:ring-gray-100 transition-all"
             title={currentUser?.displayName || currentUser?.email}
             aria-label="User menu"
           >
@@ -232,7 +250,7 @@ export default function GlobalHeader() {
 
           {userMenuOpen && (
             <div
-              className="absolute right-0 top-12 w-60 bg-white border border-gray-100 rounded-2xl py-1 z-50 overflow-hidden"
+              className="absolute right-0 top-12 z-50 w-[min(15rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] border border-gray-100 rounded-2xl bg-white py-1 overflow-hidden"
               style={{ boxShadow: cardShadow }}
             >
               <div className="px-4 py-3 border-b border-gray-50">
