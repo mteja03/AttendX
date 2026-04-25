@@ -18,92 +18,80 @@ export default function GlobalHeader() {
 
   const effectiveCompanyId = companyId || authCompanyId;
 
-  // Close dropdowns on outside click
   useEffect(() => {
     const handleClick = (e) => {
-      if (notifRef.current && !notifRef.current.contains(e.target)) {
-        setNotificationsOpen(false);
-      }
-      if (userRef.current && !userRef.current.contains(e.target)) {
-        setUserMenuOpen(false);
-      }
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotificationsOpen(false);
+      if (userRef.current && !userRef.current.contains(e.target)) setUserMenuOpen(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Fetch notifications count and items
   useEffect(() => {
     if (!effectiveCompanyId || !currentUser) {
       return undefined;
     }
 
-    const items = [];
-    let totalCount = 0;
+    const unsubs = [];
+    let leaveItems = [];
+    let auditItems = [];
 
-    // Pending leave approvals (admin/HR only)
+    const updateState = () => {
+      const all = [...leaveItems, ...auditItems].sort((a, b) => b.timestamp - a.timestamp);
+      setPendingCount(all.length);
+      setNotifications(all.slice(0, 5));
+    };
+
     if (role === 'admin' || role === 'companyadmin' || role === 'hrmanager') {
       const leaveQuery = query(
         collection(db, `companies/${effectiveCompanyId}/leave`),
         where('status', '==', 'Pending'),
-        limit(10)
+        limit(10),
       );
       const unsubLeave = onSnapshot(leaveQuery, (snap) => {
-        const count = snap.size;
-        totalCount += count;
-        items.push(...snap.docs.slice(0, 3).map((d) => ({
-          id: d.id,
+        leaveItems = snap.docs.map((d) => ({
+          id: `leave-${d.id}`,
           type: 'leave',
           title: 'Leave request pending approval',
           subtitle: `${d.data().employeeName || 'Employee'} • ${d.data().leaveType || 'Leave'}`,
           timestamp: d.data().appliedDate?.toDate?.() || new Date(),
           link: `/company/${effectiveCompanyId}/leave`,
-        })));
-        setPendingCount(totalCount);
-        setNotifications([...items].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5));
+        }));
+        updateState();
       });
-
-      // Assigned audits (auditor/audit manager)
-      if (role === 'auditor' || role === 'auditmanager') {
-        const auditQuery = query(
-          collection(db, `companies/${effectiveCompanyId}/audits`),
-          where('auditorId', '==', currentUser.uid),
-          where('status', '==', 'Assigned'),
-          limit(10)
-        );
-        const unsubAudit = onSnapshot(auditQuery, (snap) => {
-          const count = snap.size;
-          totalCount += count;
-          items.push(...snap.docs.slice(0, 3).map((d) => ({
-            id: d.id,
-            type: 'audit',
-            title: 'New audit assigned',
-            subtitle: d.data().auditTypeName || 'Audit',
-            timestamp: d.data().createdAt?.toDate?.() || new Date(),
-            link: `/company/${effectiveCompanyId}/audit`,
-          })));
-          setPendingCount(totalCount);
-          setNotifications([...items].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5));
-        });
-        return () => {
-          unsubLeave();
-          unsubAudit();
-          setPendingCount(0);
-          setNotifications([]);
-        };
-      }
-
-      return () => {
-        unsubLeave();
-        setPendingCount(0);
-        setNotifications([]);
-      };
+      unsubs.push(unsubLeave);
     }
 
-    return undefined;
+    if (role === 'auditor' || role === 'auditmanager') {
+      const auditQuery = query(
+        collection(db, `companies/${effectiveCompanyId}/audits`),
+        where('auditorId', '==', currentUser.uid),
+        where('status', '==', 'Assigned'),
+        limit(10),
+      );
+      const unsubAudit = onSnapshot(auditQuery, (snap) => {
+        auditItems = snap.docs.map((d) => ({
+          id: `audit-${d.id}`,
+          type: 'audit',
+          title: 'New audit assigned',
+          subtitle: d.data().auditTypeName || 'Audit',
+          timestamp: d.data().createdAt?.toDate?.() || new Date(),
+          link: `/company/${effectiveCompanyId}/audit`,
+        }));
+        updateState();
+      });
+      unsubs.push(unsubAudit);
+    }
+
+    return () => {
+      unsubs.forEach((u) => u());
+      setPendingCount(0);
+      setNotifications([]);
+    };
   }, [effectiveCompanyId, currentUser, role]);
 
   const handleSignOut = async () => {
+    setUserMenuOpen(false);
     try {
       await signOut();
     } catch (err) {
@@ -113,26 +101,31 @@ export default function GlobalHeader() {
 
   if (!effectiveCompanyId) return null;
 
+  const userInitial = (currentUser?.displayName || currentUser?.email || 'U').charAt(0).toUpperCase();
+  const cardShadow = '0 4px 24px 0 rgba(0,0,0,0.08)';
+
   return (
-    <header className="sticky top-0 z-50 h-14 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 flex-shrink-0">
-      {/* Left: Company pill */}
-      <div className="flex items-center gap-3">
+    <header className="hidden lg:flex h-14 bg-white border-b border-gray-100 items-center justify-between px-6 flex-shrink-0 relative z-30">
+      <button
+        type="button"
+        onClick={() => navigate(`/company/${effectiveCompanyId}/dashboard`)}
+        className="flex items-center gap-2.5 pl-1.5 pr-3 py-1.5 rounded-xl hover:bg-gray-50 transition-colors"
+      >
         <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0"
           style={{ backgroundColor: company?.color || '#1B6B6B' }}
         >
           {company?.initials || '—'}
         </div>
-        <span className="text-sm font-medium text-gray-800 hidden sm:block">{company?.name || 'Company'}</span>
-      </div>
+        <span className="text-sm font-medium text-gray-800">{company?.name || 'Company'}</span>
+      </button>
 
-      {/* Right: Calendar, Notifications, User */}
-      <div className="flex items-center gap-4">
-        {/* Calendar icon */}
+      <div className="flex items-center gap-1">
         <button
           type="button"
           onClick={() => navigate(`/company/${effectiveCompanyId}/calendar`)}
-          className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+          title="Calendar"
           aria-label="Calendar"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -141,12 +134,12 @@ export default function GlobalHeader() {
           </svg>
         </button>
 
-        {/* Notifications bell */}
         <div className="relative" ref={notifRef}>
           <button
             type="button"
             onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors relative"
+            className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors relative"
+            title="Notifications"
             aria-label="Notifications"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -154,25 +147,34 @@ export default function GlobalHeader() {
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
             {pendingCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-medium flex items-center justify-center border-2 border-white">
+              <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-medium flex items-center justify-center">
                 {pendingCount > 9 ? '9+' : pendingCount}
               </span>
             )}
           </button>
 
-          {/* Notifications dropdown */}
           {notificationsOpen && (
-            <div className="absolute right-0 top-12 w-80 bg-white border border-gray-200 rounded-xl shadow-xl py-2 z-50">
-              <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-800">Notifications</span>
+            <div
+              className="absolute right-0 top-12 w-80 bg-white border border-gray-100 rounded-2xl py-1 z-50 overflow-hidden"
+              style={{ boxShadow: cardShadow }}
+            >
+              <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-800">Notifications</span>
                 {pendingCount > 0 && (
-                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{pendingCount}</span>
+                  <span className="text-xs bg-[#E1F5EE] text-[#0F6E56] px-2 py-0.5 rounded-full font-medium">
+                    {pendingCount} new
+                  </span>
                 )}
               </div>
               {notifications.length === 0 ? (
-                <div className="px-4 py-8 text-center">
-                  <div className="text-3xl mb-2">✅</div>
-                  <p className="text-sm text-gray-500">All caught up!</p>
+                <div className="px-4 py-10 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-[#E1F5EE] flex items-center justify-center mx-auto mb-3">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0F6E56" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium text-gray-800 mb-1">All caught up</p>
+                  <p className="text-xs text-gray-400">No pending items right now.</p>
                 </div>
               ) : (
                 <div className="max-h-80 overflow-y-auto">
@@ -184,10 +186,16 @@ export default function GlobalHeader() {
                         navigate(notif.link);
                         setNotificationsOpen(false);
                       }}
-                      className="w-full px-4 py-3 hover:bg-gray-50 text-left border-b border-gray-50 last:border-b-0"
+                      className="w-full px-4 py-3 hover:bg-gray-50 text-left border-b border-gray-50 last:border-b-0 transition-colors"
                     >
                       <div className="flex items-start gap-3">
-                        <div className="text-lg flex-shrink-0">
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-base"
+                          style={{
+                            background:
+                              notif.type === 'leave' ? '#FAEEDA' : notif.type === 'audit' ? '#EEEDFE' : '#E6F1FB',
+                          }}
+                        >
                           {notif.type === 'leave' ? '🏖️' : notif.type === 'audit' ? '📋' : '🔔'}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -203,30 +211,40 @@ export default function GlobalHeader() {
           )}
         </div>
 
-        {/* User avatar */}
+        <div className="w-px h-5 bg-gray-200 mx-1.5" />
+
         <div className="relative" ref={userRef}>
           <button
             type="button"
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="w-8 h-8 rounded-full overflow-hidden border border-gray-200 hover:border-gray-300 transition-colors flex-shrink-0"
+            className="w-8 h-8 rounded-full overflow-hidden hover:ring-2 hover:ring-gray-100 transition-all flex-shrink-0"
+            title={currentUser?.displayName || currentUser?.email}
             aria-label="User menu"
           >
-            <img
-              src={
-                currentUser?.photoURL ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.displayName || currentUser?.email || 'User')}&background=E1F5EE&color=0F6E56`
-              }
-              alt=""
-              className="w-full h-full object-cover"
-            />
+            {currentUser?.photoURL ? (
+              <img src={currentUser.photoURL} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-[#E1F5EE] text-[#0F6E56] text-xs font-semibold flex items-center justify-center">
+                {userInitial}
+              </div>
+            )}
           </button>
 
-          {/* User dropdown */}
           {userMenuOpen && (
-            <div className="absolute right-0 top-12 w-56 bg-white border border-gray-200 rounded-xl shadow-xl py-2 z-50">
-              <div className="px-4 py-3 border-b border-gray-100">
-                <p className="text-sm font-medium text-gray-800 truncate">{currentUser?.displayName || currentUser?.email}</p>
+            <div
+              className="absolute right-0 top-12 w-60 bg-white border border-gray-100 rounded-2xl py-1 z-50 overflow-hidden"
+              style={{ boxShadow: cardShadow }}
+            >
+              <div className="px-4 py-3 border-b border-gray-50">
+                <p className="text-sm font-semibold text-gray-800 truncate">
+                  {currentUser?.displayName || currentUser?.email}
+                </p>
                 <p className="text-xs text-gray-500 truncate mt-0.5">{currentUser?.email}</p>
+                {role && (
+                  <span className="inline-block mt-2 px-2 py-0.5 rounded-md text-[10px] font-medium bg-[#E1F5EE] text-[#0F6E56] uppercase tracking-wide">
+                    {role}
+                  </span>
+                )}
               </div>
               <button
                 type="button"
@@ -234,20 +252,21 @@ export default function GlobalHeader() {
                   navigate(`/company/${effectiveCompanyId}/settings`);
                   setUserMenuOpen(false);
                 }}
-                className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
                 Settings
               </button>
+              <div className="h-px bg-gray-50 my-1" />
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
                 </svg>
                 Sign out

@@ -5,6 +5,7 @@ import { CompanyProvider } from '../contexts/CompanyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useIdleTimeout } from '../hooks/useIdleTimeout';
 import IdleWarningBanner from './IdleWarningBanner';
+import GlobalHeader from './GlobalHeader';
 import NotificationBanner from './NotificationBanner';
 import NotificationPermissionPrompt from './NotificationPermissionPrompt';
 import { trackSessionTimeout } from '../utils/analytics';
@@ -141,6 +142,8 @@ export default function Layout() {
             </button>
             <span className="truncate text-base font-semibold text-[#1B6B6B]">AttendX</span>
           </div>
+
+          {companyMatch && <GlobalHeader />}
 
           <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[#f1f5f9]">
             <div className="safe-bottom p-4 md:p-6 lg:p-8">
