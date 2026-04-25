@@ -287,7 +287,7 @@ function Sidebar({ isOpen = false, onClose }) {
         {isAdmin && (
           <>
             <div>
-              <p className="px-2 text-xs font-medium text-gray-400 uppercase tracking-wider mb-1 mt-1">Admin Controls</p>
+              {/* Section headers removed */}
               <div className="space-y-0.5">
                 <NavLink to="/companies" onClick={() => onClose?.()} className={({ isActive }) => linkClass(isActive)}>
                   {({ isActive }) => (
@@ -328,21 +328,13 @@ function Sidebar({ isOpen = false, onClose }) {
                   </div>
                   <span className="text-sm font-medium text-gray-700 truncate">{company?.name || 'Company'}</span>
                 </div>
-                <p className="px-2 text-xs font-medium text-gray-400 uppercase tracking-wider mb-1 mt-3">Current Company</p>
+                {/* Section headers removed */}
                 <div className="space-y-0.5">
-                  {visibleCompanyNavItems.map(({ to, label }, index) => {
+                  {visibleCompanyNavItems.map(({ to, label }) => {
                     const Icon = navIcons[to] || NavIcon;
                     const active = isPathActive(to);
-                    const section = NAV_SECTIONS[to];
-                    const prevSection = index > 0 ? NAV_SECTIONS[visibleCompanyNavItems[index - 1].to] : null;
-                    const showSection = section && section !== prevSection;
                     return (
                       <div key={to}>
-                        {showSection && (
-                          <p className="px-2 text-xs font-medium text-gray-400 uppercase tracking-wider mb-1 mt-3 first:mt-1">
-                            {section}
-                          </p>
-                        )}
                         <NavLink
                           to={`/company/${companyId}/${to}`}
                           onClick={() => onClose?.()}
@@ -372,19 +364,11 @@ function Sidebar({ isOpen = false, onClose }) {
               </div>
               <span className="text-sm font-medium text-gray-700 truncate">{company?.name || 'Company'}</span>
             </div>
-            {visibleCompanyNavItems.map(({ to, label }, index) => {
+            {visibleCompanyNavItems.map(({ to, label }) => {
               const Icon = navIcons[to] || NavIcon;
               const active = isPathActive(to);
-              const section = NAV_SECTIONS[to];
-              const prevSection = index > 0 ? NAV_SECTIONS[visibleCompanyNavItems[index - 1].to] : null;
-              const showSection = section && section !== prevSection;
               return (
                 <div key={to}>
-                  {showSection && (
-                    <p className="px-2 text-xs font-medium text-gray-400 uppercase tracking-wider mb-1 mt-3 first:mt-1">
-                      {section}
-                    </p>
-                  )}
                   <NavLink
                     to={`/company/${companyId}/${to}`}
                     onClick={() => onClose?.()}
