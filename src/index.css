@@ -2,10 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  /* Match WebKit: avoid unpredictable text inflation on small screens. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html,
 body {
   overflow-x: hidden;
-  -webkit-text-size-adjust: 100%;
 }
 
 @layer base {
@@ -47,4 +52,18 @@ body {
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/*
+ * Mobile: iOS Safari and Android Chrome auto-zoom the viewport when focused
+ * fields use font-size < 16px, which many users describe as the whole app
+ * feeling "zoomed". Force a 16px minimum on form controls; !important is
+ * required so it wins over Tailwind utilities like `text-sm` on inputs.
+ */
+@media screen and (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([type="image"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }

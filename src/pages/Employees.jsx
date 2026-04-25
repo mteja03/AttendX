@@ -118,6 +118,25 @@ function noticePeriodDaysRemaining(emp) {
   return String(Math.max(0, diff));
 }
 
+function countStatsFromEmployees(list) {
+  const next = {
+    active: 0,
+    onLeave: 0,
+    inactive: 0,
+    noticePeriod: 0,
+    offboarding: 0,
+  };
+  for (const e of list) {
+    const s = (e.status || 'Active');
+    if (s === 'Active') next.active += 1;
+    else if (s === 'On Leave') next.onLeave += 1;
+    else if (s === 'Inactive') next.inactive += 1;
+    else if (s === 'Notice Period') next.noticePeriod += 1;
+    else if (s === 'Offboarding') next.offboarding += 1;
+  }
+  return next;
+}
+
 const STATUS_BORDER_COLOR = {
   'Notice Period': '#FBBF24',
   Offboarding: '#F87171',
@@ -564,9 +583,12 @@ export default function Employees() {
     if (!collRef) return;
     try {
       const snap = await getDocs(collRef);
-      setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setEmployees(list);
       setHasMore(false);
       lastDocRef.current = null;
+      setTotalCount(snap.size);
+      setStatsCounts(countStatsFromEmployees(list));
     } catch {
       showError('Failed to load employees');
     }
@@ -866,6 +888,31 @@ export default function Employees() {
     return list;
   }, [employees, searchAllMode, tab, search, filters]);
 
+  const canDeriveFullCompanyList = useMemo(
+    () =>
+      !searchAllMode &&
+      tab === 'all' &&
+      !filters.department &&
+      !filters.branch &&
+      !filters.location &&
+      !hasMore,
+    [searchAllMode, tab, filters.department, filters.branch, filters.location, hasMore],
+  );
+
+  const displayTotal = useMemo(() => {
+    if (totalCount > 0) return totalCount;
+    if (canDeriveFullCompanyList && employees.length > 0) return employees.length;
+    return totalCount;
+  }, [totalCount, canDeriveFullCompanyList, employees.length]);
+
+  const displayStats = useMemo(() => {
+    if (totalCount > 0) return statsCounts;
+    if (canDeriveFullCompanyList && employees.length > 0) {
+      return countStatsFromEmployees(employees);
+    }
+    return statsCounts;
+  }, [totalCount, statsCounts, canDeriveFullCompanyList, employees]);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [tab, search, filters, searchAllMode]);
@@ -1132,7 +1179,7 @@ export default function Employees() {
       <div className="mb-4">
         <PageHeader
           title="Employees"
-          subtitle={`${totalCount} total · ${statsCounts.active || 0} active`}
+          subtitle={`${displayTotal} total · ${displayStats.active || 0} active`}
           actions={
             <>
               <div className="relative">
@@ -1217,8 +1264,8 @@ export default function Employees() {
       </div>
 
       <p className="text-sm text-slate-500 mb-3">
-        Showing {filtered.length} of {totalCount} employees
-        {employees.length < totalCount && !searchAllMode && hasMore ? ` · ${employees.length} loaded` : ''}
+        Showing {filtered.length} of {displayTotal} employees
+        {employees.length < displayTotal && !searchAllMode && hasMore ? ` · ${employees.length} loaded` : ''}
         {searchAllMode ? ' · search all results' : ''}
         {activeFilterCount > 0 ? ` · ${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} active (extra filters apply to loaded rows)` : ''}
       </p>
@@ -1523,27 +1570,27 @@ export default function Employees() {
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-slate-800">{totalCount}</p>
+              <p className="text-xl font-semibold text-slate-800">{displayTotal}</p>
               <p className="text-xs text-slate-500">All</p>
             </div>
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-green-700">{statsCounts.active}</p>
+              <p className="text-xl font-semibold text-green-700">{displayStats.active}</p>
               <p className="text-xs text-slate-500">Active</p>
             </div>
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-amber-600">{statsCounts.noticePeriod}</p>
+              <p className="text-xl font-semibold text-amber-600">{displayStats.noticePeriod}</p>
               <p className="text-xs text-slate-500">Notice Period</p>
             </div>
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-blue-700">{statsCounts.onLeave}</p>
+              <p className="text-xl font-semibold text-blue-700">{displayStats.onLeave}</p>
               <p className="text-xs text-slate-500">On Leave</p>
             </div>
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-orange-600">{statsCounts.offboarding}</p>
+              <p className="text-xl font-semibold text-orange-600">{displayStats.offboarding}</p>
               <p className="text-xs text-slate-500">Offboarding</p>
             </div>
             <div className="bg-white border rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-slate-400">{statsCounts.inactive}</p>
+              <p className="text-xl font-semibold text-slate-400">{displayStats.inactive}</p>
               <p className="text-xs text-slate-500">Inactive</p>
             </div>
           </div>
@@ -1949,7 +1996,7 @@ export default function Employees() {
                     Loading...
                   </>
                 ) : (
-                  `Load more (${Math.max(0, totalCount - employees.length)} remaining)`
+                  `Load more (${Math.max(0, displayTotal - employees.length)} remaining)`
                 )}
               </button>
             </div>

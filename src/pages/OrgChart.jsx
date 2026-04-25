@@ -60,24 +60,32 @@ function OrgNode({ node, search, companyId, navigate }) {
       </div>
 
       {!collapsed && node.children?.length > 0 && (
-        <div className="mt-6 relative w-full flex flex-col items-center">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-6 bg-gray-200" />
-          {node.children.length > 1 && (
-            <div
-              className="absolute top-6 h-0.5 bg-gray-200"
-              style={{
-                left: `calc(50% - ${(node.children.length - 1) * 96}px)`,
-                width: `${(node.children.length - 1) * 192}px`,
-              }}
-            />
-          )}
-          <div className="flex gap-8 items-start mt-6 flex-wrap justify-center">
-            {node.children.map((child) => (
-              <div key={child.id} className="relative flex flex-col items-center">
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-0.5 h-6 bg-gray-200" />
-                <OrgNode node={child} search={search} companyId={companyId} navigate={navigate} />
-              </div>
-            ))}
+        <div className="mt-6 flex w-full flex-col items-center">
+          <div className="w-px h-6 bg-gray-200" />
+          <div className="flex flex-wrap items-start justify-center">
+            {node.children.map((child, idx, arr) => {
+              const isFirst = idx === 0;
+              const isLast = idx === arr.length - 1;
+              const isOnly = arr.length === 1;
+              return (
+                <div
+                  key={child.id}
+                  className="flex flex-col items-center px-4 pt-6 relative"
+                >
+                  {!isOnly && (
+                    <div
+                      className="absolute top-0 h-px bg-gray-200"
+                      style={{
+                        left: isFirst ? '50%' : 0,
+                        right: isLast ? '50%' : 0,
+                      }}
+                    />
+                  )}
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-px h-6 bg-gray-200" />
+                  <OrgNode node={child} search={search} companyId={companyId} navigate={navigate} />
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
