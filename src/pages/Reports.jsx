@@ -1577,7 +1577,7 @@ export default function Reports() {
 
   return (
     <div className="px-4 sm:px-8 pb-8">
-      <div className="-mx-4 sm:-mx-8 mb-6">
+      <div className="mb-6">
         <PageHeader
           title="Reports"
           subtitle={`Analytics and insights for ${companyDisplayName}`}

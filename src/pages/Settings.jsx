@@ -12,6 +12,7 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
+import PageHeader from '../components/PageHeader';
 import ErrorModal from '../components/ErrorModal';
 import { DOCUMENT_CHECKLIST, documentTypesToSections, sectionsToDocumentTypes } from '../utils/documentTypes';
 import { withRetry } from '../utils/firestoreWithRetry';
@@ -1898,11 +1899,11 @@ export default function Settings() {
 
   return (
     <div className="p-4 sm:p-8 max-w-4xl">
-      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-800">Settings</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage company configuration, lists and policies.</p>
-        </div>
+      <div className="mb-6">
+        <PageHeader
+          title="Settings"
+          subtitle="Manage company configuration, lists and policies."
+        />
       </div>
 
       <div className="flex gap-1 overflow-x-auto scrollbar-none pb-2 mb-6 -mx-4 px-4 lg:mx-0 lg:px-0">

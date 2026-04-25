@@ -15,6 +15,7 @@ import {
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
+import PageHeader from '../components/PageHeader';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { toDisplayDate } from '../utils';
@@ -434,20 +435,22 @@ export default function TeamMembers() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-800">Team Members</h1>
-          <p className="text-sm text-gray-500">Employees with AttendX login access</p>
-        </div>
-        {canAddManagers && (
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="px-4 py-2 bg-[#1B6B6B] text-white rounded-lg text-sm font-medium hover:bg-[#155858]"
-          >
-            + Grant Access
-          </button>
-        )}
+      <div className="mb-6">
+        <PageHeader
+          title="Team Members"
+          subtitle="Employees with AttendX login access"
+          actions={
+            canAddManagers && (
+              <button
+                type="button"
+                onClick={openAddModal}
+                className="px-4 py-2 bg-[#1B6B6B] text-white rounded-lg text-sm font-medium hover:bg-[#155858]"
+              >
+                + Grant Access
+              </button>
+            )
+          }
+        />
       </div>
 
       <div className="bg-[#E8F5F5] border border-[#E8F5F5] rounded-xl p-4 mb-6">

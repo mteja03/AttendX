@@ -6,6 +6,7 @@ import { trackPageView } from '../utils/analytics';
 import { useCompany } from '../contexts/CompanyContext';
 import { getDeptColor, buildOrgTree, treeDepth } from '../utils/orgChartHelpers';
 import EmployeeAvatar from '../components/EmployeeAvatar';
+import PageHeader from '../components/PageHeader';
 
 function OrgNode({ node, search, companyId, navigate }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -133,11 +134,11 @@ export default function OrgChart() {
 
   return (
     <div className="p-4 sm:p-8">
-      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-800">Org Chart</h1>
-          <p className="text-sm text-gray-500 mt-1">{company?.name || 'Company'} organizational structure</p>
-        </div>
+      <div className="mb-6">
+        <PageHeader
+          title="Org Chart"
+          subtitle={`${company?.name || 'Company'} organizational structure`}
+        />
       </div>
 
       <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:items-center mb-4">

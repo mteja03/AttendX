@@ -595,7 +595,7 @@ export default function Leave() {
 
   return (
     <div>
-      <div className="-mt-4 -mx-4 md:-mt-6 md:-mx-6 lg:-mt-8 lg:-mx-8 mb-6">
+      <div className="mb-6">
         <PageHeader
           title="Leave"
           subtitle="Manage and approve team leave requests"

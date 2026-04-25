@@ -5,6 +5,7 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { PLATFORM_CONFIG } from '../config/constants';
 import PageLoader from '../components/PageLoader';
+import PageHeader from '../components/PageHeader';
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
 import { trackPageView } from '../utils/analytics';
 import * as XLSX from 'xlsx';
@@ -236,49 +237,51 @@ export default function Documents() {
 
   return (
     <div className="p-4 sm:p-8">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-800">Documents</h1>
-          <p className="text-sm text-gray-500 mt-1">Company document completion overview (Google Drive)</p>
-        </div>
-        <div className="relative">
-          {Object.values(docFilters).some((v) => v) && (
-            <p className="text-xs text-amber-600 mb-2">
-              ⚠️ Download will include only filtered results ({filteredDocEmployees.length} records)
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => setShowDownload((o) => !o)}
-            className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
-          >
-            Download Report ▾
-          </button>
-          {showDownload && (
-            <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[10rem]">
+      <div className="mb-6">
+        <PageHeader
+          title="Documents"
+          subtitle="Company document completion overview (Google Drive)"
+          actions={
+            <div className="relative">
               <button
                 type="button"
-                onClick={() => {
-                  downloadDocumentReport('csv');
-                  setShowDownload(false);
-                }}
-                className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100"
+                onClick={() => setShowDownload((o) => !o)}
+                className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
               >
-                Download CSV
+                Download Report ▾
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  downloadDocumentReport('excel');
-                  setShowDownload(false);
-                }}
-                className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100 rounded-b-lg"
-              >
-                Download Excel
-              </button>
+              {showDownload && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[10rem]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      downloadDocumentReport('csv');
+                      setShowDownload(false);
+                    }}
+                    className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100"
+                  >
+                    Download CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      downloadDocumentReport('excel');
+                      setShowDownload(false);
+                    }}
+                    className="block w-full text-left min-h-[44px] px-4 py-2 text-sm hover:bg-slate-50 active:bg-slate-100 rounded-b-lg"
+                  >
+                    Download Excel
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          }
+        />
+        {Object.values(docFilters).some((v) => v) && (
+          <p className="text-xs text-amber-600 mt-2">
+            ⚠️ Download will include only filtered results ({filteredDocEmployees.length} records)
+          </p>
+        )}
       </div>
 
       {loading ? (

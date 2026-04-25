@@ -18,6 +18,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
 import PageLoader from '../components/PageLoader';
+import PageHeader from '../components/PageHeader';
 import { formatLakhs, toDisplayDate, toJSDate } from '../utils';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
 import { GUIDE_TOPICS } from './libraryGuideTopics';
@@ -1155,33 +1156,35 @@ export default function Library() {
 
   return (
     <div className="p-4 sm:p-8 max-w-6xl mx-auto">
-      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-800">Library</h1>
-          <p className="text-sm text-gray-500 mt-1">Policies and designation definitions</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setRefreshKey((k) => k + 1)}
-            className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
-            title="Refresh"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 7A5 5 0 1 0 7 2" stroke="#6B7280" strokeWidth="1.3" strokeLinecap="round" />
-              <path d="M2 3v4h4" stroke="#6B7280" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          {libraryTab === 'policies' && canEdit && (
-            <button
-              type="button"
-              onClick={openAddPolicy}
-              className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-xl bg-[#1B6B6B] text-white text-sm font-medium hover:bg-[#155858] active:bg-[#0f4444]"
-            >
-              + Add Policy
-            </button>
-          )}
-        </div>
+      <div className="mb-4">
+        <PageHeader
+          title="Library"
+          subtitle="Policies and designation definitions"
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => setRefreshKey((k) => k + 1)}
+                className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
+                title="Refresh"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2 7A5 5 0 1 0 7 2" stroke="#6B7280" strokeWidth="1.3" strokeLinecap="round" />
+                  <path d="M2 3v4h4" stroke="#6B7280" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {libraryTab === 'policies' && canEdit && (
+                <button
+                  type="button"
+                  onClick={openAddPolicy}
+                  className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-xl bg-[#1B6B6B] text-white text-sm font-medium hover:bg-[#155858] active:bg-[#0f4444]"
+                >
+                  + Add Policy
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit flex-wrap">
