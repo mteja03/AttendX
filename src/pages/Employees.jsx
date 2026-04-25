@@ -1129,7 +1129,7 @@ export default function Employees() {
 
   return (
     <div className="px-4 sm:px-8 pb-8">
-      <div className="-mx-4 sm:-mx-8 mb-4">
+      <div className="mb-4">
         <PageHeader
           title="Employees"
           subtitle={`${totalCount} total · ${statsCounts.active || 0} active`}

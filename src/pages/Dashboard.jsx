@@ -873,26 +873,6 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-lg sm:text-xl font-semibold text-slate-800">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">Company overview</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => refreshAll(true)}
-            className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
-            title="Refresh dashboard"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 7A5 5 0 1 0 7 2" stroke="#6B7280" strokeWidth="1.3" strokeLinecap="round" />
-              <path d="M2 3v4h4" stroke="#6B7280" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
       {statsLoading ? (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
           {[...Array(6)].map((_, i) => (

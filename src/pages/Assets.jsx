@@ -1058,7 +1058,7 @@ export default function Assets() {
 
   return (
     <div className="px-4 sm:px-8 pb-8">
-      <div className="-mx-4 sm:-mx-8 mb-4">
+      <div className="mb-4">
         <PageHeader
           title="Assets"
           subtitle="Track and manage company equipment"

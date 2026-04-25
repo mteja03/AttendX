@@ -8,7 +8,7 @@ export default function PageHeader({
   sticky = true,
 }) {
   return (
-    <div className={`bg-white border-b border-gray-100 ${sticky ? 'sticky top-0 z-10' : ''}`}>
+    <div className={`bg-white border border-gray-100 rounded-2xl overflow-hidden ${sticky ? 'sticky top-0 z-10' : ''}`}>
       <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-gray-800 leading-tight">{title}</h1>
