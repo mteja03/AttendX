@@ -34,6 +34,7 @@ import { WhatsAppButton } from '../utils/whatsapp';
 import { whatsappUrl } from '../utils/whatsappUrl';
 import { SkeletonTable } from '../components/SkeletonRow';
 import EmptyState from '../components/EmptyState';
+import PageHeader from '../components/PageHeader';
 
 /** Used by AuditCalendar; includes legacy keys for older documents */
 const STATUS_COLORS = {
@@ -5330,7 +5331,7 @@ function AuditList({
   };
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4">
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex-1 min-w-48 relative">
@@ -6061,58 +6062,43 @@ export default function Audit() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-        <div className="max-w-4xl mx-auto">
-          <SkeletonTable rows={10} />
-        </div>
+      <div>
+        <SkeletonTable rows={10} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-100 px-4 md:px-6 py-4 sticky top-0 z-10">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-          <div>
-            <h1 className="text-lg sm:text-xl font-semibold text-gray-800">Audit</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Schedule, track and close audits</p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setShowCalendar(true)}
-              className="min-w-[44px] min-h-[44px] w-9 h-9 flex items-center justify-center border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
-              title="Audit Calendar"
-            >
-              📅
-            </button>
-            {canManage && (
+    <div>
+      <div className="mb-6">
+        <PageHeader
+          title="Audit"
+          subtitle="Schedule, track and close audits"
+          tabs={mainTabs}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          actions={
+            <>
               <button
                 type="button"
-                onClick={() => setShowSettings(true)}
-                className="min-h-[44px] flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                onClick={() => setShowCalendar(true)}
+                className="w-10 h-10 flex items-center justify-center border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+                title="Audit Calendar"
               >
-                ⚙️ Settings
+                📅
               </button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex gap-1 overflow-x-auto scrollbar-none flex-nowrap pb-1 -mx-1 px-1">
-          {mainTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-medium transition-colors flex-shrink-0 ${
-                activeTab === tab.id ? 'bg-[#E8F5F5] text-[#1B6B6B]' : 'text-gray-500 hover:bg-gray-100'
-              }`}
-            >
-              <span>{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
-        </div>
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(true)}
+                  className="min-h-[40px] flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  ⚙️ Settings
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
       <div>
