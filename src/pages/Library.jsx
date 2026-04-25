@@ -1155,7 +1155,7 @@ export default function Library() {
   const reportsToOptions = roles.filter((r) => r.id !== editingRoleId);
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+    <div>
       <div className="mb-4">
         <PageHeader
           title="Library"

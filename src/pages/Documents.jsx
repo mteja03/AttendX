@@ -236,7 +236,7 @@ export default function Documents() {
   };
 
   return (
-    <div className="p-4 sm:p-8">
+    <div>
       <div className="mb-6">
         <PageHeader
           title="Documents"

@@ -105,7 +105,7 @@ export default function GlobalHeader() {
   const cardShadow = '0 4px 24px 0 rgba(0,0,0,0.08)';
 
   return (
-    <header className="hidden lg:flex h-16 bg-white border-b border-gray-100 items-center justify-between px-6 flex-shrink-0 relative z-30">
+    <header className="hidden lg:flex h-[69px] bg-white border-b border-gray-100 items-center justify-between px-6 flex-shrink-0 relative z-30">
       <button
         type="button"
         onClick={() => navigate(`/company/${effectiveCompanyId}/dashboard`)}

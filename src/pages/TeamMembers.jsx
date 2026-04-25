@@ -434,7 +434,7 @@ export default function TeamMembers() {
   if (!companyId) return null;
 
   return (
-    <div className="p-8">
+    <div>
       <div className="mb-6">
         <PageHeader
           title="Team Members"

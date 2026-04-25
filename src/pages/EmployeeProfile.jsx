@@ -3455,7 +3455,7 @@ export default function EmployeeProfile() {
   }
 
   return (
-    <div className="p-4 sm:p-8">
+    <div>
       <Link
         to={`/company/${companyId}/employees`}
         className="text-sm text-slate-600 hover:text-[#1B6B6B] active:text-[#155858] mb-4 inline-flex items-center min-h-[44px]"

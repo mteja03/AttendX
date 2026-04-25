@@ -1057,7 +1057,7 @@ export default function Assets() {
   if (!companyId) return null;
 
   return (
-    <div className="px-4 sm:px-8 pb-8">
+    <div>
       <div className="mb-4">
         <PageHeader
           title="Assets"
