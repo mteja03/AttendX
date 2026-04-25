@@ -40,6 +40,15 @@ export default function Calendar() {
   const [viewMonth, setViewMonth] = useState(now.getMonth());
   const [viewType, setViewType] = useState('month');
   const [hiddenTypes, setHiddenTypes] = useState(() => new Set());
+  const [weekStart, setWeekStart] = useState(() => {
+    const t = new Date();
+    const day = t.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    const monday = new Date(t);
+    monday.setDate(t.getDate() + diff);
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  });
 
   const EVENT_TYPE_META = {
     holiday: { label: 'Holidays', bar: '#E24B4A', bg: '#FCEBEB', text: '#501313', dot: '#E24B4A' },
@@ -244,6 +253,50 @@ export default function Calendar() {
 
   const calendarDays = useMemo(() => buildCalendarDays(viewYear, viewMonth), [viewYear, viewMonth]);
 
+  const weekDays = useMemo(() => {
+    const out = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      out.push(d);
+    }
+    return out;
+  }, [weekStart]);
+
+  const weekRangeLabel = useMemo(() => {
+    if (weekDays.length < 7) return '';
+    const start = weekDays[0];
+    const end = weekDays[6];
+    const sameMonth = start.getMonth() === end.getMonth();
+    const sameYear = start.getFullYear() === end.getFullYear();
+    const startStr = start.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+    const endStr = sameMonth
+      ? end.getDate()
+      : end.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+    return `${startStr} – ${endStr}${sameYear ? `, ${start.getFullYear()}` : `, ${end.getFullYear()}`}`;
+  }, [weekDays]);
+
+  const agendaGroups = useMemo(() => {
+    const monthStart = new Date(viewYear, viewMonth, 1);
+    monthStart.setHours(0, 0, 0, 0);
+    const horizon = new Date(monthStart);
+    horizon.setDate(horizon.getDate() + 90);
+
+    const groups = {};
+    combinedEvents.forEach((ev) => {
+      if (hiddenTypes.has(ev.type)) return;
+      const d = ev._day || toJSDate(ev.date);
+      if (!d) return;
+      const norm = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      if (norm < monthStart || norm > horizon) return;
+      const k = dateKey(norm);
+      if (!groups[k]) groups[k] = { date: norm, events: [] };
+      groups[k].events.push(ev);
+    });
+
+    return Object.values(groups).sort((a, b) => a.date - b.date);
+  }, [combinedEvents, hiddenTypes, viewYear, viewMonth]);
+
   const visibleEventsByDay = useMemo(() => {
     if (hiddenTypes.size === 0) return eventsByDay;
     const out = {};
@@ -287,10 +340,31 @@ export default function Calendar() {
     return list;
   }, [combinedEvents, hiddenTypes]);
 
+  const startOfWeek = (d) => {
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + diff);
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  };
+
+  const shiftWeek = (delta) => {
+    setWeekStart((prev) => {
+      const next = new Date(prev);
+      next.setDate(prev.getDate() + delta * 7);
+      next.setHours(0, 0, 0, 0);
+      setViewYear(next.getFullYear());
+      setViewMonth(next.getMonth());
+      return next;
+    });
+  };
+
   const goToday = () => {
     const t = new Date();
     setViewYear(t.getFullYear());
     setViewMonth(t.getMonth());
+    setWeekStart(startOfWeek(t));
   };
 
   const shiftMonth = (delta) => {
@@ -386,11 +460,23 @@ export default function Calendar() {
             ))}
           </div>
           <div className="flex items-center gap-1 border border-gray-200 rounded-xl px-2 py-1 bg-white">
-            <button type="button" onClick={() => shiftMonth(-1)} className="min-h-[40px] min-w-[36px] text-gray-500 hover:text-gray-800" aria-label="Previous month">
+            <button
+              type="button"
+              onClick={() => (viewType === 'week' ? shiftWeek(-1) : shiftMonth(-1))}
+              className="min-h-[40px] min-w-[36px] text-gray-500 hover:text-gray-800"
+              aria-label={viewType === 'week' ? 'Previous week' : 'Previous month'}
+            >
               ‹
             </button>
-            <span className="text-sm font-medium text-slate-800 min-w-[140px] text-center capitalize">{monthLabel}</span>
-            <button type="button" onClick={() => shiftMonth(1)} className="min-h-[40px] min-w-[36px] text-gray-500 hover:text-gray-800" aria-label="Next month">
+            <span className="text-sm font-medium text-slate-800 min-w-[160px] text-center capitalize">
+              {viewType === 'week' ? weekRangeLabel : monthLabel}
+            </span>
+            <button
+              type="button"
+              onClick={() => (viewType === 'week' ? shiftWeek(1) : shiftMonth(1))}
+              className="min-h-[40px] min-w-[36px] text-gray-500 hover:text-gray-800"
+              aria-label={viewType === 'week' ? 'Next week' : 'Next month'}
+            >
               ›
             </button>
           </div>
@@ -541,46 +627,151 @@ export default function Calendar() {
           )}
 
           {viewType === 'week' && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-[#E1F5EE] flex items-center justify-center text-[#0F6E56] mx-auto mb-3">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <rect x="3" y="4" width="18" height="18" rx="2" />
-                  <path d="M16 2v4M8 2v4M3 10h18" />
-                </svg>
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
+                {weekDays.map((d) => {
+                  const t = new Date();
+                  const isToday =
+                    d.getDate() === t.getDate() &&
+                    d.getMonth() === t.getMonth() &&
+                    d.getFullYear() === t.getFullYear();
+                  return (
+                    <div
+                      key={d.toISOString()}
+                      className={`text-center py-2 ${isToday ? 'bg-[#E1F5EE]' : ''}`}
+                    >
+                      <div className="text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                        {d.toLocaleDateString('en-IN', { weekday: 'short' })}
+                      </div>
+                      <div className={`text-base font-medium mt-0.5 ${isToday ? 'text-[#0F6E56]' : 'text-gray-800'}`}>
+                        {d.getDate()}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <h3 className="text-sm font-medium text-gray-800 mb-1">Week view coming soon</h3>
-              <p className="text-xs text-gray-400">For now, switch back to Month to see your events.</p>
-              <button
-                type="button"
-                onClick={() => setViewType('month')}
-                className="mt-4 text-xs font-medium text-[#1B6B6B] hover:text-[#155858]"
-              >
-                ← Back to Month
-              </button>
+              <div className="grid grid-cols-7" style={{ minHeight: '480px' }}>
+                {weekDays.map((d) => {
+                  const k = dateKey(d);
+                  const dayEvents = visibleEventsByDay[k] || [];
+                  const t = new Date();
+                  const isToday =
+                    d.getDate() === t.getDate() &&
+                    d.getMonth() === t.getMonth() &&
+                    d.getFullYear() === t.getFullYear();
+                  const dow = d.getDay();
+                  const isWeekend = dow === 0 || dow === 6;
+                  const cellBg = isToday ? 'bg-[#E1F5EE]/40' : isWeekend ? 'bg-[#FAFAFA]' : 'bg-white';
+
+                  return (
+                    <div
+                      key={k}
+                      className={`p-2 border-r border-gray-100 last:border-r-0 ${cellBg}`}
+                    >
+                      {dayEvents.length === 0 && (
+                        <p className="text-[10px] text-gray-300 text-center mt-4">No events</p>
+                      )}
+                      {dayEvents.map((ev) => {
+                        const meta = EVENT_TYPE_META[ev.type] || EVENT_TYPE_META.company;
+                        return (
+                          <button
+                            key={ev.id}
+                            type="button"
+                            onClick={() => setSelectedEvent(ev)}
+                            title={ev.title}
+                            className="w-full text-left text-[11px] px-2 py-1.5 rounded-md mb-1.5 cursor-pointer font-medium block"
+                            style={{
+                              background: meta.bg,
+                              color: meta.text,
+                              borderLeft: `2px solid ${meta.bar}`,
+                            }}
+                          >
+                            <div className="truncate">{ev.title}</div>
+                            <div className="text-[9px] mt-0.5 opacity-70 truncate">{meta.label}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
           {viewType === 'agenda' && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-[#E1F5EE] flex items-center justify-center text-[#0F6E56] mx-auto mb-3">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <line x1="8" y1="6" x2="21" y2="6" />
-                  <line x1="8" y1="12" x2="21" y2="12" />
-                  <line x1="8" y1="18" x2="21" y2="18" />
-                  <line x1="3" y1="6" x2="3.01" y2="6" />
-                  <line x1="3" y1="12" x2="3.01" y2="12" />
-                  <line x1="3" y1="18" x2="3.01" y2="18" />
-                </svg>
-              </div>
-              <h3 className="text-sm font-medium text-gray-800 mb-1">Agenda view coming soon</h3>
-              <p className="text-xs text-gray-400">For now, see your next 7 days in the Upcoming panel.</p>
-              <button
-                type="button"
-                onClick={() => setViewType('month')}
-                className="mt-4 text-xs font-medium text-[#1B6B6B] hover:text-[#155858]"
-              >
-                ← Back to Month
-              </button>
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              {agendaGroups.length === 0 ? (
+                <div className="p-12 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center text-gray-300 mx-auto mb-3">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <rect x="3" y="4" width="18" height="18" rx="2" />
+                      <path d="M16 2v4M8 2v4M3 10h18" />
+                    </svg>
+                  </div>
+                  <h3 className="text-sm font-medium text-gray-800 mb-1">No events</h3>
+                  <p className="text-xs text-gray-400">Nothing scheduled in the next 90 days from {monthLabel}.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {agendaGroups.map((group) => {
+                    const t = new Date();
+                    t.setHours(0, 0, 0, 0);
+                    const isToday = group.date.getTime() === t.getTime();
+                    const isPast = group.date.getTime() < t.getTime();
+                    const dayLabel = group.date.toLocaleDateString('en-IN', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                    });
+
+                    return (
+                      <div key={dateKey(group.date)} className="px-4 py-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span
+                            className={`text-xs font-medium ${
+                              isToday ? 'text-[#0F6E56]' : isPast ? 'text-gray-400' : 'text-gray-700'
+                            }`}
+                          >
+                            {dayLabel}
+                          </span>
+                          {isToday && (
+                            <span className="text-[10px] bg-[#E1F5EE] text-[#0F6E56] px-1.5 py-0.5 rounded-full font-medium">
+                              Today
+                            </span>
+                          )}
+                          <span className="text-[10px] text-gray-400 ml-auto">
+                            {group.events.length} {group.events.length === 1 ? 'event' : 'events'}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          {group.events.map((ev) => {
+                            const meta = EVENT_TYPE_META[ev.type] || EVENT_TYPE_META.company;
+                            return (
+                              <button
+                                key={ev.id}
+                                type="button"
+                                onClick={() => setSelectedEvent(ev)}
+                                className="w-full flex gap-3 p-2 rounded-lg hover:bg-gray-50 text-left"
+                              >
+                                <div
+                                  className="w-1 self-stretch rounded-full flex-shrink-0"
+                                  style={{ background: meta.bar }}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium text-gray-800 truncate">
+                                    {ev.title}
+                                  </div>
+                                  <div className="text-xs text-gray-400 mt-0.5">{meta.label}</div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
