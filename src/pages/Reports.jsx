@@ -2334,6 +2334,7 @@ export default function Reports() {
             </ChartCard>
           </div>
           <ChartCard title="Assets per employee">
+            <div className="overflow-x-auto -mx-2 px-2">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="text-left text-gray-600 border-b">
@@ -2360,6 +2361,7 @@ export default function Reports() {
                 ))}
               </tbody>
             </table>
+            </div>
           </ChartCard>
           <ChartCard title="Consumable stock levels">
             <div className="space-y-3">
@@ -2600,6 +2602,7 @@ export default function Reports() {
             </ChartCard>
           </div>
           <ChartCard title="New joiners (last 90 days)">
+            <div className="overflow-x-auto -mx-2 px-2">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="text-left text-gray-600 border-b">
@@ -2643,6 +2646,7 @@ export default function Reports() {
                 ))}
               </tbody>
             </table>
+            </div>
           </ChartCard>
           <div className="mt-4 flex flex-wrap gap-2 items-center">
             <button

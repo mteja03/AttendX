@@ -625,9 +625,9 @@ export default function TeamMembers() {
       )}
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/30 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
           <div
-            className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 my-8 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 sm:my-8 max-h-[90vh] overflow-y-auto"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-semibold text-slate-800">Grant AttendX Access</h2>
@@ -823,8 +823,8 @@ export default function TeamMembers() {
       )}
 
       {removeConfirm && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/30 flex items-end sm:items-center justify-center z-[60] sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-2">Remove access?</h3>
             <p className="text-sm text-slate-600 mb-4">
               Remove {removeConfirm.name || removeConfirm.email}&apos;s access? They will no longer be able to log in.
@@ -846,8 +846,8 @@ export default function TeamMembers() {
       )}
 
       {changeRoleFor && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/30 flex items-end sm:items-center justify-center z-[60] sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-4">Change role</h3>
             <select
               value={newRoleValue}
@@ -887,8 +887,8 @@ export default function TeamMembers() {
       )}
 
       {showPermissions && permissionsTarget && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
             <div className="px-6 py-5 border-b border-gray-100 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">

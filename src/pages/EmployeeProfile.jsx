@@ -3731,7 +3731,7 @@ export default function EmployeeProfile() {
                 type="button"
                 onClick={handlePrintProfile}
                 title="Print profile"
-                className="w-8 h-8 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
+                className="w-10 h-10 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path
@@ -3866,7 +3866,7 @@ export default function EmployeeProfile() {
           </div>
         )}
 
-        <div className="border-t border-gray-100 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 divide-x divide-y divide-gray-100">
+        <div className="border-t border-gray-100 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 sm:divide-x sm:divide-y divide-gray-100">
           {[
             {
               label: 'Department',
@@ -6697,8 +6697,8 @@ export default function EmployeeProfile() {
       )}
 
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
             <div className="text-center mb-5">
               <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
                 <span className="text-2xl">🗑️</span>
@@ -6753,8 +6753,8 @@ export default function EmployeeProfile() {
       )}
 
       {showCompleteOffboardingModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="text-center mb-5">
               <div className="text-4xl mb-3">🏁</div>
               <h3 className="text-base font-semibold text-gray-800 mb-1">Complete Offboarding?</h3>
@@ -6797,8 +6797,8 @@ export default function EmployeeProfile() {
       )}
 
       {showRehireModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-xl">
             <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
               <div>
                 <h2 className="text-lg font-semibold text-gray-800">Rehire Employee</h2>
@@ -7512,8 +7512,8 @@ export default function EmployeeProfile() {
       )}
 
       {showOnboardingWarningModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-[60] sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm text-center shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="text-5xl mb-4">⚠️</div>
             <h3 className="text-base font-semibold text-gray-800 mb-2">Onboarding Not Complete</h3>
             <p className="text-sm text-gray-500 mb-2">
@@ -7906,8 +7906,8 @@ export default function EmployeeProfile() {
       )}
 
       {showRemovePhotoConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white rounded-2xl p-5 w-full max-w-xs text-center shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-[70] sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-xs text-center shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="text-3xl mb-3">🗑️</div>
             <h3 className="text-sm font-semibold text-gray-800 mb-1">Remove Photo?</h3>
             <p className="text-xs text-gray-400 mb-4">
