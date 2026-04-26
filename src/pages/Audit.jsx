@@ -5334,7 +5334,7 @@ function AuditList({
     <div className="space-y-4">
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex-1 min-w-48 relative">
+          <div className="flex-1 min-w-[120px] sm:min-w-48 relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
             <input
               value={search}
@@ -5367,9 +5367,11 @@ function AuditList({
               type="button"
               onClick={() => setShowAssignModal(true)}
               disabled={auditTypes.length === 0}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 whitespace-nowrap"
+              className="flex items-center justify-center gap-2 w-10 h-10 sm:w-auto sm:h-auto sm:px-4 sm:py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 whitespace-nowrap"
+              title="Assign Audit"
             >
-              + Assign Audit
+              <span className="sm:hidden text-lg leading-none">+</span>
+              <span className="hidden sm:inline">+ Assign Audit</span>
             </button>
           )}
         </div>

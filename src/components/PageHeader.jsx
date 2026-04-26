@@ -12,7 +12,7 @@ export default function PageHeader({
       <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-gray-800 leading-tight">{title}</h1>
-          {subtitle && <p className="text-sm text-gray-400 mt-0.5">{subtitle}</p>}
+          {subtitle && <p className="hidden sm:block text-sm text-gray-400 mt-0.5">{subtitle}</p>}
         </div>
         {actions && (
           <div className="flex items-center gap-2 flex-wrap flex-shrink-0">{actions}</div>
