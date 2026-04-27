@@ -2239,7 +2239,11 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
   const managerCanAct = canManage && isUnderReview;
   const checklistItems = Array.isArray(checklistReview) ? checklistReview : [];
   const findingsData = Array.isArray(findings) ? findings : [];
-  const teamMembers = Array.isArray(safeAudit.teamMembers) ? safeAudit.teamMembers : [];
+  const teamMembers = (Array.isArray(safeAudit.teamMembers) ? safeAudit.teamMembers : []).filter((m) => {
+    const emp = (employees || []).find((e) => e.id === m.id);
+    // Keep if employee found + active, or if employee not in list yet (don't break old data)
+    return !emp || emp.status === 'Active';
+  });
   const auditorEmployee = (employees || []).find(
     (e) => (e.email || '').toLowerCase() === (safeAudit.auditorEmail || '').toLowerCase(),
   );
@@ -5244,11 +5248,22 @@ function AuditList({
         result: null,
         note: '',
       }));
-      const teamMembersNorm = (assignForm.teamMembers || []).map((m) => ({
-        ...m,
-        email: (m.email || '').toLowerCase(),
-      }));
-      const teamMemberEmails = teamMembersNorm.map((m) => m.email).filter(Boolean);
+      const teamMembersNorm = (assignForm.teamMembers || [])
+        .filter((m) => {
+          // Remove inactive employees
+          const emp = employees.find((e) => e.id === m.id);
+          return emp && emp.status === 'Active';
+        })
+        .map((m) => ({
+          ...m,
+          email: (m.email || '').toLowerCase(),
+        }));
+
+      // Always include lead auditor email so storage rules + visibility work for auditors without a /users/ doc
+      const teamMemberEmails = [
+        ...(assignForm.auditorEmail ? [(assignForm.auditorEmail || '').toLowerCase()] : []),
+        ...teamMembersNorm.map((m) => m.email).filter(Boolean),
+      ].filter(Boolean);
       const resolvedCategory = normaliseAuditCategory(type?.auditCategory || assignForm.category);
       await addDoc(collection(db, 'companies', companyId, 'audits'), {
         auditRefId: refId,
@@ -5334,7 +5349,7 @@ function AuditList({
     <div className="space-y-4">
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex-1 min-w-[120px] sm:min-w-48 relative">
+          <div className="flex-1 min-w-0 sm:min-w-48 relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
             <input
               value={search}
@@ -5367,7 +5382,7 @@ function AuditList({
               type="button"
               onClick={() => setShowAssignModal(true)}
               disabled={auditTypes.length === 0}
-              className="flex items-center justify-center gap-2 w-10 h-10 sm:w-auto sm:h-auto sm:px-4 sm:py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 whitespace-nowrap"
+              className="flex items-center justify-center gap-2 w-11 h-11 sm:w-auto sm:h-auto sm:px-4 sm:py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50 whitespace-nowrap"
               title="Assign Audit"
             >
               <span className="sm:hidden text-lg leading-none">+</span>

@@ -3,10 +3,22 @@ service firebase.storage {
   match /b/{bucket}/o {
 
     function userDocData() {
-      return firestore.exists(/databases/(default)/documents/users/$(request.auth.token.email))
-        ? firestore.get(/databases/(default)/documents/users/$(request.auth.token.email)).data
-        : firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
-          ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data
+      return firestore.exists(
+        /databases/(default)/documents/users/
+          $(request.auth.token.email)
+      )
+        ? firestore.get(
+            /databases/(default)/documents/users/
+              $(request.auth.token.email)
+          ).data
+        : firestore.exists(
+            /databases/(default)/documents/users/
+              $(request.auth.uid)
+          )
+          ? firestore.get(
+              /databases/(default)/documents/users/
+                $(request.auth.uid)
+            ).data
           : {};
     }
 
@@ -15,40 +27,74 @@ service firebase.storage {
         && userDocData().companyId == companyId;
     }
 
-    // Employee profile images (app path)
-    match /companies/{companyId}/employees/{empId}/{allPaths=**} {
+    // Check Firestore audit doc directly —
+    // works for auditors stored in teamMembers
+    // who may not have a /users/ doc
+    function isAssignedAuditor(companyId, auditId) {
+      let audit = firestore.get(
+        /databases/(default)/documents/companies/
+          $(companyId)/audits/$(auditId)
+      );
+      return request.auth != null && (
+        audit.data.auditorEmail == 
+          request.auth.token.email
+        || (
+          audit.data.teamMemberEmails != null
+          && audit.data.teamMemberEmails.hasAny(
+            [request.auth.token.email]
+          )
+        )
+      );
+    }
+
+    // Employee profile images
+    match /companies/{companyId}/employees/
+      {empId}/{allPaths=**} {
       allow read: if request.auth != null
         && belongsToCompany(companyId);
-
       allow write: if request.auth != null
         && belongsToCompany(companyId)
         && request.resource.size < 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && request.resource.contentType
+            .matches('image/.*');
     }
 
-
+    // Audit documents — auditors + managers
     match /audits/{companyId}/{auditId}/{fileName} {
       allow read: if request.auth != null
-        && belongsToCompany(companyId);
-
-      allow write: if request.auth != null
-        && belongsToCompany(companyId)
-        && request.resource.size < 20 * 1024 * 1024
         && (
-          request.resource.contentType.matches('application/pdf')
-          || request.resource.contentType.matches('image/.*')
-          || request.resource.contentType.matches('application/.*word.*')
-          || request.resource.contentType.matches('application/vnd.*')
-          || request.resource.contentType == 'application/msword'
-          || request.resource.contentType
-            == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          belongsToCompany(companyId)
+          || isAssignedAuditor(companyId, auditId)
         );
-
+      allow write: if request.auth != null
+        && (
+          belongsToCompany(companyId)
+          || isAssignedAuditor(companyId, auditId)
+        )
+        && request.resource.size < 
+            20 * 1024 * 1024
+        && (
+          request.resource.contentType
+            .matches('application/pdf')
+          || request.resource.contentType
+              .matches('image/.*')
+          || request.resource.contentType
+              .matches('application/.*word.*')
+          || request.resource.contentType
+              .matches('application/vnd.*')
+          || request.resource.contentType == 
+              'application/msword'
+          || request.resource.contentType ==
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
       allow delete: if request.auth != null
-        && belongsToCompany(companyId);
+        && (
+          belongsToCompany(companyId)
+          || isAssignedAuditor(companyId, auditId)
+        );
     }
 
-
+    // Deny everything else
     match /{allPaths=**} {
       allow read, write: if false;
     }
