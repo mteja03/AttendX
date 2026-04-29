@@ -1690,8 +1690,18 @@ function AssignAuditModal({
     if (localCategoriesFromCompany) return localCategoriesFromCompany;
     return orgListsFromFetch?.categories ?? [];
   }, [localCategoriesFromCompany, orgListsFromFetch]);
+  const { userRole } = useAuth();
+  const isCompanyAdmin = userRole === 'companyadmin' || userRole === 'admin';
+  // Minimum date — companyadmin can backdate, others cannot
+  const todayStr = new Date().toISOString().split('T')[0];
+  const minStartDate = isCompanyAdmin ? undefined : todayStr;
+  const minEndDate = isCompanyAdmin ? undefined : assignForm.startDate || todayStr;
 
   if (assignedAudit) {
+    const isBulk = assignedAudit.isBulk;
+    const auditListText = isBulk
+      ? (assignedAudit.audits || []).map((a, i) => `${i + 1}. *${a.refId}* — ${a.typeName}`).join('\n')
+      : `*${assignedAudit.refId}* — ${assignedAudit.typeName}`;
     return (
       <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
         <div role="presentation" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -1701,25 +1711,27 @@ function AssignAuditModal({
           </div>
           <p className="text-base font-semibold text-gray-800 mb-1">Audit Assigned!</p>
           <p className="text-sm text-gray-500 mb-4">
-            {assignedAudit.refId} assigned to {assignedAudit.auditorName}
+            {isBulk
+              ? `${assignedAudit.audits?.length} audits assigned to ${assignedAudit.auditorName}`
+              : `${assignedAudit.refId} assigned to ${assignedAudit.auditorName}`}
           </p>
           <WhatsAppButton
             phone={assignedAudit.auditorPhone}
             message={
               `Dear ${assignedAudit.auditorName} Garu,\n\n` +
-              `A new audit has been assigned to you.\n\n` +
-              `*${assignedAudit.refId}*\n` +
-              `📋 *Audit:* ${assignedAudit.typeName}\n` +
-              `🏷️ *Category:* ${assignedAudit.category || 'Internal'}\n` +
-              (assignedAudit.branch ? `🏢 *Branch:* ${assignedAudit.branch}\n` : '') +
+              (isBulk
+                ? `${assignedAudit.audits?.length} audits have been assigned to you` +
+                  (assignedAudit.branch ? ` at ${assignedAudit.branch}` : '') +
+                  `:\n\n${auditListText}\n\n`
+                : `A new audit has been assigned to you.\n\n${auditListText}\n`) +
               (assignedAudit.location ? `📍 *Location:* ${assignedAudit.location}\n` : '') +
-              (assignedAudit.department ? `🏬 *Department:* ${assignedAudit.department}\n` : '') +
+              (!isBulk && assignedAudit.department ? `🏬 *Department:* ${assignedAudit.department}\n` : '') +
               (assignedAudit.teamMembers?.length > 0
                 ? `👥 *Team:* ${[assignedAudit.auditorName + ' (Lead)', ...assignedAudit.teamMembers.map((m) => m.fullName)].join(', ')}\n`
                 : '') +
               (assignedAudit.startDate ? `📅 *Start Date:* ${formatDate(assignedAudit.startDate)}\n` : '') +
               `📅 *Due Date:* ${assignedAudit.endDate ? formatDate(assignedAudit.endDate) : '—'}\n\n` +
-              `Please log in to AttendX to begin the audit.\n\n` +
+              `Please log in to AttendX to begin.\n\n` +
               `Thank you,\nAudit Team`
             }
             label="Notify Auditor on WhatsApp"
@@ -1763,49 +1775,90 @@ function AssignAuditModal({
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Audit Template</p>
-            <select
-              value={assignForm.auditTypeId}
-              onChange={(e) => setAssignForm((prev) => ({ ...prev, auditTypeId: e.target.value }))}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
-            >
-              <option value="">Select template...</option>
-              {auditTypes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} — {t.auditCategory || 'Internal'} · {t.riskLevel || 'Medium'} Risk
-                </option>
-              ))}
-            </select>
-            {assignForm.auditTypeId &&
-              (() => {
-                const t = auditTypes.find((x) => x.id === assignForm.auditTypeId);
-                if (!t) return null;
-                return (
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        t.auditCategory === 'External' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Audit Templates</p>
+              {assignForm.auditTypeIds.length > 0 && (
+                <span className="text-xs font-medium bg-[#E1F5EE] text-[#0F6E56] px-2 py-0.5 rounded-full">
+                  {assignForm.auditTypeIds.length} selected
+                </span>
+              )}
+            </div>
+
+            {auditTypes.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4 border border-dashed border-gray-200 rounded-xl">
+                No templates yet — create one in Settings
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {auditTypes.map((t) => {
+                  const selected = assignForm.auditTypeIds.includes(t.id);
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => {
+                        setAssignForm((p) => {
+                          const ids = p.auditTypeIds.includes(t.id)
+                            ? p.auditTypeIds.filter((id) => id !== t.id)
+                            : [...p.auditTypeIds, t.id];
+                          return { ...p, auditTypeIds: ids };
+                        });
+                      }}
+                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        selected
+                          ? 'border-[#1B6B6B] bg-[#E1F5EE]'
+                          : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
                       }`}
                     >
-                      {t.auditCategory === 'External' ? '🌐' : '🏢'} {t.auditCategory}
-                    </span>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        t.riskLevel === 'Critical'
-                          ? 'bg-red-100 text-red-700'
-                          : t.riskLevel === 'High'
-                            ? 'bg-orange-100 text-orange-700'
-                            : t.riskLevel === 'Medium'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-green-100 text-green-700'
-                      }`}
-                    >
-                      {t.riskLevel || 'Medium'}
-                    </span>
-                    <span className="text-xs text-gray-400">{(t.checklistItems || []).length} checklist items</span>
-                  </div>
-                );
-              })()}
+                      <div
+                        className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                        style={{ background: t.color || '#8B5CF6' }}
+                      >
+                        {t.name?.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium truncate ${selected ? 'text-[#0F6E56]' : 'text-gray-800'}`}>
+                          {t.name}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span
+                            className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                              t.auditCategory === 'External' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                            }`}
+                          >
+                            {t.auditCategory || 'Internal'}
+                          </span>
+                          <span
+                            className={`text-xs px-1.5 py-0.5 rounded-full ${
+                              t.riskLevel === 'Critical'
+                                ? 'bg-red-100 text-red-600'
+                                : t.riskLevel === 'High'
+                                  ? 'bg-orange-100 text-orange-600'
+                                  : t.riskLevel === 'Medium'
+                                    ? 'bg-amber-100 text-amber-600'
+                                    : 'bg-green-100 text-green-600'
+                            }`}
+                          >
+                            {t.riskLevel || 'Medium'}
+                          </span>
+                          <span className="text-xs text-gray-400">{(t.checklistItems || []).length} items</span>
+                        </div>
+                      </div>
+                      <div
+                        className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center transition-all ${
+                          selected ? 'bg-[#1B6B6B]' : 'border-2 border-gray-300'
+                        }`}
+                      >
+                        {selected && (
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                            <path d="M2 5l2.5 2.5 3.5-4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div>
@@ -2043,7 +2096,16 @@ function AssignAuditModal({
                 <input
                   type="date"
                   value={assignForm.startDate}
-                  onChange={(e) => setAssignForm((p) => ({ ...p, startDate: e.target.value }))}
+                  min={minStartDate}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAssignForm((p) => ({
+                      ...p,
+                      startDate: val,
+                      // Clear end date if it's before new start
+                      endDate: p.endDate && p.endDate < val ? '' : p.endDate,
+                    }));
+                  }}
                   className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 />
               </div>
@@ -2052,6 +2114,7 @@ function AssignAuditModal({
                 <input
                   type="date"
                   value={assignForm.endDate}
+                  min={minEndDate}
                   onChange={(e) => setAssignForm((p) => ({ ...p, endDate: e.target.value }))}
                   className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
                 />
@@ -2072,13 +2135,28 @@ function AssignAuditModal({
         </div>
 
         <div className="px-6 py-4 border-t bg-gray-50/50 flex-shrink-0">
-          {assignForm.auditTypeId && assignForm.auditorId && (
+          {assignForm.auditTypeIds.length > 0 && assignForm.auditorId && (
             <div className="mb-3 p-3 bg-[#E8F5F5] rounded-xl">
-              <p className="text-xs text-[#1B6B6B] font-medium">
-                📋 {auditTypes.find((t) => t.id === assignForm.auditTypeId)?.name} → {assignForm.auditorName}
+              <p className="text-xs text-[#0F6E56] font-medium mb-1">
+                {assignForm.auditTypeIds.length === 1
+                  ? `📋 ${auditTypes.find((t) => t.id === assignForm.auditTypeIds[0])?.name}`
+                  : `📋 ${assignForm.auditTypeIds.length} audits`}{' '}
+                → {assignForm.auditorName}
                 {assignForm.branch && ` · ${assignForm.branch}`}
                 {assignForm.endDate && ` · Ends ${formatDate(assignForm.endDate)}`}
               </p>
+              {assignForm.auditTypeIds.length > 1 && (
+                <div className="space-y-0.5">
+                  {assignForm.auditTypeIds.map((id, i) => {
+                    const t = auditTypes.find((x) => x.id === id);
+                    return (
+                      <p key={id} className="text-xs text-[#0F6E56]/70">
+                        {i + 1}. {t?.name}
+                      </p>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
           <div className="flex gap-3">
@@ -2088,10 +2166,14 @@ function AssignAuditModal({
             <button
               type="button"
               onClick={onSubmit}
-              disabled={saving || !assignForm.auditTypeId || !assignForm.auditorId || !assignForm.endDate}
+              disabled={saving || assignForm.auditTypeIds.length === 0 || !assignForm.auditorId || !assignForm.endDate}
               className="flex-[2] min-w-0 px-6 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold hover:bg-[#155858] disabled:opacity-40"
             >
-              {saving ? 'Assigning...' : '+ Assign Audit'}
+              {saving
+                ? 'Assigning...'
+                : assignForm.auditTypeIds.length > 1
+                  ? `+ Assign ${assignForm.auditTypeIds.length} Audits`
+                  : '+ Assign Audit'}
             </button>
           </div>
         </div>
@@ -5119,7 +5201,7 @@ function AuditList({
   const teamRef = useRef(null);
 
   const [assignForm, setAssignForm] = useState({
-    auditTypeId: '',
+    auditTypeIds: [],
     category: '',
     location: '',
     branch: '',
@@ -5209,7 +5291,7 @@ function AuditList({
 
   const resetAssignForm = () => {
     setAssignForm({
-      auditTypeId: '',
+      auditTypeIds: [],
       category: '',
       location: '',
       branch: '',
@@ -5227,8 +5309,8 @@ function AuditList({
   };
 
   const handleAssign = async () => {
-    if (!assignForm.auditTypeId) {
-      showError('Select an audit template');
+    if (!assignForm.auditTypeIds || assignForm.auditTypeIds.length === 0) {
+      showError('Select at least one audit template');
       return;
     }
     if (!assignForm.auditorId) {
@@ -5241,13 +5323,8 @@ function AuditList({
     }
     try {
       setSaving(true);
-      const type = auditTypes.find((t) => t.id === assignForm.auditTypeId);
-      const refId = await generateAuditId();
-      const checklistReview = (type?.checklistItems || []).map((item) => ({
-        ...item,
-        result: null,
-        note: '',
-      }));
+      const leadEmp = employees.find((e) => e.id === assignForm.auditorId);
+      const auditorPhone = leadEmp?.mobile || leadEmp?.phone || leadEmp?.mobileNumber || '';
       const teamMembersNorm = (assignForm.teamMembers || [])
         .filter((m) => {
           // Remove inactive employees
@@ -5264,42 +5341,72 @@ function AuditList({
         ...(assignForm.auditorEmail ? [(assignForm.auditorEmail || '').toLowerCase()] : []),
         ...teamMembersNorm.map((m) => m.email).filter(Boolean),
       ].filter(Boolean);
-      const resolvedCategory = normaliseAuditCategory(type?.auditCategory || assignForm.category);
-      await addDoc(collection(db, 'companies', companyId, 'audits'), {
-        auditRefId: refId,
-        auditTypeId: assignForm.auditTypeId,
-        auditTypeName: type?.name || '',
-        auditTypeColor: type?.color || '#8B5CF6',
-        auditCategory: resolvedCategory,
-        riskLevel: type?.riskLevel || 'Medium',
-        category: assignForm.category,
-        location: assignForm.location,
-        branch: assignForm.branch,
-        department: assignForm.department,
-        auditorId: assignForm.auditorId,
-        auditorName: assignForm.auditorName,
-        auditorEmail: (assignForm.auditorEmail || '').toLowerCase(),
-        teamMembers: teamMembersNorm,
-        teamMemberEmails,
-        startDate: assignForm.startDate,
-        endDate: assignForm.endDate,
-        notes: assignForm.notes,
-        status: 'Assigned',
-        checklistReview,
-        findings: [],
-        adminNotes: '',
-        checklistLocked: false,
-        createdAt: new Date(),
-        createdBy: currentUser?.email || '',
-      });
-      const leadEmp = employees.find((e) => e.id === assignForm.auditorId);
-      const auditorPhone = leadEmp?.mobile || leadEmp?.phone || leadEmp?.mobileNumber || '';
+
+      // Create one audit per selected template — sequentially to avoid race condition on the counter
+      const createdAudits = [];
+      for (const typeId of assignForm.auditTypeIds) {
+        const type = auditTypes.find((t) => t.id === typeId);
+        if (!type) continue;
+
+        const refId = await generateAuditId();
+        const checklistReview = (type?.checklistItems || []).map((item) => ({
+          ...item,
+          result: null,
+          note: '',
+        }));
+        const resolvedCategory = normaliseAuditCategory(type?.auditCategory || assignForm.category);
+
+        await addDoc(collection(db, 'companies', companyId, 'audits'), {
+          auditRefId: refId,
+          auditTypeId: typeId,
+          auditTypeName: type?.name || '',
+          auditTypeColor: type?.color || '#8B5CF6',
+          auditCategory: resolvedCategory,
+          riskLevel: type?.riskLevel || 'Medium',
+          category: assignForm.category,
+          location: assignForm.location,
+          branch: assignForm.branch,
+          department: assignForm.department,
+          auditorId: assignForm.auditorId,
+          auditorName: assignForm.auditorName,
+          auditorEmail: (assignForm.auditorEmail || '').toLowerCase(),
+          teamMembers: teamMembersNorm,
+          teamMemberEmails,
+          startDate: assignForm.startDate,
+          endDate: assignForm.endDate,
+          notes: assignForm.notes,
+          status: 'Assigned',
+          checklistReview,
+          findings: [],
+          adminNotes: '',
+          checklistLocked: false,
+          createdAt: new Date(),
+          createdBy: currentUser?.email || '',
+        });
+
+        createdAudits.push({
+          refId,
+          typeName: type?.name || '',
+          category: resolvedCategory,
+        });
+      }
+
+      const isBulk = createdAudits.length > 1;
+      showSuccess(
+        isBulk
+          ? `${createdAudits.length} audits assigned to ${assignForm.auditorName}!`
+          : `${createdAudits[0]?.refId} assigned to ${assignForm.auditorName}!`,
+      );
+
       setAssignedAudit({
-        refId,
+        // Keep first refId for single-audit compat
+        refId: isBulk ? null : createdAudits[0]?.refId,
+        audits: createdAudits,
+        isBulk,
         auditorName: assignForm.auditorName,
         auditorPhone,
-        typeName: type?.name || '',
-        category: resolvedCategory,
+        typeName: isBulk ? `${createdAudits.length} audits` : createdAudits[0]?.typeName,
+        category: createdAudits[0]?.category,
         location: assignForm.location,
         branch: assignForm.branch,
         department: assignForm.department,
@@ -5307,7 +5414,6 @@ function AuditList({
         startDate: assignForm.startDate,
         endDate: assignForm.endDate,
       });
-      showSuccess(`${refId} assigned to ${assignForm.auditorName}!`);
     } catch (e) {
       showError('Failed: ' + e.message);
     } finally {
@@ -5331,7 +5437,7 @@ function AuditList({
   };
 
   const emptyAssign = {
-    auditTypeId: '',
+    auditTypeIds: [],
     category: '',
     location: '',
     branch: '',
