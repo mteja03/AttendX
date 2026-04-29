@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { toDateString, toDisplayDate, toJSDate } from '../utils';
 import { trackPageView } from '../utils/analytics';
 import { WhatsAppButton } from '../utils/whatsapp';
+import { getCacheKey, getEmployeeCache, setEmployeeCache } from '../utils/employeeCache';
 
 const EMPTY_ASSET_STATS = {
   total: 0,
@@ -512,6 +513,34 @@ export default function Dashboard() {
   useEffect(() => {
     refreshAll();
   }, [refreshAll]);
+
+  // Prefetch employee list silently so Employees page loads instantly
+  useEffect(() => {
+    if (!companyId) return undefined;
+    const cacheKey = getCacheKey(companyId, 'all', {});
+    if (getEmployeeCache(cacheKey)) return undefined;
+    const t = setTimeout(async () => {
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, 'companies', companyId, 'employees'),
+            orderBy('fullName', 'asc'),
+            limit(50),
+          ),
+        );
+        const emps = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setEmployeeCache(cacheKey, {
+          employees: emps,
+          totalCount: emps.length,
+          statsCounts: {},
+          hasMore: snap.docs.length === 50,
+        });
+      } catch {
+        // silent
+      }
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [companyId]);
 
   const activeEmployeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
 

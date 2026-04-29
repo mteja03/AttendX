@@ -29,6 +29,12 @@ import { updateCompanyCounts } from '../utils/updateCompanyCounts';
 import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 import { trackEmployeeAdded, trackPageView } from '../utils/analytics';
+import {
+  getCacheKey,
+  getEmployeeCache,
+  setEmployeeCache,
+  clearEmployeeCache,
+} from '../utils/employeeCache';
 
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
 const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
@@ -629,6 +635,23 @@ export default function Employees() {
       if (!companyId || !collRef) return;
       try {
         if (reset) {
+          // Check cache first
+          const cacheKey = getCacheKey(companyId, tab, {
+            department: filters.department,
+            branch: filters.branch,
+            location: filters.location,
+          });
+          const cached = getEmployeeCache(cacheKey);
+          if (cached) {
+            // Restore from cache — no Firestore read needed
+            setEmployees(cached.employees);
+            setTotalCount(cached.totalCount);
+            setStatsCounts(cached.statsCounts);
+            setHasMore(cached.hasMore);
+            lastDocRef.current = null;
+            setLoading(false);
+            return;
+          }
           setLoading(true);
           setEmployees([]);
           lastDocRef.current = null;
@@ -666,6 +689,18 @@ export default function Employees() {
 
         if (reset) {
           setEmployees(newEmployees);
+          // Write to cache after successful first-page fetch
+          const cacheKey = getCacheKey(companyId, tab, {
+            department: filters.department,
+            branch: filters.branch,
+            location: filters.location,
+          });
+          setEmployeeCache(cacheKey, {
+            employees: newEmployees,
+            totalCount: newEmployees.length,
+            statsCounts: countStatsFromEmployees(newEmployees),
+            hasMore: snap.docs.length === FETCH_PAGE_SIZE,
+          });
         } else {
           setEmployees((prev) => [...prev, ...newEmployees]);
         }
@@ -1099,6 +1134,7 @@ export default function Employees() {
       }
 
       await updateCompanyCounts(companyId);
+      clearEmployeeCache(companyId);
       handleCloseAddModal();
       trackEmployeeAdded();
       success('Employee added successfully!');
@@ -1620,6 +1656,10 @@ export default function Employees() {
                     key={emp.id}
                     className={`border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-all ${getRowTintClass(emp.status)}`}
                     onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
+                    onMouseEnter={() => {
+                      // Prime the EmployeeProfile JS chunk on hover
+                      import('../pages/EmployeeProfile').catch(() => {});
+                    }}
                     style={{
                       borderLeft: `3px solid ${STATUS_BORDER_COLOR[emp.status] || getDeptColor(emp.department)}`,
                     }}
