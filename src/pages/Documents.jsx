@@ -8,8 +8,6 @@ import PageLoader from '../components/PageLoader';
 import PageHeader from '../components/PageHeader';
 import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
 import { trackPageView } from '../utils/analytics';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
 
 const defaultTotalMandatory = getMandatoryDocCount();
 
@@ -187,7 +185,11 @@ export default function Documents() {
 
   const companyName = (company?.name || 'Company').replace(/\s+/g, '');
 
-  const downloadDocumentReport = (format) => {
+  const downloadDocumentReport = async (format) => {
+    const [{ default: XLSX }, { saveAs }] = await Promise.all([
+      import('xlsx'),
+      import('file-saver'),
+    ]);
     const rows = filteredDocEmployees.map((emp) => {
       const docs = emp.documents || [];
       const kycDocs = docs.filter((d) => d.category === 'KYC Documents');

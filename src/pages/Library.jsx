@@ -17,7 +17,7 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
-import PageLoader from '../components/PageLoader';
+import { SkeletonCard, SkeletonTable } from '../components/SkeletonRow';
 import PageHeader from '../components/PageHeader';
 import { formatLakhs, toDisplayDate, toJSDate } from '../utils';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
@@ -1214,7 +1214,22 @@ export default function Library() {
       {libraryTab === 'policies' && (
         <>
           {loading ? (
-            <PageLoader />
+            <div className="animate-pulse">
+              {/* Section header */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="h-4 bg-gray-200 rounded w-32" />
+                <div className="h-8 bg-gray-100 rounded-xl w-28" />
+              </div>
+              {/* Card grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[...Array(6)].map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+              <div className="hidden">
+                <SkeletonTable rows={6} />
+              </div>
+            </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {policies.map((policy) => (

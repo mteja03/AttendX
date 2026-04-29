@@ -20,7 +20,7 @@ import Cropper from 'react-easy-crop';
 import { db, app } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { PLATFORM_CONFIG } from '../config/constants';
-import PageLoader from '../components/PageLoader';
+import { SkeletonTable } from '../components/SkeletonRow';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
 import { DOCUMENT_CHECKLIST, getDocById } from '../utils/documentTypes';
@@ -3440,8 +3440,59 @@ export default function EmployeeProfile() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <PageLoader />
+      <div className="animate-pulse">
+
+        {/* Header skeleton */}
+        <div className="bg-white border-b border-gray-100 mb-4">
+          {/* Top color bar */}
+          <div className="h-1.5 bg-gray-200 w-full" />
+
+          {/* Main header body */}
+          <div className="p-5">
+            <div className="flex items-start gap-4">
+
+              {/* Avatar */}
+              <div className="w-16 h-16 rounded-full bg-gray-200 flex-shrink-0" />
+
+              {/* Name + badges */}
+              <div className="flex-1 space-y-2 pt-1">
+                <div className="h-5 bg-gray-200 rounded w-48" />
+                <div className="h-3 bg-gray-100 rounded w-64" />
+                <div className="flex gap-2 mt-2">
+                  <div className="h-5 bg-gray-100 rounded-full w-20" />
+                  <div className="h-5 bg-gray-100 rounded-full w-28" />
+                  <div className="h-5 bg-gray-100 rounded-full w-16" />
+                </div>
+              </div>
+
+              {/* Edit button */}
+              <div className="h-8 bg-gray-200 rounded-xl w-24 flex-shrink-0" />
+            </div>
+          </div>
+
+          {/* Stats row */}
+          <div className="border-t border-gray-100 grid grid-cols-5 divide-x divide-gray-100">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="px-4 py-3 space-y-1.5">
+                <div className="h-2.5 bg-gray-100 rounded w-16" />
+                <div className="h-3.5 bg-gray-200 rounded w-20" />
+              </div>
+            ))}
+          </div>
+
+          {/* Tab bar */}
+          <div className="flex gap-1 px-5 py-2 border-t border-gray-100">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-8 bg-gray-100 rounded-lg w-20" />
+            ))}
+          </div>
+        </div>
+
+        {/* Content area */}
+        <div className="px-4 sm:px-6">
+          <SkeletonTable rows={6} />
+        </div>
+
       </div>
     );
   }

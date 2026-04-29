@@ -14,8 +14,6 @@ import {
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
 import { db } from '../firebase/config';
 import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
@@ -443,7 +441,11 @@ export default function Leave() {
     setLoadingOlderYear(false);
   };
 
-  const downloadLeaveReport = (format) => {
+  const downloadLeaveReport = async (format) => {
+    const [{ default: XLSX }, { saveAs }] = await Promise.all([
+      import('xlsx'),
+      import('file-saver'),
+    ]);
     const rows = filteredLeaves.map((l) => ({
       'Employee Name': l.employeeName || '',
       'Emp ID': employees.find((e) => e.id === l.employeeId)?.empId || '',

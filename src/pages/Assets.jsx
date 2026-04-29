@@ -13,8 +13,6 @@ import {
   where,
   orderBy,
 } from 'firebase/firestore';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { SkeletonTable } from '../components/SkeletonRow';
@@ -1017,7 +1015,11 @@ export default function Assets() {
     }
   };
 
-  const downloadAssets = (format) => {
+  const downloadAssets = async (format) => {
+    const [{ default: XLSX }, { saveAs }] = await Promise.all([
+      import('xlsx'),
+      import('file-saver'),
+    ]);
     if (!company) return;
     const rows = filteredAssets.map((a) => ({
       'Asset ID': a.assetId || '',

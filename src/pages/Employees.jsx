@@ -29,8 +29,6 @@ import { updateCompanyCounts } from '../utils/updateCompanyCounts';
 import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 import { trackEmployeeAdded, trackPageView } from '../utils/analytics';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
 
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal', 'Other'];
 const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
@@ -1152,7 +1150,11 @@ export default function Employees() {
       Status: emp.status || '',
     }));
 
-  const downloadCSV = () => {
+  const downloadCSV = async () => {
+    const [{ default: XLSX }, { saveAs }] = await Promise.all([
+      import('xlsx'),
+      import('file-saver'),
+    ]);
     const rows = downloadRows(filtered);
     const ws = XLSX.utils.json_to_sheet(rows);
     const csv = XLSX.utils.sheet_to_csv(ws);
@@ -1162,7 +1164,8 @@ export default function Employees() {
     setShowDownload(false);
   };
 
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
+    const { default: XLSX } = await import('xlsx');
     const rows = downloadRows(filtered);
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();

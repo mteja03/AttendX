@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
 import {
   BarChart,
   Bar,
@@ -18,7 +16,7 @@ import {
   Line,
   ResponsiveContainer,
 } from 'recharts';
-import PageLoader from '../components/PageLoader';
+import { SkeletonTable } from '../components/SkeletonRow';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
@@ -167,7 +165,8 @@ function getDaysRemainingLastDay(lastDay) {
   return Math.max(0, diff);
 }
 
-function downloadReport(companyName, reportName, data, columns) {
+async function downloadReport(companyName, reportName, data, columns) {
+  const { default: XLSX } = await import('xlsx');
   const rows = data.map((item) => {
     const row = {};
     columns.forEach((col) => {
@@ -1037,7 +1036,8 @@ export default function Reports() {
     };
   }, [activeTab, employees]);
 
-  const handleHeadcountExcel = () => {
+  const handleHeadcountExcel = async () => {
+    const { default: XLSX } = await import('xlsx');
     const rows = employees.map((emp) => ({
       'Emp ID': emp.empId || '',
       Name: emp.fullName || '',
@@ -1059,7 +1059,8 @@ export default function Reports() {
     XLSX.writeFile(wb, `${safeCompanyFile}_Headcount-Report_${today}.xlsx`);
   };
 
-  const handleOffboardingExcel = () => {
+  const handleOffboardingExcel = async () => {
+    const { default: XLSX } = await import('xlsx');
     const wb = XLSX.utils.book_new();
 
     if (noticePeriodReportRows.length > 0) {
@@ -1123,7 +1124,8 @@ export default function Reports() {
     XLSX.writeFile(wb, `${safeCompanyFile}_Offboarding-Report_${new Date().toLocaleDateString('en-GB').split('/').join('-')}.xlsx`);
   };
 
-  const handleCompensationExcel = () => {
+  const handleCompensationExcel = async () => {
+    const { default: XLSX } = await import('xlsx');
     const rows = compensationData.allEmps.map((emp) => ({
       'Emp ID': emp.empId || '',
       Name: emp.fullName || '',
@@ -1144,7 +1146,11 @@ export default function Reports() {
     XLSX.writeFile(wb, `${safeCompanyFile}_Compensation-Report_${today}.xlsx`);
   };
 
-  const downloadEmployeeCSV = () => {
+  const downloadEmployeeCSV = async () => {
+    const [{ default: XLSX }, { saveAs }] = await Promise.all([
+      import('xlsx'),
+      import('file-saver'),
+    ]);
     const rows = filteredEmployeesForReport.map((emp) => ({
       'Emp ID': emp.empId || '',
       'Full Name': emp.fullName || '',
@@ -1167,7 +1173,8 @@ export default function Reports() {
     saveAs(blob, `${safeCompanyFile}_Employees_Report_${today}.csv`);
   };
 
-  const downloadEmployeeExcel = () => {
+  const downloadEmployeeExcel = async () => {
+    const { default: XLSX } = await import('xlsx');
     const rows = filteredEmployeesForReport.map((emp) => ({
       'Emp ID': emp.empId || '',
       'Full Name': emp.fullName || '',
@@ -1569,8 +1576,46 @@ export default function Reports() {
 
   if (loading) {
     return (
-      <div className="p-4 sm:p-8">
-        <PageLoader />
+      <div className="animate-pulse">
+
+        {/* Page header skeleton */}
+        <div className="bg-white border-b border-gray-100 px-6 py-4 mb-0">
+          <div className="flex items-center justify-between mb-4">
+            <div className="space-y-2">
+              <div className="h-5 bg-gray-200 rounded w-24" />
+              <div className="h-3 bg-gray-100 rounded w-48" />
+            </div>
+          </div>
+          {/* Tab bar */}
+          <div className="flex gap-1">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-8 bg-gray-100 rounded-lg w-24" />
+            ))}
+          </div>
+        </div>
+
+        {/* Stat cards */}
+        <div className="p-4 sm:p-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-white border border-gray-100 rounded-2xl p-5 space-y-3">
+                <div className="h-3 bg-gray-100 rounded w-24" />
+                <div className="h-8 bg-gray-200 rounded w-16" />
+                <div className="h-2.5 bg-gray-100 rounded w-32" />
+              </div>
+            ))}
+          </div>
+
+          {/* Chart placeholder */}
+          <div className="bg-white border border-gray-100 rounded-2xl p-5 mb-4">
+            <div className="h-4 bg-gray-200 rounded w-32 mb-4" />
+            <div className="h-48 bg-gray-100 rounded-xl" />
+          </div>
+
+          {/* Table placeholder */}
+          <SkeletonTable rows={5} />
+        </div>
+
       </div>
     );
   }
