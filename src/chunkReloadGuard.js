@@ -5,6 +5,7 @@ function shouldReloadForChunkError(message, filename) {
   const m = message || '';
   return (
     m.includes('Failed to fetch dynamically imported') ||
+    m.includes('error loading dynamically imported module') ||
     m.includes('Loading chunk') ||
     m.includes('Loading CSS chunk') ||
     m.includes('text/html') ||
@@ -20,6 +21,7 @@ function shouldReloadForChunkRejection(reasonStr) {
   const m = reasonStr || '';
   return (
     m.includes('Failed to fetch dynamically imported') ||
+    m.includes('error loading dynamically imported module') ||
     m.includes('Loading chunk') ||
     m.includes('Loading CSS chunk') ||
     m.includes('Failed to load module') ||
