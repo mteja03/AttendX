@@ -1187,10 +1187,15 @@ export default function Employees() {
     }));
 
   const downloadCSV = async () => {
-    const [{ default: XLSX }, { saveAs }] = await Promise.all([
+    const [xlsxMod, { saveAs }] = await Promise.all([
       import('xlsx'),
       import('file-saver'),
     ]);
+    const XLSX = xlsxMod.default || xlsxMod;
+    if (!XLSX?.utils) {
+      showError('Excel library failed to load. Please refresh and try again.');
+      return;
+    }
     const rows = downloadRows(filtered);
     const ws = XLSX.utils.json_to_sheet(rows);
     const csv = XLSX.utils.sheet_to_csv(ws);
@@ -1201,7 +1206,12 @@ export default function Employees() {
   };
 
   const downloadExcel = async () => {
-    const { default: XLSX } = await import('xlsx');
+    const xlsxMod = await import('xlsx');
+    const XLSX = xlsxMod.default || xlsxMod;
+    if (!XLSX?.utils) {
+      showError('Excel library failed to load. Please refresh and try again.');
+      return;
+    }
     const rows = downloadRows(filtered);
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();

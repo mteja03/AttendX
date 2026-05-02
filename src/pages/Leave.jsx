@@ -442,10 +442,15 @@ export default function Leave() {
   };
 
   const downloadLeaveReport = async (format) => {
-    const [{ default: XLSX }, { saveAs }] = await Promise.all([
+    const [xlsxMod, { saveAs }] = await Promise.all([
       import('xlsx'),
       import('file-saver'),
     ]);
+    const XLSX = xlsxMod.default || xlsxMod;
+    if (!XLSX?.utils) {
+      showError('Excel library failed to load. Please refresh and try again.');
+      return;
+    }
     const rows = filteredLeaves.map((l) => ({
       'Employee Name': l.employeeName || '',
       'Emp ID': employees.find((e) => e.id === l.employeeId)?.empId || '',
