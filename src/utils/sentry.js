@@ -15,11 +15,16 @@ export const initSentry = () => {
         'Load failed',
         // Chunk load errors after deploy
         'Failed to fetch dynamically imported module',
+        'error loading dynamically imported module',
         'Loading chunk',
         'Loading CSS chunk',
         'Importing a module script failed',
         'Unable to preload CSS',
         /ChunkLoadError/,
+        // Firebase network blips — user-side, not a bug
+        'Failed to get document because the client is offline',
+        'Could not reach Cloud Firestore backend',
+        'The operation could not be completed',
       ],
       beforeSend(event, hint) {
         const error = hint.originalException;
@@ -36,9 +41,19 @@ export const initSentry = () => {
         const msg = error?.message || '';
         if (
           msg.includes('Failed to fetch dynamically') ||
+          msg.includes('error loading dynamically imported module') ||
           msg.includes('Loading chunk') ||
           msg.includes('Importing a module') ||
           msg.includes('Unable to preload')
+        ) {
+          return null;
+        }
+
+        // Firebase offline / network blips
+        if (
+          msg.includes('client is offline') ||
+          msg.includes('Could not reach Cloud Firestore') ||
+          error?.code === 'unavailable'
         ) {
           return null;
         }
