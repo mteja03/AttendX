@@ -4992,6 +4992,11 @@ function AuditTableRow({
               >
                 {audit.riskLevel || 'Medium'}
               </span>
+              {audit.category && (
+                <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">
+                  🏷️ {audit.category}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -5126,6 +5131,7 @@ function AuditTableRow({
               </p>
             )}
             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+              {audit.category && <span className="text-xs text-gray-500">🏷️ {audit.category}</span>}
               {audit.branch && <span className="text-xs text-gray-500">🏢 {audit.branch}</span>}
               {audit.auditorName && <span className="text-xs text-gray-500">👤 {audit.auditorName}</span>}
               {audit.endDate && (
