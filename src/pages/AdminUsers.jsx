@@ -600,9 +600,9 @@ export default function AdminUsers() {
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
+          <div className="rounded-2xl border border-gray-100 bg-white">
             <div
-              className="hidden gap-4 border-b border-gray-100 bg-gray-50/80 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-400 md:grid"
+              className="hidden gap-4 border-b border-gray-100 bg-gray-50/80 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-400 md:grid first:rounded-t-2xl"
               style={{ gridTemplateColumns: '2fr 1.2fr 1.4fr 1fr 1fr 120px 44px' }}
             >
               <div>User</div>
