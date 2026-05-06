@@ -4146,7 +4146,7 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
                 </div>
               )}
 
-              {audit.status === 'Closed' && audit.auditRating && (
+              {audit.status === 'Closed' && audit.auditRating > 0 && (
                 <div className="bg-white border border-gray-100 rounded-xl p-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Manager Feedback</p>
                   <div className="flex items-center gap-2 mb-2">
@@ -4969,7 +4969,7 @@ function AuditTableRow({
               </p>
             )}
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-              {effStatus(audit.status) === 'Closed' && audit.auditRating && (
+              {effStatus(audit.status) === 'Closed' && audit.auditRating > 0 && (
                 <span className="text-xs text-amber-500 font-medium">{'⭐'.repeat(audit.auditRating)}</span>
               )}
               <span
