@@ -485,7 +485,7 @@ export default function AdminUsers() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="sticky top-0 z-10 border-b border-gray-100 bg-white px-4 py-4 md:px-6">
+      <div className="sticky top-0 z-30 isolate border-b border-gray-100 bg-white px-4 py-4 md:px-6">
         <div className="mb-4 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <h1 className="text-lg font-semibold text-gray-800 sm:text-xl">Platform Users</h1>
