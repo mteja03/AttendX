@@ -1606,10 +1606,10 @@ export default function Library() {
                   id="job-architecture-capture"
                   style={{
                     transform: `scale(${archZoom})`,
-                    transformOrigin: 'top center',
+                    transformOrigin: 'top left',
                   }}
                 >
-                  <div className="flex flex-col items-center pb-8">
+                  <div className="flex flex-col items-start pb-8 min-w-max">
                     {roles.length === 0 ? (
                       <p className="text-sm text-gray-500">No designations to display.</p>
                     ) : roleRoots.length === 0 ? (
