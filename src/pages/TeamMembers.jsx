@@ -6,6 +6,7 @@ import {
   getDocs,
   query,
   where,
+  limit,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -201,7 +202,7 @@ export default function TeamMembers() {
     try {
       const [usersSnap, empSnap] = await Promise.all([
         getDocs(query(collection(db, 'users'), where('companyId', '==', companyId))),
-        getDocs(collection(db, 'companies', companyId, 'employees')),
+        getDocs(query(collection(db, 'companies', companyId, 'employees'), limit(500))),
       ]);
       const emps = empSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const usersList = usersSnap.docs
