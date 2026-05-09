@@ -5252,7 +5252,8 @@ function AuditList({
             a.auditTypeName?.toLowerCase().includes(q) ||
             a.branch?.toLowerCase().includes(q) ||
             a.auditorName?.toLowerCase().includes(q) ||
-            a.location?.toLowerCase().includes(q)
+            a.location?.toLowerCase().includes(q) ||
+            a.category?.toLowerCase().includes(q)
           )
         )
           return false;
@@ -5466,7 +5467,7 @@ function AuditList({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by ID, template, branch, auditor..."
+              placeholder="Search by ID, template, branch, auditor, category..."
               className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
             />
             {search && (
