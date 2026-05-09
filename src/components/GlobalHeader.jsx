@@ -99,7 +99,7 @@ export default function GlobalHeader({ onOpenMenu } = {}) {
     }
   };
 
-  if (!effectiveCompanyId) return null;
+  // Render in all contexts — company-specific elements hidden when no companyId
 
   const userInitial = (currentUser?.displayName || currentUser?.email || 'U').charAt(0).toUpperCase();
   const cardShadow = '0 4px 24px 0 rgba(0,0,0,0.08)';
@@ -121,115 +121,128 @@ export default function GlobalHeader({ onOpenMenu } = {}) {
             </svg>
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => navigate(`/company/${effectiveCompanyId}/dashboard`)}
-          className="flex min-w-0 max-w-full items-center gap-2 sm:gap-3 rounded-xl py-1.5 pl-1 pr-2 sm:pl-2 sm:pr-3.5 hover:bg-gray-50 transition-colors"
-        >
-        <div
-          className="h-8 w-8 sm:h-9 sm:w-9 flex shrink-0 items-center justify-center rounded-lg text-white text-xs font-semibold"
-          style={{ backgroundColor: company?.color || '#1B6B6B' }}
-        >
-          {company?.initials || '—'}
-        </div>
-        <span className="min-w-0 truncate text-left text-sm font-medium text-gray-800 sm:max-w-[min(12rem,40vw)] lg:max-w-[min(20rem,40vw)]">
-          {company?.name || 'Company'}
-        </span>
-        </button>
+        {effectiveCompanyId ? (
+          <button
+            type="button"
+            onClick={() => navigate(`/company/${effectiveCompanyId}/dashboard`)}
+            className="flex min-w-0 max-w-full items-center gap-2 sm:gap-3 rounded-xl py-1.5 pl-1 pr-2 sm:pl-2 sm:pr-3.5 hover:bg-gray-50 transition-colors"
+          >
+            <div
+              className="h-8 w-8 sm:h-9 sm:w-9 flex shrink-0 items-center justify-center rounded-lg text-white text-xs font-semibold"
+              style={{ backgroundColor: company?.color || '#1B6B6B' }}
+            >
+              {company?.initials || '—'}
+            </div>
+            <span className="min-w-0 truncate text-left text-sm font-medium text-gray-800 sm:max-w-[min(12rem,40vw)] lg:max-w-[min(20rem,40vw)]">
+              {company?.name || 'Company'}
+            </span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 pl-1">
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-50 border border-gray-100 p-0.5 flex-shrink-0">
+              <img src="/logo/icon.png" alt="AttendX" className="w-full h-full rounded-md object-cover" />
+            </div>
+            <span className="text-sm font-semibold text-gray-800">AttendX</span>
+          </div>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
-        <button
-          type="button"
-          onClick={() => navigate(`/company/${effectiveCompanyId}/calendar`)}
-          className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-          title="Calendar"
-          aria-label="Calendar"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" />
-            <path d="M16 2v4M8 2v4M3 10h18" />
-          </svg>
-        </button>
-
-        <div className="relative" ref={notifRef}>
-          <button
-            type="button"
-            onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="relative flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-            title="Notifications"
-            aria-label="Notifications"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-            {pendingCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-medium flex items-center justify-center">
-                {pendingCount > 9 ? '9+' : pendingCount}
-              </span>
-            )}
-          </button>
-
-          {notificationsOpen && (
-            <div
-              className="absolute right-0 top-12 z-50 w-[min(20rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] border border-gray-100 rounded-2xl bg-white py-1 overflow-hidden"
-              style={{ boxShadow: cardShadow }}
+        {effectiveCompanyId && (
+          <>
+            <button
+              type="button"
+              onClick={() => navigate(`/company/${effectiveCompanyId}/calendar`)}
+              className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+              title="Calendar"
+              aria-label="Calendar"
             >
-              <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
-                <span className="text-sm font-semibold text-gray-800">Notifications</span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <path d="M16 2v4M8 2v4M3 10h18" />
+              </svg>
+            </button>
+
+            <div className="relative" ref={notifRef}>
+              <button
+                type="button"
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                className="relative flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                title="Notifications"
+                aria-label="Notifications"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
                 {pendingCount > 0 && (
-                  <span className="text-xs bg-[#E1F5EE] text-[#0F6E56] px-2 py-0.5 rounded-full font-medium">
-                    {pendingCount} new
+                  <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-medium flex items-center justify-center">
+                    {pendingCount > 9 ? '9+' : pendingCount}
                   </span>
                 )}
-              </div>
-              {notifications.length === 0 ? (
-                <div className="px-4 py-10 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-[#E1F5EE] flex items-center justify-center mx-auto mb-3">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0F6E56" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M5 13l4 4L19 7" />
-                    </svg>
+              </button>
+
+              {notificationsOpen && (
+                <div
+                  className="absolute right-0 top-12 z-50 w-[min(20rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] border border-gray-100 rounded-2xl bg-white py-1 overflow-hidden"
+                  style={{ boxShadow: cardShadow }}
+                >
+                  <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-gray-800">Notifications</span>
+                    {pendingCount > 0 && (
+                      <span className="text-xs bg-[#E1F5EE] text-[#0F6E56] px-2 py-0.5 rounded-full font-medium">
+                        {pendingCount} new
+                      </span>
+                    )}
                   </div>
-                  <p className="text-sm font-medium text-gray-800 mb-1">All caught up</p>
-                  <p className="text-xs text-gray-400">No pending items right now.</p>
-                </div>
-              ) : (
-                <div className="max-h-80 overflow-y-auto">
-                  {notifications.map((notif) => (
-                    <button
-                      key={notif.id}
-                      type="button"
-                      onClick={() => {
-                        navigate(notif.link);
-                        setNotificationsOpen(false);
-                      }}
-                      className="w-full px-4 py-3 hover:bg-gray-50 text-left border-b border-gray-50 last:border-b-0 transition-colors"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-base"
-                          style={{
-                            background:
-                              notif.type === 'leave' ? '#FAEEDA' : notif.type === 'audit' ? '#EEEDFE' : '#E6F1FB',
-                          }}
-                        >
-                          {notif.type === 'leave' ? '🏖️' : notif.type === 'audit' ? '📋' : '🔔'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{notif.title}</p>
-                          <p className="text-xs text-gray-500 mt-0.5 truncate">{notif.subtitle}</p>
-                        </div>
+                  {notifications.length === 0 ? (
+                    <div className="px-4 py-10 text-center">
+                      <div className="w-12 h-12 rounded-2xl bg-[#E1F5EE] flex items-center justify-center mx-auto mb-3">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0F6E56" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M5 13l4 4L19 7" />
+                        </svg>
                       </div>
-                    </button>
-                  ))}
+                      <p className="text-sm font-medium text-gray-800 mb-1">All caught up</p>
+                      <p className="text-xs text-gray-400">No pending items right now.</p>
+                    </div>
+                  ) : (
+                    <div className="max-h-80 overflow-y-auto">
+                      {notifications.map((notif) => (
+                        <button
+                          key={notif.id}
+                          type="button"
+                          onClick={() => {
+                            navigate(notif.link);
+                            setNotificationsOpen(false);
+                          }}
+                          className="w-full px-4 py-3 hover:bg-gray-50 text-left border-b border-gray-50 last:border-b-0 transition-colors"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div
+                              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-base"
+                              style={{
+                                background:
+                                  notif.type === 'leave' ? '#FAEEDA' : notif.type === 'audit' ? '#EEEDFE' : '#E6F1FB',
+                              }}
+                            >
+                              {notif.type === 'leave' ? '🏖️' : notif.type === 'audit' ? '📋' : '🔔'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate">{notif.title}</p>
+                              <p className="text-xs text-gray-500 mt-0.5 truncate">{notif.subtitle}</p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        <div className="w-px h-6 bg-gray-200 mx-2" />
+            <div className="w-px h-6 bg-gray-200 mx-2" />
+          </>
+        )}
 
         <div className="relative" ref={userRef}>
           <button
