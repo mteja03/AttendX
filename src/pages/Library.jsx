@@ -459,7 +459,7 @@ function JobRoleNode({ node, employees, onView }) {
       {!collapsed && node.children?.length > 0 && (
         <div className="mt-6 flex w-full flex-col items-center">
           <div className="w-px h-6 bg-gray-300" />
-          <div className="flex flex-wrap items-start justify-center">
+          <div className="flex flex-nowrap items-start justify-center">
             {node.children.map((child, idx, arr) => {
               const isFirst = idx === 0;
               const isLast = idx === arr.length - 1;
