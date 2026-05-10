@@ -274,6 +274,47 @@ export default function Companies() {
     [users],
   );
 
+  const companyLastLogin = useMemo(() => {
+    const map = {};
+    users.forEach((u) => {
+      if (!u.companyId || u.role === 'admin') return;
+      const d = u.lastLoginAt?.toDate
+        ? u.lastLoginAt.toDate()
+        : u.lastLoginAt
+          ? new Date(u.lastLoginAt)
+          : null;
+      if (!d) return;
+      if (!map[u.companyId] || d > map[u.companyId]) map[u.companyId] = d;
+    });
+    return map;
+  }, [users]);
+
+  const companyUserCount = useMemo(() => {
+    const map = {};
+    users.forEach((u) => {
+      if (!u.companyId || u.role === 'admin' || u.isActive === false) return;
+      map[u.companyId] = (map[u.companyId] || 0) + 1;
+    });
+    return map;
+  }, [users]);
+
+  const getActivityStatus = (lastLogin, employeeCount) => {
+    if (!employeeCount) return { label: 'Not started', color: 'text-gray-400', dot: 'bg-gray-300' };
+    if (!lastLogin) return { label: 'Never logged in', color: 'text-amber-600', dot: 'bg-amber-400' };
+    const days = (Date.now() - lastLogin.getTime()) / 86400000;
+    if (days < 7) return { label: 'Active', color: 'text-green-600', dot: 'bg-green-500' };
+    if (days < 30) return { label: 'Low activity', color: 'text-amber-500', dot: 'bg-amber-400' };
+    return { label: 'Inactive', color: 'text-red-500', dot: 'bg-red-400' };
+  };
+
+  const formatLastLogin = (date) => {
+    if (!date) return 'Never';
+    const days = Math.floor((Date.now() - date.getTime()) / 86400000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    return `${days}d ago`;
+  };
+
   const adminStats = useMemo(
     () => [
       {
@@ -584,6 +625,56 @@ export default function Companies() {
         )}
       </div>
 
+      {!loading && companies.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Platform Health</h2>
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            {[...companies]
+              .sort((a, b) => {
+                const aL = companyLastLogin[a.id];
+                const bL = companyLastLogin[b.id];
+                if (aL && bL) return bL - aL;
+                if (aL) return -1;
+                if (bL) return 1;
+                return 0;
+              })
+              .map((c, i) => {
+                const lastLogin = companyLastLogin[c.id];
+                const userCount = companyUserCount[c.id] || 0;
+                const status = getActivityStatus(lastLogin, c.employeeCount);
+                return (
+                  <div
+                    key={c.id}
+                    className={`flex items-center gap-3 px-5 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${i !== companies.length - 1 ? 'border-b border-gray-50' : ''}`}
+                    onClick={() => navigate(`/company/${c.id}/dashboard`)}
+                  >
+                    <span className="text-xs text-gray-300 w-4 flex-shrink-0">{i + 1}</span>
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
+                      style={{ background: c.color || '#1B6B6B' }}
+                    >
+                      {c.initials || '—'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{c.name}</p>
+                      <p className="text-xs text-gray-400">
+                        {c.employeeCount || 0} employee{c.employeeCount !== 1 ? 's' : ''} · {userCount} user{userCount !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className={`flex items-center gap-1.5 justify-end text-xs font-medium ${status.color}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+                        {status.label}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">Last login: {formatLastLogin(lastLogin)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
       <div className="mb-4 flex flex-wrap gap-3 items-center">
         <input
           type="text"
@@ -677,8 +768,8 @@ export default function Companies() {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 py-3 border-t border-b border-gray-50 mb-3 relative z-10">
-                <>
+              <div className="py-3 border-t border-b border-gray-50 mb-3 relative z-10">
+                <div className="flex flex-wrap items-center gap-3 mb-2">
                   {getCount(c).active > 0 && (
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full bg-green-500" />
@@ -700,7 +791,22 @@ export default function Companies() {
                   {getCount(c).total === 0 && (
                     <span className="text-xs text-gray-400">No employees yet</span>
                   )}
-                </>
+                </div>
+                <div className="flex items-center justify-between">
+                  {(() => {
+                    const status = getActivityStatus(companyLastLogin[c.id], c.employeeCount);
+                    return (
+                      <div className={`flex items-center gap-1.5 text-xs font-medium ${status.color}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+                        {status.label}
+                      </div>
+                    );
+                  })()}
+                  <span className="text-xs text-gray-400">
+                    {companyUserCount[c.id] || 0} user{(companyUserCount[c.id] || 0) !== 1 ? 's' : ''}
+                    {companyLastLogin[c.id] ? ` · ${formatLastLogin(companyLastLogin[c.id])}` : ''}
+                  </span>
+                </div>
               </div>
 
               <button
