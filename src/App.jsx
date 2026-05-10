@@ -12,6 +12,7 @@ import { ToastProvider } from './contexts/ToastContext';
 
 const Companies = lazy(() => import('./pages/Companies'));
 const AdminUsers = lazy(() => import('./pages/AdminUsers'));
+const Analytics = lazy(() => import('./pages/Analytics'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Employees = lazy(() => import('./pages/Employees'));
 const Leave = lazy(() => import('./pages/Leave'));
@@ -147,6 +148,16 @@ function AppRoutes() {
               <RoleRoute allowedRoles={['admin', 'companyadmin']}>
                 <ErrorBoundary>
                   <AdminUsers />
+                </ErrorBoundary>
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="admin/analytics"
+            element={
+              <RoleRoute allowedRoles={['admin']}>
+                <ErrorBoundary>
+                  <Analytics />
                 </ErrorBoundary>
               </RoleRoute>
             }

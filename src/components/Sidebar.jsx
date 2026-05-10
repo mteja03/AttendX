@@ -296,6 +296,15 @@ function Sidebar({ isOpen = false, onClose }) {
                     </>
                   )}
                 </NavLink>
+                <NavLink to="/admin/analytics" onClick={() => onClose?.()} className={({ isActive }) => linkClass(isActive)}>
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <ActiveBar />}
+                      <BarChartIcon className="w-4 h-4 shrink-0" />
+                      Analytics
+                    </>
+                  )}
+                </NavLink>
               </div>
             </div>
 
