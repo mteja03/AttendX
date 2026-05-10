@@ -373,73 +373,11 @@ export default function Login() {
               </p>
             </div>
 
-            {/* What's new */}
-            <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#E1F5EE]">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1B6B6B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                    </svg>
-                  </span>
-                  <span className="text-[12.5px] font-semibold text-gray-700">What's new</span>
-                </div>
-                <span className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">May 2026</span>
-              </div>
-              <ul className="space-y-2.5">
-                {[
-                  { tag: 'NEW', tagColor: 'bg-[#E1F5EE] text-[#0F6E56]', text: 'Platform analytics dashboard for admins' },
-                  { tag: 'IMPROVED', tagColor: 'bg-blue-50 text-blue-700', text: 'Job architecture connector lines & layout' },
-                  { tag: 'FIXED', tagColor: 'bg-amber-50 text-amber-700', text: 'Admin user menu clipping in tables' },
-                ].map((item) => (
-                  <li key={item.text} className="flex items-start gap-2.5">
-                    <span className={`text-[9.5px] font-bold tracking-wider px-1.5 py-0.5 rounded mt-0.5 flex-shrink-0 ${item.tagColor}`}>
-                      {item.tag}
-                    </span>
-                    <span className="text-[12px] text-gray-600 leading-relaxed">{item.text}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Support shortcut */}
-            <a
-              href="mailto:support@attendx.in?subject=Access%20request"
-              className="group mt-3 flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-gray-100 hover:border-[#1B6B6B]/30 hover:bg-[#1B6B6B]/[0.02] transition-colors"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="w-8 h-8 rounded-xl bg-[#1B6B6B]/8 flex items-center justify-center flex-shrink-0 ring-1 ring-[#1B6B6B]/10">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1B6B6B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
-                  </svg>
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[13px] font-medium text-gray-800 leading-tight">Trouble signing in?</p>
-                  <p className="text-[11.5px] text-gray-400 mt-0.5 truncate">Reach out to your HR admin or support team</p>
-                </div>
-              </div>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true">
-                <line x1="5" y1="12" x2="19" y2="12" />
-                <polyline points="12 5 19 12 12 19" />
-              </svg>
-            </a>
-
             {/* Footer */}
-            <div className="mt-8 flex flex-col items-center gap-3">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 ring-1 ring-emerald-100">
-                <span className="relative flex w-1.5 h-1.5">
-                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
-                  <span className="relative inline-flex rounded-full w-1.5 h-1.5 bg-emerald-500" />
-                </span>
-                <span className="text-[10.5px] font-medium text-emerald-700">All systems operational</span>
-              </div>
-              <div className="flex items-center justify-center gap-1.5 text-[11.5px] text-gray-300">
-                <span>© 2026 AttendX</span>
-                <span aria-hidden>·</span>
-                <span>HR Platform</span>
-                <span aria-hidden>·</span>
-                <span>Made in India</span>
-              </div>
+            <div className="flex items-center justify-center gap-1.5 mt-8 text-[11.5px] text-gray-300">
+              <span>© 2026 AttendX</span>
+              <span aria-hidden>·</span>
+              <span>HR Platform</span>
             </div>
           </div>
         </div>
