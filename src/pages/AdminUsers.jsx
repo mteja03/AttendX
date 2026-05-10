@@ -639,6 +639,15 @@ export default function AdminUsers() {
               <button type="button" onClick={() => { setShowAddModal(false); setEditingUser(null); }} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
             {formError && <p className="mb-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>}
+            {currentUserRole === 'admin' && (
+              <div className="mb-4">
+                <label className="text-xs text-gray-500 block mb-1.5">Assign to Company</label>
+                <select value={form.companyId || ''} onChange={(e) => setForm((p) => ({ ...p, companyId: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]">
+                  <option value="">Select company...</option>
+                  {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            )}
             {!editingUser && (
               <div className="grid grid-cols-2 gap-3 mb-5">
                 {[{ id: 'employee', icon: '👤', label: 'Select Employee', sub: 'From your employee list' }, { id: 'manual', icon: '✉️', label: 'Enter Manually', sub: 'Gmail + Full Name' }].map((m) => (
@@ -707,16 +716,6 @@ export default function AdminUsers() {
                       <button key={opt.v} type="button" onClick={() => setForm((p) => ({ ...p, auditScope: opt.v }))} className={`py-2 rounded-xl text-xs font-medium border-2 transition-all ${form.auditScope === opt.v ? 'border-[#1B6B6B] bg-[#E8F5F5] text-[#1B6B6B]' : 'border-gray-200 text-gray-500'}`}>{opt.l}</button>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {currentUserRole === 'admin' && (
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1.5">Assign to Company</label>
-                  <select value={form.companyId || ''} onChange={(e) => setForm((p) => ({ ...p, companyId: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]">
-                    <option value="">Select company...</option>
-                    {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
                 </div>
               )}
 
