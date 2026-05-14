@@ -169,7 +169,7 @@ export default function Login() {
               </span>
             </h1>
             <p className="text-[15px] leading-relaxed text-[#9FE1CB]/90 max-w-[340px] mb-10">
-              A complete HRIS for Indian businesses — from day one to exit. Built for teams that need clarity, not clutter.
+              AttendX is a complete HR platform for Indian businesses — from day one to exit. Built for teams that need clarity, not clutter.
             </p>
 
             <ul className="flex flex-col gap-4">
@@ -263,7 +263,7 @@ export default function Login() {
               Attend<span className="text-[#1B6B6B]">X</span>
             </span>
           </div>
-          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">HRIS</span>
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">HR Platform</span>
         </div>
 
         {/* Centered login form */}
