@@ -37,22 +37,30 @@ export const initSentry = () => {
           return null;
         }
 
-        // Don't send chunk load errors
+        // Check message on both hint.originalException AND event exception values
+        // (handled errors caught by React error boundaries have different shapes)
         const msg = error?.message || '';
+        const allMsgs = [
+          msg,
+          ...(event?.exception?.values?.map((v) => v.value || '') || []),
+        ].join(' ');
+
+        // Don't send chunk load errors (any browser/shape variant)
         if (
-          msg.includes('Failed to fetch dynamically') ||
-          msg.includes('error loading dynamically imported module') ||
-          msg.includes('Loading chunk') ||
-          msg.includes('Importing a module') ||
-          msg.includes('Unable to preload')
+          allMsgs.includes('Failed to fetch dynamically') ||
+          allMsgs.includes('error loading dynamically imported module') ||
+          allMsgs.includes('Loading chunk') ||
+          allMsgs.includes('Importing a module') ||
+          allMsgs.includes('Unable to preload') ||
+          allMsgs.includes('dynamically imported module')
         ) {
           return null;
         }
 
         // Firebase offline / network blips
         if (
-          msg.includes('client is offline') ||
-          msg.includes('Could not reach Cloud Firestore') ||
+          allMsgs.includes('client is offline') ||
+          allMsgs.includes('Could not reach Cloud Firestore') ||
           error?.code === 'unavailable'
         ) {
           return null;
