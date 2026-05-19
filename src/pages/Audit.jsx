@@ -6036,7 +6036,7 @@ function AuditHistory({ audits, company }) {
   );
 }
 
-function FindingsView({ audits }) {
+function FindingsView({ audits, onSelect = () => {} }) {
   const [severityFilter, setSeverityFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
 
@@ -6127,7 +6127,14 @@ function FindingsView({ audits }) {
             const st = STATUS_STYLE[f.status] || STATUS_STYLE.Open;
             const isLast = i === filtered.length - 1;
             return (
-              <div key={`${f.auditId}-${f.id}`} className={`flex items-center gap-3 px-4 py-3 ${isLast ? '' : 'border-b border-gray-50'}`}>
+              <div
+                key={`${f.auditId}-${f.id}`}
+                className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#F8FFFE] transition-colors ${isLast ? '' : 'border-b border-gray-50'}`}
+                onClick={() => { const a = (audits || []).find((x) => x.id === f.auditId); if (a) onSelect(a); }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter') { const a = (audits || []).find((x) => x.id === f.auditId); if (a) onSelect(a); } }}
+              >
                 <div className="w-0.5 h-9 rounded-full flex-shrink-0" style={{ background: sev.bar, borderRadius: 0 }} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-800 font-medium leading-snug truncate">{f.description}</p>
@@ -6164,7 +6171,7 @@ function BranchScoreChart({ audits }) {
 
   const branchScores = useMemo(() => {
     const closed = (audits || []).filter(
-      (a) => effStatus(a.status) === 'Closed' && a.auditTypeId === activeId,
+      (a) => effStatus(a.status) === 'Closed' && (templateOptions.length === 0 || a.auditTypeId === activeId),
     );
     const map = {};
     closed.forEach((a) => {
@@ -6182,9 +6189,9 @@ function BranchScoreChart({ audits }) {
         count,
       }))
       .sort((a, b) => b.avg - a.avg);
-  }, [audits, activeId]);
+  }, [audits, activeId, templateOptions]);
 
-  if (templateOptions.length === 0 || branchScores.length === 0) return null;
+  if (branchScores.length === 0) return null;
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl p-5">
@@ -6618,7 +6625,7 @@ export default function Audit() {
         {activeTab === 'history' && (
           <AuditHistory audits={visibleAudits} company={effectiveCompany} />
         )}
-        {activeTab === 'findings' && <FindingsView audits={visibleAudits} />}
+        {activeTab === 'findings' && <FindingsView audits={visibleAudits} onSelect={(a) => setSelectedAudit(a)} />}
         {activeTab === 'reports' && <AuditReports audits={visibleAudits} />}
       </div>
 
