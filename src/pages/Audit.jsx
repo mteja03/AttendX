@@ -3236,6 +3236,32 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
               </div>
             </div>
             <div className="flex items-center gap-2 ml-2 shrink-0">
+              {complianceScore !== null && (
+                <div className="flex flex-col items-center" title={`Compliance score: ${complianceScore}%`}>
+                  <svg width="54" height="34" viewBox="0 0 54 34" aria-label={`Compliance score ${complianceScore}%`}>
+                    <path d="M5 30 A22 22 0 0 1 49 30" fill="none" stroke="#F3F4F6" strokeWidth="6" strokeLinecap="round" />
+                    <path
+                      d="M5 30 A22 22 0 0 1 49 30"
+                      fill="none"
+                      stroke={complianceScore >= 80 ? '#639922' : complianceScore >= 60 ? '#EF9F27' : '#E24B4A'}
+                      strokeWidth="6"
+                      strokeLinecap="round"
+                      strokeDasharray="69.1"
+                      strokeDashoffset={69.1 * (1 - complianceScore / 100)}
+                    />
+                    <text
+                      x="27"
+                      y="28"
+                      textAnchor="middle"
+                      fontSize="10"
+                      fontWeight="600"
+                      fill={complianceScore >= 80 ? '#639922' : complianceScore >= 60 ? '#EF9F27' : '#E24B4A'}
+                    >
+                      {complianceScore}%
+                    </text>
+                  </svg>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 {autoSaving && (
                   <span className="text-xs text-gray-400 flex items-center gap-1">
