@@ -1216,6 +1216,21 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
     }
   };
 
+  const duplicateType = async (type) => {
+    try {
+      const { id: _omit, ...typeData } = type;
+      await addDoc(collection(db, 'companies', companyId, 'auditTypes'), {
+        ...typeData,
+        name: `Copy of ${type.name}`,
+        createdAt: new Date(),
+      });
+      showSuccess(`"Copy of ${type.name}" created`);
+    } catch (e) {
+      if (import.meta.env.DEV) console.error('Duplicate type error', e);
+      showError('Failed to duplicate template');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} role="presentation" />
@@ -1322,6 +1337,15 @@ function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSucces
                     <div className="flex gap-1 ml-2">
                       <button type="button" onClick={() => openEdit(type)} className="rounded-xl px-3 py-1.5 text-xs text-[#1B6B6B] hover:bg-[#E8F5F5]">
                         Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => duplicateType(type)}
+                        title="Duplicate template"
+                        aria-label="Duplicate template"
+                        className="rounded-xl px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100"
+                      >
+                        Copy
                       </button>
                       <button type="button" onClick={() => handleDelete(type)} className="rounded-xl px-3 py-1.5 text-xs text-red-400 hover:bg-red-50">
                         Delete
@@ -2226,6 +2250,7 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [closeFeedback, setCloseFeedback] = useState('');
   const [auditRating, setAuditRating] = useState(0);
+  const [collapsedSections, setCollapsedSections] = useState(() => new Set());
   const [newFinding, setNewFinding] = useState({
     description: '',
     severity: 'Medium',
@@ -3409,8 +3434,34 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
               ) : (
                 sections.map((section) => (
                   <div key={section}>
-                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 pb-2 border-b border-gray-100">{section}</h4>
-                    <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedSections((prev) => {
+                        const n = new Set(prev);
+                        if (n.has(section)) n.delete(section); else n.add(section);
+                        return n;
+                      })}
+                      className="w-full flex items-center justify-between mb-3 pb-2 border-b border-gray-100 hover:opacity-75 transition-opacity"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: collapsedSections.has(section) ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }} aria-hidden="true">
+                          <path d="M2 3l3 3 3-3"/>
+                        </svg>
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{section}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                          {checklistReview.filter((i) => i.section === section && (i.result === 'pass' || i.result === 'fail' || i.result === 'na')).length}/{checklistReview.filter((i) => i.section === section).length}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        {checklistReview.filter((i) => i.section === section && i.result === 'pass').length > 0 && (
+                          <span style={{ color: '#3B6D11' }}>{checklistReview.filter((i) => i.section === section && i.result === 'pass').length} pass</span>
+                        )}
+                        {checklistReview.filter((i) => i.section === section && i.result === 'fail').length > 0 && (
+                          <span style={{ color: '#A32D2D' }}>{checklistReview.filter((i) => i.section === section && i.result === 'fail').length} fail</span>
+                        )}
+                      </div>
+                    </button>
+                    <div className={`space-y-3 ${collapsedSections.has(section) ? 'hidden' : ''}`}>
                       {checklistReview
                         .filter((i) => i.section === section)
                         .map((item) => (
@@ -5985,6 +6036,197 @@ function AuditHistory({ audits, company }) {
   );
 }
 
+function FindingsView({ audits }) {
+  const [severityFilter, setSeverityFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
+
+  const allFindings = useMemo(() => {
+    const rows = [];
+    (audits || []).forEach((a) => {
+      (a.findings || []).forEach((f) => {
+        rows.push({
+          ...f,
+          auditRefId: a.auditRefId || a.id,
+          auditTypeName: a.auditTypeName || '—',
+          branch: a.branch || a.location || '—',
+          auditId: a.id,
+        });
+      });
+    });
+    return rows.sort((a, b) => {
+      const sevOrder = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+      return (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9);
+    });
+  }, [audits]);
+
+  const filtered = useMemo(() => allFindings.filter((f) => {
+    if (severityFilter !== 'All' && f.severity !== severityFilter) return false;
+    if (statusFilter !== 'All' && f.status !== statusFilter) return false;
+    return true;
+  }), [allFindings, severityFilter, statusFilter]);
+
+  const counts = useMemo(() => ({
+    Critical: allFindings.filter((f) => f.severity === 'Critical').length,
+    High: allFindings.filter((f) => f.severity === 'High').length,
+    Medium: allFindings.filter((f) => f.severity === 'Medium').length,
+    Low: allFindings.filter((f) => f.severity === 'Low').length,
+    Open: allFindings.filter((f) => f.status !== 'Resolved').length,
+    Resolved: allFindings.filter((f) => f.status === 'Resolved').length,
+  }), [allFindings]);
+
+  const SEV_STYLE = {
+    Critical: { bar: '#E24B4A', bg: '#FCEBEB', text: '#791F1F' },
+    High:     { bar: '#EF9F27', bg: '#FAEEDA', text: '#633806' },
+    Medium:   { bar: '#378ADD', bg: '#E6F1FB', text: '#0C447C' },
+    Low:      { bar: '#639922', bg: '#EAF3DE', text: '#27500A' },
+  };
+
+  const STATUS_STYLE = {
+    Resolved:    { bg: '#EAF3DE', text: '#3B6D11' },
+    'In Progress': { bg: '#FAEEDA', text: '#854F0B' },
+    Open:        { bg: '#FCEBEB', text: '#A32D2D' },
+  };
+
+  if (allFindings.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+        <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mb-4 text-2xl">🔍</div>
+        <p className="text-sm font-medium text-gray-700 mb-1">No findings yet</p>
+        <p className="text-xs text-gray-400">Findings added during audits will appear here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-wrap gap-2 mb-4">
+        {[['Critical', '#FCEBEB', '#791F1F'], ['High', '#FAEEDA', '#633806'], ['Medium', '#E6F1FB', '#0C447C'], ['Low', '#EAF3DE', '#27500A']].map(([sev, bg, color]) => (
+          counts[sev] > 0 && (
+            <span key={sev} className="text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer" style={{ background: bg, color }} onClick={() => setSeverityFilter(severityFilter === sev ? 'All' : sev)}>
+              {sev} {counts[sev]}
+              {severityFilter === sev && ' ✕'}
+            </span>
+          )
+        ))}
+        <div className="ml-auto flex gap-2 flex-wrap">
+          {['All', 'Open', 'In Progress', 'Resolved'].map((s) => (
+            <button key={s} type="button" onClick={() => setStatusFilter(s)}
+              className={`text-xs px-3 py-1 rounded-lg border transition-colors ${statusFilter === s ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="text-xs text-gray-400 mb-3">{filtered.length} finding{filtered.length !== 1 ? 's' : ''} · {counts.Open} open · {counts.Resolved} resolved</div>
+      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+        {filtered.length === 0 ? (
+          <div className="text-center py-10 text-sm text-gray-400">No findings match the selected filters</div>
+        ) : (
+          filtered.map((f, i) => {
+            const sev = SEV_STYLE[f.severity] || SEV_STYLE.Low;
+            const st = STATUS_STYLE[f.status] || STATUS_STYLE.Open;
+            const isLast = i === filtered.length - 1;
+            return (
+              <div key={`${f.auditId}-${f.id}`} className={`flex items-center gap-3 px-4 py-3 ${isLast ? '' : 'border-b border-gray-50'}`}>
+                <div className="w-0.5 h-9 rounded-full flex-shrink-0" style={{ background: sev.bar, borderRadius: 0 }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-800 font-medium leading-snug truncate">{f.description}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{f.auditRefId} · {f.branch}{f.ownerName ? ` · ${f.ownerName}` : ''}</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: sev.bg, color: sev.text }}>{f.severity}</span>
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: st.bg, color: st.text }}>{f.status || 'Open'}</span>
+                  {f.targetDate && <span className="text-xs text-gray-400 hidden sm:inline">{f.targetDate}</span>}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BranchScoreChart({ audits }) {
+  const [selectedTypeId, setSelectedTypeId] = useState('');
+
+  const templateOptions = useMemo(() => {
+    const map = {};
+    (audits || []).forEach((a) => {
+      if (a.auditTypeId && a.auditTypeName && !map[a.auditTypeId]) {
+        map[a.auditTypeId] = a.auditTypeName;
+      }
+    });
+    return Object.entries(map).map(([id, name]) => ({ id, name }));
+  }, [audits]);
+
+  const activeId = selectedTypeId || templateOptions[0]?.id || '';
+
+  const branchScores = useMemo(() => {
+    const closed = (audits || []).filter(
+      (a) => effStatus(a.status) === 'Closed' && a.auditTypeId === activeId,
+    );
+    const map = {};
+    closed.forEach((a) => {
+      const branch = a.branch || a.location || '—';
+      const score = getAuditScore(a);
+      if (score === null) return;
+      if (!map[branch]) map[branch] = { total: 0, count: 0 };
+      map[branch].total += score;
+      map[branch].count += 1;
+    });
+    return Object.entries(map)
+      .map(([branch, { total, count }]) => ({
+        branch,
+        avg: Math.round(total / count),
+        count,
+      }))
+      .sort((a, b) => b.avg - a.avg);
+  }, [audits, activeId]);
+
+  if (templateOptions.length === 0 || branchScores.length === 0) return null;
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-2xl p-5">
+      <div className="flex flex-col sm:flex-row sm:items-start gap-3 mb-5">
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-gray-700">Branch score comparison</p>
+          <p className="text-xs text-gray-400 mt-0.5">Average compliance score across branches for closed audits</p>
+        </div>
+        <select
+          value={activeId}
+          onChange={(e) => setSelectedTypeId(e.target.value)}
+          className="border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none focus:border-[#1B6B6B] bg-white flex-shrink-0"
+        >
+          {templateOptions.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {branchScores.map(({ branch, avg, count }) => {
+          const barColor = avg >= 80 ? '#639922' : avg >= 60 ? '#EF9F27' : '#E24B4A';
+          const textColor = avg >= 80 ? '#EAF3DE' : '#fff';
+          return (
+            <div key={branch} className="flex items-center gap-3">
+              <span className="text-xs text-gray-500 w-28 sm:w-36 flex-shrink-0 truncate" title={branch}>{branch}</span>
+              <div className="flex-1 h-6 bg-gray-100 rounded-lg overflow-hidden">
+                <div
+                  className="h-full flex items-center px-2.5 rounded-lg transition-all duration-500"
+                  style={{ width: `${Math.max(avg, 8)}%`, background: barColor, minWidth: '36px' }}
+                >
+                  <span className="text-xs font-medium" style={{ color: textColor }}>{avg}%</span>
+                </div>
+              </div>
+              <span className="text-xs text-gray-400 w-14 text-right flex-shrink-0">{count} audit{count !== 1 ? 's' : ''}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function AuditReports({ audits }) {
   const closedAudits = audits.filter((a) => effStatus(a.status) === 'Closed');
   const overallScores = closedAudits.map((a) => getAuditScore(a)).filter((s) => s !== null);
@@ -6101,7 +6343,8 @@ function AuditReports({ audits }) {
 
       <div className="bg-white border border-gray-100 rounded-2xl p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">👤 Auditor Performance</h3>
-        {auditorPerf.length === 0 ? (
+        <BranchScoreChart audits={audits} />
+      {auditorPerf.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">No data</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -6257,6 +6500,7 @@ export default function Audit() {
       canManage
         ? [
             { id: 'history', label: 'History', icon: '📅' },
+            { id: 'findings', label: 'All Findings', icon: '🔍' },
             { id: 'reports', label: 'Reports', icon: '📈' },
           ]
         : [];
@@ -6374,6 +6618,7 @@ export default function Audit() {
         {activeTab === 'history' && (
           <AuditHistory audits={visibleAudits} company={effectiveCompany} />
         )}
+        {activeTab === 'findings' && <FindingsView audits={visibleAudits} />}
         {activeTab === 'reports' && <AuditReports audits={visibleAudits} />}
       </div>
 
