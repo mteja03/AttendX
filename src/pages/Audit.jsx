@@ -3338,14 +3338,14 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
                         <div key={step} className="flex flex-col items-center gap-1 z-10 flex-1 min-w-0">
                           <div
                             className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors"
-                            style={{ background: isDone ? '#1B6B6B' : isCur ? '#E1F5EE' : '#F3F4F6', border: isCur ? '2px solid #1B6B6B' : 'none' }}
+                            style={{ background: isDone || isCur ? '#1B6B6B' : '#F3F4F6' }}
                           >
                             {isDone && (
                               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
                                 <path d="M2 5l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                             )}
-                            {isCur && <div className="w-2 h-2 rounded-full" style={{ background: '#1B6B6B' }} />}
+                            {isCur && !isDone && <div className="w-2 h-2 rounded-full bg-white" />}
                           </div>
                           <div className="text-center px-0.5 w-full">
                             <p
