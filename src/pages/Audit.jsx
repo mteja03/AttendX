@@ -3254,15 +3254,106 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
               {canManage && approvedCount > 0 && (
                 <p className="text-xs text-gray-400 mt-1">Manager reviewed: {approvedCount}/{totalItems} items</p>
               )}
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden flex">
-                <div className="h-full bg-green-400 transition-all" style={{ width: totalItems > 0 ? `${(passCount / totalItems) * 100}%` : '0%' }} />
-                <div className="h-full bg-red-400 transition-all" style={{ width: totalItems > 0 ? `${(failCount / totalItems) * 100}%` : '0%' }} />
-                <div className="h-full bg-gray-300 transition-all" style={{ width: totalItems > 0 ? `${(naCount / totalItems) * 100}%` : '0%' }} />
+              {(() => {
+                const STATUS_ORDER = ['Assigned', 'In Progress', 'Submitted', 'Under Review', 'Closed'];
+                const curSt = effStatus(audit.status);
+                const curIdx = STATUS_ORDER.indexOf(curSt === 'Sent Back' ? 'Submitted' : curSt);
+                const isClosed = curSt === 'Closed';
+                const stepDate = (step) => {
+                  if (step === 'In Progress' && audit.startDate) return audit.startDate.slice(0, 10).split('-').reverse().join('/');
+                  if (step === 'Closed' && audit.closedAt) {
+                    try {
+                      const d = audit.closedAt?.toDate ? audit.closedAt.toDate() : new Date(audit.closedAt);
+                      return d instanceof Date && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB') : null;
+                    } catch { return null; }
+                  }
+                  return null;
+                };
+                return (
+                  <div className="relative flex items-start justify-between pt-3 pb-1 mb-2">
+                    <div className="absolute top-[28px] left-3 right-3 h-0.5 bg-gray-100" />
+                    <div
+                      className="absolute top-[28px] left-3 h-0.5 transition-all duration-500"
+                      style={{
+                        background: '#1B6B6B',
+                        width: curIdx <= 0 ? '0%' : `calc(${(curIdx / (STATUS_ORDER.length - 1)) * 100}% - 6px)`,
+                      }}
+                    />
+                    {STATUS_ORDER.map((step, idx) => {
+                      const isDone = isClosed || idx < curIdx;
+                      const isCur = !isClosed && idx === curIdx;
+                      const date = stepDate(step);
+                      return (
+                        <div key={step} className="flex flex-col items-center gap-1 z-10 flex-1 min-w-0">
+                          <div
+                            className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors"
+                            style={{ background: isDone ? '#1B6B6B' : isCur ? '#E1F5EE' : '#F3F4F6', border: isCur ? '2px solid #1B6B6B' : 'none' }}
+                          >
+                            {isDone && (
+                              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                                <path d="M2 5l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                            {isCur && <div className="w-2 h-2 rounded-full" style={{ background: '#1B6B6B' }} />}
+                          </div>
+                          <div className="text-center px-0.5 w-full">
+                            <p
+                              className="text-[10px] font-medium leading-tight truncate"
+                              style={{ color: isDone || isCur ? '#1B6B6B' : '#9CA3AF' }}
+                            >
+                              {step}
+                            </p>
+                            {date && <p className="text-[10px] text-gray-400 mt-0.5">{date}</p>}
+                            {curSt === 'Sent Back' && step === 'Submitted' && (
+                              <p className="text-[10px] mt-0.5" style={{ color: '#E24B4A' }}>Sent back</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-gray-700">
+                  {passCount + failCount + naCount} of {totalItems} reviewed
+                </span>
+                <span className="text-xs text-gray-400">
+                  {totalItems - passCount - failCount - naCount > 0
+                    ? `${totalItems - passCount - failCount - naCount} pending`
+                    : '✓ Complete'}
+                </span>
               </div>
-              <div className="flex gap-3 mt-1 flex-wrap">
-                {passCount > 0 && <span className="text-xs text-green-600">● {passCount} Pass</span>}
-                {failCount > 0 && <span className="text-xs text-red-500">● {failCount} Fail</span>}
-                {naCount > 0 && <span className="text-xs text-gray-400">● {naCount} N/A</span>}
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                <div className="h-full transition-all" style={{ width: totalItems > 0 ? `${(passCount / totalItems) * 100}%` : '0%', background: '#639922' }} />
+                <div className="h-full transition-all" style={{ width: totalItems > 0 ? `${(failCount / totalItems) * 100}%` : '0%', background: '#E24B4A' }} />
+                <div className="h-full transition-all" style={{ width: totalItems > 0 ? `${(naCount / totalItems) * 100}%` : '0%', background: '#B4B2A9' }} />
+              </div>
+              <div className="flex gap-3 mt-1.5 flex-wrap">
+                {passCount > 0 && (
+                  <span className="text-xs flex items-center gap-1" style={{ color: '#3B6D11' }}>
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#639922' }} />
+                    {passCount} pass
+                  </span>
+                )}
+                {failCount > 0 && (
+                  <span className="text-xs flex items-center gap-1" style={{ color: '#A32D2D' }}>
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#E24B4A' }} />
+                    {failCount} fail
+                  </span>
+                )}
+                {naCount > 0 && (
+                  <span className="text-xs flex items-center gap-1 text-gray-400">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0 bg-gray-300" />
+                    {naCount} N/A
+                  </span>
+                )}
+                {(totalItems - passCount - failCount - naCount) > 0 && (
+                  <span className="text-xs flex items-center gap-1 text-gray-300">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0 bg-gray-200" />
+                    {totalItems - passCount - failCount - naCount} pending
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -3623,6 +3714,14 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
                               ? 'bg-red-50 border-red-200'
                               : 'bg-white border-gray-100'
                         }`}
+                        style={{
+                          borderLeftWidth: '3px',
+                          borderLeftColor:
+                            finding.severity === 'Critical' ? '#E24B4A'
+                            : finding.severity === 'High' ? '#EF9F27'
+                            : finding.severity === 'Medium' ? '#378ADD'
+                            : '#639922',
+                        }}
                       >
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <p className="text-sm font-medium text-gray-800 flex-1">{finding.description}</p>
@@ -4393,14 +4492,32 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
                 <span className="text-gray-500">Findings added</span>
                 <span className="font-medium">{findings.filter((f) => f.addedByRole === 'auditor').length}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Score</span>
-                <span
-                  className={`font-bold ${(getAuditScore({ checklistReview }) || 0) >= 80 ? 'text-green-600' : 'text-amber-600'}`}
-                >
-                  {getAuditScore({ checklistReview }) !== null ? `${getAuditScore({ checklistReview })}%` : '—'}
-                </span>
-              </div>
+              {(() => {
+                const sc = getAuditScore({ checklistReview });
+                if (sc === null) return (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Score</span>
+                    <span className="font-medium text-gray-400">—</span>
+                  </div>
+                );
+                const color = sc >= 80 ? '#639922' : sc >= 60 ? '#EF9F27' : '#E24B4A';
+                const labelBg = sc >= 80 ? '#EAF3DE' : sc >= 60 ? '#FAEEDA' : '#FCEBEB';
+                const labelTxt = sc >= 80 ? '#3B6D11' : sc >= 60 ? '#633806' : '#791F1F';
+                const lbl = sc >= 80 ? 'Excellent' : sc >= 60 ? 'Needs attention' : 'Critical';
+                const arc = 113.1;
+                const offset = arc * (1 - sc / 100);
+                return (
+                  <div className="flex flex-col items-center py-1">
+                    <svg width="90" height="52" viewBox="0 0 90 52" aria-label={`Compliance score ${sc}%`}>
+                      <path d="M9 48 A36 36 0 0 1 81 48" fill="none" stroke="#F3F4F6" strokeWidth="8" strokeLinecap="round" />
+                      <path d="M9 48 A36 36 0 0 1 81 48" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"
+                        strokeDasharray={arc} strokeDashoffset={offset} />
+                      <text x="45" y="44" textAnchor="middle" fontSize="15" fontWeight="600" fill={color}>{sc}%</text>
+                    </svg>
+                    <span className="text-xs font-medium px-2.5 py-0.5 rounded-full" style={{ background: labelBg, color: labelTxt }}>{lbl}</span>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="flex gap-3">
