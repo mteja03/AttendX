@@ -88,6 +88,21 @@ export const GUIDE_TOPICS = [
         ],
       },
       {
+        type: 'table',
+        headers: ['Audit Action', 'Auditor', 'Audit Manager', 'HR Manager / Admin'],
+        rows: [
+          ['View assigned audits', '✅', '✅', '✅'],
+          ['Fill checklist', '✅', '❌', '❌'],
+          ['Add findings', '✅', '✅', '✅'],
+          ['Submit audit', '✅', '❌', '❌'],
+          ['Start Review', '❌', '✅', '✅'],
+          ['Send Back with reason', '❌', '✅', '✅'],
+          ['Close audit with rating', '❌', '✅', '✅'],
+          ['Create audit templates', '❌', '✅', '✅'],
+          ['Assign audits to auditors', '❌', '✅', '✅'],
+        ],
+      },
+      {
         type: 'tip',
         text: 'Permissions can be customised per user in Admin → Platform Users → Permissions. Toggle individual modules on or off.',
       },
@@ -365,6 +380,58 @@ export const GUIDE_TOPICS = [
     ],
   },
   {
+    id: 'calendar_guide',
+    icon: '📅',
+    title: 'Calendar',
+    color: 'blue',
+    summary: 'Company events, holidays, and leave overlay',
+    content: [
+      {
+        type: 'table',
+        headers: ['Layer', 'What it shows', 'Who can edit'],
+        rows: [
+          ['Company Events', 'Meetings, announcements, company days', 'HR Manager, Admin'],
+          ['Holidays', 'Public holidays for the year', 'HR Manager, Admin'],
+          ['Leave Overlay', 'Approved leaves shown on each calendar day', 'Read-only — from Leave module'],
+        ],
+      },
+      {
+        type: 'steps',
+        items: [
+          {
+            step: 1,
+            title: 'Add Event',
+            desc: 'Calendar → + Add Event. Enter title, date, time, and description. Events are visible to all company users.',
+          },
+          {
+            step: 2,
+            title: 'Edit or Delete Event',
+            desc: 'Click any event on the calendar → Edit or Delete. Only HR Managers and Admins can modify company events.',
+          },
+          {
+            step: 3,
+            title: 'View Leave Overlay',
+            desc: 'Approved employee leaves appear on the calendar automatically. Employee name and leave type are shown on each day.',
+          },
+          {
+            step: 4,
+            title: 'Navigate months',
+            desc: 'Use ← → arrows to move between months. Click Today to return to the current month.',
+          },
+        ],
+      },
+      {
+        type: 'rule',
+        title: 'Leave overlay is read-only',
+        text: 'Leaves shown on the Calendar cannot be approved or rejected from here. Go to the Leave module to manage leave requests.',
+      },
+      {
+        type: 'tip',
+        text: 'Seed public holidays at the start of each year using + Add Event and mark them clearly. They appear on the calendar for all users.',
+      },
+    ],
+  },
+  {
     id: 'assets_guide',
     icon: '📦',
     title: 'Asset Management',
@@ -528,6 +595,54 @@ export const GUIDE_TOPICS = [
     ],
   },
   {
+    id: 'orgchart_guide',
+    icon: '🌳',
+    title: 'Org Chart',
+    color: 'teal',
+    summary: 'Live organisation hierarchy from reporting relationships',
+    content: [
+      {
+        type: 'rule',
+        title: 'Powered by Designations',
+        text: 'The Org Chart is built automatically from the Reports To field in Library → Designations. Set up your designation hierarchy first and the chart draws itself.',
+      },
+      {
+        type: 'steps',
+        items: [
+          {
+            step: 1,
+            title: 'Set up reporting lines',
+            desc: 'Library → Designations → Edit each designation → set Reports To. Example: Branch Manager reports to Regional Manager.',
+          },
+          {
+            step: 2,
+            title: 'View Org Chart',
+            desc: 'Click Org Chart in the sidebar. The full hierarchy loads automatically showing all designations and their employee counts.',
+          },
+          {
+            step: 3,
+            title: 'Click a node',
+            desc: 'Click any designation box to see the list of employees in that designation with their name, Emp ID, and branch.',
+          },
+          {
+            step: 4,
+            title: 'Collapse branches',
+            desc: 'Click the − button on any node to collapse that branch. Click + to expand. Useful for large multi-level organisations.',
+          },
+          {
+            step: 5,
+            title: 'Job Architecture view',
+            desc: 'Library → Designations → Job Architecture tab shows the same hierarchy with zoom controls and a wider canvas for printing.',
+          },
+        ],
+      },
+      {
+        type: 'tip',
+        text: 'Each node shows the headcount of active employees in that designation. Vacant designations show "Vacant". The chart updates live — no refresh needed.',
+      },
+    ],
+  },
+  {
     id: 'celebrations_guide',
     icon: '🎉',
     title: 'Celebrations',
@@ -580,6 +695,99 @@ export const GUIDE_TOPICS = [
     ],
   },
   {
+    id: 'audit_guide',
+    icon: '🔍',
+    title: 'Audit',
+    color: 'purple',
+    summary: 'Internal and external audit workflows end-to-end',
+    content: [
+      {
+        type: 'flow',
+        steps: [
+          {
+            status: 'Assigned',
+            color: 'gray',
+            icon: '📋',
+            desc: 'Audit Manager assigns audit to an Auditor with a due date. WhatsApp notification sent automatically.',
+          },
+          {
+            status: 'In Progress',
+            color: 'blue',
+            icon: '✍️',
+            desc: 'Auditor fills checklist (Pass/Fail/N/A), adds findings, uploads evidence documents. Auto-saves every 1.5 seconds.',
+          },
+          {
+            status: 'Submitted',
+            color: 'amber',
+            icon: '📤',
+            desc: 'Auditor submits for manager review. No further edits unless the manager sends it back.',
+          },
+          {
+            status: 'Under Review',
+            color: 'purple',
+            icon: '👀',
+            desc: 'Manager reviews checklist, approves items, adds manager-level findings.',
+          },
+          {
+            status: 'Closed',
+            color: 'green',
+            icon: '✅',
+            desc: 'Manager closes with a 1–5 star rating and written feedback. Final state — fully read-only.',
+          },
+        ],
+      },
+      {
+        type: 'steps',
+        items: [
+          {
+            step: 1,
+            title: 'Create a Template',
+            desc: 'Audit → Templates tab → + New Template. Add checklist items organised into sections. Set category (Internal or External) and risk level.',
+          },
+          {
+            step: 2,
+            title: 'Assign an Audit',
+            desc: 'Audit → + Assign Audit. Select template(s), auditor, branch, start date, and due date. Multiple templates can be assigned at once.',
+          },
+          {
+            step: 3,
+            title: 'Auditor fills checklist',
+            desc: 'Open the assigned audit. Mark each item Pass, Fail, or N/A. Add notes per item. Checklist saves automatically — no manual save button.',
+          },
+          {
+            step: 4,
+            title: 'Add Findings',
+            desc: 'During the audit, add findings with severity (Critical / High / Medium / Low), owner name, and target resolution date.',
+          },
+          {
+            step: 5,
+            title: 'Submit',
+            desc: 'Click Submit. A summary shows the compliance score and checklist results before you confirm. Audit Manager is notified via WhatsApp.',
+          },
+          {
+            step: 6,
+            title: 'Review and Close',
+            desc: 'Manager clicks Start Review. Reviews checklist, adds manager findings, then Closes with rating and feedback — or Sends Back with a reason.',
+          },
+        ],
+      },
+      {
+        type: 'rule',
+        title: 'Sent Back',
+        text: 'When a manager sends an audit back, the auditor receives a WhatsApp notification with the reason. The auditor makes corrections and resubmits.',
+      },
+      {
+        type: 'rule',
+        title: 'Duplicate Templates',
+        text: 'Use the Copy button on any template to duplicate it as a starting point for a new template. Edit the copy to suit the new audit type.',
+      },
+      {
+        type: 'tip',
+        text: 'Use the All Findings tab in the Audit page to see findings across every audit in one place. Filter by severity or status to prioritise critical issues first.',
+      },
+    ],
+  },
+  {
     id: 'reports_guide',
     icon: '📊',
     title: 'Reports',
@@ -609,6 +817,10 @@ export const GUIDE_TOPICS = [
           [
             'Compensation',
             'Total payroll, average salary, salary distribution. By department. PF/ESIC enrollment.',
+          ],
+          [
+            'Audit',
+            'Auditor performance, compliance rates, findings summary, branch score comparison by template.',
           ],
         ],
       },
