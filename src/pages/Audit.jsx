@@ -1636,6 +1636,7 @@ function AssignAuditModal({
   company,
   companyId,
   employees,
+  auditorEmails = new Set(),
   assignForm,
   setAssignForm,
   leadSearch,
@@ -1970,6 +1971,9 @@ function AssignAuditModal({
                       .filter(
                         (e) =>
                           e.status === 'Active' &&
+                          // Only show employees with auditor/auditmanager role in Team Members
+                          // Falls back to all employees if fetch failed (auditorEmails empty)
+                          (auditorEmails.size === 0 || auditorEmails.has(e.email?.toLowerCase())) &&
                           !assignForm.teamMembers.some((m) => m.id === e.id) &&
                           (!leadSearch || e.fullName?.toLowerCase().includes(leadSearch.toLowerCase())),
                       )
@@ -5378,6 +5382,24 @@ function AuditList({
 }) {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignedAudit, setAssignedAudit] = useState(null);
+  const [auditorEmails, setAuditorEmails] = useState(new Set());
+
+  useEffect(() => {
+    if (!showAssignModal || !companyId) return;
+    getDocs(
+      query(
+        collection(db, 'companies', companyId, 'teamMembers'),
+        where('role', 'in', ['auditor', 'auditmanager']),
+        limit(200),
+      ),
+    )
+      .then((snap) => {
+        setAuditorEmails(
+          new Set(snap.docs.map((d) => d.data().email?.toLowerCase()).filter(Boolean)),
+        );
+      })
+      .catch(() => {});
+  }, [showAssignModal, companyId]);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [activeStatusTab, setActiveStatusTab] = useState('all'); // all | overdue | status
@@ -5940,6 +5962,7 @@ function AuditList({
           company={company}
           companyId={companyId}
           employees={employees}
+          auditorEmails={auditorEmails}
           assignForm={assignForm}
           setAssignForm={setAssignForm}
           leadSearch={leadSearch}
