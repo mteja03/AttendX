@@ -1,18 +1,20 @@
 export const TEST_COMPANY_ID = 'vwxXIWbJ4zMi2lwWcaS2';
 
+export const BASE_URL = '';
+
 export const URLS = {
+  documents: `${BASE_URL}/company/${TEST_COMPANY_ID}/documents`,
+  orgchart: `${BASE_URL}/company/${TEST_COMPANY_ID}/orgchart`,
+  team: `${BASE_URL}/company/${TEST_COMPANY_ID}/team`,
+  assets: `${BASE_URL}/company/${TEST_COMPANY_ID}/assets`,
+  reports: `${BASE_URL}/company/${TEST_COMPANY_ID}/reports`,
+  settings: `${BASE_URL}/company/${TEST_COMPANY_ID}/settings`,
+  library: `${BASE_URL}/company/${TEST_COMPANY_ID}/policies`,
+  calendar: `${BASE_URL}/company/${TEST_COMPANY_ID}/calendar`,
   dashboard: `/company/${TEST_COMPANY_ID}/dashboard`,
   employees: `/company/${TEST_COMPANY_ID}/employees`,
   leave:     `/company/${TEST_COMPANY_ID}/leave`,
-  documents: `/company/${TEST_COMPANY_ID}/documents`,
   audit:     `/company/${TEST_COMPANY_ID}/audit`,
-  library:   `/company/${TEST_COMPANY_ID}/policies`,
-  assets:    `/company/${TEST_COMPANY_ID}/assets`,
-  reports:   `/company/${TEST_COMPANY_ID}/reports`,
-  settings:  `/company/${TEST_COMPANY_ID}/settings`,
-  orgchart:  `/company/${TEST_COMPANY_ID}/orgchart`,
-  calendar:  `/company/${TEST_COMPANY_ID}/calendar`,
-  team:      `/company/${TEST_COMPANY_ID}/team`,
 };
 
 export const EMPLOYEES = {
