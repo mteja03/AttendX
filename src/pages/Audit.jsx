@@ -411,7 +411,7 @@ function AuditDashboard({ audits, auditTypes }) {
             </div>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {overdueActions.slice(0, 8).map((item, i) => (
+              {overdueActions.slice(0, 20).map((item, i) => (
                 <div key={i} className="p-3 bg-red-50 border border-red-100 rounded-xl">
                   <p className="text-xs font-medium text-gray-800 mb-1.5 line-clamp-2">{item.description}</p>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -437,7 +437,7 @@ function AuditDashboard({ audits, auditTypes }) {
             </div>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {upcomingActions.slice(0, 8).map((item, i) => (
+              {upcomingActions.slice(0, 20).map((item, i) => (
                 <div
                   key={i}
                   className={`p-3 border rounded-xl ${
@@ -1949,7 +1949,7 @@ function AssignAuditModal({
                 <input
                   type="text"
                   value={assignForm.auditorId ? assignForm.auditorName : leadSearch}
-                  placeholder="Search auditor..."
+                  placeholder="Type name to search all employees..."
                   onChange={(e) => {
                     setLeadSearch(e.target.value);
                     setShowLeadDrop(true);
@@ -1974,7 +1974,7 @@ function AssignAuditModal({
                           (!leadSearch || e.fullName?.toLowerCase().includes(leadSearch.toLowerCase())),
                       )
                       .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''))
-                      .slice(0, 8)
+                      .slice(0, 20)
                       .map((emp) => (
                         <div
                           key={emp.id}
@@ -2044,7 +2044,7 @@ function AssignAuditModal({
                           (!teamSearch || e.fullName?.toLowerCase().includes(teamSearch.toLowerCase())),
                       )
                       .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''))
-                      .slice(0, 8)
+                      .slice(0, 20)
                       .map((emp) => (
                         <div
                           key={emp.id}

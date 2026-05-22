@@ -27,3 +27,7 @@ functions/.env
 serviceAccount.json
 fixPermissions.mjs
 .claude/
+tests/e2e/.auth/
+tests/e2e/.auth/
+playwright-report/
+test-results/
