@@ -37,8 +37,9 @@ test.describe('Add Employee Flow', () => {
     await page.waitForSelector('input[type="text"]', { timeout: 10_000, state: 'visible' });
     await page.waitForTimeout(500);
 
-    // Fill inputs in order — Step 1 is Personal: First Name, Last Name, Email
-    const inputs = page.locator('input[type="text"], input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+    // Only target visible text/email/tel inputs — excludes hidden file inputs
+    const inputs = page.locator('input[type="text"], input[type="email"], input[type="tel"]')
+      .filter({ visible: true });
     const count = await inputs.count();
     if (count >= 1) await inputs.nth(0).fill(TEST_FIRST);
     if (count >= 2) await inputs.nth(1).fill(TEST_LAST);
