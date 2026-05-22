@@ -33,26 +33,24 @@ test.describe('Add Employee Flow', () => {
 
   test('can fill step 1 and advance to step 2', async ({ page }) => {
     await page.locator('button', { hasText: /Add Employee/i }).first().click();
-    await page.waitForTimeout(1000);
+    // Wait for modal to fully render before interacting
+    await page.waitForSelector('input[type="text"]', { timeout: 10_000, state: 'visible' });
+    await page.waitForTimeout(500);
 
-    // Fill First Name
-    const firstNameInput = page.locator('input').filter({ hasText: /first/i })
-      .or(page.locator('input[placeholder*="First"], input[name*="first"]')).first();
-    await firstNameInput.fill(TEST_FIRST).catch(() => {});
-
-    // Try filling by label order — first input is usually First Name
-    const inputs = page.locator('input[type="text"], input:not([type])');
+    // Fill inputs in order — Step 1 is Personal: First Name, Last Name, Email
+    const inputs = page.locator('input[type="text"], input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
     const count = await inputs.count();
     if (count >= 1) await inputs.nth(0).fill(TEST_FIRST);
     if (count >= 2) await inputs.nth(1).fill(TEST_LAST);
     if (count >= 3) await inputs.nth(2).fill(TEST_EMAIL);
 
+    await page.waitForTimeout(300);
+
     // Click Next
     await page.locator('button', { hasText: /Next/i }).first().click();
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
 
     const body = await page.locator('body').textContent() ?? '';
-    // Should now be on Step 2 — Employment
     expect(body).toMatch(/Employment|Department|Branch|Joining|Step 2/i);
   });
 
