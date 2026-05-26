@@ -1016,10 +1016,11 @@ export default function Assets() {
   };
 
   const downloadAssets = async (format) => {
-    const [{ default: XLSX }, { saveAs }] = await Promise.all([
+    const [xlsxMod, { saveAs }] = await Promise.all([
       import('xlsx'),
       import('file-saver'),
     ]);
+    const XLSX = xlsxMod.default ?? xlsxMod;
     if (!company) return;
     const rows = filteredAssets.map((a) => ({
       'Asset ID': a.assetId || '',

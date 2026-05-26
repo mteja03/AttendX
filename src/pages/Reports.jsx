@@ -166,7 +166,8 @@ function getDaysRemainingLastDay(lastDay) {
 }
 
 async function downloadReport(companyName, reportName, data, columns) {
-  const { default: XLSX } = await import('xlsx');
+  const xlsxMod = await import('xlsx');
+  const XLSX = xlsxMod.default ?? xlsxMod;
   const rows = data.map((item) => {
     const row = {};
     columns.forEach((col) => {

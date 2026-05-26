@@ -20,12 +20,21 @@ export default class ErrorBoundary extends Component {
     };
   }
 
-  componentDidCatch(error, errorInfo) {
-    console.error('AttendX Error:', error, errorInfo);
+  componentDidCatch(error, info) {
+    // Auto-reload stale chunks after redeployment
+    if (
+      error?.message?.includes('dynamically imported module') ||
+      error?.message?.includes('Failed to fetch dynamically') ||
+      error?.name === 'ChunkLoadError'
+    ) {
+      window.location.reload();
+      return;
+    }
+    console.error('AttendX Error:', error, info);
 
     try {
       captureError(error, {
-        componentStack: errorInfo.componentStack,
+        componentStack: info.componentStack,
         action: 'render',
       });
     } catch {

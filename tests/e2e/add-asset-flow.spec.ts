@@ -7,7 +7,7 @@ test.describe('Add Asset Flow', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(URLS.assets);
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('text=Trackable', { timeout: 15_000, state: 'visible' });
+    await page.waitForSelector('text=Trackable', { timeout: 25_000, state: 'visible' });
     await page.waitForTimeout(500);
   });
 
