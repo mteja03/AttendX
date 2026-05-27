@@ -6269,6 +6269,30 @@ function BranchScoreChart({ audits }) {
 }
 
 function AuditReports({ audits }) {
+  const [perfPeriod, setPerfPeriod] = useState('year');
+  const [perfBranch, setPerfBranch] = useState('');
+  const [perfLocation, setPerfLocation] = useState('');
+  const [perfCategory, setPerfCategory] = useState('');
+
+  const perfDateFrom = useMemo(() => {
+    const now = new Date();
+    if (perfPeriod === 'month') return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    if (perfPeriod === '3months') { const d = new Date(now); d.setMonth(d.getMonth() - 3); return d.toISOString().split('T')[0]; }
+    if (perfPeriod === 'year') return `${now.getFullYear()}-01-01`;
+    return '';
+  }, [perfPeriod]);
+
+  const uniqueBranches = useMemo(() => [...new Set(audits.map((a) => a.branch).filter(Boolean))].sort(), [audits]);
+  const uniqueLocations = useMemo(() => [...new Set(audits.map((a) => a.location).filter(Boolean))].sort(), [audits]);
+
+  const perfAudits = useMemo(() => audits.filter((a) => {
+    if (perfBranch && a.branch !== perfBranch) return false;
+    if (perfLocation && a.location !== perfLocation) return false;
+    if (perfCategory && a.auditCategory !== perfCategory) return false;
+    if (perfDateFrom) { const end = a.endDate || a.startDate; if (!end || end < perfDateFrom) return false; }
+    return true;
+  }), [audits, perfBranch, perfLocation, perfCategory, perfDateFrom]);
+
   const closedAudits = audits.filter((a) => effStatus(a.status) === 'Closed');
   const overallScores = closedAudits.map((a) => getAuditScore(a)).filter((s) => s !== null);
   const overallRate = overallScores.length > 0 ? Math.round(overallScores.reduce((sum, s) => sum + s, 0) / overallScores.length) : null;
@@ -6284,7 +6308,7 @@ function AuditReports({ audits }) {
 
   const auditorPerf = useMemo(() => {
     const map = {};
-    audits.forEach((a) => {
+    perfAudits.forEach((a) => {
       if (!a.auditorName) return;
       if (!map[a.auditorName]) {
         map[a.auditorName] = {
@@ -6302,10 +6326,14 @@ function AuditReports({ audits }) {
           avgRating: null,
           onTime: 0,
           late: 0,
+          branchMap: {},
+          locationMap: {},
         };
       }
       const p = map[a.auditorName];
       p.totalAssigned++;
+      if (a.branch) p.branchMap[a.branch] = (p.branchMap[a.branch] || 0) + 1;
+      if (a.location) p.locationMap[a.location] = (p.locationMap[a.location] || 0) + 1;
 
       if (effStatus(a.status) === 'Closed') {
         p.closed++;
@@ -6336,9 +6364,11 @@ function AuditReports({ audits }) {
         avgScore: a.scores.length > 0 ? Math.round(a.scores.reduce((s, v) => s + v, 0) / a.scores.length) : null,
         avgRating: a.ratings.length > 0 ? (a.ratings.reduce((s, v) => s + v, 0) / a.ratings.length).toFixed(1) : null,
         closedRate: a.totalAssigned > 0 ? Math.round((a.closed / a.totalAssigned) * 100) : 0,
+        branches: Object.entries(a.branchMap).sort((x, y) => y[1] - x[1]).map(([name, count]) => ({ name, count })),
+        locations: Object.entries(a.locationMap).sort((x, y) => y[1] - x[1]).map(([name, count]) => ({ name, count })),
       }))
       .sort((a, b) => b.totalAssigned - a.totalAssigned);
-  }, [audits]);
+  }, [perfAudits]);
 
   if (audits.length === 0) {
     return (
@@ -6385,8 +6415,50 @@ function AuditReports({ audits }) {
       <div className="bg-white border border-gray-100 rounded-2xl p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">👤 Auditor Performance</h3>
         <BranchScoreChart audits={audits} />
+
+        <div className="flex items-center gap-2 flex-wrap p-3 bg-gray-50 border border-gray-100 rounded-xl mb-3 mt-4">
+          <span className="text-xs font-medium text-gray-400">⚙️ Filter</span>
+          <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+          {uniqueBranches.length > 0 && (
+            <select value={perfBranch} onChange={(e) => setPerfBranch(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:border-[#1B6B6B]">
+              <option value="">All branches</option>
+              {uniqueBranches.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+          )}
+          {uniqueLocations.length > 0 && (
+            <select value={perfLocation} onChange={(e) => setPerfLocation(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:border-[#1B6B6B]">
+              <option value="">All locations</option>
+              {uniqueLocations.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
+          )}
+          <select value={perfCategory} onChange={(e) => setPerfCategory(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:border-[#1B6B6B]">
+            <option value="">All categories</option>
+            <option value="Internal">🏢 Internal</option>
+            <option value="External">🌐 External</option>
+          </select>
+          {(perfBranch || perfLocation || perfCategory || perfPeriod !== 'year') && (
+            <button type="button" onClick={() => { setPerfBranch(''); setPerfLocation(''); setPerfCategory(''); setPerfPeriod('year'); }} className="text-xs text-[#1B6B6B] hover:underline ml-auto">Clear</button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="text-xs text-gray-400">Period:</span>
+          {[
+            { id: 'month', label: 'This month' },
+            { id: '3months', label: 'Last 3 months' },
+            { id: 'year', label: 'This year' },
+            { id: 'all', label: 'All time' },
+          ].map((p) => (
+            <button key={p.id} type="button" onClick={() => setPerfPeriod(p.id)}
+              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${perfPeriod === p.id ? 'bg-[#E1F5EE] text-[#0F6E56] border-[#9FE1CB] font-medium' : 'border-gray-200 text-gray-500 hover:border-gray-300 bg-white'}`}>
+              {p.label}
+            </button>
+          ))}
+          <span className="text-xs text-gray-400 ml-auto">{auditorPerf.length} auditor{auditorPerf.length !== 1 ? 's' : ''} · {perfAudits.length} audits</span>
+        </div>
+
       {auditorPerf.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">No data</p>
+          <p className="text-sm text-gray-400 text-center py-8">No data for selected filters</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {auditorPerf.map((ap) => (
@@ -6458,6 +6530,29 @@ function AuditReports({ audits }) {
                     </div>
                   )}
                 </div>
+
+                {(ap.branches.length > 0 || ap.locations.length > 0) && (
+                  <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
+                    {ap.branches.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {ap.branches.map(({ name, count }) => (
+                          <span key={name} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#E1F5EE] text-[#0F6E56] border border-[#9FE1CB]">
+                            🏢 {name} <span className="font-medium opacity-70">· {count}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {ap.locations.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {ap.locations.map(({ name, count }) => (
+                          <span key={name} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#E6F1FB] text-[#185FA5] border border-[#B5D4F4]">
+                            📍 {name} <span className="font-medium opacity-70">· {count}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
