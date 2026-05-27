@@ -265,10 +265,8 @@ function AuditDashboard({ audits, auditTypes }) {
 
   const maxPipeline = Math.max(...pipeline.map((p) => p.count), 1);
 
-  const statusBadge = (audit, isOverdueAudit) => {
-    if (isOverdueAudit) return 'bg-red-100 text-red-700';
-    return statusMeta(audit.status).badge || 'bg-gray-100 text-gray-700';
-  };
+  const statusBadge = (audit) =>
+    statusMeta(audit.status).badge || 'bg-gray-100 text-gray-700';
 
   return (
     <div className="space-y-6">
@@ -561,12 +559,7 @@ function AuditDashboard({ audits, auditTypes }) {
           </div>
         ) : (
           <div className="space-y-2">
-            {audits.slice(0, 5).map((audit) => {
-              const isOverdueAudit =
-                effStatus(audit.status) !== 'Closed' &&
-                (audit.endDate || audit.dueDate) &&
-                new Date(audit.endDate || audit.dueDate) < now;
-              return (
+            {audits.slice(0, 5).map((audit) => (
                 <div key={audit.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div
@@ -587,12 +580,11 @@ function AuditDashboard({ audits, auditTypes }) {
                       </p>
                     </div>
                   </div>
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ml-2 ${statusBadge(audit, isOverdueAudit)}`}>
-                    {isOverdueAudit ? 'Overdue' : effStatus(audit.status)}
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ml-2 ${statusBadge(audit)}`}>
+                    {effStatus(audit.status)}
                   </span>
                 </div>
-              );
-            })}
+              ))}
           </div>
         )}
       </div>
