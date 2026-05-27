@@ -2268,7 +2268,7 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
   const fileInputRef = useRef(null);
 
   const handleDetailClose = useCallback(() => {
-    const id = safeAudit?.id;
+    const id = safeAudit.id;
     if (id && typeof sessionStorage !== 'undefined') {
       try {
         sessionStorage.removeItem(`tab_${id}`);
@@ -2280,7 +2280,7 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
       }
     }
     onClose();
-  }, [safeAudit?.id, onClose]);
+  }, [safeAudit.id, onClose]);
 
   useEffect(() => {
     isMountedRef.current = true;
