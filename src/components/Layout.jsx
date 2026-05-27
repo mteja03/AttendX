@@ -115,7 +115,8 @@ export default function Layout() {
   }, [resetTimer]);
 
   useEffect(() => {
-    setSidebarOpen(false);
+    const id = requestAnimationFrame(() => setSidebarOpen(false));
+    return () => cancelAnimationFrame(id);
   }, [location.pathname]);
 
   return (
