@@ -6,7 +6,8 @@ import { useState, useEffect } from 'react';
 export function usePlaceholder(initialValue = null) {
   const [value, setValue] = useState(initialValue);
   useEffect(() => {
-    setValue(initialValue);
+    const id = requestAnimationFrame(() => setValue(initialValue));
+    return () => cancelAnimationFrame(id);
   }, [initialValue]);
   return [value, setValue];
 }
