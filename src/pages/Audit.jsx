@@ -5069,11 +5069,9 @@ function AuditTableRow({
     <div onClick={(e) => e.stopPropagation()} className="min-w-0">
       {isAuditor && (
         <span
-          className={`inline-flex w-full items-center justify-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-medium ${
-            overdueAudit ? 'border-red-200 bg-red-50 text-red-700' : `${statusCfg.badge} border-gray-200`
-          }`}
+          className={`inline-flex w-full items-center justify-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-medium ${statusCfg.badge} border-gray-200`}
         >
-          {overdueAudit ? '⚠️ Overdue' : `${statusCfg.icon} ${eff}`}
+          {`${statusCfg.icon} ${eff}`}
         </span>
       )}
       {!isAuditor && canManage && eff === 'Submitted' && (
@@ -5105,11 +5103,9 @@ function AuditTableRow({
       )}
       {!isAuditor && (!canManage || (eff !== 'Submitted' && eff !== 'Under Review')) && (
         <span
-          className={`inline-flex w-full items-center justify-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-medium ${
-            overdueAudit ? 'border-red-200 bg-red-50 text-red-700' : `${statusCfg.badge} border-gray-200`
-          }`}
+          className={`inline-flex w-full items-center justify-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-medium ${statusCfg.badge} border-gray-200`}
         >
-          {overdueAudit ? '⚠️ Overdue' : `${statusCfg.icon} ${eff}`}
+          {`${statusCfg.icon} ${eff}`}
         </span>
       )}
       {saved && <p className="text-xs text-green-500 mt-1">✓ Saved</p>}
@@ -5306,11 +5302,9 @@ function AuditTableRow({
             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <span className="text-xs font-mono text-gray-400">{audit.auditRefId}</span>
               <span
-                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  overdueAudit ? 'bg-red-100 text-red-700' : statusMeta(status).badge
-                }`}
+                className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusMeta(status).badge}`}
               >
-                {overdueAudit ? '⚠️ Overdue' : eff}
+                {eff}
               </span>
             </div>
             <p className="text-sm font-semibold text-gray-800">{audit.auditTypeName}</p>
