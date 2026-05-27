@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   collection,
@@ -2295,7 +2295,7 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
   }, []);
 
   // Reset draft state only when the opened audit changes — not on every Firestore field update.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!safeAudit.id) return;
     const cr = Array.isArray(safeAudit.checklistReview) ? safeAudit.checklistReview : [];
     const fd = Array.isArray(safeAudit.findings) ? safeAudit.findings : [];
