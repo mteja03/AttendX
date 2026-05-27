@@ -5448,7 +5448,6 @@ function AuditList({
       if (activeStatusTab === 'overdue') {
         if (!isOverdue(a)) return false;
       } else if (activeStatusTab !== 'all') {
-        if (isOverdue(a)) return false;
         if (effStatus(a.status) !== activeStatusTab) return false;
       }
 
@@ -5467,7 +5466,7 @@ function AuditList({
           return false;
       }
       if (filters.status) {
-        const eff = isOverdue(a) ? 'Overdue' : effStatus(a.status);
+        const eff = effStatus(a.status);
         if (eff !== filters.status) return false;
       }
       if (filters.type && a.auditTypeId !== filters.type) return false;
