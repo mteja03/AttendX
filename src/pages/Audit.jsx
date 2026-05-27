@@ -996,7 +996,7 @@ function AuditCalendar({ audits, onClose, onSelectAudit }) {
                                 : STATUS_COLORS[effStatus(audit.status)] || STATUS_COLORS.Assigned
                             }`}
                           >
-                            {overdueAudit ? 'Overdue' : effStatus(audit.status)}
+                            {effStatus(audit.status)}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap ml-8">
