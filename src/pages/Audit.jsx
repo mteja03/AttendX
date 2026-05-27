@@ -74,7 +74,7 @@ const STATUS_TAB_CONFIG = [
     label: 'Assigned',
     getCount: (list) =>
       list.filter(
-        (a) => effStatus(a.status) === 'Assigned' && !isAuditOverdue({ ...a, status: effStatus(a.status) }),
+        (a) => effStatus(a.status) === 'Assigned',
       ).length,
     activeClass: 'bg-gray-50 text-gray-700 border-gray-300',
     countClass: 'bg-gray-200 text-gray-700',
@@ -84,7 +84,7 @@ const STATUS_TAB_CONFIG = [
     label: 'In Progress',
     getCount: (list) =>
       list.filter(
-        (a) => effStatus(a.status) === 'In Progress' && !isAuditOverdue({ ...a, status: effStatus(a.status) }),
+        (a) => effStatus(a.status) === 'In Progress',
       ).length,
     activeClass: 'bg-blue-50 text-blue-700 border-blue-300',
     countClass: 'bg-blue-200 text-blue-800',
