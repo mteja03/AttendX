@@ -83,6 +83,52 @@ const getAssetIcon = (type) => {
   return icons[type] || '📦';
 };
 
+const getConditionBadgeClass = (condition) => {
+  switch (condition) {
+    case 'New': return 'bg-[#EAF3DE] text-[#27500A]';
+    case 'Good': return 'bg-[#E1F5EE] text-[#0F6E56]';
+    case 'Fair': return 'bg-[#FAEEDA] text-[#633806]';
+    case 'Poor': return 'bg-[#FCEBEB] text-[#791F1F]';
+    case 'Damaged': return 'bg-[#FCEBEB] text-[#791F1F]';
+    default: return 'bg-gray-100 text-gray-600';
+  }
+};
+
+const getStatusBarColor = (status) => {
+  switch (status) {
+    case 'Assigned': return '#9FE1CB';
+    case 'In Repair': return '#F09595';
+    case 'Damaged': return '#F09595';
+    case 'Lost': return '#F7C1C1';
+    case 'Retired': return '#D3D1C7';
+    default: return '#D3D1C7';
+  }
+};
+
+const getAssetIdBadgeClass = (status) => {
+  switch (status) {
+    case 'Assigned': return 'bg-[#E1F5EE] text-[#0F6E56]';
+    case 'In Repair': return 'bg-[#FCEBEB] text-[#791F1F]';
+    case 'Damaged': return 'bg-[#FCEBEB] text-[#791F1F]';
+    case 'Lost': return 'bg-[#FCEBEB] text-[#A32D2D]';
+    default: return 'bg-gray-100 text-gray-600';
+  }
+};
+
+const getAssetTypeColors = (type) => {
+  const map = {
+    Laptop: { bg: '#E6F1FB' }, Desktop: { bg: '#EEEDFE' },
+    'Mobile Phone': { bg: '#E1F5EE' }, 'SIM Card': { bg: '#EEEDFE' },
+    Tablet: { bg: '#E6F1FB' }, 'ID Card': { bg: '#E1F5EE' },
+    'Access Card': { bg: '#E1F5EE' }, Uniform: { bg: '#FAEEDA' },
+    Headset: { bg: '#FAEEDA' }, Charger: { bg: '#FAEEDA' },
+    Vehicle: { bg: '#FCEBEB' }, Tools: { bg: '#F1EFE8' },
+    Furniture: { bg: '#F1EFE8' }, Printer: { bg: '#FAEEDA' },
+    Scanner: { bg: '#FAEEDA' },
+  };
+  return map[type] || { bg: '#F1EFE8' };
+};
+
 const buildAssetIdPrefix = (type) => {
   if (!type) return 'AST';
   const map = {
@@ -1118,21 +1164,49 @@ export default function Assets() {
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <div className="bg-white border rounded-lg p-3 text-center">
-          <p className="text-xl font-semibold text-slate-800">{stats.total}</p>
-          <p className="text-xs text-slate-500">Total Assets</p>
+        <div className="bg-white border border-gray-100 rounded-2xl p-4">
+          <div className="w-9 h-9 rounded-xl bg-[#E1F5EE] flex items-center justify-center mb-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F6E56" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </div>
+          <p className="text-2xl font-semibold text-gray-900">{stats.total}</p>
+          <p className="text-xs text-gray-500 mt-0.5">Total assets</p>
+          <div className="mt-2 h-1 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full bg-[#1B6B6B] rounded-full" style={{ width: stats.total > 0 ? `${Math.round((stats.assignedIssued / stats.total) * 100)}%` : '0%' }} />
+          </div>
+          <p className="text-xs text-gray-400 mt-1">{stats.assignedIssued} of {stats.total} in use</p>
         </div>
-        <div className="bg-white border rounded-lg p-3 text-center">
-          <p className="text-xl font-semibold text-[#1B6B6B]">{stats.trackable}</p>
-          <p className="text-xs text-slate-500">Trackable</p>
+        <div className="bg-white border border-gray-100 rounded-2xl p-4">
+          <div className="w-9 h-9 rounded-xl bg-[#E6F1FB] flex items-center justify-center mb-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#185FA5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <p className="text-2xl font-semibold text-gray-900">{stats.trackable}</p>
+          <p className="text-xs text-gray-500 mt-0.5">Trackable</p>
+          <div className="mt-2 h-1 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full bg-[#378ADD] rounded-full" style={{ width: stats.trackable > 0 ? `${Math.round((assets.filter((a) => (a.mode || 'trackable') === 'trackable' && a.status === 'Assigned').length / stats.trackable) * 100)}%` : '0%' }} />
+          </div>
+          <p className="text-xs text-gray-400 mt-1">{assets.filter((a) => (a.mode || 'trackable') === 'trackable' && a.status === 'Assigned').length} assigned</p>
         </div>
-        <div className="bg-white border rounded-lg p-3 text-center">
-          <p className="text-xl font-semibold text-green-600">{stats.consumable}</p>
-          <p className="text-xs text-slate-500">Consumable</p>
+        <div className="bg-white border border-gray-100 rounded-2xl p-4">
+          <div className="w-9 h-9 rounded-xl bg-[#EAF3DE] flex items-center justify-center mb-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+          </div>
+          <p className="text-2xl font-semibold text-gray-900">{stats.consumable}</p>
+          <p className="text-xs text-gray-500 mt-0.5">Consumable</p>
+          <div className="mt-2 h-1 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full bg-[#639922] rounded-full" style={{ width: stats.consumable > 0 ? '100%' : '0%' }} />
+          </div>
+          <p className="text-xs text-gray-400 mt-1">{assets.filter((a) => (a.mode || 'trackable') === 'consumable').reduce((s, a) => s + (Number(a.issuedCount) || 0), 0)} issued</p>
         </div>
-        <div className="bg-white border rounded-lg p-3 text-center">
-          <p className="text-xl font-semibold text-emerald-700">{stats.assignedIssued}</p>
-          <p className="text-xs text-slate-500">Assigned / Issued</p>
+        <div className="bg-white border border-gray-100 rounded-2xl p-4">
+          <div className="w-9 h-9 rounded-xl bg-[#EAF3DE] flex items-center justify-center mb-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
+          </div>
+          <p className="text-2xl font-semibold text-gray-900">{stats.assignedIssued}</p>
+          <p className="text-xs text-gray-500 mt-0.5">Assigned / issued</p>
+          <div className="mt-2 h-1 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full bg-[#639922] rounded-full" style={{ width: stats.total > 0 ? `${Math.round((stats.assignedIssued / stats.total) * 100)}%` : '0%' }} />
+          </div>
+          <p className="text-xs text-gray-400 mt-1">{stats.total > 0 ? Math.round((stats.assignedIssued / stats.total) * 100) : 0}% utilisation</p>
         </div>
       </div>
 
@@ -1303,116 +1377,125 @@ export default function Assets() {
         )}
       </div>
 
-      <div className="overflow-x-auto scrollbar-none -mx-1 px-1 mb-4 lg:mx-0 lg:px-0">
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit min-w-max">
-          {['all', 'trackable', 'consumable'].map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setAssetView(v)}
-              className={`px-4 py-2 min-h-[44px] rounded-md text-sm font-medium capitalize transition-all flex-shrink-0 active:opacity-90 ${
-                assetView === v ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700 active:bg-gray-200/50'
-              }`}
-            >
-              {v === 'all' ? 'All Assets' : v === 'trackable' ? '🔵 Trackable' : '🟢 Consumable'}
-            </button>
-          ))}
-        </div>
+      <div className="flex gap-1 border-b border-gray-100 mb-4 overflow-x-auto scrollbar-none">
+        {[
+          { id: 'all', label: 'All assets', count: filteredAssets.length },
+          { id: 'trackable', label: 'Trackable', count: trackableAssets.length, dot: '#378ADD' },
+          { id: 'consumable', label: 'Consumable', count: consumableAssets.length, dot: '#639922' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setAssetView(tab.id)}
+            className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors -mb-px ${
+              assetView === tab.id
+                ? 'border-[#1B6B6B] text-[#1B6B6B]'
+                : 'border-transparent text-gray-400 hover:text-gray-600 hover:border-gray-200'
+            }`}
+          >
+            {tab.dot && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: tab.dot }} />}
+            {tab.label}
+            <span className={`text-xs px-1.5 py-0.5 rounded-full ${assetView === tab.id ? 'bg-[#E1F5EE] text-[#0F6E56]' : 'bg-gray-100 text-gray-400'}`}>
+              {tab.count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {loading ? (
         <SkeletonTable rows={8} />
       ) : (
         <>
-        <div className="hidden lg:block overflow-x-auto border border-slate-200 rounded-xl bg-white">
+        <div className="hidden lg:block overflow-x-auto border border-gray-100 rounded-2xl bg-white">
           {(assetView === 'all' || assetView === 'trackable') && (
             <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium">Asset ID</th>
-                <th className="px-4 py-3 text-left font-medium">Name &amp; Type</th>
-                <th className="px-4 py-3 text-left font-medium">Assigned To</th>
-                <th className="px-4 py-3 text-left font-medium">Issue Date</th>
-                <th className="px-4 py-3 text-left font-medium">Condition</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-left font-medium">Actions</th>
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Asset ID</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Name &amp; type</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Assigned to</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Issue date</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Condition</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {trackableAssets.map((a) => (
-                <tr key={a.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{a.assetId}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{a.name || '—'}</p>
-                      <p className="text-xs text-gray-400">
-                        {a.type || '—'}
-                        {(a.brand || a.model) && ' · '}
-                        {[a.brand, a.model].filter(Boolean).join(' ')}
-                      </p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {a.assignedToId ? (
-                      <div className="flex items-center gap-2">
-                        <EmployeeAvatar
-                          employee={{
-                            fullName: a.assignedToName,
-                            photoURL: employees.find((e) => e.id === a.assignedToId)?.photoURL,
-                          }}
-                          size="xs"
-                        />
+              {trackableAssets.map((a) => {
+                const assetStatus = a.status || 'Available';
+                const typeColors = getAssetTypeColors(a.type);
+                return (
+                  <tr key={a.id} className="border-t border-gray-100 hover:bg-gray-50/80 transition-colors border-l-4" style={{ borderLeftColor: getStatusBarColor(assetStatus) }}>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center font-mono text-xs px-2 py-1 rounded-lg font-medium ${getAssetIdBadgeClass(assetStatus)}`}>{a.assetId}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0" style={{ background: typeColors.bg }}>
+                          {getAssetIcon(a.type)}
+                        </div>
                         <div>
-                          <p className="text-sm text-gray-700">{a.assignedToName}</p>
-                          <p className="text-[10px] text-slate-400">{a.assignedToEmpId}</p>
+                          <p className="text-sm font-medium text-gray-800">{a.name || '—'}</p>
+                          <p className="text-xs text-gray-400">
+                            {a.type || '—'}
+                            {(a.brand || a.model) && ' · '}
+                            {[a.brand, a.model].filter(Boolean).join(' ')}
+                          </p>
                         </div>
                       </div>
-                    ) : (
-                      <span className="text-xs text-slate-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-700">{a.issueDate ? toDisplayDate(a.issueDate) : '—'}</td>
-                  <td className="px-4 py-3 text-xs text-slate-700">{a.condition || '—'}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusBadgeClass(
-                        a.status || 'Available',
-                      )}`}
-                    >
-                      {a.status || 'Available'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 space-x-2">
-                    {(a.status === 'Available' || !a.status) && (
-                      <button
-                        type="button"
-                        onClick={() => openAssignModal(a)}
-                        className="text-xs text-[#1B6B6B] hover:underline"
-                      >
-                        Assign
-                      </button>
-                    )}
-                    {a.status === 'Assigned' && (
-                      <button
-                        type="button"
-                        onClick={() => openReturnModal(a)}
-                        className="text-xs text-amber-600 hover:underline"
-                      >
-                        Return
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => openHistoryModal(a)}
-                      className="text-xs text-slate-600 hover:underline"
-                    >
-                      View History
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-4 py-3">
+                      {a.assignedToId ? (
+                        <div className="flex items-center gap-2">
+                          <EmployeeAvatar
+                            employee={{ fullName: a.assignedToName, photoURL: employees.find((e) => e.id === a.assignedToId)?.photoURL }}
+                            size="xs"
+                          />
+                          <div>
+                            <p className="text-sm text-gray-700">{a.assignedToName}</p>
+                            <p className="text-[10px] text-slate-400">{a.assignedToEmpId}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs text-gray-400 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                          Unassigned
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-600">{a.issueDate ? toDisplayDate(a.issueDate) : <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3">
+                      {a.condition ? (
+                        <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium ${getConditionBadgeClass(a.condition)}`}>{a.condition}</span>
+                      ) : <span className="text-gray-300 text-xs">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusBadgeClass(assetStatus)}`}>{assetStatus}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        {(assetStatus === 'Available' || !a.status) && (
+                          <button type="button" onClick={() => openAssignModal(a)}
+                            className="inline-flex items-center text-xs font-medium px-2.5 py-1.5 bg-[#E1F5EE] text-[#0F6E56] border border-[#9FE1CB] rounded-full hover:bg-[#1B6B6B] hover:text-white hover:border-[#1B6B6B] transition-colors">
+                            Assign
+                          </button>
+                        )}
+                        {assetStatus === 'Assigned' && (
+                          <button type="button" onClick={() => openReturnModal(a)}
+                            className="inline-flex items-center text-xs font-medium px-2.5 py-1.5 bg-[#FAEEDA] text-[#633806] border border-[#FAC775] rounded-full hover:bg-[#EF9F27] hover:text-white hover:border-[#EF9F27] transition-colors">
+                            Return
+                          </button>
+                        )}
+                        <button type="button" onClick={() => openHistoryModal(a)}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                          title="View history" aria-label="View history">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {trackableAssets.length === 0 &&
                 (assetView === 'trackable' ||
                   (assetView === 'all' && consumableAssets.length === 0)) && (
@@ -1562,19 +1645,22 @@ export default function Assets() {
         <div className="lg:hidden space-y-3">
           {(assetView === 'all' || assetView === 'trackable') &&
             trackableAssets.map((asset) => (
-              <div key={asset.id} className="bg-white border border-gray-100 rounded-2xl p-4 mb-3 shadow-sm">
+              <div key={asset.id} className="bg-white border border-gray-100 rounded-2xl p-4 mb-3 overflow-hidden border-l-4" style={{ borderLeftColor: getStatusBarColor(asset.status || 'Available') }}>
                 <div className="flex items-start justify-between mb-2 gap-2">
-                  <div className="min-w-0">
-                    <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600">{asset.assetId}</span>
-                    <p className="font-medium text-gray-900 mt-1">{asset.name || '—'}</p>
-                    <p className="text-xs text-gray-400">
-                      {asset.type || '—'}
-                      {(asset.brand || asset.model) && ` · ${[asset.brand, asset.model].filter(Boolean).join(' ')}`}
-                    </p>
+                  <div className="min-w-0 flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0" style={{ background: getAssetTypeColors(asset.type).bg }}>
+                      {getAssetIcon(asset.type)}
+                    </div>
+                    <div className="min-w-0">
+                      <span className={`inline-flex font-mono text-xs px-2 py-0.5 rounded-lg font-medium ${getAssetIdBadgeClass(asset.status || 'Available')}`}>{asset.assetId}</span>
+                      <p className="font-medium text-gray-900 mt-0.5">{asset.name || '—'}</p>
+                      <p className="text-xs text-gray-400">
+                        {asset.type || '—'}
+                        {(asset.brand || asset.model) && ` · ${[asset.brand, asset.model].filter(Boolean).join(' ')}`}
+                      </p>
+                    </div>
                   </div>
-                  <span
-                    className={`inline-flex items-center text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${getStatusBadgeClass(asset.status || 'Available')}`}
-                  >
+                  <span className={`inline-flex items-center text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${getStatusBadgeClass(asset.status || 'Available')}`}>
                     {asset.status || 'Available'}
                   </span>
                 </div>
