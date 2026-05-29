@@ -630,6 +630,17 @@ function AuditorDashboard({ audits, currentUser }) {
 
   const myFindings = myAudits.reduce((sum, a) => sum + (a.findings || []).filter((f) => f.addedByRole === 'auditor').length, 0);
 
+  const upcomingAudits = myAudits
+    .filter((a) => {
+      const s = effStatus(a.status);
+      return s !== 'Closed' && s !== 'Submitted' && s !== 'Under Review' && a.endDate;
+    })
+    .map((a) => ({
+      ...a,
+      daysLeft: Math.ceil((new Date(a.endDate) - now) / (1000 * 60 * 60 * 24)),
+    }))
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+
   return (
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-[#1B6B6B] to-[#2D8A8A] rounded-2xl p-6 text-white">
@@ -688,6 +699,79 @@ function AuditorDashboard({ audits, currentUser }) {
           </div>
         ))}
       </div>
+
+      {upcomingAudits.length > 0 && (
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-700">📅 Upcoming Deadlines</h3>
+            <div className="flex items-center gap-2">
+              {upcomingAudits.filter((a) => a.daysLeft < 0).length > 0 && (
+                <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                  {upcomingAudits.filter((a) => a.daysLeft < 0).length} overdue
+                </span>
+              )}
+              {upcomingAudits.filter((a) => a.daysLeft >= 0 && a.daysLeft <= 7).length > 0 && (
+                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                  {upcomingAudits.filter((a) => a.daysLeft >= 0 && a.daysLeft <= 7).length} this week
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="space-y-2">
+            {upcomingAudits.map((audit) => {
+              const isOverdue = audit.daysLeft < 0;
+              const isDueToday = audit.daysLeft === 0;
+              const isDueSoon = audit.daysLeft > 0 && audit.daysLeft <= 3;
+              const isDueThisWeek = audit.daysLeft > 3 && audit.daysLeft <= 7;
+              const cardCls = isOverdue || isDueToday
+                ? 'bg-red-50 border-red-200'
+                : isDueSoon
+                ? 'bg-amber-50 border-amber-200'
+                : isDueThisWeek
+                ? 'bg-blue-50 border-blue-100'
+                : 'bg-gray-50 border-gray-100';
+              const dateLabel = isOverdue
+                ? `⚠️ ${Math.abs(audit.daysLeft)}d overdue`
+                : isDueToday
+                ? '🔴 Due today'
+                : isDueSoon
+                ? `⏰ Due in ${audit.daysLeft}d`
+                : isDueThisWeek
+                ? `📅 Due in ${audit.daysLeft}d`
+                : `📅 ${formatDate(audit.endDate)}`;
+              const dateCls = isOverdue || isDueToday
+                ? 'text-red-600 font-bold'
+                : isDueSoon
+                ? 'text-amber-700 font-bold'
+                : isDueThisWeek
+                ? 'text-blue-700'
+                : 'text-gray-400';
+              const eff = effStatus(audit.status);
+              const sCfg = AUDIT_STATUSES.find((s) => s.key === eff) || AUDIT_STATUSES[0];
+              return (
+                <div key={audit.id} className={`border rounded-xl p-3.5 ${cardCls}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-xs font-mono text-gray-400">{audit.auditRefId}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sCfg.badge}`}>
+                          {sCfg.icon} {eff}
+                        </span>
+                      </div>
+                      <p className="text-sm font-semibold text-gray-800 truncate">{audit.auditTypeName}</p>
+                      <div className="flex items-center gap-3 mt-1 flex-wrap">
+                        {audit.branch && <span className="text-xs text-gray-500">🏢 {audit.branch}</span>}
+                        {audit.location && <span className="text-xs text-gray-400">📍 {audit.location}</span>}
+                      </div>
+                    </div>
+                    <span className={`text-xs flex-shrink-0 mt-0.5 ${dateCls}`}>{dateLabel}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {myAudits.length > 0 && (
         <div className="bg-white border border-gray-100 rounded-2xl p-5">
@@ -2295,29 +2379,6 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
     };
   }, []);
 
-  // Reset draft state only when the opened audit changes — not on every Firestore field update.
-  useEffect(() => {
-    if (!safeAudit.id) return;
-    const cr = Array.isArray(safeAudit.checklistReview) ? safeAudit.checklistReview : [];
-    const fd = Array.isArray(safeAudit.findings) ? safeAudit.findings : [];
-    const ad = Array.isArray(safeAudit.auditDocuments) ? safeAudit.auditDocuments : [];
-    setChecklistReview(cr);
-    setFindings(fd);
-    setAdminNotes(safeAudit.adminNotes || '');
-    setAuditDocs(ad);
-    lastSavedRef.current = {
-      checklistReview: cr,
-      findings: fd,
-      adminNotes: safeAudit.adminNotes || '',
-      auditDocuments: ad,
-    };
-    setShowSubmitConfirm(false);
-    setShowCloseModal(false);
-    setCloseFeedback('');
-    setAuditRating(0);
-    setSentBackTo(null);
-    setClosedAuditData(null);
-  }, [safeAudit.id]); // eslint-disable-line react-hooks/exhaustive-deps -- reset draft only when audit id changes
 
   useEffect(() => {
     if (!safeAudit.id) return;
