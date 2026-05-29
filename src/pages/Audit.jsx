@@ -6136,6 +6136,8 @@ function FindingsView({ audits, onSelect = () => {} }) {
   const [severityFilter, setSeverityFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [monthFilter, setMonthFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
 
   const allFindings = useMemo(() => {
     const rows = [];
@@ -6146,6 +6148,7 @@ function FindingsView({ audits, onSelect = () => {} }) {
           auditRefId: a.auditRefId || a.id,
           auditTypeName: a.auditTypeName || '—',
           branch: a.branch || a.location || '—',
+          location: a.location || '',
           auditId: a.id,
         });
       });
@@ -6162,12 +6165,17 @@ function FindingsView({ audits, onSelect = () => {} }) {
     return [...months].sort().reverse();
   }, [allFindings]);
 
+  const findingBranches = useMemo(() => [...new Set(allFindings.map((f) => f.branch).filter((b) => b && b !== '—'))].sort(), [allFindings]);
+  const findingLocations = useMemo(() => [...new Set(allFindings.map((f) => f.location).filter(Boolean))].sort(), [allFindings]);
+
   const filtered = useMemo(() => allFindings.filter((f) => {
     if (severityFilter !== 'All' && f.severity !== severityFilter) return false;
     if (statusFilter !== 'All' && f.status !== statusFilter) return false;
     if (monthFilter && (!f.createdAt || !String(f.createdAt).startsWith(monthFilter))) return false;
+    if (branchFilter && f.branch !== branchFilter) return false;
+    if (locationFilter && f.location !== locationFilter) return false;
     return true;
-  }), [allFindings, severityFilter, statusFilter, monthFilter]);
+  }), [allFindings, severityFilter, statusFilter, monthFilter, branchFilter, locationFilter]);
 
   const counts = useMemo(() => ({
     Critical: allFindings.filter((f) => f.severity === 'Critical').length,
@@ -6213,6 +6221,20 @@ function FindingsView({ audits, onSelect = () => {} }) {
           )
         ))}
         <div className="ml-auto flex items-center gap-2 flex-wrap">
+          {findingBranches.length > 0 && (
+            <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:border-[#1B6B6B]">
+              <option value="">All branches</option>
+              {findingBranches.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+          )}
+          {findingLocations.length > 0 && (
+            <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:border-[#1B6B6B]">
+              <option value="">All locations</option>
+              {findingLocations.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
+          )}
           {findingMonths.length > 0 && (
             <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}
               className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:border-[#1B6B6B]">
@@ -6425,6 +6447,8 @@ function LocationScoreChart({ audits }) {
 
 function AuditDocumentsView({ audits, companyId, userRole, showSuccess, showError }) {
   const [monthFilter, setMonthFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
   const [retentionMonths, setRetentionMonths] = useState(6);
   const [deleting, setDeleting] = useState(null);
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
@@ -6452,10 +6476,15 @@ function AuditDocumentsView({ audits, companyId, userRole, showSuccess, showErro
     return [...months].sort().reverse();
   }, [allDocs]);
 
-  const filteredDocs = useMemo(() => {
-    if (!monthFilter) return allDocs;
-    return allDocs.filter((d) => d.uploadedAt && d.uploadedAt.startsWith(monthFilter));
-  }, [allDocs, monthFilter]);
+  const docBranches = useMemo(() => [...new Set(allDocs.map((d) => d.branch).filter(Boolean))].sort(), [allDocs]);
+  const docLocations = useMemo(() => [...new Set(allDocs.map((d) => d.location).filter(Boolean))].sort(), [allDocs]);
+
+  const filteredDocs = useMemo(() => allDocs.filter((d) => {
+    if (monthFilter && (!d.uploadedAt || !d.uploadedAt.startsWith(monthFilter))) return false;
+    if (branchFilter && d.branch !== branchFilter) return false;
+    if (locationFilter && d.location !== locationFilter) return false;
+    return true;
+  }), [allDocs, monthFilter, branchFilter, locationFilter]);
 
   const expiredDocs = useMemo(() => {
     if (!retentionMonths) return [];
@@ -6528,6 +6557,20 @@ function AuditDocumentsView({ audits, companyId, userRole, showSuccess, showErro
             <option key={m} value={m}>{new Date(m + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</option>
           ))}
         </select>
+        {docBranches.length > 0 && (
+          <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
+            className="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-[#1B6B6B]">
+            <option value="">All branches</option>
+            {docBranches.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+        )}
+        {docLocations.length > 0 && (
+          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}
+            className="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-[#1B6B6B]">
+            <option value="">All locations</option>
+            {docLocations.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+        )}
         <span className="text-xs text-gray-400">{filteredDocs.length} of {allDocs.length} documents</span>
 
         {canDelete && (
