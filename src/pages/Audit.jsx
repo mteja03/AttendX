@@ -35,6 +35,7 @@ import { whatsappUrl } from '../utils/whatsappUrl';
 import { SkeletonTable } from '../components/SkeletonRow';
 import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 /** Used by AuditCalendar; includes legacy keys for older documents */
 const STATUS_COLORS = {
@@ -6370,6 +6371,98 @@ function AuditReports({ audits }) {
       .sort((a, b) => b.totalAssigned - a.totalAssigned);
   }, [perfAudits]);
 
+  const monthlyTrend = useMemo(() => {
+    const now = new Date();
+    const months = Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+      return {
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+        assigned: 0,
+        closed: 0,
+      };
+    });
+    audits.forEach((a) => {
+      const assignedDate = a.startDate || (() => {
+        try { return a.createdAt?.toDate ? a.createdAt.toDate().toISOString().split('T')[0] : null; } catch { return null; }
+      })();
+      if (assignedDate) {
+        const m = months.find((x) => x.key === assignedDate.slice(0, 7));
+        if (m) m.assigned++;
+      }
+      if (effStatus(a.status) === 'Closed') {
+        let closedDate = null;
+        try {
+          if (a.closedAt) closedDate = (a.closedAt?.toDate ? a.closedAt.toDate() : new Date(a.closedAt)).toISOString().split('T')[0];
+        } catch { /* ignore */ }
+        if (!closedDate && a.endDate) closedDate = a.endDate;
+        if (closedDate) {
+          const m = months.find((x) => x.key === closedDate.slice(0, 7));
+          if (m) m.closed++;
+        }
+      }
+    });
+    return months;
+  }, [audits]);
+
+  const branchCompliance = useMemo(() => {
+    const map = {};
+    audits.forEach((a) => {
+      const branch = a.branch || '—';
+      if (!map[branch]) map[branch] = { branch, total: 0, closed: 0, scores: [], openFindings: 0 };
+      map[branch].total++;
+      if (effStatus(a.status) === 'Closed') {
+        map[branch].closed++;
+        const score = getAuditScore(a);
+        if (score !== null) map[branch].scores.push(score);
+      }
+      map[branch].openFindings += (a.findings || []).filter((f) => f.status !== 'Resolved').length;
+    });
+    return Object.values(map)
+      .map((b) => ({
+        ...b,
+        avgScore: b.scores.length > 0 ? Math.round(b.scores.reduce((s, v) => s + v, 0) / b.scores.length) : null,
+      }))
+      .sort((a, b) => {
+        if (a.avgScore === null && b.avgScore === null) return 0;
+        if (a.avgScore === null) return 1;
+        if (b.avgScore === null) return -1;
+        return a.avgScore - b.avgScore;
+      });
+  }, [audits]);
+
+  const handleExportAuditorPerf = async () => {
+    try {
+      const xlsxMod = await import('xlsx');
+      const XLSX = xlsxMod.default ?? xlsxMod;
+      const { saveAs } = await import('file-saver');
+      const rows = auditorPerf.map((ap) => ({
+        Auditor: ap.name,
+        Email: ap.email,
+        'Total Assigned': ap.totalAssigned,
+        Closed: ap.closed,
+        'In Progress': ap.inProgress,
+        Overdue: ap.overdue,
+        'Completion Rate (%)': ap.closedRate,
+        'Avg Score (%)': ap.avgScore ?? '',
+        'Avg Rating': ap.avgRating ?? '',
+        'Total Findings': ap.findings,
+        'Resolved Findings': ap.resolvedFindings,
+        Branches: ap.branches.map((b) => `${b.name} (${b.count})`).join(', '),
+        Locations: ap.locations.map((l) => `${l.name} (${l.count})`).join(', '),
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [24, 30, 16, 10, 14, 10, 20, 16, 12, 16, 20, 40, 40].map((w) => ({ wch: w }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Auditor Performance');
+      const period = perfPeriod === 'month' ? 'ThisMonth' : perfPeriod === '3months' ? 'Last3Months' : perfPeriod === 'year' ? 'ThisYear' : 'AllTime';
+      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      saveAs(new Blob([buf], { type: 'application/octet-stream' }), `AuditorPerformance_${period}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (e) {
+      if (import.meta.env.DEV) console.error('Export failed', e);
+    }
+  };
+
   if (audits.length === 0) {
     return (
       <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
@@ -6413,7 +6506,47 @@ function AuditReports({ audits }) {
       </div>
 
       <div className="bg-white border border-gray-100 rounded-2xl p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">👤 Auditor Performance</h3>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-semibold text-gray-700">📈 Monthly Trend</h3>
+          <span className="text-xs text-gray-400">Last 12 months</span>
+        </div>
+        <p className="text-xs text-gray-400 mb-4">Audits assigned vs closed per month</p>
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart data={monthlyTrend} barSize={12} barGap={2} margin={{ top: 0, right: 0, left: -16, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} allowDecimals={false} />
+            <Tooltip
+              contentStyle={{ border: '0.5px solid #E5E7EB', borderRadius: 8, fontSize: 12, boxShadow: 'none', padding: '6px 10px' }}
+              cursor={{ fill: '#F9FAFB' }}
+            />
+            <Bar dataKey="assigned" name="Assigned" fill="#D3D1C7" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="closed" name="Closed" fill="#1B6B6B" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+        <div className="flex items-center gap-4 mt-3">
+          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#D3D1C7' }} />Assigned
+          </span>
+          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+            <span className="w-3 h-3 rounded-sm inline-block bg-[#1B6B6B]" />Closed
+          </span>
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-100 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-700">👤 Auditor Performance</h3>
+          {auditorPerf.length > 0 && (
+            <button
+              type="button"
+              onClick={handleExportAuditorPerf}
+              className="flex items-center gap-1.5 text-xs border border-[#9FE1CB] bg-[#E1F5EE] text-[#0F6E56] px-3 py-1.5 rounded-xl hover:bg-[#1B6B6B] hover:text-white hover:border-[#1B6B6B] transition-colors"
+            >
+              ⬇️ Export Excel
+            </button>
+          )}
+        </div>
         <BranchScoreChart audits={audits} />
 
         <div className="flex items-center gap-2 flex-wrap p-3 bg-gray-50 border border-gray-100 rounded-xl mb-3 mt-4">
@@ -6558,6 +6691,81 @@ function AuditReports({ audits }) {
           </div>
         )}
       </div>
+
+      {branchCompliance.length > 0 && (
+        <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">🏢 Branch Compliance Ranking</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Sorted by lowest score — worst performers first</p>
+            </div>
+            <span className="text-xs text-gray-400">{branchCompliance.length} branch{branchCompliance.length !== 1 ? 'es' : ''}</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[540px]" style={{ tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: '30%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '25%' }} />
+                <col style={{ width: '15%' }} />
+              </colgroup>
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  {['Branch', 'Total', 'Closed', 'Avg Score', 'Open Findings'].map((h) => (
+                    <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-5 py-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {branchCompliance.map((b) => {
+                  const scoreColor = b.avgScore === null ? 'text-gray-300' : b.avgScore >= 80 ? 'text-green-600' : b.avgScore >= 60 ? 'text-amber-600' : 'text-red-600';
+                  const barColor = b.avgScore === null ? '#D3D1C7' : b.avgScore >= 80 ? '#639922' : b.avgScore >= 60 ? '#EF9F27' : '#E24B4A';
+                  const rowBg = b.avgScore !== null && b.avgScore < 60 ? 'bg-red-50/30' : '';
+                  return (
+                    <tr key={b.branch} className={`hover:bg-gray-50/80 transition-colors ${rowBg}`}>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-1 h-8 rounded-full flex-shrink-0" style={{ background: barColor }} />
+                          <span className="text-sm font-medium text-gray-800 truncate">{b.branch}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-600">{b.total}</td>
+                      <td className="px-5 py-3.5">
+                        <span className="text-sm text-gray-600">{b.closed}</span>
+                        <span className="text-xs text-gray-400 ml-1">
+                          ({b.total > 0 ? Math.round((b.closed / b.total) * 100) : 0}%)
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {b.avgScore !== null ? (
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-bold ${scoreColor}`}>{b.avgScore}%</span>
+                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden max-w-[64px]">
+                              <div className="h-full rounded-full" style={{ width: `${b.avgScore}%`, background: barColor }} />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-300">No closed audits</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {b.openFindings > 0 ? (
+                          <span className="inline-flex items-center text-xs font-medium text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
+                            {b.openFindings} open
+                          </span>
+                        ) : (
+                          <span className="text-sm text-green-600 font-medium">✓ Clear</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
