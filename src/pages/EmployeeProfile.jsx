@@ -1587,7 +1587,6 @@ export default function EmployeeProfile() {
       }
 
       try {
-        const { deleteEmployeePhoto } = await import('../utils/photoUpload');
         await deleteEmployeePhoto(companyId, empId);
       } catch (storageErr) {
         if (import.meta.env.DEV) console.warn('Storage cleanup failed:', storageErr);
