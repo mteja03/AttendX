@@ -7302,7 +7302,7 @@ export default function Audit() {
   const isAuditManager = userRole === 'auditmanager';
   const isAuditor = userRole === 'auditor';
   const isHRManager = userRole === 'hrmanager';
-  const canManage = isAdmin || isAuditManager || isHRManager;
+  const canManage = isAdmin || isAuditManager || isHRManager || isCompanyAdmin;
 
   const [activeTab, setActiveTab] = useState(isAuditor ? 'dashboard' : 'audits');
   const [auditTypes, setAuditTypes] = useState([]);

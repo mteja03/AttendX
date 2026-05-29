@@ -97,7 +97,7 @@ export function effStatus(status) {
 }
 
 export function getAllowedStatuses(currentStatus, userRole) {
-  const canMgr = userRole === 'admin' || userRole === 'hrmanager' || userRole === 'auditmanager';
+  const canMgr = userRole === 'admin' || userRole === 'hrmanager' || userRole === 'auditmanager' || userRole === 'companyadmin';
   if (!canMgr) return [];
   const s = effStatus(currentStatus);
   if (s === 'Submitted') return ['Under Review'];
@@ -111,6 +111,7 @@ export function getFindingAddedByRole(userRole) {
   if (userRole === 'auditmanager') return 'auditmanager';
   if (userRole === 'hrmanager') return 'auditmanager';
   if (userRole === 'admin') return 'auditmanager';
+  if (userRole === 'companyadmin') return 'auditmanager';
   return 'auditor';
 }
 
