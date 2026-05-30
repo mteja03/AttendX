@@ -3,9 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
   collection,
   getDocs,
-  addDoc,
   updateDoc,
-  deleteDoc,
   doc,
   query,
   orderBy,
@@ -13,8 +11,6 @@ import {
   onSnapshot,
   where,
   getDoc,
-  setDoc,
-  increment,
 } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
@@ -34,12 +30,9 @@ import {
   auditDocViewLabel,
   isAuditDocImageType,
   statusMeta,
-  normaliseAuditCategory,
   getAuditScore,
-  isAuditOverdue,
 } from './audit/auditHelpers';
 import { WhatsAppButton } from '../utils/whatsapp';
-import { whatsappUrl } from '../utils/whatsappUrl';
 import { SkeletonTable } from '../components/SkeletonRow';
 import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, query, where, limit, getDoc, setDoc, increment } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import { effStatus, isAuditOverdue, normaliseAuditCategory, formatDate } from './auditHelpers';
+import { effStatus, isAuditOverdue, normaliseAuditCategory } from './auditHelpers';
 import EmptyAuditState from './EmptyAuditState';
 import AssignAuditModal from './AssignAuditModal';
 import AuditTableRow from './AuditTableRow';
