@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatDate } from './auditHelpers';
+import { formatDate, TEMPLATE_TYPES, generateSampleCSV, parseCSVToRecords, makeBlankRecord } from './auditHelpers';
 import { WhatsAppButton } from '../../utils/whatsapp';
 
 export default function AssignAuditModal({
@@ -37,6 +37,60 @@ export default function AssignAuditModal({
   const localCategories = useMemo(() => { if (localCategoriesFromCompany) return localCategoriesFromCompany; return orgListsFromFetch?.categories ?? []; }, [localCategoriesFromCompany, orgListsFromFetch]);
 
   const [templateSearch, setTemplateSearch] = useState('');
+  const csvFileRef = useRef(null);
+  const csvTargetRef = useRef({ templateId: null, sectionId: null, section: null });
+
+  const selectedRecordTemplates = useMemo(
+    () => assignForm.auditTypeIds.map((id) => auditTypes.find((t) => t.id === id)).filter((t) => t?.templateType === TEMPLATE_TYPES.RECORD),
+    [assignForm.auditTypeIds, auditTypes],
+  );
+
+  const handleCSVSelect = (file) => {
+    if (!file || !csvTargetRef.current.section) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const records = parseCSVToRecords(e.target.result, csvTargetRef.current.section);
+      const { templateId, sectionId } = csvTargetRef.current;
+      setAssignForm((prev) => ({
+        ...prev,
+        recordData: {
+          ...(prev.recordData || {}),
+          [templateId]: { ...(prev.recordData?.[templateId] || {}), [sectionId]: records },
+        },
+      }));
+    };
+    reader.readAsText(file);
+    if (csvFileRef.current) csvFileRef.current.value = '';
+  };
+
+  const handleAddManualRow = (templateId, section) => {
+    const blank = makeBlankRecord(section.columns);
+    setAssignForm((prev) => ({
+      ...prev,
+      recordData: {
+        ...(prev.recordData || {}),
+        [templateId]: {
+          ...(prev.recordData?.[templateId] || {}),
+          [section.id]: [...(prev.recordData?.[templateId]?.[section.id] || []), blank],
+        },
+      },
+    }));
+  };
+
+  const handleSampleCSVDownload = (section) => {
+    const csv = generateSampleCSV(section);
+    if (!csv) return;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(section.name || 'section').replace(/\s+/g, '_')}_sample.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const { userRole } = useAuth();
   const isCompanyAdmin = userRole === 'companyadmin' || userRole === 'admin';
   const todayStr = new Date().toISOString().split('T')[0];
@@ -84,6 +138,7 @@ export default function AssignAuditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div role="presentation" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <input ref={csvFileRef} type="file" accept=".csv" className="hidden" onChange={(e) => handleCSVSelect(e.target.files?.[0])} />
       <div className="relative flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-sm sm:mx-4 sm:max-w-2xl sm:rounded-2xl">
         <div className="px-6 py-5 border-b flex-shrink-0">
           <div className="flex items-center justify-between">
@@ -151,6 +206,91 @@ export default function AssignAuditModal({
               </div>
             )}
           </div>
+
+          {selectedRecordTemplates.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Records data</p>
+              </div>
+              <p className="text-xs text-gray-400 mb-3">Download sample CSV, fill it, then upload. Or add rows manually. Auditor fills the status columns.</p>
+              {selectedRecordTemplates.map((tmpl) => (
+                <div key={tmpl.id} className="border border-gray-100 rounded-xl overflow-hidden mb-3">
+                  <div className="bg-gray-50 px-4 py-2.5 flex items-center gap-2 border-b border-gray-100">
+                    <div className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: tmpl.color || '#1B6B6B' }}>{tmpl.name?.charAt(0)}</div>
+                    <span className="text-sm font-medium text-gray-700 flex-1 truncate">{tmpl.name}</span>
+                    <span className="text-xs bg-[#E8F5F5] text-[#0F6E56] px-2 py-0.5 rounded-full font-medium flex-shrink-0">Records</span>
+                  </div>
+                  {(tmpl.recordSections || []).map((sec) => {
+                    const prefilledCols = (sec.columns || []).filter((c) => c.type?.startsWith('prefilled'));
+                    const rows = assignForm.recordData?.[tmpl.id]?.[sec.id] || [];
+                    return (
+                      <div key={sec.id} className="px-4 py-3 border-b border-gray-50 last:border-b-0">
+                        <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+                          <span className="text-xs font-medium text-gray-600">{sec.name}</span>
+                          <span className="text-xs text-gray-400">{prefilledCols.map((c) => c.label).join(', ')}</span>
+                        </div>
+                        <div className="flex gap-2 flex-wrap mb-2">
+                          {prefilledCols.length > 0 && (
+                            <button type="button" onClick={() => handleSampleCSVDownload(sec)}
+                              className="flex items-center gap-1.5 text-xs border border-[#1B6B6B] text-[#1B6B6B] px-3 py-2 rounded-xl hover:bg-[#E8F5F5] transition-colors min-h-[36px]">
+                              ↓ Sample CSV
+                            </button>
+                          )}
+                          {prefilledCols.length > 0 && (
+                            <button type="button" onClick={() => { csvTargetRef.current = { templateId: tmpl.id, sectionId: sec.id, section: sec }; csvFileRef.current?.click(); }}
+                              className="flex items-center gap-1.5 text-xs bg-[#1B6B6B] text-white px-3 py-2 rounded-xl hover:bg-[#155858] transition-colors min-h-[36px]">
+                              ↑ Upload CSV
+                            </button>
+                          )}
+                          <button type="button" onClick={() => handleAddManualRow(tmpl.id, sec)}
+                            className="flex items-center gap-1.5 text-xs border border-gray-200 text-gray-600 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors min-h-[36px]">
+                            + Add row
+                          </button>
+                        </div>
+                        {rows.length > 0 && (
+                          <>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-xs font-medium bg-[#E8F5F5] text-[#0F6E56] px-2.5 py-1 rounded-full">✓ {rows.length} record{rows.length !== 1 ? 's' : ''} loaded</span>
+                              <button type="button"
+                                onClick={() => setAssignForm((prev) => ({ ...prev, recordData: { ...(prev.recordData || {}), [tmpl.id]: { ...(prev.recordData?.[tmpl.id] || {}), [sec.id]: [] } } }))}
+                                className="text-xs text-red-400 hover:underline">Clear</button>
+                            </div>
+                            {prefilledCols.length > 0 && (
+                              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                                <table style={{ fontSize: 11, width: '100%', borderCollapse: 'collapse', minWidth: prefilledCols.length * 90 }}>
+                                  <thead>
+                                    <tr style={{ background: '#F9FAFB' }}>
+                                      {prefilledCols.map((col) => (
+                                        <th key={col.id} style={{ textAlign: 'left', padding: '5px 10px', fontSize: 10, fontWeight: 500, color: '#6B7280', borderBottom: '0.5px solid #F3F4F6', whiteSpace: 'nowrap' }}>{col.label}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {rows.slice(0, 3).map((row, i) => (
+                                      <tr key={row.id}>
+                                        {prefilledCols.map((col) => (
+                                          <td key={col.id} style={{ padding: '4px 10px', fontSize: 11, color: '#374151', borderBottom: i < Math.min(rows.length, 3) - 1 ? '0.5px solid #F9FAFB' : 'none', whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {row.data?.[col.id] || '—'}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    ))}
+                                    {rows.length > 3 && (
+                                      <tr><td colSpan={prefilledCols.length} style={{ padding: '4px 10px', fontSize: 10, color: '#9CA3AF', textAlign: 'center' }}>… {rows.length - 3} more rows</td></tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
 
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Location</p>
