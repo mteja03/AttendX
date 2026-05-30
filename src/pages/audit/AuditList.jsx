@@ -37,6 +37,9 @@ export default function AuditList({
   const [activeStatusTab, setActiveStatusTab] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({ status: '', type: '', branch: '', location: '', riskLevel: '', auditor: '', category: '', dateFrom: '', dateTo: '' });
+  const [viewMode, setViewMode] = useState('list');
+  const [locationDrill, setLocationDrill] = useState(null);
+  const [branchDrill, setBranchDrill] = useState(null);
   const [leadSearch, setLeadSearch] = useState('');
   const [showLeadDrop, setShowLeadDrop] = useState(false);
   const [teamSearch, setTeamSearch] = useState('');
@@ -54,6 +57,12 @@ export default function AuditList({
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset drill-down when filters change
+    setLocationDrill(null);
+    setBranchDrill(null);
+  }, [activeStatusTab, search, filters]);
 
   const isOverdue = useCallback((audit) => isAuditOverdue({ ...audit, status: effStatus(audit?.status) }), []);
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
@@ -78,6 +87,17 @@ export default function AuditList({
       return true;
     });
   }, [audits, search, filters, activeStatusTab, isOverdue]);
+
+  const drillStats = (list) => {
+    const total = list.length;
+    const closed = list.filter((a) => effStatus(a.status) === 'Closed').length;
+    const overdueCount = list.filter((a) => isAuditOverdue({ ...a, status: effStatus(a.status) })).length;
+    const inProgressCount = list.filter((a) => effStatus(a.status) === 'In Progress').length;
+    const submittedCount = list.filter((a) => effStatus(a.status) === 'Submitted' || effStatus(a.status) === 'Under Review').length;
+    const barPct = total > 0 ? Math.round((closed / total) * 100) : 0;
+    const barColor = overdueCount > 0 ? '#E24B4A' : barPct >= 60 ? '#639922' : '#EF9F27';
+    return { total, closed, overdueCount, inProgressCount, submittedCount, barPct, barColor };
+  };
 
   const generateAuditId = async () => {
     const counterRef = doc(db, 'companies', companyId, 'settings', 'auditCounter');
@@ -168,6 +188,16 @@ export default function AuditList({
               <span className="hidden sm:inline">+ Assign Audit</span>
             </button>
           )}
+          <div className="flex border border-gray-200 rounded-xl overflow-hidden flex-shrink-0">
+            <button type="button" onClick={() => setViewMode('list')}
+              className={`px-3 py-2 text-xs font-medium transition-colors ${viewMode === 'list' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
+              List
+            </button>
+            <button type="button" onClick={() => { setViewMode('location'); setLocationDrill(null); setBranchDrill(null); }}
+              className={`px-3 py-2 text-xs font-medium transition-colors border-l border-gray-200 ${viewMode === 'location' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
+              Location
+            </button>
+          </div>
         </div>
 
         {showFilters && (
@@ -274,23 +304,153 @@ export default function AuditList({
       </div>
 
       <div>
-        {filtered.length === 0 ? (
-          <EmptyAuditState total={audits.length} onAssign={() => setShowAssignModal(true)} auditTypesEmpty={auditTypes.length === 0} canManage={canManage} search={search} onClearSearch={() => setSearch('')} />
+        {viewMode === 'location' ? (
+          (() => {
+            const locMap = {};
+            filtered.forEach((a) => {
+              const loc = a.location || '—';
+              if (!locMap[loc]) locMap[loc] = [];
+              locMap[loc].push(a);
+            });
+            const locations = Object.entries(locMap).sort((a, b) => a[0].localeCompare(b[0]));
+
+            if (locationDrill) {
+              const locAudits = filtered.filter((a) => (a.location || '—') === locationDrill);
+
+              if (branchDrill) {
+                const branchAudits = locAudits.filter((a) => (a.branch || '—') === branchDrill);
+                return (
+                  <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 text-xs">
+                      <button type="button" onClick={() => { setLocationDrill(null); setBranchDrill(null); }} className="text-[#1B6B6B] font-medium hover:underline">All locations</button>
+                      <span className="text-gray-300">›</span>
+                      <button type="button" onClick={() => setBranchDrill(null)} className="text-[#1B6B6B] font-medium hover:underline">{locationDrill}</button>
+                      <span className="text-gray-300">›</span>
+                      <span className="text-gray-700 font-medium">{branchDrill}</span>
+                      <span className="ml-auto text-gray-400">{branchAudits.length} audit{branchAudits.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    {branchAudits.length === 0 ? (
+                      <p className="text-center text-sm text-gray-400 py-10">No audits match current filters</p>
+                    ) : (
+                      <>
+                        <div className="hidden md:grid gap-3 px-5 py-3 bg-gray-50/80 border-b border-gray-100" style={{ gridTemplateColumns: '2fr 1.2fr 1.2fr 1fr 140px 80px 88px' }}>
+                          {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Score', ''].map((h, i) => (
+                            <div key={i} className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate">{h}</div>
+                          ))}
+                        </div>
+                        <div className="divide-y divide-gray-50">
+                          {branchAudits.map((audit) => (
+                            <AuditTableRow key={audit.id} audit={audit} companyId={companyId} userRole={userRole} currentUser={currentUser} employees={employees}
+                              onOpen={() => setSelectedAudit(audit)} onDelete={(e) => handleDelete(e, audit)}
+                              showSuccess={showSuccess} showError={showError} canManage={canManage} isAuditor={isAuditor} />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              }
+
+              const branchMap = {};
+              locAudits.forEach((a) => {
+                const br = a.branch || '—';
+                if (!branchMap[br]) branchMap[br] = [];
+                branchMap[br].push(a);
+              });
+              const branches = Object.entries(branchMap).sort((a, b) => a[0].localeCompare(b[0]));
+              return (
+                <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 text-xs">
+                    <button type="button" onClick={() => { setLocationDrill(null); setBranchDrill(null); }} className="text-[#1B6B6B] font-medium hover:underline">All locations</button>
+                    <span className="text-gray-300">›</span>
+                    <span className="text-gray-700 font-medium">{locationDrill}</span>
+                    <span className="ml-auto text-gray-400">{branches.length} branch{branches.length !== 1 ? 'es' : ''}</span>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {branches.map(([br, brAudits]) => {
+                      const st = drillStats(brAudits);
+                      return (
+                        <div key={br} className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-[#E8F5F5]/40 transition-colors" onClick={() => setBranchDrill(br)}>
+                          <div className="w-8 h-8 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5F5E5A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800">{br}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{st.total} audit{st.total !== 1 ? 's' : ''}</p>
+                            <div className="w-20 h-1 bg-gray-100 rounded-full overflow-hidden mt-1.5">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(st.barPct, st.total > 0 ? 4 : 0)}%`, background: st.barColor }} />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                            {st.overdueCount > 0 && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-50 text-red-600">{st.overdueCount} overdue</span>}
+                            {st.inProgressCount > 0 && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-700">{st.inProgressCount} in progress</span>}
+                            {st.closed > 0 && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-50 text-green-700">{st.closed} closed</span>}
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D3D1C7" strokeWidth="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+
+            if (locations.length === 0) {
+              return <EmptyAuditState total={audits.length} onAssign={() => setShowAssignModal(true)} auditTypesEmpty={auditTypes.length === 0} canManage={canManage} search={search} onClearSearch={() => setSearch('')} />;
+            }
+
+            return (
+              <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+                <div className="divide-y divide-gray-50">
+                  {locations.map(([loc, locAudits]) => {
+                    const st = drillStats(locAudits);
+                    const branchCount = new Set(locAudits.map((a) => a.branch).filter(Boolean)).size;
+                    return (
+                      <div key={loc} className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-[#E8F5F5]/40 transition-colors" onClick={() => setLocationDrill(loc)}>
+                        <div className="w-8 h-8 bg-[#E8F5F5] rounded-xl flex items-center justify-center flex-shrink-0">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1B6B6B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800">{loc}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {branchCount > 0 ? `${branchCount} branch${branchCount !== 1 ? 'es' : ''} · ` : ''}{st.total} audit{st.total !== 1 ? 's' : ''}
+                          </p>
+                          <div className="w-20 h-1 bg-gray-100 rounded-full overflow-hidden mt-1.5">
+                            <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(st.barPct, st.total > 0 ? 4 : 0)}%`, background: st.barColor }} />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                          {st.overdueCount > 0 && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-50 text-red-600">{st.overdueCount} overdue</span>}
+                          {st.submittedCount > 0 && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700">{st.submittedCount} submitted</span>}
+                          {st.closed > 0 && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-50 text-green-700">{st.closed} closed</span>}
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D3D1C7" strokeWidth="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()
         ) : (
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-            <div className="hidden md:grid gap-3 px-5 py-3 bg-gray-50/80 border-b border-gray-100" style={{ gridTemplateColumns: '2fr 1.2fr 1.2fr 1fr 140px 80px 88px' }}>
-              {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Score', ''].map((h, i) => (
-                <div key={i} className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate">{h}</div>
-              ))}
+          filtered.length === 0 ? (
+            <EmptyAuditState total={audits.length} onAssign={() => setShowAssignModal(true)} auditTypesEmpty={auditTypes.length === 0} canManage={canManage} search={search} onClearSearch={() => setSearch('')} />
+          ) : (
+            <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+              <div className="hidden md:grid gap-3 px-5 py-3 bg-gray-50/80 border-b border-gray-100" style={{ gridTemplateColumns: '2fr 1.2fr 1.2fr 1fr 140px 80px 88px' }}>
+                {['Audit', 'Location', 'Auditor', 'Dates', 'Status', 'Score', ''].map((h, i) => (
+                  <div key={i} className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate">{h}</div>
+                ))}
+              </div>
+              <div className="divide-y divide-gray-50">
+                {filtered.map((audit) => (
+                  <AuditTableRow key={audit.id} audit={audit} companyId={companyId} userRole={userRole} currentUser={currentUser} employees={employees}
+                    onOpen={() => setSelectedAudit(audit)} onDelete={(e) => handleDelete(e, audit)}
+                    showSuccess={showSuccess} showError={showError} canManage={canManage} isAuditor={isAuditor} />
+                ))}
+              </div>
             </div>
-            <div className="divide-y divide-gray-50">
-              {filtered.map((audit) => (
-                <AuditTableRow key={audit.id} audit={audit} companyId={companyId} userRole={userRole} currentUser={currentUser} employees={employees}
-                  onOpen={() => setSelectedAudit(audit)} onDelete={(e) => handleDelete(e, audit)}
-                  showSuccess={showSuccess} showError={showError} canManage={canManage} isAuditor={isAuditor} />
-              ))}
-            </div>
-          </div>
+          )
         )}
       </div>
 

@@ -36,6 +36,7 @@ export default function AssignAuditModal({
   const localDepts = useMemo(() => { if (orgListsFromFetch?.departments?.length) return orgListsFromFetch.departments; return localDeptsFromCompany || []; }, [localDeptsFromCompany, orgListsFromFetch]);
   const localCategories = useMemo(() => { if (localCategoriesFromCompany) return localCategoriesFromCompany; return orgListsFromFetch?.categories ?? []; }, [localCategoriesFromCompany, orgListsFromFetch]);
 
+  const [templateSearch, setTemplateSearch] = useState('');
   const { userRole } = useAuth();
   const isCompanyAdmin = userRole === 'companyadmin' || userRole === 'admin';
   const todayStr = new Date().toISOString().split('T')[0];
@@ -105,11 +106,29 @@ export default function AssignAuditModal({
                 <span className="text-xs font-medium bg-[#E1F5EE] text-[#0F6E56] px-2 py-0.5 rounded-full">{assignForm.auditTypeIds.length} selected</span>
               )}
             </div>
+            {auditTypes.length > 0 && (
+              <div className="relative mb-2">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">🔍</span>
+                <input
+                  type="text"
+                  value={templateSearch}
+                  onChange={(e) => setTemplateSearch(e.target.value)}
+                  placeholder="Search templates..."
+                  className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-8 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
+                />
+                {templateSearch && (
+                  <button type="button" onClick={() => setTemplateSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-xs">✕</button>
+                )}
+              </div>
+            )}
             {auditTypes.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4 border border-dashed border-gray-200 rounded-xl">No templates yet — create one in Settings</p>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                {auditTypes.map((t) => {
+                {auditTypes.filter((t) => !templateSearch || t.name?.toLowerCase().includes(templateSearch.toLowerCase())).length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-4">No templates match &quot;{templateSearch}&quot;</p>
+                ) : null}
+                {auditTypes.filter((t) => !templateSearch || t.name?.toLowerCase().includes(templateSearch.toLowerCase())).map((t) => {
                   const selected = assignForm.auditTypeIds.includes(t.id);
                   return (
                     <div key={t.id} onClick={() => setAssignForm((p) => { const ids = p.auditTypeIds.includes(t.id) ? p.auditTypeIds.filter((id) => id !== t.id) : [...p.auditTypeIds, t.id]; return { ...p, auditTypeIds: ids }; })}
