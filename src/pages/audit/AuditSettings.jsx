@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
-import { AUDIT_COLORS, normaliseAuditCategory } from './auditHelpers';
+import { AUDIT_COLORS, normaliseAuditCategory, TEMPLATE_TYPES, COLUMN_TYPES } from './auditHelpers';
 
 export default function AuditSettings({ auditTypes, companyId, currentUser, onClose, showSuccess, showError }) {
   const { userRole, auditScope } = useAuth();
@@ -31,26 +31,29 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
   const [newSection, setNewSection] = useState('');
   const [editingSection, setEditingSection] = useState(null);
   const [editSectionName, setEditSectionName] = useState('');
+  const [recordSections, setRecordSections] = useState([]);
 
   const resetForm = () => {
     const defaultCategory = isAuditManager && auditScope === 'internal' ? 'Internal' : isAuditManager && auditScope === 'external' ? 'External' : '';
-    setForm({ auditCategory: defaultCategory, name: '', description: '', color: AUDIT_COLORS[0], riskLevel: 'Medium' });
+    setForm({ auditCategory: defaultCategory, name: '', description: '', color: AUDIT_COLORS[0], riskLevel: 'Medium', templateType: TEMPLATE_TYPES.CHECKLIST });
     setChecklistItems([]);
     setSections(['General']);
     setNewSection('');
     setEditingType(null);
     setEditingSection(null);
     setEditSectionName('');
+    setRecordSections([]);
   };
 
   const openEdit = (type) => {
     setEditingSection(null);
     setEditSectionName('');
     setEditingType(type);
-    setForm({ auditCategory: type.auditCategory || '', name: type.name || '', description: type.description || '', color: type.color || AUDIT_COLORS[0], riskLevel: type.riskLevel || 'Medium' });
+    setForm({ auditCategory: type.auditCategory || '', name: type.name || '', description: type.description || '', color: type.color || AUDIT_COLORS[0], riskLevel: type.riskLevel || 'Medium', templateType: type.templateType || TEMPLATE_TYPES.CHECKLIST });
     setChecklistItems(type.checklistItems || []);
     const sects = [...new Set((type.checklistItems || []).map((i) => i.section))];
     setSections(sects.length > 0 ? sects : ['General']);
+    setRecordSections(type.recordSections || []);
     setShowModal(true);
   };
 
@@ -61,9 +64,28 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
   const handleSave = async () => {
     if (!form.auditCategory) { showError('Select Internal or External'); return; }
     if (!form.name.trim()) { showError('Enter template name'); return; }
+    if (form.templateType === TEMPLATE_TYPES.RECORD) {
+      if (recordSections.length === 0) { showError('Add at least one section'); return; }
+      const hasDropdown = recordSections.some((s) => (s.columns || []).some((c) => c.type === COLUMN_TYPES.AUDITOR_DROPDOWN));
+      if (!hasDropdown) { showError('Add at least one auditor dropdown column'); return; }
+      const hasPrimary = recordSections.some((s) => (s.columns || []).some((c) => c.isPrimary));
+      if (!hasPrimary) { showError('Mark one dropdown column as the scoring column (★)'); return; }
+    }
     try {
       setSaving(true);
-      const data = { auditCategory: normaliseAuditCategory(form.auditCategory), name: form.name.trim(), description: form.description.trim(), color: form.color, riskLevel: form.riskLevel, checklistItems, updatedAt: new Date(), updatedBy: currentUser?.email || '' };
+      const base = {
+        templateType: form.templateType || TEMPLATE_TYPES.CHECKLIST,
+        auditCategory: normaliseAuditCategory(form.auditCategory),
+        name: form.name.trim(),
+        description: form.description.trim(),
+        color: form.color,
+        riskLevel: form.riskLevel,
+        updatedAt: new Date(),
+        updatedBy: currentUser?.email || '',
+      };
+      const data = form.templateType === TEMPLATE_TYPES.RECORD
+        ? { ...base, recordSections, checklistItems: [] }
+        : { ...base, checklistItems, recordSections: [] };
       if (editingType) {
         await updateDoc(doc(db, 'companies', companyId, 'auditTypes', editingType.id), data);
         showSuccess('Template updated!');
@@ -90,6 +112,81 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
       if (import.meta.env.DEV) console.error('Duplicate type error', e);
       showError('Failed to duplicate template');
     }
+  };
+
+  const OPTION_COLORS = ['#639922', '#E24B4A', '#EF9F27', '#378ADD', '#7F77DD', '#888780'];
+  const COLUMN_TYPE_OPTIONS = [
+    { value: COLUMN_TYPES.PREFILLED_TEXT, label: 'Pre-filled · text' },
+    { value: COLUMN_TYPES.PREFILLED_NUMBER, label: 'Pre-filled · number' },
+    { value: COLUMN_TYPES.PREFILLED_DATE, label: 'Pre-filled · date' },
+    { value: COLUMN_TYPES.AUDITOR_DROPDOWN, label: 'Auditor · dropdown' },
+    { value: COLUMN_TYPES.AUDITOR_TEXT, label: 'Auditor · free text' },
+  ];
+
+  const addRecordSection = () => {
+    setRecordSections((prev) => [...prev, { id: `sec_${Date.now()}`, name: `Section ${prev.length + 1}`, columns: [] }]);
+  };
+
+  const updateRecordSectionName = (sId, name) => {
+    setRecordSections((prev) => prev.map((s) => s.id === sId ? { ...s, name } : s));
+  };
+
+  const removeRecordSection = (sId) => {
+    setRecordSections((prev) => prev.filter((s) => s.id !== sId));
+  };
+
+  const addRecordColumn = (sId, type = COLUMN_TYPES.PREFILLED_TEXT) => {
+    const col = {
+      id: `col_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+      label: '', type, widthHint: 'N',
+      ...(type === COLUMN_TYPES.AUDITOR_DROPDOWN ? { options: [{ label: '', color: '#639922', isPass: true }], isPrimary: false } : {}),
+    };
+    setRecordSections((prev) => prev.map((s) => s.id === sId ? { ...s, columns: [...s.columns, col] } : s));
+  };
+
+  const updateRecordColumn = (sId, cId, patch) => {
+    setRecordSections((prev) => {
+      if (patch.isPrimary === true) {
+        return prev.map((s) => ({
+          ...s,
+          columns: s.columns.map((c) => {
+            if (s.id === sId && c.id === cId) return { ...c, ...patch };
+            return { ...c, isPrimary: false };
+          }),
+        }));
+      }
+      return prev.map((s) => s.id !== sId ? s : { ...s, columns: s.columns.map((c) => c.id === cId ? { ...c, ...patch } : c) });
+    });
+  };
+
+  const removeRecordColumn = (sId, cId) => {
+    setRecordSections((prev) => prev.map((s) => s.id === sId ? { ...s, columns: s.columns.filter((c) => c.id !== cId) } : s));
+  };
+
+  const addDropdownOption = (sId, cId) => {
+    setRecordSections((prev) => prev.map((s) => s.id !== sId ? s : {
+      ...s, columns: s.columns.map((c) => c.id !== cId ? c : { ...c, options: [...(c.options || []), { label: '', color: '#888780', isPass: false }] }),
+    }));
+  };
+
+  const updateDropdownOption = (sId, cId, idx, patch) => {
+    setRecordSections((prev) => prev.map((s) => s.id !== sId ? s : {
+      ...s, columns: s.columns.map((c) => {
+        if (c.id !== cId) return c;
+        const opts = (c.options || []).map((o, i) => {
+          const updated = i === idx ? { ...o, ...patch } : o;
+          if (patch.isPass === true && i !== idx) return { ...updated, isPass: false };
+          return updated;
+        });
+        return { ...c, options: opts };
+      }),
+    }));
+  };
+
+  const removeDropdownOption = (sId, cId, idx) => {
+    setRecordSections((prev) => prev.map((s) => s.id !== sId ? s : {
+      ...s, columns: s.columns.map((c) => c.id !== cId ? c : { ...c, options: (c.options || []).filter((_, i) => i !== idx) }),
+    }));
   };
 
   return (
@@ -130,6 +227,9 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800">{type.name}</p>
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          {type.templateType === TEMPLATE_TYPES.RECORD && (
+                            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#E8F5F5] text-[#0F6E56]">Records</span>
+                          )}
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${type.auditCategory === 'External' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
                             {type.auditCategory === 'External' ? '🌐' : '🏢'} {type.auditCategory}
                           </span>
@@ -187,6 +287,22 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
               </div>
 
               <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Template type *</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { value: TEMPLATE_TYPES.CHECKLIST, label: 'Checklist', sub: 'Pass / Fail per question' },
+                    { value: TEMPLATE_TYPES.RECORD, label: 'Records', sub: 'Row-by-row data review' },
+                  ].map((t) => (
+                    <button key={t.value} type="button" onClick={() => setForm((prev) => ({ ...prev, templateType: t.value }))}
+                      className={`py-3 px-4 rounded-xl border-2 text-sm transition-all text-left ${form.templateType === t.value ? 'border-[#1B6B6B] bg-[#E8F5F5]' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                      <p className={`font-medium ${form.templateType === t.value ? 'text-[#0F6E56]' : ''}`}>{t.label}</p>
+                      <p className="text-xs font-normal mt-0.5 text-gray-400">{t.sub}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
                 <label className="text-xs text-gray-500 block mb-1.5">Template Name *</label>
                 <input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="e.g. Cash Handling Audit"
                   className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20" />
@@ -226,11 +342,114 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Checklist</label>
-                  <span className="text-xs text-gray-400">{checklistItems.length} items</span>
+              {form.templateType === TEMPLATE_TYPES.RECORD ? (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sections &amp; columns</label>
+                    <span className="text-xs text-gray-400">{recordSections.reduce((n, s) => n + s.columns.length, 0)} columns total</span>
+                  </div>
+
+                  {recordSections.length === 0 && (
+                    <div className="text-center py-8 border-2 border-dashed border-gray-100 rounded-xl mb-3">
+                      <p className="text-xs text-gray-400">No sections yet — add one to define your record structure</p>
+                    </div>
+                  )}
+
+                  {recordSections.map((sec) => (
+                    <div key={sec.id} className="border border-gray-200 rounded-xl overflow-hidden mb-3">
+                      <div className="bg-gray-50 px-3 py-2.5 flex items-center gap-2 border-b border-gray-100">
+                        <input value={sec.name} onChange={(e) => updateRecordSectionName(sec.id, e.target.value)}
+                          className="flex-1 text-sm font-medium bg-transparent focus:outline-none min-w-0"
+                          placeholder="Section name" />
+                        {recordSections.length > 1 && (
+                          <button type="button" onClick={() => removeRecordSection(sec.id)} className="text-xs text-red-400 hover:text-red-600 flex-shrink-0">Remove</button>
+                        )}
+                      </div>
+
+                      {sec.columns.map((col) => (
+                        <div key={col.id} className="px-3 py-3 border-b border-gray-50 last:border-b-0">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <input value={col.label} onChange={(e) => updateRecordColumn(sec.id, col.id, { label: e.target.value })}
+                              placeholder="Column name"
+                              className="flex-1 min-w-[100px] text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#1B6B6B]" />
+                            <select value={col.type} onChange={(e) => {
+                              const t = e.target.value;
+                              const patch = { type: t };
+                              if (t === COLUMN_TYPES.AUDITOR_DROPDOWN && !col.options) patch.options = [{ label: '', color: '#639922', isPass: true }];
+                              if (t !== COLUMN_TYPES.AUDITOR_DROPDOWN) { patch.options = undefined; patch.isPrimary = false; }
+                              updateRecordColumn(sec.id, col.id, patch);
+                            }}
+                              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-[#1B6B6B] flex-shrink-0">
+                              {COLUMN_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                            <div className="flex gap-1 flex-shrink-0">
+                              {['N','W','XW'].map((w) => (
+                                <button key={w} type="button" onClick={() => updateRecordColumn(sec.id, col.id, { widthHint: w })}
+                                  className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${col.widthHint === w ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}>
+                                  {w}
+                                </button>
+                              ))}
+                            </div>
+                            <button type="button" onClick={() => removeRecordColumn(sec.id, col.id)} className="text-gray-300 hover:text-red-500 text-sm flex-shrink-0">✕</button>
+                          </div>
+
+                          {col.type === COLUMN_TYPES.AUDITOR_DROPDOWN && (
+                            <div className="ml-0 mt-2 bg-gray-50 rounded-xl p-3">
+                              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                                <span className="text-xs text-gray-400">Options &nbsp;·&nbsp; ★ = counts as pass for scoring</span>
+                                <button type="button" onClick={() => updateRecordColumn(sec.id, col.id, { isPrimary: !col.isPrimary })}
+                                  className={`text-xs px-2 py-0.5 rounded-full border transition-colors flex-shrink-0 ${col.isPrimary ? 'bg-amber-50 text-amber-700 border-amber-300' : 'border-gray-200 text-gray-400 hover:border-amber-300 hover:text-amber-600'}`}>
+                                  ★ {col.isPrimary ? 'Scoring column' : 'Set as scoring'}
+                                </button>
+                              </div>
+                              {(col.options || []).map((opt, idx) => (
+                                <div key={idx} className="flex items-center gap-2 mb-2">
+                                  <div className="flex gap-1 flex-shrink-0">
+                                    {OPTION_COLORS.map((clr) => (
+                                      <button key={clr} type="button" onClick={() => updateDropdownOption(sec.id, col.id, idx, { color: clr })}
+                                        className={`w-4 h-4 rounded-full flex-shrink-0 transition-all ${opt.color === clr ? 'ring-2 ring-offset-1 ring-gray-400 scale-110' : 'hover:scale-110'}`}
+                                        style={{ background: clr }} />
+                                    ))}
+                                  </div>
+                                  <input value={opt.label} onChange={(e) => updateDropdownOption(sec.id, col.id, idx, { label: e.target.value })}
+                                    placeholder="Option label"
+                                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#1B6B6B] min-w-0 bg-white" />
+                                  <button type="button" onClick={() => updateDropdownOption(sec.id, col.id, idx, { isPass: !opt.isPass })}
+                                    title="Mark as passing option"
+                                    className={`text-base flex-shrink-0 transition-colors ${opt.isPass ? 'text-amber-400' : 'text-gray-300 hover:text-amber-400'}`}>★</button>
+                                  {(col.options || []).length > 1 && (
+                                    <button type="button" onClick={() => removeDropdownOption(sec.id, col.id, idx)} className="text-gray-300 hover:text-red-500 text-sm flex-shrink-0">✕</button>
+                                  )}
+                                </div>
+                              ))}
+                              <button type="button" onClick={() => addDropdownOption(sec.id, col.id)}
+                                className="text-xs text-[#1B6B6B] hover:underline mt-1">+ Add option</button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      <div className="px-3 py-2 bg-white">
+                        <select defaultValue="" onChange={(e) => { if (e.target.value) { addRecordColumn(sec.id, e.target.value); e.target.value = ''; } }}
+                          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-[#1B6B6B] w-full text-gray-500">
+                          <option value="" disabled>+ Add column…</option>
+                          {COLUMN_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button type="button" onClick={addRecordSection}
+                    className="w-full py-2.5 border border-dashed border-gray-200 rounded-xl text-xs text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors">
+                    + Add section
+                  </button>
                 </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Checklist</label>
+                    <span className="text-xs text-gray-400">{checklistItems.length} items</span>
+                  </div>
 
                 {sections.map((section) => (
                   <div key={section} className="mb-5">
@@ -300,7 +519,8 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
                     className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
                   <button type="button" onClick={() => { if (!newSection.trim()) return; setSections((prev) => [...prev, newSection.trim()]); setNewSection(''); }} className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm">+ Section</button>
                 </div>
-              </div>
+                </div>
+              )}
             </div>
 
             <div className="p-6 border-t flex-shrink-0 flex gap-3">
