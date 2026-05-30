@@ -27,6 +27,7 @@ import AuditReports from './audit/AuditReports';
 import AuditSettings from './audit/AuditSettings';
 import AuditList from './audit/AuditList';
 import AuditDetail from './audit/AuditDetail';
+import RecordAuditDetail from './audit/RecordAuditDetail';
 
 export default function Audit() {
   const { companyId: routeCompanyId } = useParams();
@@ -228,6 +229,22 @@ export default function Audit() {
 
       {selectedAudit && (() => {
         const liveAudit = visibleAudits.find((a) => a.id === selectedAudit.id) || audits.find((a) => a.id === selectedAudit.id) || selectedAudit;
+        if (liveAudit.templateType === 'record') {
+          return (
+            <RecordAuditDetail
+              key={liveAudit.id}
+              audit={liveAudit}
+              companyId={companyId}
+              currentUser={currentUser}
+              employees={employees}
+              onClose={() => setSelectedAudit(null)}
+              showSuccess={showSuccess}
+              showError={showError}
+              isAuditor={isAuditor}
+              canManage={canManage}
+            />
+          );
+        }
         return (
           <AuditDetail
             key={liveAudit.id}
