@@ -471,14 +471,17 @@ export default function AuditList({
 
       {showAssignModal && (
         <AssignAuditModal
-          auditTypes={auditTypes} company={company} companyId={companyId} employees={employees} auditorEmails={auditorEmails}
-          assignForm={assignForm} setAssignForm={setAssignForm} leadSearch={leadSearch} setLeadSearch={setLeadSearch}
-          showLeadDrop={showLeadDrop} setShowLeadDrop={setShowLeadDrop} teamSearch={teamSearch} setTeamSearch={setTeamSearch}
-          showTeamDrop={showTeamDrop} setShowTeamDrop={setShowTeamDrop} leadRef={leadRef} teamRef={teamRef}
-          saving={saving} assignedAudit={assignedAudit}
-          onAssignedDone={() => { setShowAssignModal(false); setAssignedAudit(null); resetAssignForm(); }}
-          onClose={() => { setShowAssignModal(false); setAssignedAudit(null); setAssignForm(emptyAssign); setLeadSearch(''); setTeamSearch(''); }}
-          onSubmit={handleAssign}
+          companyId={companyId}
+          auditTypes={auditTypes}
+          employees={employees}
+          branches={company?.branches || []}
+          locations={company?.locations || []}
+          departments={company?.departments || []}
+          currentUser={currentUser}
+          showSuccess={showSuccess}
+          showError={showError}
+          onAssigned={() => { setShowAssignModal(false); }}
+          onClose={() => setShowAssignModal(false)}
         />
       )}
     </div>

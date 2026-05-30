@@ -216,7 +216,7 @@ function QABuilder({ section, onChange }) {
 }
 
 /* ─── Main AuditSettings component ──────────────────────────────────────── */
-export default function AuditSettings({ companyId, auditTypes, showSuccess, showError }) {
+export default function AuditSettings({ companyId, auditTypes, showSuccess, showError, onClose }) {
   const [view, setView] = useState('list');          // 'list' | 'edit'
   const [editingType, setEditingType] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -315,7 +315,10 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
       <div className="h-full flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
           <h2 className="text-sm font-semibold text-gray-800">Audit Templates</h2>
-          <button type="button" onClick={openNew} className="px-3 py-2 bg-[#1B6B6B] text-white text-xs rounded-xl font-medium min-h-[36px]">+ New template</button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={openNew} className="px-3 py-2 bg-[#1B6B6B] text-white text-xs rounded-xl font-medium min-h-[36px]">+ New template</button>
+            <button type="button" onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">✕</button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {(auditTypes || []).length === 0 && (

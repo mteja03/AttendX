@@ -281,14 +281,22 @@ export default function Audit() {
       })()}
 
       {showSettings && (
-        <AuditSettings
-          auditTypes={auditTypes}
-          companyId={companyId}
-          currentUser={currentUser}
-          onClose={() => setShowSettings(false)}
-          showSuccess={showSuccess}
-          showError={showError}
-        />
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div
+            role="presentation"
+            className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
+            onClick={() => setShowSettings(false)}
+          />
+          <div className="relative z-10 flex h-full w-full flex-col overflow-hidden border-l border-gray-100 bg-white shadow-xl sm:w-[480px]">
+            <AuditSettings
+              companyId={companyId}
+              auditTypes={auditTypes}
+              showSuccess={showSuccess}
+              showError={showError}
+              onClose={() => setShowSettings(false)}
+            />
+          </div>
+        </div>
       )}
 
       {showCalendar && (
