@@ -260,7 +260,7 @@ export default function UnifiedAuditDetail({
         {(sec.items || []).map((item) => {
           const row   = items.find((i) => i.id === item.id) || { id: item.id, result: '', note: '' };
           const rv    = reviewItems[item.id];
-          const rOpt  = responseOptions.find((o) => o.label === row.result);
+          const rOpt  = responseOptions.find((o) => o.label.toLowerCase() === row.result);
           return (
             <div key={item.id} className={`border rounded-xl p-3 transition-all ${rv?.result === 'concern' ? 'border-amber-200 bg-amber-50/40' : rv?.result === 'approved' ? 'border-green-100 bg-green-50/20' : 'border-gray-100 bg-white'}`}>
               <div className="flex items-start gap-3">

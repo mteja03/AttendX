@@ -256,6 +256,8 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
   const handleSave = async () => {
     if (!name.trim()) { showError('Enter a template name'); return; }
     let sections = [];
+    if (templateType === SECTION_TYPES.RECORDS && recSections.length === 0) { showError('Add at least one section'); return; }
+    if (templateType === SECTION_TYPES.QA && qaSections.length === 0) { showError('Add at least one section'); return; }
     if (templateType === SECTION_TYPES.CHECKLIST) {
       for (const sec of clSections) {
         const items = clItems.filter((i) => i.section === sec);
