@@ -228,6 +228,15 @@ export default function RecordAuditDetail({
 
   const handleSubmit = async () => {
     if (submitting) return;
+    for (const sec of recordSections) {
+      const pCol = (sec.columns || []).find((c) => c.isPrimary && c.type === COLUMN_TYPES.AUDITOR_DROPDOWN);
+      if (!pCol) continue;
+      const unfilled = (sec.records || []).filter((r) => !r.data?.[pCol.id]);
+      if (unfilled.length > 0) {
+        showError(`Fill all ${unfilled.length} row${unfilled.length !== 1 ? 's' : ''} in "${sec.name}" before submitting`);
+        return;
+      }
+    }
     try {
       setSubmitting(true);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
@@ -276,7 +285,13 @@ export default function RecordAuditDetail({
   };
 
   const getOptionColor = (col, value) => (!value || !col.options) ? null : (col.options.find((o) => o.label === value)?.color || null);
-  const colMinWidth = (col) => (col.widthHint === 'XW' ? 200 : col.widthHint === 'W' ? 140 : 90);
+  const colMinWidth = (col) => {
+    if (col.type === COLUMN_TYPES.AUDITOR_TEXT) return 160;
+    if (col.type === COLUMN_TYPES.AUDITOR_DROPDOWN) return 150;
+    if (col.type === COLUMN_TYPES.PREFILLED_NUMBER) return 80;
+    if (col.type === COLUMN_TYPES.PREFILLED_DATE) return 100;
+    return 120;
+  };
 
   // ── tabs for non-auditor-mode ─────────────────────────────────────────────────
   const MANAGER_TABS = [{ id: 'records', label: '1. Records' }, { id: 'findings', label: '2. Findings', count: findings.length }, { id: 'overview', label: '3. Overview & Close' }];
@@ -412,12 +427,12 @@ export default function RecordAuditDetail({
                 {!activeSection ? (
                   <div className="flex items-center justify-center py-16 text-sm text-gray-400">No record sections in this audit</div>
                 ) : (
-                  <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 48 + prefilledCols.reduce((n, c) => n + colMinWidth(c) + 20, 0) + auditorCols.reduce((n, c) => n + (c.widthHint === 'W' ? 160 : c.widthHint === 'XW' ? 210 : 130) + 20, 0), fontSize: 12 }}>
+                  <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 48 + prefilledCols.reduce((n, c) => n + colMinWidth(c) + 20, 0) + auditorCols.reduce((n, c) => n + colMinWidth(c) + 20, 0), fontSize: 12 }}>
                     <thead>
                       <tr style={{ background: '#F9FAFB', position: 'sticky', top: 0, zIndex: 2 }}>
                         <th style={{ width: 44, minWidth: 44, padding: '8px 10px', textAlign: 'center', fontSize: 10, fontWeight: 500, color: '#6B7280', borderBottom: '0.5px solid #E5E7EB', position: 'sticky', left: 0, background: '#F9FAFB', zIndex: 3 }}>#</th>
                         {prefilledCols.map((col) => (<th key={col.id} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 500, color: '#6B7280', borderBottom: '0.5px solid #E5E7EB', whiteSpace: 'nowrap', minWidth: colMinWidth(col) }}>{col.label}</th>))}
-                        {auditorCols.map((col) => (<th key={col.id} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 500, color: '#0F6E56', background: '#E8F5F5', borderBottom: '0.5px solid #9FE1CB', whiteSpace: 'nowrap', minWidth: col.widthHint === 'XW' ? 210 : col.widthHint === 'W' ? 160 : 130 }}>{col.label}{col.isPrimary ? ' ★' : ''}</th>))}
+                        {auditorCols.map((col) => (<th key={col.id} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 500, color: '#0F6E56', background: '#E8F5F5', borderBottom: '0.5px solid #9FE1CB', whiteSpace: 'nowrap', minWidth: colMinWidth(col) }}>{col.label}{col.isPrimary ? ' ★' : ''}</th>))}
                       </tr>
                     </thead>
                     <tbody>
@@ -677,7 +692,6 @@ export default function RecordAuditDetail({
               <div className="flex justify-between text-sm"><span className="text-gray-500">Findings</span><span className="font-medium">{findingsData.filter((f) => f.addedByRole === 'auditor').length}</span></div>
               {score !== null && <div className="flex justify-between text-sm"><span className="text-gray-500">Score</span><span className={`font-bold ${score >= 80 ? 'text-green-600' : score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{score}%</span></div>}
             </div>
-            {unfilledCount > 0 && <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-4">⚠️ {unfilledCount} rows still unfilled. You can still submit — manager will see these as blank.</p>}
             <div className="flex gap-2">
               <button type="button" onClick={() => setShowSubmitConfirm(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancel</button>
               <button type="button" onClick={handleSubmit} disabled={submitting} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold disabled:opacity-50">{submitting ? 'Submitting…' : '📤 Confirm Submit'}</button>

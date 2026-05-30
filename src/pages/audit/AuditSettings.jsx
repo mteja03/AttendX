@@ -403,14 +403,6 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
                               className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-[#1B6B6B] flex-shrink-0">
                               {COLUMN_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
-                            <div className="flex gap-1 flex-shrink-0">
-                              {[{ v:'N', label:'S' },{ v:'W', label:'M' },{ v:'XW', label:'L' }].map(({ v, label }) => (
-                                <button key={v} type="button" title={v==='N'?'Short':v==='W'?'Normal':'Wide'} onClick={() => updateRecordColumn(sec.id, col.id, { widthHint: v })}
-                                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${col.widthHint === v ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}>
-                                  {label}
-                                </button>
-                              ))}
-                            </div>
                             <button type="button" onClick={() => removeRecordColumn(sec.id, col.id)} className="text-gray-300 hover:text-red-500 text-sm flex-shrink-0">✕</button>
                           </div>
 

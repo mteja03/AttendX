@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatDate, TEMPLATE_TYPES, generateSampleCSV, parseCSVToRecords } from './auditHelpers';
+import { formatDate, TEMPLATE_TYPES, generateSampleCSV, parseCSVToRecords, makeBlankRecord } from './auditHelpers';
 import { WhatsAppButton } from '../../utils/whatsapp';
 
 export default function AssignAuditModal({
@@ -61,6 +61,52 @@ export default function AssignAuditModal({
     };
     reader.readAsText(file);
     if (csvFileRef.current) csvFileRef.current.value = '';
+  };
+
+  const handleUpdateRow = (templateId, sectionId, rowId, colId, value) => {
+    setAssignForm((prev) => {
+      const rows = prev.recordData?.[templateId]?.[sectionId] || [];
+      return {
+        ...prev,
+        recordData: {
+          ...(prev.recordData || {}),
+          [templateId]: {
+            ...(prev.recordData?.[templateId] || {}),
+            [sectionId]: rows.map((r) => r.id === rowId ? { ...r, data: { ...r.data, [colId]: value } } : r),
+          },
+        },
+      };
+    });
+  };
+
+  const handleDeleteRow = (templateId, sectionId, rowId) => {
+    setAssignForm((prev) => {
+      const rows = prev.recordData?.[templateId]?.[sectionId] || [];
+      return {
+        ...prev,
+        recordData: {
+          ...(prev.recordData || {}),
+          [templateId]: {
+            ...(prev.recordData?.[templateId] || {}),
+            [sectionId]: rows.filter((r) => r.id !== rowId),
+          },
+        },
+      };
+    });
+  };
+
+  const handleAddManualRow = (templateId, section) => {
+    const blank = makeBlankRecord(section.columns);
+    setAssignForm((prev) => ({
+      ...prev,
+      recordData: {
+        ...(prev.recordData || {}),
+        [templateId]: {
+          ...(prev.recordData?.[templateId] || {}),
+          [section.id]: [...(prev.recordData?.[templateId]?.[section.id] || []), blank],
+        },
+      },
+    }));
   };
 
   const handleSampleCSVDownload = (section) => {
@@ -228,14 +274,19 @@ export default function AssignAuditModal({
                               ↑ Upload CSV
                             </button>
                           )}
+                          <button type="button" onClick={() => handleAddManualRow(tmpl.id, sec)}
+                            className="flex items-center gap-1.5 text-xs border border-gray-200 text-gray-600 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors min-h-[36px]">
+                            + Add row
+                          </button>
                         </div>
                         {rows.length > 0 && (
                           <>
                             <div className="flex items-center gap-2 mb-2">
-                              <span className="text-xs font-medium bg-[#E8F5F5] text-[#0F6E56] px-2.5 py-1 rounded-full">✓ {rows.length} record{rows.length !== 1 ? 's' : ''} loaded</span>
+                              <span className="text-xs font-medium bg-[#E8F5F5] text-[#0F6E56] px-2.5 py-1 rounded-full">✓ {rows.length} record{rows.length !== 1 ? 's' : ''}</span>
                               <button type="button"
                                 onClick={() => setAssignForm((prev) => ({ ...prev, recordData: { ...(prev.recordData || {}), [tmpl.id]: { ...(prev.recordData?.[tmpl.id] || {}), [sec.id]: [] } } }))}
-                                className="text-xs text-red-400 hover:underline">Clear</button>
+                                className="text-xs text-red-400 hover:underline">Clear all</button>
+                              {rows.length > 20 && <span className="text-xs text-gray-400">· Re-upload CSV to edit all rows</span>}
                             </div>
                             {prefilledCols.length > 0 && (
                               <div className="overflow-x-auto rounded-xl border border-gray-100">
@@ -243,22 +294,37 @@ export default function AssignAuditModal({
                                   <thead>
                                     <tr style={{ background: '#F9FAFB' }}>
                                       {prefilledCols.map((col) => (
-                                        <th key={col.id} style={{ textAlign: 'left', padding: '5px 10px', fontSize: 10, fontWeight: 500, color: '#6B7280', borderBottom: '0.5px solid #F3F4F6', whiteSpace: 'nowrap' }}>{col.label}</th>
+                                        <th key={col.id} style={{ textAlign: 'left', padding: '5px 8px', fontSize: 10, fontWeight: 500, color: '#6B7280', borderBottom: '0.5px solid #F3F4F6', whiteSpace: 'nowrap' }}>{col.label}</th>
                                       ))}
+                                      {rows.length <= 20 && <th style={{ width: 28 }} />}
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {rows.slice(0, 3).map((row, i) => (
-                                      <tr key={row.id}>
+                                    {(rows.length <= 20 ? rows : rows.slice(0, 3)).map((row) => (
+                                      <tr key={row.id} style={{ borderBottom: '0.5px solid #F9FAFB' }}>
                                         {prefilledCols.map((col) => (
-                                          <td key={col.id} style={{ padding: '4px 10px', fontSize: 11, color: '#374151', borderBottom: i < Math.min(rows.length, 3) - 1 ? '0.5px solid #F9FAFB' : 'none', whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {row.data?.[col.id] || '—'}
+                                          <td key={col.id} style={{ padding: '3px 6px' }}>
+                                            {rows.length <= 20 ? (
+                                              <input
+                                                value={row.data?.[col.id] || ''}
+                                                onChange={(e) => handleUpdateRow(tmpl.id, sec.id, row.id, col.id, e.target.value)}
+                                                placeholder={col.label}
+                                                style={{ width: '100%', fontSize: 11, padding: '4px 6px', border: '0.5px solid #E5E7EB', borderRadius: 6, background: '#fff', minHeight: 30 }}
+                                              />
+                                            ) : (
+                                              <span style={{ padding: '3px 6px', fontSize: 11, color: '#374151', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{row.data?.[col.id] || '—'}</span>
+                                            )}
                                           </td>
                                         ))}
+                                        {rows.length <= 20 && (
+                                          <td style={{ padding: '3px 4px', textAlign: 'center' }}>
+                                            <button type="button" onClick={() => handleDeleteRow(tmpl.id, sec.id, row.id)} style={{ fontSize: 12, color: '#D1D5DB', cursor: 'pointer', background: 'none', border: 'none', lineHeight: 1, padding: 2 }}>✕</button>
+                                          </td>
+                                        )}
                                       </tr>
                                     ))}
-                                    {rows.length > 3 && (
-                                      <tr><td colSpan={prefilledCols.length} style={{ padding: '4px 10px', fontSize: 10, color: '#9CA3AF', textAlign: 'center' }}>… {rows.length - 3} more rows</td></tr>
+                                    {rows.length > 20 && (
+                                      <tr><td colSpan={prefilledCols.length} style={{ padding: '5px 10px', fontSize: 10, color: '#9CA3AF', textAlign: 'center' }}>… {rows.length - 3} more rows</td></tr>
                                     )}
                                   </tbody>
                                 </table>
