@@ -204,3 +204,121 @@ export function auditDocViewLabel(type) {
 export function isAuditDocImageType(type) {
   return String(type || '').toLowerCase().includes('image');
 }
+
+// ─── Record template type helpers ────────────────────────────────────────────
+
+export const TEMPLATE_TYPES = { CHECKLIST: 'checklist', RECORD: 'record' };
+
+export const COLUMN_TYPES = {
+  PREFILLED_TEXT: 'prefilled_text',
+  PREFILLED_NUMBER: 'prefilled_number',
+  PREFILLED_DATE: 'prefilled_date',
+  AUDITOR_DROPDOWN: 'auditor_dropdown',
+  AUDITOR_TEXT: 'auditor_text',
+};
+
+export const COLUMN_WIDTHS = { N: 80, W: 140, XW: 220 };
+
+export function isRecordType(auditOrTemplate) {
+  return auditOrTemplate?.templateType === TEMPLATE_TYPES.RECORD;
+}
+
+export function getRecordAuditScore(audit) {
+  const sections = audit?.recordSections || [];
+  let total = 0;
+  let passed = 0;
+  for (const section of sections) {
+    const primaryCol = (section.columns || []).find(
+      (c) => c.isPrimary && c.type === COLUMN_TYPES.AUDITOR_DROPDOWN,
+    );
+    if (!primaryCol) continue;
+    const passingLabel = (primaryCol.options || []).find((o) => o.isPass)?.label;
+    if (!passingLabel) continue;
+    for (const row of (section.records || [])) {
+      total++;
+      if ((row.data || {})[primaryCol.id] === passingLabel) passed++;
+    }
+  }
+  if (total === 0) return null;
+  return Math.round((passed / total) * 100);
+}
+
+export function getRecordFillProgress(audit) {
+  const sections = audit?.recordSections || [];
+  let total = 0;
+  let filled = 0;
+  for (const section of sections) {
+    const primaryCol =
+      (section.columns || []).find((c) => c.isPrimary && c.type === COLUMN_TYPES.AUDITOR_DROPDOWN) ||
+      (section.columns || []).find((c) => c.type === COLUMN_TYPES.AUDITOR_DROPDOWN);
+    if (!primaryCol) continue;
+    for (const row of (section.records || [])) {
+      total++;
+      if ((row.data || {})[primaryCol.id]) filled++;
+    }
+  }
+  return { total, filled };
+}
+
+export function getRecordStatusCounts(audit) {
+  const sections = audit?.recordSections || [];
+  const counts = {};
+  for (const section of sections) {
+    const primaryCol = (section.columns || []).find(
+      (c) => c.isPrimary && c.type === COLUMN_TYPES.AUDITOR_DROPDOWN,
+    );
+    if (!primaryCol) continue;
+    for (const row of (section.records || [])) {
+      const val = (row.data || {})[primaryCol.id] || null;
+      if (val) counts[val] = (counts[val] || 0) + 1;
+      else counts.__unfilled = (counts.__unfilled || 0) + 1;
+    }
+  }
+  return counts;
+}
+
+export function generateSampleCSV(section) {
+  const cols = (section.columns || []).filter((c) => c.type?.startsWith('prefilled'));
+  if (cols.length === 0) return '';
+  const headers = cols.map((c) => `"${c.label}"`).join(',');
+  const example = cols.map((c) => {
+    if (c.type === COLUMN_TYPES.PREFILLED_NUMBER) return '12345';
+    if (c.type === COLUMN_TYPES.PREFILLED_DATE) return '01/01/2026';
+    return 'example text';
+  }).join(',');
+  return `${headers}\n${example}`;
+}
+
+export function parseCSVToRecords(csvText, section) {
+  if (!csvText || !section) return [];
+  const cols = (section.columns || []).filter((c) => c.type?.startsWith('prefilled'));
+  const lines = csvText.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const rawHeaders = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, '').toLowerCase());
+  const records = [];
+  const ts = Date.now();
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const values = line.split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
+    const data = {};
+    cols.forEach((col) => {
+      const idx = rawHeaders.indexOf(col.label.toLowerCase());
+      data[col.id] = idx >= 0 ? (values[idx] || '') : '';
+    });
+    records.push({
+      id: `rec_${ts}_${i}_${Math.random().toString(36).slice(2, 7)}`,
+      data,
+    });
+  }
+  return records;
+}
+
+export function makeBlankRecord(columns) {
+  const data = {};
+  (columns || []).forEach((col) => { data[col.id] = ''; });
+  return {
+    id: `rec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    data,
+  };
+}
