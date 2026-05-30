@@ -404,10 +404,10 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
                               {COLUMN_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                             <div className="flex gap-1 flex-shrink-0">
-                              {['N','W','XW'].map((w) => (
-                                <button key={w} type="button" onClick={() => updateRecordColumn(sec.id, col.id, { widthHint: w })}
-                                  className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${col.widthHint === w ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}>
-                                  {w}
+                              {[{ v:'N', label:'S' },{ v:'W', label:'M' },{ v:'XW', label:'L' }].map(({ v, label }) => (
+                                <button key={v} type="button" title={v==='N'?'Short':v==='W'?'Normal':'Wide'} onClick={() => updateRecordColumn(sec.id, col.id, { widthHint: v })}
+                                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${col.widthHint === v ? 'bg-[#1B6B6B] text-white border-[#1B6B6B]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}>
+                                  {label}
                                 </button>
                               ))}
                             </div>

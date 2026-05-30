@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatDate, TEMPLATE_TYPES, generateSampleCSV, parseCSVToRecords, makeBlankRecord } from './auditHelpers';
+import { formatDate, TEMPLATE_TYPES, generateSampleCSV, parseCSVToRecords } from './auditHelpers';
 import { WhatsAppButton } from '../../utils/whatsapp';
 
 export default function AssignAuditModal({
@@ -61,20 +61,6 @@ export default function AssignAuditModal({
     };
     reader.readAsText(file);
     if (csvFileRef.current) csvFileRef.current.value = '';
-  };
-
-  const handleAddManualRow = (templateId, section) => {
-    const blank = makeBlankRecord(section.columns);
-    setAssignForm((prev) => ({
-      ...prev,
-      recordData: {
-        ...(prev.recordData || {}),
-        [templateId]: {
-          ...(prev.recordData?.[templateId] || {}),
-          [section.id]: [...(prev.recordData?.[templateId]?.[section.id] || []), blank],
-        },
-      },
-    }));
   };
 
   const handleSampleCSVDownload = (section) => {
@@ -242,10 +228,6 @@ export default function AssignAuditModal({
                               ↑ Upload CSV
                             </button>
                           )}
-                          <button type="button" onClick={() => handleAddManualRow(tmpl.id, sec)}
-                            className="flex items-center gap-1.5 text-xs border border-gray-200 text-gray-600 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors min-h-[36px]">
-                            + Add row
-                          </button>
                         </div>
                         {rows.length > 0 && (
                           <>
