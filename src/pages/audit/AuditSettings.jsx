@@ -116,7 +116,16 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
   const duplicateType = async (type) => {
     try {
       const { id: _omit, ...typeData } = type;
-      await addDoc(collection(db, 'companies', companyId, 'auditTypes'), { ...typeData, name: `Copy of ${type.name}`, createdAt: new Date() });
+      const cleanDup = (val) => {
+        if (Array.isArray(val)) return val.map(cleanDup);
+        if (val !== null && typeof val === 'object' && !(val instanceof Date)) {
+          const r = {};
+          Object.entries(val).forEach(([k, v]) => { if (v !== undefined) r[k] = cleanDup(v); });
+          return r;
+        }
+        return val;
+      };
+      await addDoc(collection(db, 'companies', companyId, 'auditTypes'), cleanDup({ ...typeData, name: `Copy of ${type.name}`, createdAt: new Date() }));
       showSuccess(`"Copy of ${type.name}" created`);
     } catch (e) {
       if (import.meta.env.DEV) console.error('Duplicate type error', e);
@@ -156,16 +165,18 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
 
   const updateRecordColumn = (sId, cId, patch) => {
     setRecordSections((prev) => {
+      const applyPatch = (col) => {
+        const merged = { ...col, ...patch };
+        Object.keys(merged).forEach((k) => { if (merged[k] === undefined) delete merged[k]; });
+        return merged;
+      };
       if (patch.isPrimary === true) {
         return prev.map((s) => ({
           ...s,
-          columns: s.columns.map((c) => {
-            if (s.id === sId && c.id === cId) return { ...c, ...patch };
-            return { ...c, isPrimary: false };
-          }),
+          columns: s.columns.map((c) => s.id === sId && c.id === cId ? applyPatch(c) : { ...c, isPrimary: false }),
         }));
       }
-      return prev.map((s) => s.id !== sId ? s : { ...s, columns: s.columns.map((c) => c.id === cId ? { ...c, ...patch } : c) });
+      return prev.map((s) => s.id !== sId ? s : { ...s, columns: s.columns.map((c) => c.id === cId ? applyPatch(c) : c) });
     });
   };
 
