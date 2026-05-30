@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { AUDIT_STATUSES, effStatus, formatDate, getAuditScore, isAuditOverdue, statusMeta } from './auditHelpers';
+import { AUDIT_STATUSES, effStatus, formatDate, getAuditScore, statusMeta } from './auditHelpers';
 
 export function AuditDashboard({ audits, auditTypes }) {
   const now = new Date();
