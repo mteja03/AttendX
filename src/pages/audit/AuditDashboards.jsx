@@ -1,4 +1,4 @@
-import { AUDIT_STATUSES, effStatus, formatDate, getAuditScore, statusMeta } from './auditHelpers';
+import { AUDIT_STATUSES, effStatus, formatDate, getAuditScore, statusMeta, isRecordType, getRecordAuditScore } from './auditHelpers';
 
 export function AuditDashboard({ audits, auditTypes }) {
   const now = new Date();
@@ -19,7 +19,9 @@ export function AuditDashboard({ audits, auditTypes }) {
 
   const closedAudits = audits.filter((a) => effStatus(a.status) === 'Closed');
   const complianceRate = (() => {
-    const scores = closedAudits.map((a) => getAuditScore(a)).filter((s) => s !== null);
+    const scores = closedAudits
+      .map((a) => (isRecordType(a) ? getRecordAuditScore(a) : getAuditScore(a)))
+      .filter((s) => s !== null);
     if (scores.length === 0) return null;
     return Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length);
   })();
@@ -418,7 +420,9 @@ export function AuditorDashboard({ audits, currentUser }) {
 
   const activeCount = myAudits.filter((a) => effStatus(a.status) !== 'Closed').length;
   const closedA = myAudits.filter((a) => effStatus(a.status) === 'Closed');
-  const scoreList = closedA.map((a) => getAuditScore(a)).filter((s) => s !== null);
+  const scoreList = closedA
+    .map((a) => (isRecordType(a) ? getRecordAuditScore(a) : getAuditScore(a)))
+    .filter((s) => s !== null);
   const myScore = scoreList.length > 0 ? Math.round(scoreList.reduce((sum, s) => sum + s, 0) / scoreList.length) : null;
   const completionRate = myAudits.length > 0 ? Math.round((closed.length / myAudits.length) * 100) : 0;
   const myFindings = myAudits.reduce((sum, a) => sum + (a.findings || []).filter((f) => f.addedByRole === 'auditor').length, 0);

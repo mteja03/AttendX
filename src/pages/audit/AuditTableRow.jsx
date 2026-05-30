@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { updateDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import { AUDIT_STATUSES, effStatus, formatDate, getAuditScore, isAuditOverdue, statusMeta } from './auditHelpers';
+import { AUDIT_STATUSES, effStatus, formatDate, getAuditScore, isAuditOverdue, statusMeta, isRecordType, getRecordFillProgress, getRecordAuditScore } from './auditHelpers';
 import { whatsappUrl } from '../../utils/whatsappUrl';
 
 export default function AuditTableRow({
@@ -15,7 +15,9 @@ export default function AuditTableRow({
 
   const overdueAudit = isAuditOverdue({ ...audit, status: effStatus(audit?.status) });
   const openFindings = (audit.findings || []).filter((f) => f.status !== 'Resolved').length;
-  const score = getAuditScore(audit);
+  const isRecord = isRecordType(audit);
+  const score = isRecord ? getRecordAuditScore(audit) : getAuditScore(audit);
+  const recordProgress = isRecord ? getRecordFillProgress(audit) : null;
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -136,10 +138,11 @@ export default function AuditTableRow({
             {audit.auditTypeName?.charAt(0)}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-              <span className="text-xs font-mono text-gray-400">{audit.auditRefId}</span>
-              {overdueAudit && <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">Overdue</span>}
-            </div>
+                    <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                      <span className="text-xs font-mono text-gray-400">{audit.auditRefId}</span>
+                      {isRecord && <span className="text-xs bg-[#E8F5F5] text-[#0F6E56] px-1.5 py-0.5 rounded-full font-medium">Records</span>}
+                      {overdueAudit && <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">Overdue</span>}
+                    </div>
             <p className="text-sm font-semibold text-gray-800 truncate">{audit.auditTypeName}</p>
             {isSentBack && isAuditor && audit.sentBackReason && (
               <p className="mt-1.5 flex items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
@@ -187,7 +190,19 @@ export default function AuditTableRow({
         {statusCell}
 
         <div className="text-center">
-          {score !== null ? (
+          {isRecord ? (
+            recordProgress && recordProgress.total > 0 ? (
+              <>
+                <p className="text-xs font-medium text-gray-600">{recordProgress.filled}/{recordProgress.total}</p>
+                <div className="w-12 h-1.5 bg-gray-100 rounded-full overflow-hidden mx-auto mt-1">
+                  <div className="h-full rounded-full bg-[#1B6B6B]" style={{ width: `${Math.round((recordProgress.filled / recordProgress.total) * 100)}%` }} />
+                </div>
+                {score !== null && (
+                  <p className={`text-xs font-bold mt-0.5 ${score >= 80 ? 'text-green-600' : score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{score}%</p>
+                )}
+              </>
+            ) : <span className="text-xs text-gray-300">—</span>
+          ) : score !== null ? (
             <>
               <p className={`text-sm font-bold ${score >= 80 ? 'text-green-600' : score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{score}%</p>
               <div className="w-12 h-1.5 bg-gray-100 rounded-full overflow-hidden mx-auto mt-1">
