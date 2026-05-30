@@ -138,6 +138,137 @@ export function isAuditOverdue(audit) {
   return new Date(end) < now;
 }
 
+/** True if the auditType/audit uses the new unified sections[] model */
+export function isUnifiedTemplate(doc) {
+  return Array.isArray(doc?.sections) && doc.sections.some((s) => s.sectionType);
+}
+
+/**
+ * Fill progress for a single section.
+ * Accepts the section definition + the responses object for that section
+ * from audit.sectionResponses[sectionId].
+ */
+export function getSectionFillProgress(section, responses) {
+  if (!section) return { filled: 0, total: 0 };
+  const type = section.sectionType;
+
+  if (type === SECTION_TYPES.CHECKLIST) {
+    const items = section.items || [];
+    const answered = (responses?.items || []).filter(
+      (i) => i.result === 'pass' || i.result === 'fail' || i.result === 'na',
+    ).length;
+    return { filled: answered, total: items.length };
+  }
+
+  if (type === SECTION_TYPES.RECORDS) {
+    const records = responses?.records || section.records || [];
+    const primaryCol = (section.columns || []).find(
+      (c) => c.isPrimary && c.type === COLUMN_TYPES.AUDITOR_DROPDOWN,
+    );
+    const filled = primaryCol
+      ? records.filter((r) => r.data?.[primaryCol.id]).length
+      : records.length;
+    return { filled, total: records.length };
+  }
+
+  if (type === SECTION_TYPES.QA) {
+    const questions = section.questions || [];
+    const answers = responses?.answers || {};
+    const filled = questions.filter(
+      (q) => answers[q.id]?.value != null && String(answers[q.id].value).trim() !== '',
+    ).length;
+    return { filled, total: questions.length };
+  }
+
+  return { filled: 0, total: 0 };
+}
+
+/**
+ * Compliance score (0-100) for a single section.
+ * QA sections always return null (informational only).
+ */
+export function getSectionScore(section, responses) {
+  if (!section) return null;
+  const type = section.sectionType;
+
+  if (type === SECTION_TYPES.CHECKLIST) {
+    const items = responses?.items || [];
+    const reviewed = items.filter((i) => i.result === 'pass' || i.result === 'fail');
+    if (reviewed.length === 0) return null;
+    const passed = items.filter((i) => i.result === 'pass').length;
+    return Math.round((passed / reviewed.length) * 100);
+  }
+
+  if (type === SECTION_TYPES.RECORDS) {
+    const records = responses?.records || section.records || [];
+    const primaryCol = (section.columns || []).find(
+      (c) => c.isPrimary && c.type === COLUMN_TYPES.AUDITOR_DROPDOWN,
+    );
+    if (!primaryCol || records.length === 0) return null;
+    const passOption = (primaryCol.options || []).find((o) => o.isPass);
+    if (!passOption) return null;
+    const passed = records.filter(
+      (r) => r.data?.[primaryCol.id] === passOption.label,
+    ).length;
+    return Math.round((passed / records.length) * 100);
+  }
+
+  return null;
+}
+
+/** Overall fill progress across all sections in a unified audit */
+export function getUnifiedFillProgress(audit) {
+  const sections = audit?.sections || [];
+  const responses = audit?.sectionResponses || {};
+  let filled = 0;
+  let total = 0;
+  for (const sec of sections) {
+    const p = getSectionFillProgress(sec, responses[sec.id]);
+    filled += p.filled;
+    total += p.total;
+  }
+  return { filled, total };
+}
+
+/**
+ * Weighted score across all scored sections (checklist + records).
+ * QA sections are excluded from scoring.
+ */
+export function getUnifiedAuditScore(audit) {
+  const sections = audit?.sections || [];
+  const responses = audit?.sectionResponses || {};
+  const scorable = sections.filter((s) => s.sectionType !== SECTION_TYPES.QA);
+  if (scorable.length === 0) return null;
+  let totalItems = 0;
+  let totalPassed = 0;
+  for (const sec of scorable) {
+    const score = getSectionScore(sec, responses[sec.id]);
+    if (score !== null) {
+      const { total } = getSectionFillProgress(sec, responses[sec.id]);
+      totalItems += total;
+      totalPassed += Math.round((total * score) / 100);
+    }
+  }
+  return totalItems > 0 ? Math.round((totalPassed / totalItems) * 100) : null;
+}
+
+/**
+ * Backward-compat helper: get the responses object for a section.
+ * Checks new sectionResponses format first, then falls back to old
+ * checklistReview[] / recordSections[] formats.
+ */
+export function getSectionResponses(audit, sectionId, sectionType) {
+  if (audit?.sectionResponses?.[sectionId]) return audit.sectionResponses[sectionId];
+  if (sectionType === SECTION_TYPES.CHECKLIST && Array.isArray(audit?.checklistReview)) {
+    return { type: 'checklist', items: audit.checklistReview };
+  }
+  if (sectionType === SECTION_TYPES.RECORDS && Array.isArray(audit?.recordSections)) {
+    const sec = audit.recordSections.find((s) => s.id === sectionId);
+    if (sec) return { type: 'records', records: sec.records || [] };
+  }
+  return null;
+}
+
 // ─── Shared display utilities (used by multiple Audit sub-components) ────────
 
 /** Legacy status → Tailwind class map used by AuditCalendar */
@@ -215,6 +346,20 @@ export const COLUMN_TYPES = {
   PREFILLED_DATE: 'prefilled_date',
   AUDITOR_DROPDOWN: 'auditor_dropdown',
   AUDITOR_TEXT: 'auditor_text',
+  AUDITOR_NUMBER: 'auditor_number',
+};
+
+export const SECTION_TYPES = {
+  CHECKLIST: 'checklist',
+  RECORDS: 'records',
+  QA: 'qa',
+};
+
+export const QA_QUESTION_TYPES = {
+  TEXT: 'text',
+  NUMBER: 'number',
+  DATE: 'date',
+  DROPDOWN: 'dropdown',
 };
 
 export const COLUMN_WIDTHS = { N: 80, W: 140, XW: 220 };
