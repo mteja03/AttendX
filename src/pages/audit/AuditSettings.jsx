@@ -83,9 +83,19 @@ export default function AuditSettings({ auditTypes, companyId, currentUser, onCl
         updatedAt: new Date(),
         updatedBy: currentUser?.email || '',
       };
-      const data = form.templateType === TEMPLATE_TYPES.RECORD
+      const stripUndefined = (val) => {
+        if (Array.isArray(val)) return val.map(stripUndefined);
+        if (val !== null && typeof val === 'object' && !(val instanceof Date)) {
+          const r = {};
+          Object.entries(val).forEach(([k, v]) => { if (v !== undefined) r[k] = stripUndefined(v); });
+          return r;
+        }
+        return val;
+      };
+      const rawData = form.templateType === TEMPLATE_TYPES.RECORD
         ? { ...base, recordSections, checklistItems: [] }
         : { ...base, checklistItems, recordSections: [] };
+      const data = stripUndefined(rawData);
       if (editingType) {
         await updateDoc(doc(db, 'companies', companyId, 'auditTypes', editingType.id), data);
         showSuccess('Template updated!');
