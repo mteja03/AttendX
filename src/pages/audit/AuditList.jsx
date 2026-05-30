@@ -37,7 +37,7 @@ export default function AuditList({
   const [activeStatusTab, setActiveStatusTab] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({ status: '', type: '', branch: '', location: '', riskLevel: '', auditor: '', category: '', dateFrom: '', dateTo: '' });
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState('location');
   const [locationDrill, setLocationDrill] = useState(null);
   const [branchDrill, setBranchDrill] = useState(null);
   const [leadSearch, setLeadSearch] = useState('');
