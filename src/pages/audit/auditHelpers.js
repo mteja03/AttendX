@@ -137,3 +137,70 @@ export function isAuditOverdue(audit) {
   now.setHours(0, 0, 0, 0);
   return new Date(end) < now;
 }
+
+// ─── Shared display utilities (used by multiple Audit sub-components) ────────
+
+/** Legacy status → Tailwind class map used by AuditCalendar */
+export const STATUS_COLORS = {
+  Scheduled: 'bg-gray-100 text-gray-600',
+  Assigned: 'bg-gray-100 text-gray-600',
+  'In Progress': 'bg-blue-100 text-blue-800',
+  Submitted: 'bg-amber-100 text-amber-800',
+  'Sent Back': 'bg-red-100 text-red-800',
+  'Under Review': 'bg-purple-100 text-purple-800',
+  Closed: 'bg-green-100 text-green-800',
+  Overdue: 'bg-red-100 text-red-700',
+};
+
+export function statusMeta(status) {
+  const e = effStatus(status);
+  return AUDIT_STATUSES.find((s) => s.key === e) || { badge: 'bg-gray-100 text-gray-600', icon: '•' };
+}
+
+export function normaliseAuditCategory(cat) {
+  if (!cat) return 'Internal';
+  const lower = String(cat).toLowerCase().trim();
+  if (lower === 'external') return 'External';
+  return 'Internal';
+}
+
+export function formatAuditDocSize(bytes) {
+  if (bytes == null || Number.isNaN(Number(bytes))) return '—';
+  const n = Number(bytes);
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function fileDocIconType(type) {
+  if (!type) return '📎';
+  const t = String(type).toLowerCase();
+  if (t.includes('pdf')) return '📄';
+  if (t.includes('image')) return '🖼️';
+  if (t.includes('word') || t.includes('document') || t === 'application/msword') return '📝';
+  return '📎';
+}
+
+export function stableStringify(value) {
+  try {
+    return JSON.stringify(value, (_, v) => {
+      if (v && typeof v.toDate === 'function') {
+        try { return v.toDate().toISOString(); } catch { return v; }
+      }
+      return v;
+    });
+  } catch {
+    return String(value);
+  }
+}
+
+export function auditDocViewLabel(type) {
+  const t = String(type || '').toLowerCase();
+  if (t.includes('pdf')) return '👁️ View';
+  if (t.includes('image')) return '🖼️ View';
+  return '⬇️ Open';
+}
+
+export function isAuditDocImageType(type) {
+  return String(type || '').toLowerCase().includes('image');
+}

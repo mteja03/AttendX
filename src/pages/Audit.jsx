@@ -25,8 +25,16 @@ import { trackPageView } from '../utils/analytics';
 import {
   AUDIT_COLORS,
   AUDIT_STATUSES,
+  STATUS_COLORS,
   effStatus,
   formatDate,
+  formatAuditDocSize,
+  fileDocIconType,
+  stableStringify,
+  auditDocViewLabel,
+  isAuditDocImageType,
+  statusMeta,
+  normaliseAuditCategory,
   getAuditScore,
   isAuditOverdue,
 } from './audit/auditHelpers';
@@ -36,31 +44,6 @@ import { SkeletonTable } from '../components/SkeletonRow';
 import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-
-/** Used by AuditCalendar; includes legacy keys for older documents */
-const STATUS_COLORS = {
-  Scheduled: 'bg-gray-100 text-gray-600',
-  Assigned: 'bg-gray-100 text-gray-600',
-  'In Progress': 'bg-blue-100 text-blue-800',
-  Submitted: 'bg-amber-100 text-amber-800',
-  'Sent Back': 'bg-red-100 text-red-800',
-  'Under Review': 'bg-purple-100 text-purple-800',
-  Closed: 'bg-green-100 text-green-800',
-  Overdue: 'bg-red-100 text-red-700',
-};
-
-function statusMeta(status) {
-  const e = effStatus(status);
-  return AUDIT_STATUSES.find((s) => s.key === e) || { badge: 'bg-gray-100 text-gray-600', icon: '•' };
-}
-
-/** Normalise template/audit category for Firestore and scope filtering (case-insensitive). */
-function normaliseAuditCategory(cat) {
-  if (!cat) return 'Internal';
-  const lower = String(cat).toLowerCase().trim();
-  if (lower === 'external') return 'External';
-  return 'Internal';
-}
 
 const STATUS_TAB_CONFIG = [
   {
@@ -126,51 +109,6 @@ const STATUS_TAB_CONFIG = [
     countClass: 'bg-red-200 text-red-700',
   },
 ];
-
-function formatAuditDocSize(bytes) {
-  if (bytes == null || Number.isNaN(Number(bytes))) return '—';
-  const n = Number(bytes);
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function fileDocIconType(type) {
-  if (!type) return '📎';
-  const t = String(type).toLowerCase();
-  if (t.includes('pdf')) return '📄';
-  if (t.includes('image')) return '🖼️';
-  if (t.includes('word') || t.includes('document') || t === 'application/msword') return '📝';
-  return '📎';
-}
-
-function stableStringify(value) {
-  try {
-    return JSON.stringify(value, (_, v) => {
-      if (v && typeof v.toDate === 'function') {
-        try {
-          return v.toDate().toISOString();
-        } catch {
-          return v;
-        }
-      }
-      return v;
-    });
-  } catch {
-    return String(value);
-  }
-}
-
-function auditDocViewLabel(type) {
-  const t = String(type || '').toLowerCase();
-  if (t.includes('pdf')) return '👁️ View';
-  if (t.includes('image')) return '🖼️ View';
-  return '⬇️ Open';
-}
-
-function isAuditDocImageType(type) {
-  return String(type || '').toLowerCase().includes('image');
-}
 
 function AuditDashboard({ audits, auditTypes }) {
   const now = new Date();
@@ -2435,6 +2373,7 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
 
   useEffect(() => {
     if (!isAuditorMode && isAuditor && (auditorStep === 'checklist' || auditorStep === 'findings')) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveTab(auditorStep);
     }
   }, [isAuditorMode, isAuditor, auditorStep]);
@@ -3620,6 +3559,7 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
                                     {item.riskLevel || 'Medium'}
                                   </span>
                                 </div>
+                                {/* eslint-disable react-hooks/refs */}
                                 <div className="flex gap-2 mb-2 flex-wrap sm:flex-nowrap">
                                   {[
                                     { val: 'pass', label: '✅ Pass', active: 'bg-green-500 text-white border-green-500', def: 'bg-white border-gray-200 text-gray-500 hover:bg-green-50 hover:border-green-200' },
@@ -3646,6 +3586,7 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
                                   placeholder="Note or observation (optional)..."
                                   className="w-full rounded-xl border border-gray-200 bg-white/80 px-3 py-2 text-xs focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20 disabled:bg-gray-50"
                                 />
+                                {/* eslint-enable react-hooks/refs */}
                               </>
                             )}
                             {managerCanAct && (
@@ -3835,6 +3776,7 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* eslint-disable react-hooks/refs */}
                   {findingsData.map((finding) => {
                     const now = new Date();
                     const isOverdueFinding =
@@ -3986,6 +3928,7 @@ function AuditDetail({ audit, company, companyId, currentUser, employees, onClos
                       </div>
                     );
                   })}
+                  {/* eslint-enable react-hooks/refs */}
                 </div>
               )}
 
@@ -4997,6 +4940,7 @@ function AuditTableRow({
   const score = getAuditScore(audit);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus(audit.status);
   }, [audit.id, audit.status]);
 
