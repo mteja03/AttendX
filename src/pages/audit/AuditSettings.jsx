@@ -190,12 +190,21 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
   /* qa state */
   const [qaSections,    setQASections]    = useState([{ id: uid(), name: 'Questions', sectionType: SECTION_TYPES.QA, questions: [] }]);
 
+  /* mixed state */
+  const [mixedSections,    setMixedSections]    = useState([]);
+  const [mixedAddingFor,   setMixedAddingFor]   = useState(null);
+  const [mixedNewItem,     setMixedNewItem]      = useState('');
+  const [mixedNewItemRisk, setMixedNewItemRisk]  = useState('Medium');
+  const [mixedEditSecId,   setMixedEditSecId]    = useState(null);
+  const [mixedEditSecVal,  setMixedEditSecVal]   = useState('');
+
   const resetForm = () => {
     setAuditCategory('Internal'); setTemplateType(SECTION_TYPES.CHECKLIST); setName(''); setDescription('');
     setColor(AUDIT_COLORS[Math.floor(Math.random() * AUDIT_COLORS.length)]); setRiskLevel('Medium');
     setClSections(['General']); setClItems([]); setNewSecName(''); setEditSecId(null); setAddingFor(null); setNewItemText('');
     setRecSections([{ id: uid(), name: 'Section 1', sectionType: SECTION_TYPES.RECORDS, columns: [] }]);
     setQASections([{ id: uid(), name: 'Questions', sectionType: SECTION_TYPES.QA, questions: [] }]);
+    setMixedSections([]); setMixedAddingFor(null); setMixedNewItem(''); setMixedEditSecId(null);
   };
 
   const openNew = () => { setEditingType(null); resetForm(); setShowModal(true); };
@@ -209,22 +218,28 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
     setRiskLevel(tmpl.riskLevel || 'Medium');
 
     if (Array.isArray(tmpl.sections) && tmpl.sections.length > 0) {
-      const firstType = tmpl.sections[0]?.sectionType;
-      setTemplateType(firstType || SECTION_TYPES.CHECKLIST);
-      if (firstType === SECTION_TYPES.RECORDS) {
-        setRecSections(tmpl.sections);
-      } else if (firstType === SECTION_TYPES.QA) {
-        setQASections(tmpl.sections);
+      const distinctTypes = [...new Set(tmpl.sections.map((s) => s.sectionType).filter(Boolean))];
+      if (distinctTypes.length > 1) {
+        setTemplateType('mixed');
+        setMixedSections(tmpl.sections);
       } else {
-        /* unified checklist */
-        const allItems = [];
-        const secs = [];
-        for (const sec of tmpl.sections) {
-          secs.push(sec.name || 'General');
-          for (const item of (sec.items || [])) allItems.push({ ...item, section: sec.name || 'General' });
+        const firstType = distinctTypes[0] || SECTION_TYPES.CHECKLIST;
+        setTemplateType(firstType);
+        if (firstType === SECTION_TYPES.RECORDS) {
+          setRecSections(tmpl.sections);
+        } else if (firstType === SECTION_TYPES.QA) {
+          setQASections(tmpl.sections);
+        } else {
+          /* unified checklist */
+          const allItems = [];
+          const secs = [];
+          for (const sec of tmpl.sections) {
+            secs.push(sec.name || 'General');
+            for (const item of (sec.items || [])) allItems.push({ ...item, section: sec.name || 'General' });
+          }
+          setClSections(secs.length ? secs : ['General']);
+          setClItems(allItems);
         }
-        setClSections(secs.length ? secs : ['General']);
-        setClItems(allItems);
       }
     } else if (tmpl.templateType === 'record') {
       setTemplateType(SECTION_TYPES.RECORDS);
@@ -256,12 +271,49 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
     setClItems((p) => p.map((i) => i.section === oldName ? { ...i, section: newName } : i));
   };
 
+  /* ── mixed section helpers ──────────────────────────────────────── */
+  const addMixedSection = (type) => {
+    const count = mixedSections.filter((s) => s.sectionType === type).length + 1;
+    const names = { [SECTION_TYPES.CHECKLIST]: `Checklist ${count}`, [SECTION_TYPES.RECORDS]: `Records ${count}`, [SECTION_TYPES.QA]: `Q&A ${count}` };
+    setMixedSections((p) => [...p, {
+      id: uid(), name: names[type] || `Section ${count}`, sectionType: type,
+      ...(type === SECTION_TYPES.CHECKLIST ? { items: [], responseOptions: [...DEFAULT_RESPONSE_OPTIONS] } : {}),
+      ...(type === SECTION_TYPES.RECORDS   ? { columns: [] } : {}),
+      ...(type === SECTION_TYPES.QA        ? { questions: [] } : {}),
+    }]);
+  };
+  const updateMixedSection = (id, updater) => setMixedSections((p) => p.map((s) => s.id === id ? updater(s) : s));
+  const removeMixedSection = (id) => setMixedSections((p) => p.filter((s) => s.id !== id));
+  const addMixedItem = (secId) => {
+    if (!mixedNewItem.trim()) return;
+    updateMixedSection(secId, (s) => ({ ...s, items: [...(s.items || []), { id: uid(), question: mixedNewItem.trim(), section: s.name, riskLevel: mixedNewItemRisk }] }));
+    setMixedNewItem(''); setMixedNewItemRisk('Medium'); setMixedAddingFor(null);
+  };
+
   const handleSave = async () => {
     if (!name.trim()) { showError('Enter a template name'); return; }
     let sections = [];
     if (templateType === SECTION_TYPES.RECORDS && recSections.length === 0) { showError('Add at least one section'); return; }
     if (templateType === SECTION_TYPES.QA && qaSections.length === 0) { showError('Add at least one section'); return; }
-    if (templateType === SECTION_TYPES.CHECKLIST) {
+    if (templateType === 'mixed') {
+      if (mixedSections.length === 0) { showError('Add at least one section'); return; }
+      for (const sec of mixedSections) {
+        if (sec.sectionType === SECTION_TYPES.CHECKLIST && !(sec.items || []).length) { showError(`"${sec.name}" has no items`); return; }
+        if (sec.sectionType === SECTION_TYPES.RECORDS) {
+          const audCols = (sec.columns || []).filter((c) => [COLUMN_TYPES.AUDITOR_DROPDOWN, COLUMN_TYPES.AUDITOR_TEXT, COLUMN_TYPES.AUDITOR_NUMBER, COLUMN_TYPES.AUDITOR_DATE].includes(c.type));
+          if (!audCols.length) { showError(`"${sec.name}" needs at least one auditor column`); return; }
+        }
+        if (sec.sectionType === SECTION_TYPES.QA && !(sec.questions || []).length) { showError(`"${sec.name}" has no questions`); return; }
+      }
+      sections = mixedSections.map((sec) => {
+        if (sec.sectionType !== SECTION_TYPES.RECORDS) return sec;
+        const cols = sec.columns || [];
+        if (cols.some((c) => c.isPrimary && c.type === COLUMN_TYPES.AUDITOR_DROPDOWN)) return sec;
+        const fi = cols.findIndex((c) => c.type === COLUMN_TYPES.AUDITOR_DROPDOWN);
+        if (fi === -1) return sec;
+        return { ...sec, columns: cols.map((c, i) => ({ ...c, isPrimary: i === fi })) };
+      });
+    } else if (templateType === SECTION_TYPES.CHECKLIST) {
       for (const sec of clSections) {
         const items = clItems.filter((i) => i.section === sec);
         if (!items.length) { showError(`Section "${sec}" has no items`); return; }
@@ -369,16 +421,17 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
               {/* Template Type */}
               <div>
                 <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-2">Template type *</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   {[
                     { v: SECTION_TYPES.CHECKLIST, label: 'Checklist', sub: 'Pass/Fail per item' },
                     { v: SECTION_TYPES.RECORDS,   label: 'Records',   sub: 'Row-by-row table'  },
                     { v: SECTION_TYPES.QA,        label: 'Q&A',       sub: 'Open questions'     },
+                    { v: 'mixed',                  label: 'Mixed',     sub: 'Any combination'   },
                   ].map(({ v, label, sub }) => (
                     <button key={v} type="button" onClick={() => setTemplateType(v)}
-                      className={`py-3 px-2 rounded-xl border text-center transition-all ${templateType === v ? 'border-[#1B6B6B] bg-[#E8F5F5]' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <p className={`text-sm font-medium ${templateType === v ? 'text-[#0F6E56]' : 'text-gray-700'}`}>{label}</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>
+                      className={`py-2.5 px-1 rounded-xl border text-center transition-all ${templateType === v ? 'border-[#1B6B6B] bg-[#E8F5F5]' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <p className={`text-xs font-medium ${templateType === v ? 'text-[#0F6E56]' : 'text-gray-700'}`}>{label}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>
                     </button>
                   ))}
                 </div>
@@ -549,6 +602,90 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
                     + Add section
                   </button>
                   <p className="text-xs text-gray-400 mt-2">Q&amp;A answers are informational — not scored.</p>
+                </div>
+              )}
+
+              {/* ── MIXED BUILDER ──────────────────────────────────── */}
+              {templateType === 'mixed' && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Sections</span>
+                    <span className="text-xs text-gray-400">{mixedSections.length} section{mixedSections.length !== 1 ? 's' : ''}</span>
+                  </div>
+
+                  {mixedSections.length === 0 && (
+                    <div className="text-center py-6 border-2 border-dashed border-gray-100 rounded-xl mb-3">
+                      <p className="text-sm text-gray-400">Add sections using the buttons below</p>
+                    </div>
+                  )}
+
+                  {mixedSections.map((sec) => {
+                    const meta = SECTION_META[sec.sectionType] || SECTION_META[SECTION_TYPES.CHECKLIST];
+                    return (
+                      <div key={sec.id} className="border border-gray-200 rounded-xl overflow-hidden mb-3">
+                        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-100" style={{ background: meta.bg }}>
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ background: meta.bg, color: meta.color, border: `1px solid ${meta.color}30` }}>{meta.label}</span>
+                          {mixedEditSecId === sec.id ? (
+                            <input value={mixedEditSecVal} onChange={(e) => setMixedEditSecVal(e.target.value)}
+                              onBlur={() => { updateMixedSection(sec.id, (s) => ({ ...s, name: mixedEditSecVal.trim() || s.name })); setMixedEditSecId(null); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { updateMixedSection(sec.id, (s) => ({ ...s, name: mixedEditSecVal.trim() || s.name })); setMixedEditSecId(null); } if (e.key === 'Escape') setMixedEditSecId(null); }}
+                              className="flex-1 text-sm font-semibold text-gray-800 border-b border-[#1B6B6B] bg-transparent focus:outline-none" autoFocus />
+                          ) : (
+                            <>
+                              <span className="flex-1 text-sm font-semibold text-gray-800">{sec.name}</span>
+                              <button type="button" onClick={() => { setMixedEditSecId(sec.id); setMixedEditSecVal(sec.name); }} className="text-gray-300 hover:text-gray-500">✏️</button>
+                            </>
+                          )}
+                          {mixedSections.length > 1 && (
+                            <button type="button" onClick={() => removeMixedSection(sec.id)} className="text-xs text-red-400 hover:text-red-600">Remove</button>
+                          )}
+                        </div>
+
+                        <div className="p-3">
+                          {sec.sectionType === SECTION_TYPES.CHECKLIST && (
+                            <div className="border-2 border-dashed border-gray-200 rounded-xl overflow-hidden">
+                              {(sec.items || []).map((item, idx) => (
+                                <div key={item.id} className={`flex items-center gap-2 px-3 py-2 ${idx < (sec.items || []).length - 1 || mixedAddingFor === sec.id ? 'border-b border-gray-100' : ''}`}>
+                                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: RISK_LEVELS.find((r) => r.value === item.riskLevel)?.color || '#888780' }} />
+                                  <input value={item.question} onChange={(e) => updateMixedSection(sec.id, (s) => ({ ...s, items: (s.items || []).map((i) => i.id === item.id ? { ...i, question: e.target.value } : i) }))}
+                                    className="flex-1 text-sm text-gray-700 bg-transparent focus:outline-none" />
+                                  <button type="button" onClick={() => updateMixedSection(sec.id, (s) => ({ ...s, items: (s.items || []).filter((i) => i.id !== item.id) }))} className="text-gray-300 hover:text-red-400">✕</button>
+                                </div>
+                              ))}
+                              {mixedAddingFor === sec.id ? (
+                                <div className="flex items-center gap-2 px-3 py-2">
+                                  <input value={mixedNewItem} onChange={(e) => setMixedNewItem(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') addMixedItem(sec.id); if (e.key === 'Escape') setMixedAddingFor(null); }}
+                                    placeholder="Item text…" autoFocus className="flex-1 text-sm bg-transparent focus:outline-none" />
+                                  <select value={mixedNewItemRisk} onChange={(e) => setMixedNewItemRisk(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-1.5 py-1 bg-white">
+                                    {RISK_LEVELS.map((r) => <option key={r.value}>{r.value}</option>)}
+                                  </select>
+                                  <button type="button" onClick={() => addMixedItem(sec.id)} className="text-xs text-white bg-[#1B6B6B] font-medium px-2.5 py-1 rounded-lg">Add</button>
+                                  <button type="button" onClick={() => setMixedAddingFor(null)} className="text-xs text-gray-400">✕</button>
+                                </div>
+                              ) : (sec.items || []).length === 0 ? (
+                                <button type="button" onClick={() => { setMixedAddingFor(sec.id); setMixedNewItem(''); }} className="w-full py-4 text-sm text-gray-400 hover:text-gray-600 transition-colors">+ Add first item</button>
+                              ) : (
+                                <button type="button" onClick={() => { setMixedAddingFor(sec.id); setMixedNewItem(''); }} className="w-full py-2 text-xs text-[#1B6B6B] font-medium hover:underline">+ Add item</button>
+                              )}
+                            </div>
+                          )}
+                          {sec.sectionType === SECTION_TYPES.RECORDS && (
+                            <RecordsColBuilder section={sec} onChange={(updated) => setMixedSections((p) => p.map((s) => s.id === sec.id ? updated : s))} />
+                          )}
+                          {sec.sectionType === SECTION_TYPES.QA && (
+                            <QAQBuilder section={sec} onChange={(updated) => setMixedSections((p) => p.map((s) => s.id === sec.id ? updated : s))} />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <button type="button" onClick={() => addMixedSection(SECTION_TYPES.CHECKLIST)} className="py-2.5 border border-[#9FE1CB] bg-[#E1F5EE] text-[#0F6E56] text-xs rounded-xl font-medium hover:opacity-80 transition-opacity">+ Checklist</button>
+                    <button type="button" onClick={() => addMixedSection(SECTION_TYPES.RECORDS)} className="py-2.5 border border-[#B5D4F4] bg-[#E6F1FB] text-[#185FA5] text-xs rounded-xl font-medium hover:opacity-80 transition-opacity">+ Records</button>
+                    <button type="button" onClick={() => addMixedSection(SECTION_TYPES.QA)} className="py-2.5 border border-[#CECBF6] bg-[#EEEDFE] text-[#3C3489] text-xs rounded-xl font-medium hover:opacity-80 transition-opacity">+ Q&A</button>
+                  </div>
                 </div>
               )}
 
