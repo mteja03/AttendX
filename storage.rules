@@ -60,7 +60,7 @@ service firebase.storage {
     }
 
     // Audit documents — auditors + managers
-    match /audits/{companyId}/{auditId}/{fileName} {
+    match /companies/{companyId}/audits/{auditId}/{fileName} {
       allow read: if request.auth != null
         && (
           belongsToCompany(companyId)
