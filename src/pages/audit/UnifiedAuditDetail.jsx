@@ -804,7 +804,7 @@ export default function UnifiedAuditDetail({
             )}
             {isClosed ? (
               <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
-            ) : isEditable && (activeTab === 'findings' || activeTab === 'documents') ? (
+            ) : isEditable && activeTab === 'documents' ? (
               <button type="button" onClick={() => setShowSubmit(true)} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold">📤 Submit to Manager</button>
             ) : st === 'Submitted' && canManage && activeTab === 'overview' ? (
               <>
