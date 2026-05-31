@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { updateDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase/config';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { db, storage } from '../../firebase/config';
 import {
   effStatus, formatDate, statusMeta,
   SECTION_TYPES, QA_QUESTION_TYPES, COLUMN_TYPES,
@@ -63,9 +64,13 @@ export default function UnifiedAuditDetail({
   const [showOwnerDrop, setShowOwnerDrop] = useState(false);
   const ownerRef = useRef(null);
 
+  const [auditDocs,    setAuditDocs]    = useState(() => safeAudit.auditDocuments || []);
+  const [docUploading, setDocUploading] = useState(false);
+
   const saveTimeoutRef = useRef(null);
   const isMountedRef   = useRef(true);
   const isSavingRef    = useRef(false);
+  const docFileRef     = useRef(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -96,6 +101,47 @@ export default function UnifiedAuditDetail({
     [employees, safeAudit.auditorEmail],
   );
   const auditorPhone = auditorEmployee?.mobile || auditorEmployee?.phone || auditorEmployee?.mobileNumber || '';
+
+  /* ── audit document upload / delete ─────────────────────────────── */
+  const handleDocUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ALLOWED = ['application/pdf','image/jpeg','image/png','image/gif','image/webp','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (file.size > 20 * 1024 * 1024) { showError('Max file size is 20MB'); return; }
+    if (!ALLOWED.includes(file.type))  { showError('Only PDF, image or Word files allowed'); return; }
+    try {
+      setDocUploading(true);
+      const path = `companies/${companyId}/audits/${audit.id}/${Date.now()}_${file.name}`;
+      const sRef = storageRef(storage, path);
+      await uploadBytes(sRef, file);
+      const url  = await getDownloadURL(sRef);
+      const newDoc = { id: Date.now().toString(), name: file.name, url, storagePath: path, size: file.size, type: file.type, uploadedBy: currentUser?.email || '', uploadedAt: new Date().toISOString() };
+      const updated = [...auditDocs, newDoc];
+      setAuditDocs(updated);
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updated, updatedAt: new Date() });
+      showSuccess(`${file.name} uploaded`);
+    } catch (err) {
+      showError('Upload failed: ' + err.message);
+      if (import.meta.env.DEV) console.error(err);
+    } finally {
+      setDocUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleDocDelete = async (docItem) => {
+    try {
+      if (docItem.storagePath) {
+        await deleteObject(storageRef(storage, docItem.storagePath)).catch(() => {});
+      }
+      const updated = auditDocs.filter((d) => d.id !== docItem.id);
+      setAuditDocs(updated);
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updated, updatedAt: new Date() });
+      showSuccess('Document removed');
+    } catch (err) {
+      showError('Remove failed: ' + err.message);
+    }
+  };
 
   /* ── auto-save ───────────────────────────────────────────────────────── */
   const autoSave = useCallback((respUpd, findUpd, notesUpd) => {
@@ -203,7 +249,7 @@ export default function UnifiedAuditDetail({
   };
 
   const handleMarkUnderReview = async () => {
-    try { setSaving(true); await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Under Review', reviewStartedAt: new Date(), reviewStartedBy: currentUser?.email || '', updatedAt: new Date() }); showSuccess('Audit under review'); onClose(); } catch { showError('Failed'); } finally { setSaving(false); }
+    try { setSaving(true); await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Under Review', reviewStartedAt: new Date(), reviewStartedBy: currentUser?.email || '', updatedAt: new Date() }); showSuccess('Review started — go through each section then close from Overview'); } catch { showError('Failed'); } finally { setSaving(false); }
   };
 
   const handleCloseAudit = async () => {
@@ -320,13 +366,13 @@ export default function UnifiedAuditDetail({
     const allRows  = resp.records || [];
     const cols     = sec.columns || [];
     const preCols  = cols.filter((c) => c.type?.startsWith('prefilled'));
-    const audCols  = cols.filter((c) => [COLUMN_TYPES.AUDITOR_DROPDOWN,COLUMN_TYPES.AUDITOR_TEXT,COLUMN_TYPES.AUDITOR_NUMBER].includes(c.type));
+    const audCols  = cols.filter((c) => [COLUMN_TYPES.AUDITOR_DROPDOWN,COLUMN_TYPES.AUDITOR_TEXT,COLUMN_TYPES.AUDITOR_NUMBER,COLUMN_TYPES.AUDITOR_DATE].includes(c.type));
     const primaryCol = audCols.find((c) => c.isPrimary) || audCols[0];
     const reviewRows  = resp.managerReview?.rows || {};
     const search   = recSearch[sec.id] || '';
     const filter   = recFilter[sec.id] || 'all';
     const page     = recPage[sec.id]   || 1;
-    const colMinW  = (col) => col.type === COLUMN_TYPES.AUDITOR_TEXT ? 160 : col.type === COLUMN_TYPES.AUDITOR_DROPDOWN ? 150 : col.type?.includes('number') ? 80 : 120;
+    const colMinW  = (col) => col.type === COLUMN_TYPES.AUDITOR_TEXT ? 160 : col.type === COLUMN_TYPES.AUDITOR_DROPDOWN ? 150 : col.type?.includes('number') ? 80 : col.type === COLUMN_TYPES.AUDITOR_DATE ? 130 : 120;
 
     const filtered = allRows.filter((row) => {
       if (search) { const q = search.toLowerCase(); const match = cols.some((c) => String(row.data?.[c.id] || '').toLowerCase().includes(q)); if (!match) return false; }
@@ -399,6 +445,13 @@ export default function UnifiedAuditDetail({
                           {isEditable ? (
                             <input value={val} onChange={(e) => setRecordCell(sec.id, row.id, col.id, e.target.value)} placeholder="Note…" style={{ width:'100%', fontSize:12, padding:'5px 6px', borderRadius:8, border:'0.5px solid #E5E7EB', background:'#fff', color:'#111827', minHeight:40 }} />
                           ) : <span style={{ fontSize:11, color:'#6B7280' }}>{val || '—'}</span>}
+                        </td>
+                      );
+                      if (col.type === COLUMN_TYPES.AUDITOR_DATE) return (
+                        <td key={col.id} style={{ padding:'3px 6px', background:'#fff' }}>
+                          {isEditable ? (
+                            <input type="date" value={val} onChange={(e) => setRecordCell(sec.id, row.id, col.id, e.target.value)} style={{ width:'100%', fontSize:12, padding:'5px 6px', borderRadius:8, border:'0.5px solid #E5E7EB', background:'#fff', color:'#111827', minHeight:40 }} />
+                          ) : <span style={{ fontSize:11, color:'#374151' }}>{val || '—'}</span>}
                         </td>
                       );
                       return <td key={col.id} style={{ padding:'5px 10px', color:'#9CA3AF' }}>—</td>;
@@ -673,6 +726,42 @@ export default function UnifiedAuditDetail({
             /* eslint-disable-next-line react-hooks/refs */
             renderFindings()
           )}
+          {activeTab === 'findings' && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span>📎</span>
+                  <span className="text-sm font-semibold text-gray-700">Audit Documents</span>
+                </div>
+                <span className="text-xs text-gray-400">{auditDocs.length} file{auditDocs.length !== 1 ? 's' : ''}</span>
+              </div>
+              <p className="text-xs text-gray-400 mb-3">Upload physical audit reports, photos, or supporting documents. Max 20MB per file. PDF, image or Word.</p>
+              {isEditable && (
+                <div role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && !docUploading && docFileRef.current?.click()} onClick={() => !docUploading && docFileRef.current?.click()} className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-[#1B6B6B] transition-colors mb-3">
+                  {docUploading ? <p className="text-sm text-gray-400">Uploading…</p> : (
+                    <div className="flex items-center justify-center gap-2 text-gray-400">
+                      <span>📎</span><span className="text-sm">Upload PDF, image or Word doc</span><span className="text-xs text-gray-300">· Max 20MB</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {auditDocs.length > 0 && (
+                <div className="space-y-2">
+                  {auditDocs.map((d) => (
+                    <div key={d.id} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-100 rounded-xl">
+                      <span className="text-lg flex-shrink-0">{d.type?.includes('pdf') ? '📄' : d.type?.startsWith('image') ? '🖼️' : '📝'}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-700 truncate">{d.name}</p>
+                        <p className="text-xs text-gray-400">{d.size ? `${(d.size / 1024 / 1024).toFixed(1)} MB` : ''}</p>
+                      </div>
+                      <a href={d.url} target="_blank" rel="noreferrer" className="text-xs text-[#1B6B6B] hover:underline flex-shrink-0">View</a>
+                      {isEditable && <button type="button" onClick={() => handleDocDelete(d)} className="text-gray-300 hover:text-red-400 flex-shrink-0">✕</button>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {activeTab === 'overview' && renderOverview()}
         </div>
 
@@ -706,6 +795,8 @@ export default function UnifiedAuditDetail({
           </div>
         </div>
       </div>
+
+      <input ref={docFileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx" className="hidden" onChange={handleDocUpload} />
 
       {/* Submit confirm */}
       {showSubmit && (
