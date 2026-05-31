@@ -49,7 +49,6 @@ function RecordsColBuilder({ section, onChange }) {
   };
   const rmCol = (id) => onChange({ ...section, columns: cols.filter((c) => c.id !== id) });
   const upCol = (id, f, v) => onChange({ ...section, columns: cols.map((c) => c.id === id ? { ...c, [f]: v } : c) });
-  const setPrim = (id) => onChange({ ...section, columns: cols.map((c) => ({ ...c, isPrimary: c.id === id })) });
   const addCOpt = (colId) => {
     const lbl = (newOpts[colId] || '').trim(); if (!lbl) return;
     const col = cols.find((c) => c.id === colId);
@@ -69,8 +68,7 @@ function RecordsColBuilder({ section, onChange }) {
             <select value={col.type} onChange={(e) => { const t = e.target.value; upCol(col.id, 'type', t); if (t === COLUMN_TYPES.AUDITOR_DROPDOWN && !col.options) upCol(col.id, 'options', []); }} className="text-xs border border-gray-200 rounded-lg px-1.5 py-1.5 bg-white">
               {COL_TYPE_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            {col.type === COLUMN_TYPES.AUDITOR_NUMBER && <input value={col.unit || ''} onChange={(e) => upCol(col.id, 'unit', e.target.value)} placeholder="unit" className="w-14 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none" />}
-            {isAud(col.type) && <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer"><input type="checkbox" checked={!!col.isPrimary} onChange={() => setPrim(col.id)} /> ★</label>}
+            {col.type === COLUMN_TYPES.AUDITOR_NUMBER && <input value={col.unit || ''} onChange={(e) => upCol(col.id, 'unit', e.target.value)} placeholder="unit" title="Label shown next to the number when auditor fills it — e.g. kg, ₹, count, ml" className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none" />}
             <button type="button" onClick={() => rmCol(col.id)} className="text-gray-300 hover:text-red-400">✕</button>
           </div>
           {col.type === COLUMN_TYPES.AUDITOR_DROPDOWN && (
@@ -79,7 +77,7 @@ function RecordsColBuilder({ section, onChange }) {
                 <div key={oi} className="flex items-center gap-1.5">
                   <input type="color" value={opt.color || '#888780'} onChange={(e) => upCOpt(col.id, oi, 'color', e.target.value)} className="w-6 h-6 rounded border border-gray-200 cursor-pointer p-0.5" />
                   <input value={opt.label} onChange={(e) => upCOpt(col.id, oi, 'label', e.target.value)} className="flex-1 text-xs border border-gray-100 rounded-lg px-2 py-1 bg-white focus:outline-none" />
-                  <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer"><input type="checkbox" checked={!!opt.isPass} onChange={(e) => upCOpt(col.id, oi, 'isPass', e.target.checked)} /> Pass</label>
+                  <label className="flex items-center gap-1 text-xs text-green-700 cursor-pointer" title="Mark this option as compliant — used for scoring"><input type="checkbox" checked={!!opt.isPass} onChange={(e) => upCOpt(col.id, oi, 'isPass', e.target.checked)} /> ✓ Compliant</label>
                   <button type="button" onClick={() => rmCOpt(col.id, oi)} className="text-gray-300 hover:text-red-400 text-xs">✕</button>
                 </div>
               ))}
@@ -98,9 +96,6 @@ function RecordsColBuilder({ section, onChange }) {
         </select>
         <button type="button" onClick={addCol} className="px-3 py-2 bg-[#1B6B6B] text-white text-xs rounded-xl font-medium">Add</button>
       </div>
-      {cols.some((c) => c.type === COLUMN_TYPES.AUDITOR_DROPDOWN) && !cols.some((c) => c.isPrimary) && (
-        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">★ Mark one dropdown column as Primary — it drives the compliance score</p>
-      )}
     </div>
   );
 }
@@ -265,7 +260,13 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
         sections.push({ id: uid(), name: sec, sectionType: SECTION_TYPES.CHECKLIST, items, responseOptions: [...DEFAULT_RESPONSE_OPTIONS] });
       }
     } else if (templateType === SECTION_TYPES.RECORDS) {
-      sections = recSections;
+      sections = recSections.map((sec) => {
+        const cols = sec.columns || [];
+        if (cols.some((c) => c.isPrimary && c.type === COLUMN_TYPES.AUDITOR_DROPDOWN)) return sec;
+        const fi = cols.findIndex((c) => c.type === COLUMN_TYPES.AUDITOR_DROPDOWN);
+        if (fi === -1) return sec;
+        return { ...sec, columns: cols.map((c, i) => ({ ...c, isPrimary: i === fi })) };
+      });
       for (const sec of sections) {
         const audCols = (sec.columns || []).filter((c) => [COLUMN_TYPES.AUDITOR_DROPDOWN, COLUMN_TYPES.AUDITOR_TEXT, COLUMN_TYPES.AUDITOR_NUMBER].includes(c.type));
         if (!audCols.length) { showError(`Records section "${sec.name}" needs at least one auditor column`); return; }
@@ -333,7 +334,7 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
       {showModal && (
         <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto py-8 px-4">
           <div role="presentation" className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-auto mb-8" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-auto mb-8" onClick={(e) => e.stopPropagation()}>
 
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">

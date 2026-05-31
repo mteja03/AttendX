@@ -34,7 +34,6 @@ export default function UnifiedAuditDetail({
 
   /* ── navigation ──────────────────────────────────────────────────────── */
   const [activeTab,    setActiveTab]    = useState(() => sections[0] ? `sec_${sections[0].id}` : 'findings');
-  const [auditorStep,  setAuditorStep]  = useState('fill'); // 'fill' | 'findings'
 
   /* ── records UI state (per section) ─────────────────────────────────── */
   const [recPage,   setRecPage]   = useState({});
@@ -241,7 +240,12 @@ export default function UnifiedAuditDetail({
     ...(!isEditable ? [{ id: 'overview', label: managerCanAct ? 'Overview & Close' : 'Overview' }] : []),
   ];
 
-  const activeSec = sectionTabs.find((t) => t.id === activeTab)?.sec || null;
+  const activeSec    = sectionTabs.find((t) => t.id === activeTab)?.sec || null;
+  const currentIdx   = allTabs.findIndex((t) => t.id === activeTab);
+  const isFirstTab   = currentIdx === 0;
+  const isLastTab    = currentIdx === allTabs.length - 1;
+  const goNext       = () => { if (currentIdx < allTabs.length - 1) setActiveTab(allTabs[currentIdx + 1].id); };
+  const goPrev       = () => { if (currentIdx > 0) setActiveTab(allTabs[currentIdx - 1].id); };
 
   /* ── render helpers ──────────────────────────────────────────────────── */
   const getOptColor = (col, val) => (!val || !col.options) ? null : (col.options.find((o) => o.label === val)?.color || null);
@@ -430,9 +434,9 @@ export default function UnifiedAuditDetail({
      Q&A SECTION RENDERER
   ───────────────────────────────────────────────────────────────────── */
   const renderQA = (sec) => {
-    const resp    = sectionResponses[sec.id] || {};
-    const answers = resp.answers || {};
-    const notes   = resp.managerNotes || {};
+    const resp        = sectionResponses[sec.id] || {};
+    const answers     = resp.answers || {};
+    const reviewItems = resp.managerReview?.items || {};
     return (
       <div className="space-y-4">
         {(sec.questions || []).map((q) => {
@@ -454,15 +458,20 @@ export default function UnifiedAuditDetail({
                 </>
               ) : (
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="flex-1">
                     {ans?.value != null && String(ans.value).trim() !== '' ? (
                       <p className="text-base font-semibold text-gray-800">{ans.value}{q.type === QA_QUESTION_TYPES.NUMBER && q.unit ? ` ${q.unit}` : ''}</p>
                     ) : (
                       <p className="text-sm text-gray-300 italic">Not answered</p>
                     )}
                   </div>
-                  {canManage && !isClosed && (
-                    <input value={notes[q.id] || ''} onChange={(e) => { const nm = { ...notes, [q.id]: e.target.value }; mutateSec(sec.id, (r) => ({ ...r, managerNotes: nm })); }} placeholder="Manager note…" className="text-xs border border-gray-200 rounded-xl px-2.5 py-2 focus:outline-none w-44 flex-shrink-0" />
+                  {managerCanAct && (
+                    <div className="flex gap-1.5 flex-shrink-0">
+                      <button type="button" onClick={() => setManagerReview(sec.id, 'items', q.id, reviewItems[q.id]?.result === 'approved' ? null : 'approved')}
+                        className={`text-xs px-2 py-1.5 rounded-lg border font-medium transition-all ${reviewItems[q.id]?.result === 'approved' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white text-gray-400 border-gray-200 hover:border-green-200'}`}>✓</button>
+                      <button type="button" onClick={() => setManagerReview(sec.id, 'items', q.id, reviewItems[q.id]?.result === 'concern' ? null : 'concern')}
+                        className={`text-xs px-2 py-1.5 rounded-lg border font-medium transition-all ${reviewItems[q.id]?.result === 'concern' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white text-gray-400 border-gray-200 hover:border-amber-200'}`}>⚠</button>
+                    </div>
                   )}
                 </div>
               )}
@@ -588,11 +597,7 @@ export default function UnifiedAuditDetail({
           <textarea value={adminNotes} disabled={isClosed} onChange={(e) => { setAdminNotes(e.target.value); autoSave(sectionResponses, findingsData, e.target.value); }} rows={3} placeholder="Internal notes…" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B] disabled:bg-gray-50" />
         </div>
       )}
-      {managerCanAct && (
-        <button type="button" onClick={() => { setClosedData(null); setShowClose(true); }} disabled={openFindings.length > 0} className="w-full py-3 bg-green-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
-          {openFindings.length > 0 ? `Resolve ${openFindings.length} finding${openFindings.length !== 1 ? 's' : ''} first` : '✅ Close Audit'}
-        </button>
-      )}
+
     </div>
   );
 
@@ -645,98 +650,60 @@ export default function UnifiedAuditDetail({
 
           {/* Tabs */}
           <div className="flex gap-1 overflow-x-auto scrollbar-none flex-nowrap -mb-px">
-            {isEditable ? (
-              <>
-                {sectionTabs.map((t) => {
-                  const isActive = auditorStep === 'fill' && activeTab === t.id;
-                  return (
-                    <button key={t.id} type="button" onClick={() => { setAuditorStep('fill'); setActiveTab(t.id); }}
-                      className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors ${isActive ? 'border-[#1B6B6B] text-[#1B6B6B]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
-                      <span style={{ fontSize: 11 }}>{t.meta.icon}</span>{t.label}
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isActive ? 'bg-[#E1F5EE] text-[#0F6E56]' : 'bg-gray-100 text-gray-400'}`}>{t.prog.filled}/{t.prog.total}</span>
-                    </button>
-                  );
-                })}
-                <button type="button" onClick={() => setAuditorStep('findings')}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors ${auditorStep === 'findings' ? 'border-[#1B6B6B] text-[#1B6B6B]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
-                  Findings {findingsData.length > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${auditorStep==='findings'?'bg-[#E1F5EE] text-[#0F6E56]':'bg-gray-100 text-gray-400'}`}>{findingsData.length}</span>}
-                </button>
-              </>
-            ) : (
-              allTabs.map((t) => (
-                <button key={t.id} type="button" onClick={() => setActiveTab(t.id)}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors ${activeTab === t.id ? 'border-[#1B6B6B] text-[#1B6B6B]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
-                  {t.meta?.icon && <span style={{ fontSize: 11 }}>{t.meta.icon}</span>}{t.label}
-                  {(t.prog || t.count !== undefined) && <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab===t.id?'bg-[#E1F5EE] text-[#0F6E56]':'bg-gray-100 text-gray-400'}`}>{t.prog ? `${t.prog.filled}/${t.prog.total}` : t.count}</span>}
-                </button>
-              ))
-            )}
+          {allTabs.map((t) => (
+            <button key={t.id} type="button" onClick={() => setActiveTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors ${activeTab === t.id ? 'border-[#1B6B6B] text-[#1B6B6B]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+              {t.meta?.icon && <span style={{ fontSize: 11 }}>{t.meta.icon}</span>}{t.label}
+              {(t.prog || t.count !== undefined) && <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === t.id ? 'bg-[#E1F5EE] text-[#0F6E56]' : 'bg-gray-100 text-gray-400'}`}>{t.prog ? `${t.prog.filled}/${t.prog.total}` : t.count}</span>}
+            </button>
+          ))}
           </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-          {isEditable && auditorStep === 'fill' && activeSec && (
+          {activeTab.startsWith('sec_') && activeSec && (
             <>
               {activeSec.sectionType === SECTION_TYPES.CHECKLIST && renderChecklist(activeSec)}
               {activeSec.sectionType === SECTION_TYPES.RECORDS   && renderRecords(activeSec)}
               {activeSec.sectionType === SECTION_TYPES.QA        && renderQA(activeSec)}
             </>
           )}
-          {isEditable && auditorStep === 'findings' && (
+          {activeTab === 'findings' && (
             /* eslint-disable-next-line react-hooks/refs */
             renderFindings()
           )}
-          {!isEditable && activeTab.startsWith('sec_') && activeSec && (
-            <>
-              {activeSec.sectionType === SECTION_TYPES.CHECKLIST && renderChecklist(activeSec)}
-              {activeSec.sectionType === SECTION_TYPES.RECORDS   && renderRecords(activeSec)}
-              {activeSec.sectionType === SECTION_TYPES.QA        && renderQA(activeSec)}
-            </>
-          )}
-          {!isEditable && activeTab === 'findings' && (
-            /* eslint-disable-next-line react-hooks/refs */
-            renderFindings()
-          )}
-          {!isEditable && activeTab === 'overview'  && renderOverview()}
+          {activeTab === 'overview' && renderOverview()}
         </div>
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0">
-          {isClosed ? (
-            <div className="flex gap-2">
-              <div className="flex-1 p-2.5 bg-green-50 border border-green-100 rounded-xl text-center"><p className="text-xs font-medium text-green-700">✅ Closed {safeAudit.closedBy && `by ${safeAudit.closedBy}`}</p></div>
-              <button type="button" onClick={onClose} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
-            </div>
-          ) : isEditable ? (
-            <div className="flex gap-2">
-              {auditorStep === 'fill' ? (
-                <>
-                  <button type="button" onClick={onClose} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
-                  <button type="button" onClick={() => setAuditorStep('findings')} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold">Next: Findings →</button>
-                </>
-              ) : (
-                <>
-                  <button type="button" onClick={() => { setAuditorStep('fill'); setActiveTab(sectionTabs[0]?.id || 'findings'); }} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">← Back</button>
-                  <button type="button" onClick={() => setShowSubmit(true)} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold">📤 Submit to Manager</button>
-                </>
-              )}
-            </div>
-          ) : st === 'Submitted' && canManage ? (
-            <div className="flex gap-2">
-              <button type="button" onClick={onClose} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
-              <button type="button" onClick={() => { setSentBackTo(null); setShowSendBack(true); }} className="flex-1 py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium">↩ Send Back</button>
-              <button type="button" onClick={handleMarkUnderReview} disabled={saving} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold disabled:opacity-50">👀 Start Review</button>
-            </div>
-          ) : st === 'Under Review' && canManage ? (
-            <div className="flex gap-2">
-              <button type="button" onClick={onClose} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
-              <button type="button" onClick={() => { setSentBackTo(null); setShowSendBack(true); }} className="flex-1 py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium">↩ Send Back</button>
-              {activeTab !== 'overview' && <button type="button" onClick={() => setActiveTab('overview')} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold">Overview →</button>}
-            </div>
-          ) : (
-            <button type="button" onClick={onClose} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
-          )}
+          <div className="flex gap-2">
+            {!isFirstTab && (
+              <button type="button" onClick={goPrev} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">← Back</button>
+            )}
+            {isClosed ? (
+              <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
+            ) : isEditable && activeTab === 'findings' ? (
+              <button type="button" onClick={() => setShowSubmit(true)} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold">📤 Submit to Manager</button>
+            ) : st === 'Submitted' && canManage && activeTab === 'overview' ? (
+              <>
+                <button type="button" onClick={() => { setSentBackTo(null); setShowSendBack(true); }} className="flex-1 py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium">↩ Send Back</button>
+                <button type="button" onClick={handleMarkUnderReview} disabled={saving} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold disabled:opacity-50">👀 Start Review</button>
+              </>
+            ) : managerCanAct && activeTab === 'overview' ? (
+              <>
+                <button type="button" onClick={() => { setSentBackTo(null); setShowSendBack(true); }} className="flex-1 py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium">↩ Send Back</button>
+                <button type="button" onClick={() => { setClosedData(null); setShowClose(true); }} disabled={openFindings.length > 0} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40">
+                  {openFindings.length > 0 ? `Resolve ${openFindings.length} finding${openFindings.length !== 1 ? 's' : ''} first` : '✅ Close Audit'}
+                </button>
+              </>
+            ) : !isLastTab ? (
+              <button type="button" onClick={goNext} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold">Next →</button>
+            ) : (
+              <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
+            )}
+          </div>
         </div>
       </div>
 
