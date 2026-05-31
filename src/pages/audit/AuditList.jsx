@@ -31,7 +31,7 @@ export default function AuditList({
   const [branchDrill, setBranchDrill] = useState(null);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset drill-down when filters change
+     
     setLocationDrill(null);
     setBranchDrill(null);
   }, [activeStatusTab, search, filters]);

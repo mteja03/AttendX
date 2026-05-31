@@ -62,7 +62,7 @@ export default function RecordAuditDetail({
     return () => { isMountedRef.current = false; document.removeEventListener('mousedown', h); if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
   }, []);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset page when filters/section change
+   
   useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, activeSectionIdx]);
 
   // ── derived audit state ───────────────────────────────────────────────────────

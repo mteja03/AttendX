@@ -74,7 +74,7 @@ export default function UnifiedAuditDetail({
     return () => { isMountedRef.current = false; document.removeEventListener('mousedown', h); clearTimeout(saveTimeoutRef.current); };
   }, []);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset record pages when filters change
+   
   useEffect(() => { setRecPage({}); }, [recSearch, recFilter]);
 
   /* ── derived ─────────────────────────────────────────────────────────── */

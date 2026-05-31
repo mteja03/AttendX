@@ -20,7 +20,7 @@ export default function AuditTableRow({
   const recordProgress = isRecord ? getRecordFillProgress(audit) : null;
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setStatus(audit.status);
   }, [audit.id, audit.status]);
 

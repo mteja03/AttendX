@@ -155,7 +155,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
 
   useEffect(() => {
     if (!isAuditorMode && isAuditor && (auditorStep === 'checklist' || auditorStep === 'findings')) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setActiveTab(auditorStep);
     }
   }, [isAuditorMode, isAuditor, auditorStep]);
