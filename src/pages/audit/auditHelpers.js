@@ -347,6 +347,7 @@ export const COLUMN_TYPES = {
   AUDITOR_DROPDOWN: 'auditor_dropdown',
   AUDITOR_TEXT: 'auditor_text',
   AUDITOR_NUMBER: 'auditor_number',
+  AUDITOR_DATE: 'auditor_date',
 };
 
 export const SECTION_TYPES = {
