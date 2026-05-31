@@ -282,7 +282,8 @@ export default function UnifiedAuditDetail({
   });
   const allTabs = [
     ...sectionTabs,
-    { id: 'findings', label: 'Findings', count: findingsData.length },
+    { id: 'findings',  label: 'Findings',  count: findingsData.length },
+    { id: 'documents', label: 'Documents', count: auditDocs.length },
     ...(!isEditable ? [{ id: 'overview', label: managerCanAct ? 'Overview & Close' : 'Overview' }] : []),
   ];
 
@@ -707,7 +708,15 @@ export default function UnifiedAuditDetail({
             <button key={t.id} type="button" onClick={() => setActiveTab(t.id)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors ${activeTab === t.id ? 'border-[#1B6B6B] text-[#1B6B6B]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
               {t.meta?.icon && <span style={{ fontSize: 11 }}>{t.meta.icon}</span>}{t.label}
-              {(t.prog || t.count !== undefined) && <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === t.id ? 'bg-[#E1F5EE] text-[#0F6E56]' : 'bg-gray-100 text-gray-400'}`}>{t.prog ? `${t.prog.filled}/${t.prog.total}` : t.count}</span>}
+              {t.prog ? (
+      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+        t.prog.total === 0 ? 'bg-gray-200' :
+        t.prog.filled === t.prog.total ? 'bg-green-500' :
+        t.prog.filled > 0 ? 'bg-amber-400' : 'bg-gray-200'
+      }`} />
+    ) : t.count !== undefined ? (
+      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === t.id ? 'bg-[#E1F5EE] text-[#0F6E56]' : 'bg-gray-100 text-gray-400'}`}>{t.count}</span>
+    ) : null}
             </button>
           ))}
           </div>
@@ -726,36 +735,58 @@ export default function UnifiedAuditDetail({
             /* eslint-disable-next-line react-hooks/refs */
             renderFindings()
           )}
-          {activeTab === 'findings' && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span>📎</span>
-                  <span className="text-sm font-semibold text-gray-700">Audit Documents</span>
+          {activeTab === 'documents' && (
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-xl flex-shrink-0">📎</div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Audit Documents</p>
+                    <p className="text-xs text-gray-400">PDF, image or Word · max 20MB per file</p>
+                  </div>
                 </div>
-                <span className="text-xs text-gray-400">{auditDocs.length} file{auditDocs.length !== 1 ? 's' : ''}</span>
+                {(isEditable || (canManage && !isClosed)) && (
+                  <button type="button" onClick={() => !docUploading && docFileRef.current?.click()} disabled={docUploading} className="flex items-center gap-1.5 px-3 py-2 bg-[#1B6B6B] text-white text-xs rounded-xl font-medium flex-shrink-0 disabled:opacity-50 min-h-[36px]">
+                    {docUploading ? 'Uploading…' : '+ Upload'}
+                  </button>
+                )}
               </div>
-              <p className="text-xs text-gray-400 mb-3">Upload physical audit reports, photos, or supporting documents. Max 20MB per file. PDF, image or Word.</p>
-              {isEditable && (
-                <div role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && !docUploading && docFileRef.current?.click()} onClick={() => !docUploading && docFileRef.current?.click()} className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-[#1B6B6B] transition-colors mb-3">
+
+              {(isEditable || (canManage && !isClosed)) && (
+                <div onClick={() => !docUploading && docFileRef.current?.click()} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && !docUploading && docFileRef.current?.click()} className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-[#1B6B6B] hover:bg-[#E8F5F5]/30 transition-all">
                   {docUploading ? <p className="text-sm text-gray-400">Uploading…</p> : (
-                    <div className="flex items-center justify-center gap-2 text-gray-400">
-                      <span>📎</span><span className="text-sm">Upload PDF, image or Word doc</span><span className="text-xs text-gray-300">· Max 20MB</span>
-                    </div>
+                    <>
+                      <p className="text-2xl mb-2">📁</p>
+                      <p className="text-sm text-gray-500 font-medium">Tap to upload a document</p>
+                      <p className="text-xs text-gray-400 mt-1">PDF, image (JPEG/PNG/WebP), or Word</p>
+                    </>
                   )}
                 </div>
               )}
+
+              {auditDocs.length === 0 && !(isEditable || (canManage && !isClosed)) && (
+                <div className="text-center py-10 border-2 border-dashed border-gray-100 rounded-2xl">
+                  <p className="text-3xl mb-2">📂</p>
+                  <p className="text-sm font-medium text-gray-500">No documents uploaded</p>
+                  <p className="text-xs text-gray-400 mt-1">The auditor can upload physical reports here</p>
+                </div>
+              )}
+
               {auditDocs.length > 0 && (
                 <div className="space-y-2">
                   {auditDocs.map((d) => (
-                    <div key={d.id} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-100 rounded-xl">
-                      <span className="text-lg flex-shrink-0">{d.type?.includes('pdf') ? '📄' : d.type?.startsWith('image') ? '🖼️' : '📝'}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-700 truncate">{d.name}</p>
-                        <p className="text-xs text-gray-400">{d.size ? `${(d.size / 1024 / 1024).toFixed(1)} MB` : ''}</p>
+                    <div key={d.id} className="flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-xl hover:border-gray-200 transition-colors">
+                      <div className="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center text-lg flex-shrink-0">
+                        {d.type?.includes('pdf') ? '📄' : d.type?.startsWith('image') ? '🖼️' : '📝'}
                       </div>
-                      <a href={d.url} target="_blank" rel="noreferrer" className="text-xs text-[#1B6B6B] hover:underline flex-shrink-0">View</a>
-                      {isEditable && <button type="button" onClick={() => handleDocDelete(d)} className="text-gray-300 hover:text-red-400 flex-shrink-0">✕</button>}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-800 truncate">{d.name}</p>
+                        <p className="text-xs text-gray-400">{d.size ? `${(d.size / 1024 / 1024).toFixed(1)} MB` : ''}{d.uploadedBy ? ` · ${d.uploadedBy}` : ''}</p>
+                      </div>
+                      <a href={d.url} target="_blank" rel="noreferrer" className="text-xs text-[#1B6B6B] font-medium hover:underline flex-shrink-0 px-2 py-1 rounded-lg hover:bg-[#E8F5F5]">View</a>
+                      {(isEditable || (canManage && !isClosed)) && (
+                        <button type="button" onClick={() => handleDocDelete(d)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 flex-shrink-0 transition-colors">✕</button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -773,7 +804,7 @@ export default function UnifiedAuditDetail({
             )}
             {isClosed ? (
               <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
-            ) : isEditable && activeTab === 'findings' ? (
+            ) : isEditable && (activeTab === 'findings' || activeTab === 'documents') ? (
               <button type="button" onClick={() => setShowSubmit(true)} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold">📤 Submit to Manager</button>
             ) : st === 'Submitted' && canManage && activeTab === 'overview' ? (
               <>
