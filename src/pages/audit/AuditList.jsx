@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, query, where, limit, getDoc, setDoc, increment } from 'firebase/firestore';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import { effStatus, isAuditOverdue, normaliseAuditCategory, TEMPLATE_TYPES } from './auditHelpers';
+import { effStatus, isAuditOverdue } from './auditHelpers';
 import EmptyAuditState from './EmptyAuditState';
 import AssignAuditModal from './AssignAuditModal';
 import AuditTableRow from './AuditTableRow';
@@ -22,17 +22,6 @@ export default function AuditList({
   showSuccess, showError, setSelectedAudit, isAuditor, canManage,
 }) {
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assignedAudit, setAssignedAudit] = useState(null);
-  const [auditorEmails, setAuditorEmails] = useState(new Set());
-
-  useEffect(() => {
-    if (!showAssignModal || !companyId) return;
-    getDocs(query(collection(db, 'companies', companyId, 'teamMembers'), where('role', 'in', ['auditor', 'auditmanager']), limit(200)))
-      .then((snap) => { setAuditorEmails(new Set(snap.docs.map((d) => d.data().email?.toLowerCase()).filter(Boolean))); })
-      .catch(() => {});
-  }, [showAssignModal, companyId]);
-
-  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [activeStatusTab, setActiveStatusTab] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -40,23 +29,6 @@ export default function AuditList({
   const [viewMode, setViewMode] = useState('location');
   const [locationDrill, setLocationDrill] = useState(null);
   const [branchDrill, setBranchDrill] = useState(null);
-  const [leadSearch, setLeadSearch] = useState('');
-  const [showLeadDrop, setShowLeadDrop] = useState(false);
-  const [teamSearch, setTeamSearch] = useState('');
-  const [showTeamDrop, setShowTeamDrop] = useState(false);
-  const leadRef = useRef(null);
-  const teamRef = useRef(null);
-
-  const [assignForm, setAssignForm] = useState({ auditTypeIds: [], category: '', location: '', branch: '', department: '', auditorId: '', auditorName: '', auditorEmail: '', teamMembers: [], startDate: '', endDate: '', notes: '', recordData: {} });
-
-  useEffect(() => {
-    const handleClick = (e) => {
-      if (leadRef.current && !leadRef.current.contains(e.target)) setShowLeadDrop(false);
-      if (teamRef.current && !teamRef.current.contains(e.target)) setShowTeamDrop(false);
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset drill-down when filters change
@@ -99,77 +71,6 @@ export default function AuditList({
     return { total, closed, overdueCount, inProgressCount, submittedCount, barPct, barColor };
   };
 
-  const generateAuditId = async () => {
-    const counterRef = doc(db, 'companies', companyId, 'settings', 'auditCounter');
-    const snap = await getDoc(counterRef);
-    let next = 1;
-    if (snap.exists()) { next = (snap.data().count || 0) + 1; await updateDoc(counterRef, { count: increment(1) }); }
-    else { await setDoc(counterRef, { count: 1 }); }
-    return `AUD-${new Date().getFullYear()}-${String(next).padStart(3, '0')}`;
-  };
-
-  const resetAssignForm = () => {
-    setAssignForm({ auditTypeIds: [], category: '', location: '', branch: '', department: '', auditorId: '', auditorName: '', auditorEmail: '', teamMembers: [], startDate: '', endDate: '', notes: '', recordData: {} });
-    setLeadSearch('');
-    setTeamSearch('');
-  };
-
-  const handleAssign = async () => {
-    if (!assignForm.auditTypeIds || assignForm.auditTypeIds.length === 0) { showError('Select at least one audit template'); return; }
-    if (!assignForm.auditorId) { showError('Select a lead auditor'); return; }
-    if (!assignForm.endDate) { showError('Set an end date'); return; }
-    for (const typeId of assignForm.auditTypeIds) {
-      const t = auditTypes.find((x) => x.id === typeId);
-      if (t?.templateType === TEMPLATE_TYPES.RECORD) {
-        const hasRecords = (t.recordSections || []).some((sec) => (assignForm.recordData?.[typeId]?.[sec.id] || []).length > 0);
-        if (!hasRecords) { showError(`Add at least one record for "${t.name}" before assigning`); return; }
-      }
-    }
-    try {
-      setSaving(true);
-      const leadEmp = employees.find((e) => e.id === assignForm.auditorId);
-      const auditorPhone = leadEmp?.mobile || leadEmp?.phone || leadEmp?.mobileNumber || '';
-      const teamMembersNorm = (assignForm.teamMembers || []).filter((m) => { const emp = employees.find((e) => e.id === m.id); return emp && emp.status === 'Active'; }).map((m) => ({ ...m, email: (m.email || '').toLowerCase() }));
-      const teamMemberEmails = [...(assignForm.auditorEmail ? [(assignForm.auditorEmail || '').toLowerCase()] : []), ...teamMembersNorm.map((m) => m.email).filter(Boolean)].filter(Boolean);
-
-      const createdAudits = [];
-      for (const typeId of assignForm.auditTypeIds) {
-        const type = auditTypes.find((t) => t.id === typeId);
-        if (!type) continue;
-        const refId = await generateAuditId();
-        const checklistReview = type?.templateType === TEMPLATE_TYPES.RECORD
-          ? []
-          : (type?.checklistItems || []).map((item) => ({ ...item, result: null, note: '' }));
-        const resolvedCategory = normaliseAuditCategory(type?.auditCategory || assignForm.category);
-        const isRecord = type?.templateType === TEMPLATE_TYPES.RECORD;
-        const auditRecordSections = isRecord
-          ? (type?.recordSections || []).map((sec) => ({ ...sec, records: assignForm.recordData?.[typeId]?.[sec.id] || [] }))
-          : [];
-        await addDoc(collection(db, 'companies', companyId, 'audits'), {
-          auditRefId: refId, auditTypeId: typeId, auditTypeName: type?.name || '', auditTypeColor: type?.color || '#8B5CF6',
-          auditCategory: resolvedCategory, riskLevel: type?.riskLevel || 'Medium', category: assignForm.category,
-          location: assignForm.location, branch: assignForm.branch, department: assignForm.department,
-          auditorId: assignForm.auditorId, auditorName: assignForm.auditorName, auditorEmail: (assignForm.auditorEmail || '').toLowerCase(),
-          teamMembers: teamMembersNorm, teamMemberEmails, startDate: assignForm.startDate, endDate: assignForm.endDate, notes: assignForm.notes,
-          templateType: type?.templateType || TEMPLATE_TYPES.CHECKLIST,
-          status: 'Assigned', checklistReview, findings: [], adminNotes: '', checklistLocked: false,
-          recordSections: auditRecordSections,
-          createdAt: new Date(), createdBy: currentUser?.email || '',
-        });
-        createdAudits.push({ refId, typeName: type?.name || '', category: resolvedCategory });
-      }
-
-      const isBulk = createdAudits.length > 1;
-      showSuccess(isBulk ? `${createdAudits.length} audits assigned to ${assignForm.auditorName}!` : `${createdAudits[0]?.refId} assigned to ${assignForm.auditorName}!`);
-      setAssignedAudit({
-        refId: isBulk ? null : createdAudits[0]?.refId, audits: createdAudits, isBulk,
-        auditorName: assignForm.auditorName, auditorPhone, typeName: isBulk ? `${createdAudits.length} audits` : createdAudits[0]?.typeName,
-        category: createdAudits[0]?.category, location: assignForm.location, branch: assignForm.branch,
-        department: assignForm.department, teamMembers: assignForm.teamMembers, startDate: assignForm.startDate, endDate: assignForm.endDate,
-      });
-    } catch (e) { showError('Failed: ' + e.message); } finally { setSaving(false); }
-  };
-
   const handleDelete = async (e, audit) => {
     e.stopPropagation();
     if (userRole !== 'admin') { showError('Only admins can delete audits'); return; }
@@ -177,8 +78,6 @@ export default function AuditList({
     try { await deleteDoc(doc(db, 'companies', companyId, 'audits', audit.id)); showSuccess('Audit deleted'); }
     catch { showError('Failed to delete'); }
   };
-
-  const emptyAssign = { auditTypeIds: [], category: '', location: '', branch: '', department: '', auditorId: '', auditorName: '', auditorEmail: '', teamMembers: [], startDate: '', endDate: '', notes: '', recordData: {} };
 
   return (
     <div className="space-y-4">
