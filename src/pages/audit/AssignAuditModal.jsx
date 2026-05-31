@@ -103,6 +103,7 @@ export default function AssignAuditModal({
     if (!selectedIds.length)  { showError('Select at least one template'); return; }
     if (!auditorId)            { showError('Select a lead auditor'); return; }
     if (!endDate)              { showError('End date is required'); return; }
+    if (!location && !branch)  { showError('Select a location or branch'); return; }
 
     // Records section validation
     for (const tmpl of selectedTemplates) {
