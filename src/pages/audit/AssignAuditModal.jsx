@@ -2,17 +2,11 @@ import { useState, useRef, useMemo, useCallback } from 'react';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import {
-  SECTION_TYPES, isUnifiedTemplate,
+  SECTION_TYPES, isUnifiedTemplate, SECTION_META,
   generateSampleCSV, parseCSVToRecords, makeBlankRecord,
 } from './auditHelpers';
 
 function stripUndefined(obj) { return JSON.parse(JSON.stringify(obj, (_, v) => (v === undefined ? null : v))); }
-
-const SECTION_META = {
-  [SECTION_TYPES.CHECKLIST]: { label: 'Checklist', color: '#0F6E56', bg: '#E1F5EE' },
-  [SECTION_TYPES.RECORDS]:   { label: 'Records',   color: '#185FA5', bg: '#E6F1FB' },
-  [SECTION_TYPES.QA]:        { label: 'Q&A',       color: '#3C3489', bg: '#EEEDFE' },
-};
 
 export default function AssignAuditModal({
   companyId, auditTypes, employees, branches, locations, departments,

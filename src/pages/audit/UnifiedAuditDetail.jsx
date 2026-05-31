@@ -4,15 +4,10 @@ import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'fi
 import { db, storage } from '../../firebase/config';
 import {
   effStatus, formatDate, statusMeta,
-  SECTION_TYPES, QA_QUESTION_TYPES, COLUMN_TYPES,
+  SECTION_TYPES, QA_QUESTION_TYPES, COLUMN_TYPES, SECTION_META,
   getSectionFillProgress, getUnifiedFillProgress, getUnifiedAuditScore,
 } from './auditHelpers';
 
-const SECTION_META = {
-  [SECTION_TYPES.CHECKLIST]: { label: 'Checklist', color: '#0F6E56', bg: '#E1F5EE', icon: '📋' },
-  [SECTION_TYPES.RECORDS]:   { label: 'Records',   color: '#185FA5', bg: '#E6F1FB', icon: '📊' },
-  [SECTION_TYPES.QA]:        { label: 'Q&A',       color: '#3C3489', bg: '#EEEDFE', icon: '❓' },
-};
 const ROWS_PER_PAGE = 100;
 const SEVERITIES = [
   { v:'Low',      cls:'bg-green-50  border-green-200  text-green-700',  act:'bg-green-500  border-green-500  text-white' },

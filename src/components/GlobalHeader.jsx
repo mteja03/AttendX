@@ -249,14 +249,14 @@ export default function GlobalHeader({ onOpenMenu } = {}) {
           <button
             type="button"
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="h-8 w-8 min-h-[44px] min-w-[44px] shrink-0 overflow-hidden rounded-full hover:ring-2 hover:ring-gray-100 transition-all"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 transition-all"
             title={currentUser?.displayName || currentUser?.email}
             aria-label="User menu"
           >
             {currentUser?.photoURL ? (
-              <img src={currentUser.photoURL} alt="" className="w-full h-full object-cover" />
+              <img src={currentUser.photoURL} alt="" className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-gray-100 transition-all" />
             ) : (
-              <div className="w-full h-full bg-[#E1F5EE] text-[#0F6E56] text-xs font-semibold flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-[#E1F5EE] text-[#0F6E56] text-xs font-semibold flex items-center justify-center hover:ring-2 hover:ring-gray-100 transition-all">
                 {userInitial}
               </div>
             )}

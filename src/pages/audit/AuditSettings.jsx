@@ -1,24 +1,10 @@
 import { useState } from 'react';
 import { addDoc, updateDoc, collection, doc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import { AUDIT_COLORS, SECTION_TYPES, QA_QUESTION_TYPES, COLUMN_TYPES } from './auditHelpers';
+import { AUDIT_COLORS, SECTION_TYPES, QA_QUESTION_TYPES, COLUMN_TYPES, SECTION_META, RISK_LEVELS, moveArr } from './auditHelpers';
 
 function uid() { return '_' + Math.random().toString(36).slice(2, 9); }
-function moveArr(arr, i, dir) { const a = [...arr]; const j = i + dir; if (j < 0 || j >= a.length) return arr; [a[i], a[j]] = [a[j], a[i]]; return a; }
 function stripUndefined(obj) { return JSON.parse(JSON.stringify(obj, (_, v) => (v === undefined ? null : v))); }
-
-const RISK_LEVELS = [
-  { value: 'Low',      color: '#639922' },
-  { value: 'Medium',   color: '#EF9F27' },
-  { value: 'High',     color: '#E8750A' },
-  { value: 'Critical', color: '#E24B4A' },
-];
-
-const SECTION_META = {
-  [SECTION_TYPES.CHECKLIST]: { label: 'Checklist', color: '#0F6E56', bg: '#E1F5EE' },
-  [SECTION_TYPES.RECORDS]:   { label: 'Records',   color: '#185FA5', bg: '#E6F1FB' },
-  [SECTION_TYPES.QA]:        { label: 'Q&A',       color: '#3C3489', bg: '#EEEDFE' },
-};
 
 const COL_TYPE_OPTS = [
   { value: COLUMN_TYPES.PREFILLED_TEXT,   label: 'Pre-filled · Text' },
