@@ -26,6 +26,7 @@ const COL_TYPE_OPTS = [
   { value: COLUMN_TYPES.AUDITOR_DROPDOWN, label: 'Auditor · Dropdown' },
   { value: COLUMN_TYPES.AUDITOR_TEXT,     label: 'Auditor · Text' },
   { value: COLUMN_TYPES.AUDITOR_NUMBER,   label: 'Auditor · Number' },
+  { value: COLUMN_TYPES.AUDITOR_DATE,     label: 'Auditor · Date' },
 ];
 
 const DEFAULT_RESPONSE_OPTIONS = [
@@ -57,7 +58,7 @@ function RecordsColBuilder({ section, onChange }) {
   };
   const rmCOpt  = (colId, oi) => { const col = cols.find((c) => c.id === colId); upCol(colId, 'options', (col?.options || []).filter((_, i) => i !== oi)); };
   const upCOpt  = (colId, oi, f, v) => { const col = cols.find((c) => c.id === colId); upCol(colId, 'options', (col?.options || []).map((o, i) => i === oi ? { ...o, [f]: v } : o)); };
-  const isAud = (t) => [COLUMN_TYPES.AUDITOR_DROPDOWN, COLUMN_TYPES.AUDITOR_TEXT, COLUMN_TYPES.AUDITOR_NUMBER].includes(t);
+  const isAud = (t) => [COLUMN_TYPES.AUDITOR_DROPDOWN, COLUMN_TYPES.AUDITOR_TEXT, COLUMN_TYPES.AUDITOR_NUMBER, COLUMN_TYPES.AUDITOR_DATE].includes(t);
 
   return (
     <div className="space-y-2">
@@ -68,7 +69,14 @@ function RecordsColBuilder({ section, onChange }) {
             <select value={col.type} onChange={(e) => { const t = e.target.value; upCol(col.id, 'type', t); if (t === COLUMN_TYPES.AUDITOR_DROPDOWN && !col.options) upCol(col.id, 'options', []); }} className="text-xs border border-gray-200 rounded-lg px-1.5 py-1.5 bg-white">
               {COL_TYPE_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            {col.type === COLUMN_TYPES.AUDITOR_NUMBER && <input value={col.unit || ''} onChange={(e) => upCol(col.id, 'unit', e.target.value)} placeholder="unit" title="Label shown next to the number when auditor fills it — e.g. kg, ₹, count, ml" className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none" />}
+            {col.type === COLUMN_TYPES.AUDITOR_NUMBER && (
+              <>
+                <input list={`ul-${col.id}`} value={col.unit || ''} onChange={(e) => upCol(col.id, 'unit', e.target.value)} placeholder="unit" title="Unit shown next to the number — pick or type" className="w-20 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none" />
+                <datalist id={`ul-${col.id}`}>
+                  {['count','pcs','nos','kg','g','ton','L','ml','₹','$','hrs','min','days','months','km','m','%','sq.ft','acres'].map((u) => <option key={u} value={u} />)}
+                </datalist>
+              </>
+            )}
             <button type="button" onClick={() => rmCol(col.id)} className="text-gray-300 hover:text-red-400">✕</button>
           </div>
           {col.type === COLUMN_TYPES.AUDITOR_DROPDOWN && (
