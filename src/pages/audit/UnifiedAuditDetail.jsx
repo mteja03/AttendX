@@ -667,8 +667,8 @@ export default function UnifiedAuditDetail({
       <div className="relative flex max-h-[95vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-sm sm:mx-4 sm:max-h-[90vh] sm:max-w-4xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
 
         {/* Header */}
-        <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
-          <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="px-4 py-2 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-start justify-between gap-2 mb-1.5">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <span className="rounded-xl bg-gray-100 px-2 py-0.5 font-mono text-xs font-bold text-gray-400">{safeAudit.auditRefId}</span>
@@ -697,8 +697,8 @@ export default function UnifiedAuditDetail({
             </div>
           )}
 
-          <div className="mb-2">
-            <div className="flex justify-between mb-1"><span className="text-xs text-gray-400">{fillProgress.filled}/{fillProgress.total} filled</span><span className="text-xs text-gray-400">{pct}%</span></div>
+          <div className="mb-1.5">
+            <div className="flex justify-between mb-0.5"><span className="text-xs text-gray-400">{fillProgress.filled}/{fillProgress.total} filled</span><span className="text-xs text-gray-400">{pct}%</span></div>
             <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-[#1B6B6B] rounded-full transition-all" style={{ width: `${pct}%` }} /></div>
           </div>
 
@@ -706,7 +706,7 @@ export default function UnifiedAuditDetail({
           <div className="flex gap-1 overflow-x-auto scrollbar-none flex-nowrap -mb-px">
           {allTabs.map((t) => (
             <button key={t.id} type="button" onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors ${activeTab === t.id ? 'border-[#1B6B6B] text-[#1B6B6B]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors ${activeTab === t.id ? 'border-[#1B6B6B] text-[#1B6B6B]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
               {t.meta?.icon && <span style={{ fontSize: 11 }}>{t.meta.icon}</span>}{t.label}
               {t.prog ? (
       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${

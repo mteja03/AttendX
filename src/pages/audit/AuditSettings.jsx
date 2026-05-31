@@ -4,6 +4,7 @@ import { db } from '../../firebase/config';
 import { AUDIT_COLORS, SECTION_TYPES, QA_QUESTION_TYPES, COLUMN_TYPES } from './auditHelpers';
 
 function uid() { return '_' + Math.random().toString(36).slice(2, 9); }
+function moveArr(arr, i, dir) { const a = [...arr]; const j = i + dir; if (j < 0 || j >= a.length) return arr; [a[i], a[j]] = [a[j], a[i]]; return a; }
 function stripUndefined(obj) { return JSON.parse(JSON.stringify(obj, (_, v) => (v === undefined ? null : v))); }
 
 const RISK_LEVELS = [
@@ -123,14 +124,23 @@ function QAQBuilder({ section, onChange }) {
 
   return (
     <div className="space-y-2">
-      {qs.map((q) => (
+      {qs.map((q, qi) => (
         <div key={q.id} className="border border-purple-100 bg-purple-50/20 rounded-xl p-3">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <input value={q.question} onChange={(e) => upQ(q.id, 'question', e.target.value)} className="flex-1 min-w-[160px] text-xs border border-gray-200 rounded-xl px-2.5 py-2 focus:outline-none focus:border-[#7F77DD] bg-white" />
             <select value={q.type} onChange={(e) => upQ(q.id, 'type', e.target.value)} className="text-xs border border-gray-200 rounded-xl px-2 py-2 bg-white">
               {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-            {q.type === QA_QUESTION_TYPES.NUMBER && <input value={q.unit || ''} onChange={(e) => upQ(q.id, 'unit', e.target.value)} placeholder="unit" className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-2 bg-white focus:outline-none" />}
+            {q.type === QA_QUESTION_TYPES.NUMBER && (
+              <>
+                <input list={`qa-ul-${q.id}`} value={q.unit || ''} onChange={(e) => upQ(q.id, 'unit', e.target.value)} placeholder="unit" title="Unit shown next to the number" className="w-20 text-xs border border-gray-200 rounded-xl px-2 py-2 bg-white focus:outline-none" />
+                <datalist id={`qa-ul-${q.id}`}>
+                  {['count','pcs','nos','kg','g','ton','L','ml','₹','$','hrs','min','days','months','km','m','%','sq.ft','acres'].map((u) => <option key={u} value={u} />)}
+                </datalist>
+              </>
+            )}
+            <button type="button" disabled={qi === 0} onClick={() => onChange({ ...section, questions: moveArr(qs, qi, -1) })} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs">↑</button>
+            <button type="button" disabled={qi === qs.length - 1} onClick={() => onChange({ ...section, questions: moveArr(qs, qi, 1) })} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs">↓</button>
             <button type="button" onClick={() => rmQ(q.id)} className="text-gray-300 hover:text-red-400">✕</button>
           </div>
           {q.type === QA_QUESTION_TYPES.DROPDOWN && (
@@ -289,6 +299,18 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
     updateMixedSection(secId, (s) => ({ ...s, items: [...(s.items || []), { id: uid(), question: mixedNewItem.trim(), section: s.name, riskLevel: mixedNewItemRisk }] }));
     setMixedNewItem(''); setMixedNewItemRisk('Medium'); setMixedAddingFor(null);
   };
+
+  /* ── reorder helpers ─────────────────────────────────────────────── */
+  const moveClSection = (idx, dir) => setClSections((p) => moveArr(p, idx, dir));
+  const moveClItem = (sec, idx, dir) => setClItems((p) => {
+    const secItems = p.filter((i) => i.section === sec);
+    const others   = p.filter((i) => i.section !== sec);
+    return [...others, ...moveArr(secItems, idx, dir)];
+  });
+  const moveRecSection = (idx, dir) => setRecSections((p) => moveArr(p, idx, dir));
+  const moveQASection  = (idx, dir) => setQASections((p)  => moveArr(p, idx, dir));
+  const moveMixedSection = (idx, dir) => setMixedSections((p) => moveArr(p, idx, dir));
+  const moveMixedItem = (secId, idx, dir) => updateMixedSection(secId, (s) => ({ ...s, items: moveArr(s.items || [], idx, dir) }));
 
   const handleSave = async () => {
     if (!name.trim()) { showError('Enter a template name'); return; }
@@ -485,37 +507,40 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
                     <span className="text-xs text-gray-400">{clItems.length} item{clItems.length !== 1 ? 's' : ''}</span>
                   </div>
 
-                  {clSections.map((sec) => {
+                  {clSections.map((sec, si) => {
                     const items = clItems.filter((i) => i.section === sec);
                     return (
-                      <div key={sec} className="mb-4">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <div className="flex items-center gap-1.5">
-                            {editSecId === sec ? (
-                              <input value={editSecVal} onChange={(e) => setEditSecVal(e.target.value)}
-                                onBlur={() => { if (editSecVal.trim() && editSecVal !== sec) renameSection(sec, editSecVal.trim()); setEditSecId(null); }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') { if (editSecVal.trim() && editSecVal !== sec) renameSection(sec, editSecVal.trim()); setEditSecId(null); } if (e.key === 'Escape') setEditSecId(null); }}
-                                className="text-sm font-semibold text-gray-800 border-b border-[#1B6B6B] bg-transparent focus:outline-none w-32" autoFocus />
-                            ) : (
-                              <>
-                                <span className="text-sm font-semibold text-gray-800">{sec}</span>
-                                <button type="button" onClick={() => { setEditSecId(sec); setEditSecVal(sec); }} className="text-gray-300 hover:text-gray-500 text-sm">✏️</button>
-                              </>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => { setAddingFor(sec); setNewItemText(''); setNewItemRisk('Medium'); }} className="text-xs text-[#1B6B6B] font-medium hover:underline">+ Add item</button>
-                            {clSections.length > 1 && <button type="button" onClick={() => rmClSection(sec)} className="text-xs text-red-400 hover:text-red-600">Remove</button>}
+                      <div key={sec} className="border border-gray-200 rounded-xl overflow-hidden mb-3">
+                        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-100" style={{ background: '#E1F5EE' }}>
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ background: '#E1F5EE', color: '#0F6E56', border: '1px solid #9FE1CB' }}>Checklist</span>
+                          {editSecId === sec ? (
+                            <input value={editSecVal} onChange={(e) => setEditSecVal(e.target.value)}
+                              onBlur={() => { if (editSecVal.trim() && editSecVal !== sec) renameSection(sec, editSecVal.trim()); setEditSecId(null); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { if (editSecVal.trim() && editSecVal !== sec) renameSection(sec, editSecVal.trim()); setEditSecId(null); } if (e.key === 'Escape') setEditSecId(null); }}
+                              className="flex-1 text-sm font-semibold text-gray-800 border-b border-[#1B6B6B] bg-transparent focus:outline-none" autoFocus />
+                          ) : (
+                            <>
+                              <span className="flex-1 text-sm font-semibold text-gray-800">{sec}</span>
+                              <button type="button" onClick={() => { setEditSecId(sec); setEditSecVal(sec); }} className="text-gray-300 hover:text-gray-500">✏️</button>
+                            </>
+                          )}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button type="button" onClick={() => { setAddingFor(sec); setNewItemText(''); setNewItemRisk('Medium'); }} className="text-xs text-[#1B6B6B] font-medium hover:underline mr-1">+ Add item</button>
+                            <button type="button" onClick={() => moveClSection(si, -1)} disabled={si === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs px-0.5">↑</button>
+                            <button type="button" onClick={() => moveClSection(si, 1)} disabled={si === clSections.length - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs px-0.5">↓</button>
+                            {clSections.length > 1 && <button type="button" onClick={() => rmClSection(sec)} className="text-xs text-red-400 hover:text-red-600 ml-1">Remove</button>}
                           </div>
                         </div>
 
-                        <div className="border-2 border-dashed border-gray-200 rounded-xl overflow-hidden">
+                        <div className="m-3 border-2 border-dashed border-gray-200 rounded-xl overflow-hidden">
                           {items.map((item, idx) => (
                             <div key={item.id} className={`flex items-center gap-2 px-3 py-2.5 ${idx < items.length - 1 || addingFor === sec ? 'border-b border-gray-100' : ''}`}>
                               <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: RISK_LEVELS.find((r) => r.value === item.riskLevel)?.color || '#888780' }} />
                               <input value={item.question} onChange={(e) => upClItem(item.id, 'question', e.target.value)}
                                 className="flex-1 text-sm text-gray-700 bg-transparent focus:outline-none" />
                               <span className="text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded flex-shrink-0">{item.riskLevel}</span>
+                              <button type="button" onClick={() => moveClItem(sec, idx, -1)} disabled={idx === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs">↑</button>
+                              <button type="button" onClick={() => moveClItem(sec, idx, 1)} disabled={idx === items.length - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs">↓</button>
                               <button type="button" onClick={() => rmClItem(item.id)} className="text-gray-300 hover:text-red-400 flex-shrink-0">✕</button>
                             </div>
                           ))}
@@ -559,12 +584,17 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
                     <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Sections &amp; Columns</span>
                     <span className="text-xs text-gray-400">{recSections.reduce((n, s) => n + (s.columns || []).length, 0)} columns total</span>
                   </div>
-                  {recSections.map((sec) => (
+                  {recSections.map((sec, si) => (
                     <div key={sec.id} className="border border-gray-200 rounded-xl overflow-hidden mb-3">
-                      <div className="bg-gray-50 px-3 py-2.5 flex items-center gap-2 border-b border-gray-100">
+                      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-blue-100" style={{ background: '#E6F1FB' }}>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ background: '#E6F1FB', color: '#185FA5', border: '1px solid #B5D4F4' }}>Records</span>
                         <input value={sec.name} onChange={(e) => setRecSections((p) => p.map((s) => s.id === sec.id ? { ...s, name: e.target.value } : s))}
-                          className="flex-1 text-sm font-medium bg-transparent focus:outline-none" placeholder="Section name" />
-                        {recSections.length > 1 && <button type="button" onClick={() => setRecSections((p) => p.filter((s) => s.id !== sec.id))} className="text-xs text-red-400 hover:text-red-600">Remove</button>}
+                          className="flex-1 text-sm font-semibold text-gray-800 bg-transparent focus:outline-none" placeholder="Section name" />
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button type="button" onClick={() => moveRecSection(si, -1)} disabled={si === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs px-0.5">↑</button>
+                          <button type="button" onClick={() => moveRecSection(si, 1)} disabled={si === recSections.length - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs px-0.5">↓</button>
+                          {recSections.length > 1 && <button type="button" onClick={() => setRecSections((p) => p.filter((s) => s.id !== sec.id))} className="text-xs text-red-400 hover:text-red-600 ml-1">Remove</button>}
+                        </div>
                       </div>
                       <div className="p-3">
                         <RecordsColBuilder section={sec} onChange={(updated) => setRecSections((p) => p.map((s) => s.id === sec.id ? updated : s))} />
@@ -585,12 +615,17 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
                     <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Questions</span>
                     <span className="text-xs text-gray-400">{qaSections.reduce((n, s) => n + (s.questions || []).length, 0)} total</span>
                   </div>
-                  {qaSections.map((sec) => (
+                  {qaSections.map((sec, si) => (
                     <div key={sec.id} className="border border-gray-200 rounded-xl overflow-hidden mb-3">
-                      <div className="bg-purple-50/50 px-3 py-2.5 flex items-center gap-2 border-b border-purple-100">
+                      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-purple-100" style={{ background: '#EEEDFE' }}>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ background: '#EEEDFE', color: '#3C3489', border: '1px solid #CECBF6' }}>Q&A</span>
                         <input value={sec.name} onChange={(e) => setQASections((p) => p.map((s) => s.id === sec.id ? { ...s, name: e.target.value } : s))}
-                          className="flex-1 text-sm font-medium bg-transparent focus:outline-none" placeholder="Section name" />
-                        {qaSections.length > 1 && <button type="button" onClick={() => setQASections((p) => p.filter((s) => s.id !== sec.id))} className="text-xs text-red-400">Remove</button>}
+                          className="flex-1 text-sm font-semibold text-gray-800 bg-transparent focus:outline-none" placeholder="Section name" />
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button type="button" onClick={() => moveQASection(si, -1)} disabled={si === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs px-0.5">↑</button>
+                          <button type="button" onClick={() => moveQASection(si, 1)} disabled={si === qaSections.length - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs px-0.5">↓</button>
+                          {qaSections.length > 1 && <button type="button" onClick={() => setQASections((p) => p.filter((s) => s.id !== sec.id))} className="text-xs text-red-400 hover:text-red-600 ml-1">Remove</button>}
+                        </div>
                       </div>
                       <div className="p-3">
                         <QAQBuilder section={sec} onChange={(updated) => setQASections((p) => p.map((s) => s.id === sec.id ? updated : s))} />
@@ -636,9 +671,13 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
                               <button type="button" onClick={() => { setMixedEditSecId(sec.id); setMixedEditSecVal(sec.name); }} className="text-gray-300 hover:text-gray-500">✏️</button>
                             </>
                           )}
-                          {mixedSections.length > 1 && (
-                            <button type="button" onClick={() => removeMixedSection(sec.id)} className="text-xs text-red-400 hover:text-red-600">Remove</button>
-                          )}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button type="button" onClick={() => moveMixedSection(mixedSections.findIndex((s) => s.id === sec.id), -1)} disabled={mixedSections.findIndex((s) => s.id === sec.id) === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs px-0.5">↑</button>
+                            <button type="button" onClick={() => moveMixedSection(mixedSections.findIndex((s) => s.id === sec.id), 1)} disabled={mixedSections.findIndex((s) => s.id === sec.id) === mixedSections.length - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs px-0.5">↓</button>
+                            {mixedSections.length > 1 && (
+                              <button type="button" onClick={() => removeMixedSection(sec.id)} className="text-xs text-red-400 hover:text-red-600 ml-1">Remove</button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="p-3">
@@ -649,6 +688,8 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
                                   <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: RISK_LEVELS.find((r) => r.value === item.riskLevel)?.color || '#888780' }} />
                                   <input value={item.question} onChange={(e) => updateMixedSection(sec.id, (s) => ({ ...s, items: (s.items || []).map((i) => i.id === item.id ? { ...i, question: e.target.value } : i) }))}
                                     className="flex-1 text-sm text-gray-700 bg-transparent focus:outline-none" />
+                                  <button type="button" onClick={() => moveMixedItem(sec.id, idx, -1)} disabled={idx === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs">↑</button>
+                                  <button type="button" onClick={() => moveMixedItem(sec.id, idx, 1)} disabled={idx === (sec.items || []).length - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs">↓</button>
                                   <button type="button" onClick={() => updateMixedSection(sec.id, (s) => ({ ...s, items: (s.items || []).filter((i) => i.id !== item.id) }))} className="text-gray-300 hover:text-red-400">✕</button>
                                 </div>
                               ))}

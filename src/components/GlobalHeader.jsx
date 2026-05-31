@@ -129,7 +129,7 @@ export default function GlobalHeader({ onOpenMenu } = {}) {
             className="flex min-w-0 max-w-full items-center gap-2 sm:gap-3 rounded-xl py-1.5 pl-1 pr-2 sm:pl-2 sm:pr-3.5 hover:bg-gray-50 transition-colors"
           >
             <div
-              className="h-8 w-8 sm:h-9 sm:w-9 flex shrink-0 items-center justify-center rounded-lg text-white text-xs font-semibold"
+              className="h-7 w-7 sm:h-8 sm:w-8 flex shrink-0 items-center justify-center rounded-lg text-white text-xs font-semibold"
               style={{ backgroundColor: company?.color || '#1B6B6B' }}
             >
               {company?.initials || '—'}
@@ -249,7 +249,7 @@ export default function GlobalHeader({ onOpenMenu } = {}) {
           <button
             type="button"
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 overflow-hidden rounded-full hover:ring-2 hover:ring-gray-100 transition-all"
+            className="h-8 w-8 min-h-[44px] min-w-[44px] shrink-0 overflow-hidden rounded-full hover:ring-2 hover:ring-gray-100 transition-all"
             title={currentUser?.displayName || currentUser?.email}
             aria-label="User menu"
           >
