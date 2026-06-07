@@ -1423,6 +1423,25 @@ export default function Settings() {
       setTemplateTasks((prev) => (prev || []).filter((t) => t.id !== taskId));
     };
 
+    const moveOnboardTask = (taskId, dir) => {
+      setTemplateTasks((prev) => {
+        const task = prev.find((t) => t.id === taskId);
+        if (!task) return prev;
+        const cat = task.category || 'Day 1';
+        const catTasks = prev.filter((t) => (t.category || 'Day 1') === cat).sort((a, b) => (a.order || 0) - (b.order || 0));
+        const idx = catTasks.findIndex((t) => t.id === taskId);
+        const swapIdx = idx + dir;
+        if (swapIdx < 0 || swapIdx >= catTasks.length) return prev;
+        const thisOrd = catTasks[idx].order ?? idx;
+        const otherOrd = catTasks[swapIdx].order ?? swapIdx;
+        return prev.map((t) => {
+          if (t.id === catTasks[idx].id) return { ...t, order: otherOrd };
+          if (t.id === catTasks[swapIdx].id) return { ...t, order: thisOrd };
+          return t;
+        });
+      });
+    };
+
     const handleSaveTemplate = async () => {
       try {
         if (!companyId) {
@@ -1533,7 +1552,7 @@ export default function Settings() {
                   <p className="text-xs text-slate-400">No tasks in this category.</p>
                 ) : (
                   <div className="space-y-3">
-                    {g.tasks.map((t) => (
+                    {g.tasks.map((t, idx) => (
                       <div key={t.id} className="border border-slate-200 rounded-xl p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
@@ -1545,13 +1564,19 @@ export default function Settings() {
                               placeholder="Task title"
                             />
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => removeTask(t.id)}
-                            className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50"
-                          >
-                            Delete
-                          </button>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <div className="flex flex-col gap-0.5">
+                              <button type="button" onClick={() => moveOnboardTask(t.id, -1)} disabled={idx === 0} className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-20 text-xs">↑</button>
+                              <button type="button" onClick={() => moveOnboardTask(t.id, 1)} disabled={idx === g.tasks.length - 1} className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-20 text-xs">↓</button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeTask(t.id)}
+                              className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </div>
 
                         <div className="mt-3">

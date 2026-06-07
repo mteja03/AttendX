@@ -534,6 +534,7 @@ export default function Library() {
 
   const [libraryTab, setLibraryTab] = useState('policies');
   const [expandedGuide, setExpandedGuide] = useState(null);
+  const [guideSearch, setGuideSearch] = useState('');
   const [policies, setPolicies] = useState([]);
   const [roles, setRoles] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -1648,13 +1649,24 @@ export default function Library() {
         <div className="space-y-4">
           <div className="bg-gradient-to-r from-[#1B6B6B] to-[#2D8A8A] rounded-2xl p-6 text-white">
             <h2 className="text-lg font-bold mb-1">📖 AttendX HR Guide</h2>
-            <p className="text-sm opacity-80">
+            <p className="text-sm opacity-80 mb-3">
               Everything you need to know to use AttendX effectively. Click any topic to learn more.
             </p>
+            <input
+              value={guideSearch}
+              onChange={(e) => setGuideSearch(e.target.value)}
+              placeholder="Search topics…"
+              className="w-full rounded-xl px-3 py-2 text-sm text-gray-800 bg-white/90 focus:outline-none focus:bg-white placeholder:text-gray-400"
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {GUIDE_TOPICS.map((topic) => {
+            {GUIDE_TOPICS.filter((topic) => {
+              const q = guideSearch.trim().toLowerCase();
+              if (!q) return true;
+              return (topic.title || '').toLowerCase().includes(q) ||
+                     (topic.description || '').toLowerCase().includes(q);
+            }).map((topic) => {
               const colors = GUIDE_COLORS[topic.color] || GUIDE_COLORS.teal;
               const isOpen = expandedGuide === topic.id;
 
