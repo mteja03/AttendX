@@ -176,6 +176,19 @@ async function downloadReport(companyName, reportName, data, columns) {
     return row;
   });
   const ws = XLSX.utils.json_to_sheet(rows);
+  if (rows.length > 0) {
+    ws['!cols'] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 15) }));
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    for (let R = range.s.r + 1; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const addr = XLSX.utils.encode_cell({ r: R, c: C });
+        const cell = ws[addr];
+        if (cell && cell.t === 's' && cell.v !== '' && !Number.isNaN(Number(cell.v))) {
+          cell.t = 'n'; cell.v = Number(cell.v);
+        }
+      }
+    }
+  }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, reportName.slice(0, 31));
   const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
@@ -1054,6 +1067,19 @@ export default function Reports() {
       Status: emp.status || '',
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
+    if (rows.length > 0) {
+      ws['!cols'] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 15) }));
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let R = range.s.r + 1; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = ws[addr];
+          if (cell && cell.t === 's' && cell.v !== '' && !Number.isNaN(Number(cell.v))) {
+            cell.t = 'n'; cell.v = Number(cell.v);
+          }
+        }
+      }
+    }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Headcount');
     const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
@@ -1063,6 +1089,19 @@ export default function Reports() {
   const handleOffboardingExcel = async () => {
     const { default: XLSX } = await import('xlsx');
     const wb = XLSX.utils.book_new();
+    const fmtWs = (ws, rows) => {
+      if (!rows.length) return ws;
+      ws['!cols'] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 15) }));
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let R = range.s.r + 1; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = ws[addr];
+          if (cell && cell.t === 's' && cell.v !== '' && !Number.isNaN(Number(cell.v))) { cell.t = 'n'; cell.v = Number(cell.v); }
+        }
+      }
+      return ws;
+    };
 
     if (noticePeriodReportRows.length > 0) {
       const noticeData = noticePeriodReportRows.map(({ e }) => ({
@@ -1074,7 +1113,7 @@ export default function Reports() {
         'Days Remaining': getDaysRemainingLastDay(e.offboarding?.expectedLastDay),
         Reason: e.offboarding?.reason || e.offboarding?.exitReason || '',
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(noticeData), 'Notice Period');
+      XLSX.utils.book_append_sheet(wb, fmtWs(XLSX.utils.json_to_sheet(noticeData), noticeData), 'Notice Period');
     }
 
     if (activeOffboardingRows.length > 0) {
@@ -1088,7 +1127,7 @@ export default function Reports() {
         'Completion %': pct,
         Reason: e.offboarding?.reason || e.offboarding?.exitReason || '',
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exitData), 'Exit In Progress');
+      XLSX.utils.book_append_sheet(wb, fmtWs(XLSX.utils.json_to_sheet(exitData), exitData), 'Exit In Progress');
     }
 
     if (withdrawnOffboardingRows.length > 0) {
@@ -1099,7 +1138,7 @@ export default function Reports() {
         'Withdrawn On': toDisplayDate(e.offboarding?.withdrawnOn),
         Notes: e.offboarding?.withdrawNotes || '',
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(withdrawnData), 'Withdrawn');
+      XLSX.utils.book_append_sheet(wb, fmtWs(XLSX.utils.json_to_sheet(withdrawnData), withdrawnData), 'Withdrawn');
     }
 
     if (completedOffboardingRows.length > 0) {
@@ -1111,7 +1150,7 @@ export default function Reports() {
         Reason: e.offboarding?.reason || e.offboarding?.exitReason || '',
         Tenure: tenureLabel(e.joiningDate),
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(completedData), 'Completed Exits');
+      XLSX.utils.book_append_sheet(wb, fmtWs(XLSX.utils.json_to_sheet(completedData), completedData), 'Completed Exits');
     }
 
     if (wb.SheetNames.length === 0) {

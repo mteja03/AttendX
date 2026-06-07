@@ -177,6 +177,12 @@ export default function Assets() {
   const [showViewIssuedModal, setShowViewIssuedModal] = useState(false);
   const [showReturnConsumableModal, setShowReturnConsumableModal] = useState(false);
   const [showEditStockModal, setShowEditStockModal] = useState(false);
+  const [showEditAssetModal, setShowEditAssetModal] = useState(false);
+  const [editingAsset, setEditingAsset] = useState(null);
+  const [editAssetForm, setEditAssetForm] = useState({
+    name: '', brand: '', model: '', serialNumber: '',
+    condition: '', purchaseDate: '', purchasePrice: '', warrantyExpiry: '', notes: '',
+  });
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [issueAsset, setIssueAsset] = useState(null);
   const [issuedAsset, setIssuedAsset] = useState(null);
@@ -981,6 +987,47 @@ export default function Assets() {
     }
   };
 
+  const openEditAssetModal = (asset) => {
+    setEditingAsset(asset);
+    const toDateStr = (d) => {
+      if (!d) return '';
+      try { const dt = d?.toDate ? d.toDate() : new Date(d); return isNaN(dt.getTime()) ? '' : dt.toISOString().slice(0, 10); } catch { return ''; }
+    };
+    setEditAssetForm({
+      name: asset.name || '',
+      brand: asset.brand || '',
+      model: asset.model || '',
+      serialNumber: asset.serialNumber || '',
+      condition: asset.condition || '',
+      purchaseDate: toDateStr(asset.purchaseDate),
+      purchasePrice: asset.purchasePrice ?? '',
+      warrantyExpiry: toDateStr(asset.warrantyExpiry),
+      notes: asset.notes || '',
+    });
+    setShowEditAssetModal(true);
+  };
+
+  const handleSaveEditAsset = async () => {
+    if (!editingAsset || !companyId) return;
+    try {
+      await updateDoc(doc(db, 'companies', companyId, 'assets', editingAsset.id), {
+        name: editAssetForm.name.trim() || editingAsset.name,
+        brand: editAssetForm.brand.trim(),
+        model: editAssetForm.model.trim(),
+        serialNumber: editAssetForm.serialNumber.trim(),
+        condition: editAssetForm.condition,
+        purchaseDate: editAssetForm.purchaseDate || null,
+        purchasePrice: editAssetForm.purchasePrice !== '' ? Number(editAssetForm.purchasePrice) : null,
+        warrantyExpiry: editAssetForm.warrantyExpiry || null,
+        notes: editAssetForm.notes.trim(),
+      });
+      setShowEditAssetModal(false);
+      success('Asset updated.');
+    } catch {
+      showError('Failed to update asset.');
+    }
+  };
+
   const handleSaveEditStock = async (e) => {
     e.preventDefault();
     if (!companyId || !currentUser || !editStockAsset) return;
@@ -1089,6 +1136,19 @@ export default function Assets() {
     }));
 
     const ws = XLSX.utils.json_to_sheet(rows);
+    if (rows.length > 0) {
+      ws['!cols'] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 15) }));
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let R = range.s.r + 1; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = ws[addr];
+          if (cell && cell.t === 's' && cell.v !== '' && !Number.isNaN(Number(cell.v))) {
+            cell.t = 'n'; cell.v = Number(cell.v);
+          }
+        }
+      }
+    }
     const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
     const safeName = (company.name || 'Company').replace(/\s+/g, '');
 
@@ -1490,6 +1550,11 @@ export default function Assets() {
                           className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
                           title="View history" aria-label="View history">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </button>
+                        <button type="button" onClick={() => openEditAssetModal(a)}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                          title="Edit asset" aria-label="Edit asset">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         </button>
                       </div>
                     </td>
@@ -2735,6 +2800,67 @@ export default function Assets() {
             await signOut();
           }}
         />
+      )}
+      {showEditAssetModal && editingAsset && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-800">Edit Asset</h3>
+              <button type="button" onClick={() => setShowEditAssetModal(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400">✕</button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Asset Name *</label>
+                <input value={editAssetForm.name} onChange={(e) => setEditAssetForm((p) => ({ ...p, name: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Serial Number</label>
+                  <input value={editAssetForm.serialNumber} onChange={(e) => setEditAssetForm((p) => ({ ...p, serialNumber: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Condition</label>
+                  <select value={editAssetForm.condition} onChange={(e) => setEditAssetForm((p) => ({ ...p, condition: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] bg-white">
+                    <option value="">Select</option>
+                    {['New', 'Good', 'Fair', 'Poor', 'Damaged'].map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Brand</label>
+                  <input value={editAssetForm.brand} onChange={(e) => setEditAssetForm((p) => ({ ...p, brand: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Model</label>
+                  <input value={editAssetForm.model} onChange={(e) => setEditAssetForm((p) => ({ ...p, model: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Purchase Date</label>
+                  <input type="date" value={editAssetForm.purchaseDate} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchaseDate: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Purchase Price (₹)</label>
+                  <input type="number" value={editAssetForm.purchasePrice} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchasePrice: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Warranty Expiry</label>
+                <input type="date" value={editAssetForm.warrantyExpiry} onChange={(e) => setEditAssetForm((p) => ({ ...p, warrantyExpiry: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Notes</label>
+                <textarea value={editAssetForm.notes} onChange={(e) => setEditAssetForm((p) => ({ ...p, notes: e.target.value }))} rows={2} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] resize-none" />
+              </div>
+            </div>
+            <div className="flex gap-2 px-5 pb-5">
+              <button type="button" onClick={() => setShowEditAssetModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button type="button" onClick={handleSaveEditAsset} className="flex-1 py-2.5 rounded-xl bg-[#1B6B6B] text-white text-sm font-medium hover:bg-[#155858] transition-colors">Save Changes</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

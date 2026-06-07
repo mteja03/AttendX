@@ -129,7 +129,7 @@ export function getNavItems(role) {
   const effectivePermissions = DEFAULT_PERMISSIONS[role] ?? {};
   return ALL_NAV_ITEMS.filter((item) => {
     if (role === 'admin' || role === 'companyadmin') return true;
-    if (item.to === 'dashboard') return true;
+    if (item.to === 'dashboard') return role !== 'auditmanager' && role !== 'auditor';
     return effectivePermissions[item.to] !== false;
   });
 }

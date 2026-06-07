@@ -1037,6 +1037,7 @@ export default function Employees() {
     try {
       const exists = await checkEmpIdExists(form.empId);
       if (exists) {
+        showError(`Emp ID "${form.empId}" is already taken — please use a different ID.`);
         setFormErrors((prev) => ({
           ...prev,
           empId: `Emp ID ${form.empId} is already taken. Please use a different ID.`,
@@ -1198,6 +1199,19 @@ export default function Employees() {
     }
     const rows = downloadRows(filtered);
     const ws = XLSX.utils.json_to_sheet(rows);
+    if (rows.length > 0) {
+      ws['!cols'] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 15) }));
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let R = range.s.r + 1; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = ws[addr];
+          if (cell && cell.t === 's' && cell.v !== '' && !Number.isNaN(Number(cell.v))) {
+            cell.t = 'n'; cell.v = Number(cell.v);
+          }
+        }
+      }
+    }
     const csv = XLSX.utils.sheet_to_csv(ws);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
@@ -1214,6 +1228,19 @@ export default function Employees() {
     }
     const rows = downloadRows(filtered);
     const ws = XLSX.utils.json_to_sheet(rows);
+    if (rows.length > 0) {
+      ws['!cols'] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 15) }));
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let R = range.s.r + 1; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = ws[addr];
+          if (cell && cell.t === 's' && cell.v !== '' && !Number.isNaN(Number(cell.v))) {
+            cell.t = 'n'; cell.v = Number(cell.v);
+          }
+        }
+      }
+    }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Employees');
     const today = new Date().toLocaleDateString('en-GB').split('/').join('-');

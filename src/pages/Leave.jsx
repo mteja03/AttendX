@@ -182,6 +182,8 @@ export default function Leave() {
   });
   const [saving, setSaving] = useState(false);
   const [actioningId, setActioningId] = useState(null);
+  const [rejectLeaveModal, setRejectLeaveModal] = useState(null);
+  const [rejectReasonInput, setRejectReasonInput] = useState('');
   const [errorModal, setErrorModal] = useState(null);
 
   // Clear error modal on re-login
@@ -464,6 +466,19 @@ export default function Leave() {
       'Applied On': l.appliedAt ? toDisplayDate(l.appliedAt) : '',
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
+    if (rows.length > 0) {
+      ws['!cols'] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 15) }));
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let R = range.s.r + 1; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = ws[addr];
+          if (cell && cell.t === 's' && cell.v !== '' && !Number.isNaN(Number(cell.v))) {
+            cell.t = 'n'; cell.v = Number(cell.v);
+          }
+        }
+      }
+    }
     const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
     if (format === 'csv') {
       const csv = XLSX.utils.sheet_to_csv(ws);
@@ -497,16 +512,20 @@ export default function Leave() {
     setActioningId(null);
   };
 
-  const handleReject = async (leaveDoc) => {
+  const handleReject = async (leaveDoc, reason = '') => {
     setActioningId(leaveDoc.id);
     try {
-      await withRetry(() => updateDoc(doc(db, 'companies', companyId, 'leave', leaveDoc.id), {
-        status: 'Rejected',
-        decidedAt: serverTimestamp(),
-      }), { companyId, action: 'rejectLeave' });
-      setLeaveList((prev) => prev.map((l) => (l.id === leaveDoc.id ? { ...l, status: 'Rejected' } : l)));
+      const update = { status: 'Rejected', decidedAt: serverTimestamp() };
+      if (reason.trim()) update.rejectReason = reason.trim();
+      await withRetry(() => updateDoc(doc(db, 'companies', companyId, 'leave', leaveDoc.id), update),
+        { companyId, action: 'rejectLeave' });
+      setLeaveList((prev) => prev.map((l) =>
+        l.id === leaveDoc.id ? { ...l, status: 'Rejected', ...(reason.trim() ? { rejectReason: reason.trim() } : {}) } : l,
+      ));
       trackLeaveRejected();
       success('Leave rejected');
+      setRejectLeaveModal(null);
+      setRejectReasonInput('');
     } catch (error) {
       await handleSmartError(error, { action: 'rejectLeave', leaveId: leaveDoc.id }, 'Failed to reject');
     }
@@ -1013,7 +1032,7 @@ export default function Leave() {
                           <button
                             type="button"
                             disabled={actioningId === l.id}
-                            onClick={() => handleReject(l)}
+                            onClick={() => { setRejectLeaveModal(l); setRejectReasonInput(''); }}
                             className="text-red-600 text-xs font-medium hover:underline disabled:opacity-50"
                           >
                             Reject
@@ -1153,7 +1172,7 @@ export default function Leave() {
                       <button
                         type="button"
                         disabled={actioningId === leave.id}
-                        onClick={() => handleReject(leave)}
+                        onClick={() => { setRejectLeaveModal(leave); setRejectReasonInput(''); }}
                         className="flex-1 min-h-[44px] py-2 bg-red-100 text-red-600 rounded-xl text-xs font-medium hover:bg-red-200 active:bg-red-300 disabled:opacity-50"
                       >
                         Reject
@@ -1444,6 +1463,42 @@ export default function Leave() {
             await signOut();
           }}
         />
+      )}
+      {rejectLeaveModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-800">Reject Leave Request</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {rejectLeaveModal.employeeName} · {rejectLeaveModal.leaveType} ·{' '}
+                {rejectLeaveModal.days ?? 1} day{(rejectLeaveModal.days ?? 1) !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <div className="px-5 py-4">
+              <label className="text-xs font-medium text-gray-600 mb-1.5 block">Reason for rejection <span className="text-gray-400 font-normal">(optional)</span></label>
+              <textarea
+                value={rejectReasonInput}
+                onChange={(e) => setRejectReasonInput(e.target.value)}
+                placeholder="e.g. Insufficient leave balance, critical project deadline..."
+                rows={3}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20 resize-none"
+              />
+            </div>
+            <div className="flex gap-2 px-5 pb-5">
+              <button
+                type="button"
+                onClick={() => { setRejectLeaveModal(null); setRejectReasonInput(''); }}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+              >Cancel</button>
+              <button
+                type="button"
+                onClick={() => handleReject(rejectLeaveModal, rejectReasonInput)}
+                disabled={!!actioningId}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+              >Reject Leave</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

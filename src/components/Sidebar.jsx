@@ -210,7 +210,7 @@ function Sidebar({ isOpen = false, onClose }) {
   const visibleCompanyNavItems = ALL_NAV_ITEMS.filter((item) => {
     if (item.to === 'calendar') return false; // Moved to GlobalHeader
     if (isAdmin || isCompanyAdmin) return true;
-    if (item.to === 'dashboard') return true;
+    if (item.to === 'dashboard') return role !== 'auditmanager' && role !== 'auditor';
     return effectivePermissions[item.to] !== false;
   });
 

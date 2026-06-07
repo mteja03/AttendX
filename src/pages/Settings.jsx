@@ -703,30 +703,30 @@ export default function Settings() {
     }
   };
 
-  const addDocType = (sectionId) => {
+  const addDocType = async (sectionId) => {
     const name = (newDocNames[sectionId] || '').trim();
     if (!name) return;
     const id = `${name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
-    setDocSections((prev) =>
-      prev.map((s) =>
-        s.id === sectionId
-          ? {
-              ...s,
-              types: [
-                ...(s.types || []),
-                {
-                  id,
-                  name,
-                  mandatory: false,
-                  accepts: ['.pdf', '.jpg', '.jpeg', '.png'],
-                  maxSizeMB: 5,
-                },
-              ],
-            }
-          : s,
-      ),
+    const next = docSections.map((s) =>
+      s.id === sectionId
+        ? {
+            ...s,
+            types: [
+              ...(s.types || []),
+              {
+                id,
+                name,
+                mandatory: false,
+                accepts: ['.pdf', '.jpg', '.jpeg', '.png'],
+                maxSizeMB: 5,
+              },
+            ],
+          }
+        : s,
     );
+    setDocSections(next);
     setNewDocNames((prev) => ({ ...prev, [sectionId]: '' }));
+    await saveDocSections(next);
   };
 
   const toggleFormat = (sectionId, docId, ext) => {
@@ -762,16 +762,13 @@ export default function Settings() {
     );
   };
 
-  const toggleMandatory = (sectionId, docId) => {
-    setDocSections((prev) =>
-      prev.map((s) => {
-        if (s.id !== sectionId) return s;
-        return {
-          ...s,
-          types: (s.types || []).map((d) => (d.id === docId ? { ...d, mandatory: !d.mandatory } : d)),
-        };
-      }),
-    );
+  const toggleMandatory = async (sectionId, docId) => {
+    const next = docSections.map((s) => {
+      if (s.id !== sectionId) return s;
+      return { ...s, types: (s.types || []).map((d) => (d.id === docId ? { ...d, mandatory: !d.mandatory } : d)) };
+    });
+    setDocSections(next);
+    await saveDocSections(next);
   };
 
   const removeDocType = (sectionId, docId) => {
