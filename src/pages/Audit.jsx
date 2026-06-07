@@ -291,6 +291,7 @@ export default function Audit() {
             <AuditSettings
               companyId={companyId}
               auditTypes={auditTypes}
+              userRole={userRole}
               showSuccess={showSuccess}
               showError={showError}
               onClose={() => setShowSettings(false)}

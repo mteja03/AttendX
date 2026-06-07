@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { addDoc, updateDoc, collection, doc } from 'firebase/firestore';
+import { addDoc, updateDoc, deleteDoc, getDocs, query, where, limit, collection, doc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { AUDIT_COLORS, SECTION_TYPES, QA_QUESTION_TYPES, COLUMN_TYPES, SECTION_META, RISK_LEVELS, moveArr } from './auditHelpers';
 
@@ -157,7 +157,7 @@ function QAQBuilder({ section, onChange }) {
 }
 
 /* ── Main component ───────────────────────────────────────────────────── */
-export default function AuditSettings({ companyId, auditTypes, showSuccess, showError, onClose }) {
+export default function AuditSettings({ companyId, auditTypes, userRole, showSuccess, showError, onClose }) {
   const [showModal,    setShowModal]    = useState(false);
   const [editingType,  setEditingType]  = useState(null);
   const [saving,       setSaving]       = useState(false);
@@ -298,6 +298,27 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
   const moveMixedSection = (idx, dir) => setMixedSections((p) => moveArr(p, idx, dir));
   const moveMixedItem = (secId, idx, dir) => updateMixedSection(secId, (s) => ({ ...s, items: moveArr(s.items || [], idx, dir) }));
 
+  const canDelete = userRole === 'admin' || userRole === 'companyadmin' || userRole === 'hrmanager' || userRole === 'auditmanager';
+
+  const handleDeleteTemplate = async (tmpl, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete "${tmpl.name}"? This cannot be undone.`)) return;
+    try {
+      const activeSnap = await getDocs(
+        query(collection(db, 'companies', companyId, 'audits'), where('auditTypeId', '==', tmpl.id), limit(20)),
+      );
+      const active = activeSnap.docs.filter((d) => d.data().status !== 'Closed');
+      if (active.length > 0) {
+        showError(`${active.length} active audit${active.length > 1 ? 's' : ''} use this template — close them first.`);
+        return;
+      }
+      await deleteDoc(doc(db, 'companies', companyId, 'auditTypes', tmpl.id));
+      showSuccess(`"${tmpl.name}" deleted.`);
+    } catch {
+      showError('Failed to delete template.');
+    }
+  };
+
   const handleSave = async () => {
     if (!name.trim()) { showError('Enter a template name'); return; }
     let sections = [];
@@ -382,7 +403,7 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
           const types = [...new Set(secs.map((s) => s.sectionType).filter(Boolean))];
           const isOld = !secs.some((s) => s.sectionType);
           return (
-            <div key={tmpl.id} className="flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-xl hover:border-gray-200 transition-colors cursor-pointer" onClick={() => openEdit(tmpl)}>
+            <div key={tmpl.id} className="flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-xl hover:border-gray-200 transition-colors cursor-pointer group" onClick={() => openEdit(tmpl)}>
               <div className="w-3 h-3 rounded-full flex-shrink-0 mt-0.5" style={{ background: tmpl.color || '#1B6B6B' }} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 truncate">{tmpl.name}</p>
@@ -392,7 +413,21 @@ export default function AuditSettings({ companyId, auditTypes, showSuccess, show
                   {isOld && <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600">Legacy</span>}
                 </div>
               </div>
-              <span className="text-xs text-gray-400 flex-shrink-0">Edit →</span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteTemplate(tmpl, e)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500"
+                    title="Delete template"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M2 3.5h10M5.5 3.5V2.5h3v1M6 6v4M8 6v4M3 3.5l.7 7.5h6.6l.7-7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                )}
+                <span className="text-xs text-gray-400">Edit →</span>
+              </div>
             </div>
           );
         })}
