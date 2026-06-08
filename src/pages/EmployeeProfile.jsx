@@ -6379,8 +6379,9 @@ export default function EmployeeProfile() {
                       </div>
                     )}
                   </div>
-                  {canEditEmployees && offPhase === 'notice_period' && (
+                  {canEditEmployees && (offPhase === 'notice_period' || offPhase === 'exit_tasks') && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {offPhase === 'notice_period' && (
                       <button
                         type="button"
                         onClick={() => setShowWithdrawModal(true)}
@@ -6393,6 +6394,7 @@ export default function EmployeeProfile() {
                           <p className="text-xs text-green-500 mt-0.5">Employee stays</p>
                         </div>
                       </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setShowBuyoutModal(true)}
@@ -6405,7 +6407,7 @@ export default function EmployeeProfile() {
                           <p className="text-xs text-blue-500 mt-0.5">Early exit</p>
                         </div>
                       </button>
-                      <button
+                      {offPhase === 'notice_period' && <button
                         type="button"
                         onClick={() => setShowExitTasksModal(true)}
                         className="flex flex-col items-center gap-2 p-4 bg-orange-50 border border-orange-200 rounded-2xl hover:bg-orange-100 transition-colors text-center"
@@ -6416,7 +6418,7 @@ export default function EmployeeProfile() {
                           <p className="text-xs font-semibold text-orange-700">Tasks</p>
                           <p className="text-xs text-orange-500 mt-0.5">Begin F&amp;F</p>
                         </div>
-                      </button>
+                      </button>}
                     </div>
                   )}
                 </div>

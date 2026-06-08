@@ -3,12 +3,12 @@ import { useEffect, useRef, useCallback } from 'react';
 /** 4 hours in milliseconds */
 export const IDLE_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 
-/** Warning window length (5 minutes before full idle timeout) — used by IdleWarningBanner countdown */
-export const WARNING_BEFORE_MS = 5 * 60 * 1000;
+/** Warning window length (2 hours before full idle timeout) — used by IdleWarningBanner countdown */
+export const WARNING_BEFORE_MS = 2 * 60 * 60 * 1000;
 
 const IDLE_TIME = IDLE_TIMEOUT_MS;
 
-/** Fire warning this many ms after last activity (5 min before sign-out) */
+/** Fire warning this many ms after last activity (2 h before sign-out) */
 const WARNING_TIME = IDLE_TIME - WARNING_BEFORE_MS;
 
 /** Only genuine user interactions reset the timer — not visibility/focus/mousemove noise */
