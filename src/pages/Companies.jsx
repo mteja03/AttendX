@@ -9,7 +9,6 @@ import {
   updateDoc,
   deleteDoc,
   query,
-  where,
   orderBy,
   limit,
   serverTimestamp,
