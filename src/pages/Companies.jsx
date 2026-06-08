@@ -488,18 +488,6 @@ export default function Companies() {
         return;
       }
 
-      const assignedUsersSnap = await getDocs(
-        query(collection(db, 'users'), where('companyId', '==', companyId)),
-      );
-      if (assignedUsersSnap.docs.length > 0) {
-        showError(
-          `Cannot delete ${companyName}. ${assignedUsersSnap.docs.length} platform user${
-            assignedUsersSnap.docs.length !== 1 ? 's are' : ' is'
-          } assigned to this company. Remove them first in Platform Users.`,
-        );
-        return;
-      }
-
       // Step 1 — Collect all Drive file IDs from all employees (none when subcollection is empty)
       const driveFileIds = [];
       employeesSnap.docs.forEach((empDoc) => {
