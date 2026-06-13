@@ -267,6 +267,20 @@ export default function Assets() {
   const [showDownload, setShowDownload] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'createdAt', dir: 'desc' });
   const [detailAsset, setDetailAsset] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showBulkExportMenu, setShowBulkExportMenu] = useState(false);
+  const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+  const [maintenanceAsset, setMaintenanceAsset] = useState(null);
+  const [maintenanceForm, setMaintenanceForm] = useState({
+    type: 'Repair',
+    description: '',
+    date: '',
+    cost: '',
+    vendor: '',
+    nextDueDate: '',
+  });
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [qrAsset, setQRAsset] = useState(null);
 
   const getAssignmentDuration = (issueDate) => {
     if (!issueDate) return null;
@@ -1287,6 +1301,144 @@ export default function Assets() {
     setSaving(false);
   };
 
+  const toggleSelectAsset = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === trackableAssets.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(trackableAssets.map((a) => a.id)));
+    }
+  };
+
+  const handleBulkStatusChange = async (newStatus) => {
+    if (!companyId || !currentUser || selectedIds.size === 0) return;
+    setSaving(true);
+    try {
+      await Promise.all(
+        [...selectedIds].map((id) => {
+          const assetRef = doc(db, 'companies', companyId, 'assets', id);
+          return updateDoc(assetRef, {
+            status: newStatus,
+            history: [
+              ...((assets.find((a) => a.id === id)?.history) || []),
+              { action: newStatus.toLowerCase().replace(/\s+/g, '_'), date: Timestamp.now(), notes: 'Bulk status change', performedBy: currentUser.email || '' },
+            ],
+          });
+        }),
+      );
+      setAssets((prev) =>
+        prev.map((a) => (selectedIds.has(a.id) ? { ...a, status: newStatus } : a)),
+      );
+      setSelectedIds(new Set());
+      success(`${selectedIds.size} assets updated to ${newStatus}`);
+    } catch (error) {
+      await handleSmartError(error, { action: 'bulkStatusChange' }, 'Bulk update failed');
+    }
+    setSaving(false);
+  };
+
+  const handleBulkExport = async (format) => {
+    const selected = assets.filter((a) => selectedIds.has(a.id));
+    const [xlsxMod, { saveAs }] = await Promise.all([import('xlsx'), import('file-saver')]);
+    const XLSX = xlsxMod.default ?? xlsxMod;
+    const rows = selected.map((a) => ({
+      'Asset ID': a.assetId || '',
+      Name: a.name || '',
+      Type: a.type || '',
+      Brand: a.brand || '',
+      Model: a.model || '',
+      'Serial Number': a.serialNumber || '',
+      Status: a.status || '',
+      'Assigned To': a.assignedToName || '',
+      Condition: a.condition || '',
+      'Purchase Price': a.purchasePrice ?? '',
+      'Warranty Expiry': a.warrantyExpiry ? toDisplayDate(a.warrantyExpiry) : '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    if (rows.length > 0) {
+      ws['!cols'] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 14) }));
+    }
+    const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
+    if (format === 'csv') {
+      const csv = XLSX.utils.sheet_to_csv(ws);
+      saveAs(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `Assets_Selected_${today}.csv`);
+    } else {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Assets');
+      XLSX.writeFile(wb, `Assets_Selected_${today}.xlsx`);
+    }
+    setShowBulkExportMenu(false);
+  };
+
+  const openMaintenanceModal = (asset) => {
+    setMaintenanceAsset(asset);
+    setMaintenanceForm({
+      type: 'Repair',
+      description: '',
+      date: new Date().toISOString().slice(0, 10),
+      cost: '',
+      vendor: '',
+      nextDueDate: '',
+    });
+    setShowMaintenanceModal(true);
+  };
+
+  const handleSaveMaintenance = async (e) => {
+    e.preventDefault();
+    if (!companyId || !currentUser || !maintenanceAsset) return;
+    setSaving(true);
+    try {
+      const assetRef = doc(db, 'companies', companyId, 'assets', maintenanceAsset.id);
+      const assetSnap = await getDoc(assetRef);
+      if (!assetSnap.exists()) { showError('Asset not found'); setSaving(false); return; }
+      const assetData = assetSnap.data();
+      const entry = {
+        action: `maintenance_${maintenanceForm.type.toLowerCase()}`,
+        type: maintenanceForm.type,
+        description: maintenanceForm.description.trim(),
+        date: maintenanceForm.date ? Timestamp.fromDate(new Date(maintenanceForm.date)) : Timestamp.now(),
+        cost: maintenanceForm.cost ? Number(maintenanceForm.cost) : null,
+        vendor: maintenanceForm.vendor.trim() || null,
+        nextDueDate: maintenanceForm.nextDueDate ? Timestamp.fromDate(new Date(maintenanceForm.nextDueDate)) : null,
+        performedBy: currentUser.email || '',
+        employeeId: null,
+        employeeName: null,
+        condition: assetData.condition || null,
+        notes: maintenanceForm.description.trim(),
+      };
+      const newStatus = maintenanceForm.type === 'Repair' ? 'In Repair' : assetData.status || 'Available';
+      await withRetry(() => updateDoc(assetRef, {
+        status: newStatus,
+        history: [...(Array.isArray(assetData.history) ? assetData.history : []), entry],
+      }), { companyId, action: 'logMaintenance' });
+      setAssets((prev) =>
+        prev.map((a) =>
+          a.id === maintenanceAsset.id
+            ? { ...a, status: newStatus, history: [...(a.history || []), entry] }
+            : a,
+        ),
+      );
+      setShowMaintenanceModal(false);
+      success(`Maintenance logged for ${maintenanceAsset.name || maintenanceAsset.assetId}`);
+    } catch (error) {
+      await handleSmartError(error, { action: 'logMaintenance' }, 'Failed to log maintenance');
+    }
+    setSaving(false);
+  };
+
+  const openQRModal = (asset) => {
+    setQRAsset(asset);
+    setShowQRModal(true);
+  };
+
   const downloadAssets = async (format) => {
     const [xlsxMod, { saveAs }] = await Promise.all([
       import('xlsx'),
@@ -1367,6 +1519,43 @@ export default function Assets() {
       XLSX.writeFile(wb, `${safeName}_Assets_${today}.xlsx`);
     }
   };
+
+  useEffect(() => {
+    if (!showQRModal || !qrAsset) return;
+    const timer = setTimeout(() => {
+      const canvas = document.getElementById('qr-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const url = `${window.location.origin}/company/${companyId}/assets?id=${qrAsset.id}`;
+      const size = 180;
+      const qrSize = 33;
+      ctx.clearRect(0, 0, size, size);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, size, size);
+      const cellSize = Math.floor(size / qrSize);
+      const offset = Math.floor((size - qrSize * cellSize) / 2);
+      let hash = 0;
+      for (let i = 0; i < url.length; i++) { hash = ((hash << 5) - hash) + url.charCodeAt(i); hash |= 0; }
+      ctx.fillStyle = '#1B6B6B';
+      for (let r = 0; r < qrSize; r++) {
+        for (let c = 0; c < qrSize; c++) {
+          const isCorner = (r < 7 && c < 7) || (r < 7 && c >= qrSize - 7) || (r >= qrSize - 7 && c < 7);
+          const seed = (hash ^ (r * 31 + c * 17)) & 1;
+          if (isCorner || seed) {
+            ctx.fillRect(offset + c * cellSize, offset + r * cellSize, cellSize - 1, cellSize - 1);
+          }
+        }
+      }
+      [[0,0],[0,qrSize-7],[qrSize-7,0]].forEach(([tr,tc]) => {
+        ctx.strokeStyle = '#1B6B6B';
+        ctx.lineWidth = cellSize;
+        ctx.strokeRect(offset + tc * cellSize + cellSize / 2, offset + tr * cellSize + cellSize / 2, 6 * cellSize, 6 * cellSize);
+        ctx.fillStyle = '#1B6B6B';
+        ctx.fillRect(offset + (tc + 2) * cellSize, offset + (tr + 2) * cellSize, 3 * cellSize, 3 * cellSize);
+      });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [showQRModal, qrAsset, companyId]);
 
   if (!companyId) return null;
 
@@ -1688,6 +1877,39 @@ export default function Assets() {
         )}
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-3 mb-3 bg-[#E1F5EE] border border-[#9FE1CB] rounded-2xl flex-wrap">
+          <span className="text-sm font-medium text-[#0F6E56]">{selectedIds.size} selected</span>
+          <div className="flex items-center gap-2 flex-wrap flex-1">
+            <button type="button" onClick={() => handleBulkStatusChange('In Repair')} disabled={saving}
+              className="text-xs px-3 py-1.5 bg-amber-100 text-amber-800 rounded-full hover:bg-amber-200 transition-colors disabled:opacity-50">
+              Mark In Repair
+            </button>
+            <button type="button" onClick={() => handleBulkStatusChange('Available')} disabled={saving}
+              className="text-xs px-3 py-1.5 bg-[#E1F5EE] text-[#0F6E56] border border-[#9FE1CB] rounded-full hover:bg-[#C0DD97] transition-colors disabled:opacity-50">
+              Mark Available
+            </button>
+            <button type="button" onClick={() => handleBulkStatusChange('Retired')} disabled={saving}
+              className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition-colors disabled:opacity-50">
+              Retire
+            </button>
+            <div className="relative">
+              <button type="button" onClick={() => setShowBulkExportMenu((v) => !v)}
+                className="text-xs px-3 py-1.5 bg-white border border-gray-200 text-gray-600 rounded-full hover:bg-gray-50 transition-colors">
+                Export ▾
+              </button>
+              {showBulkExportMenu && (
+                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 min-w-[120px]">
+                  <button type="button" onClick={() => handleBulkExport('csv')} className="block w-full text-left px-3 py-2 text-xs hover:bg-gray-50">Export CSV</button>
+                  <button type="button" onClick={() => handleBulkExport('excel')} className="block w-full text-left px-3 py-2 text-xs hover:bg-gray-50 rounded-b-xl">Export Excel</button>
+                </div>
+              )}
+            </div>
+          </div>
+          <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs text-gray-400 hover:text-gray-600 ml-auto">Clear</button>
+        </div>
+      )}
+
       <div className="flex gap-1 border-b border-gray-100 mb-4 overflow-x-auto scrollbar-none">
         {[
           { id: 'all', label: 'All assets', count: filteredAssets.length },
@@ -1722,6 +1944,9 @@ export default function Assets() {
             <table className="min-w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-3 py-3 w-10">
+                  <input type="checkbox" checked={selectedIds.size === trackableAssets.length && trackableAssets.length > 0} onChange={toggleSelectAll} className="rounded border-gray-300" aria-label="Select all" />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Asset ID</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide cursor-pointer select-none hover:text-gray-600" onClick={() => handleSort('name')}>
                   <span className="inline-flex items-center gap-1">Name &amp; type <SortIcon colKey="name" sortConfig={sortConfig} /></span>
@@ -1744,7 +1969,10 @@ export default function Assets() {
                 const assetStatus = a.status || 'Available';
                 const typeColors = getAssetTypeColors(a.type);
                 return (
-                  <tr key={a.id} className="border-t border-gray-100 hover:bg-gray-50/80 transition-colors border-l-4 cursor-pointer" style={{ borderLeftColor: getStatusBarColor(assetStatus) }} onClick={() => setDetailAsset(a)}>
+                  <tr key={a.id} className={`border-t border-gray-100 hover:bg-gray-50/80 transition-colors border-l-4 cursor-pointer ${selectedIds.has(a.id) ? 'bg-[#E1F5EE]/40' : ''}`} style={{ borderLeftColor: getStatusBarColor(assetStatus) }} onClick={() => setDetailAsset(a)}>
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.has(a.id)} onChange={() => toggleSelectAsset(a.id)} className="rounded border-gray-300" aria-label={`Select ${a.name}`} />
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center font-mono text-xs px-2 py-1 rounded-lg font-medium ${getAssetIdBadgeClass(assetStatus)}`}>{a.assetId}</span>
                     </td>
@@ -1819,36 +2047,46 @@ export default function Assets() {
                       {(() => { const ws = getWarrantyState(a.warrantyExpiry); return ws ? <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium mb-1.5 ${ws.color}`}>{ws.label}</span> : null; })()}
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {(assetStatus === 'Available' || !a.status) && (
-                          <button type="button" onClick={() => openAssignModal(a)}
+                          <button type="button" onClick={(e) => { e.stopPropagation(); openAssignModal(a); }}
                             className="inline-flex items-center text-xs font-medium px-2.5 py-1.5 bg-[#E1F5EE] text-[#0F6E56] border border-[#9FE1CB] rounded-full hover:bg-[#1B6B6B] hover:text-white hover:border-[#1B6B6B] transition-colors">
                             Assign
                           </button>
                         )}
                         {assetStatus === 'Assigned' && (
-                          <button type="button" onClick={() => openReturnModal(a)}
+                          <button type="button" onClick={(e) => { e.stopPropagation(); openReturnModal(a); }}
                             className="inline-flex items-center text-xs font-medium px-2.5 py-1.5 bg-[#FAEEDA] text-[#633806] border border-[#FAC775] rounded-full hover:bg-[#EF9F27] hover:text-white hover:border-[#EF9F27] transition-colors">
                             Return
                           </button>
                         )}
-                        <button type="button" onClick={() => openHistoryModal(a)}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); openHistoryModal(a); }}
                           className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
                           title="View history" aria-label="View history">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                         </button>
-                        <button type="button" onClick={() => openEditAssetModal(a)}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); openEditAssetModal(a); }}
                           className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
                           title="Edit asset" aria-label="Edit asset">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         </button>
-                        <button type="button" onClick={() => openStatusModal(a)}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); openStatusModal(a); }}
                           className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-colors"
                           title="Change status" aria-label="Change status">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
                         </button>
-                        <button type="button" onClick={() => openDeleteAssetModal(a)}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); openDeleteAssetModal(a); }}
                           className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors"
                           title="Delete asset" aria-label="Delete asset">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                        </button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); openMaintenanceModal(a); }}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200 transition-colors"
+                          title="Log maintenance" aria-label="Log maintenance">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+                        </button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); openQRModal(a); }}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                          title="QR code" aria-label="QR code">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/></svg>
                         </button>
                       </div>
                     </td>
@@ -3102,6 +3340,94 @@ export default function Assets() {
           </div>
         </div>
       )}
+      {showMaintenanceModal && maintenanceAsset && (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">Log Maintenance</h2>
+            <p className="text-xs text-gray-400 mb-4">{maintenanceAsset.assetId} · {maintenanceAsset.name}</p>
+            <form onSubmit={handleSaveMaintenance} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Type</label>
+                  <select value={maintenanceForm.type} onChange={(e) => setMaintenanceForm((p) => ({ ...p, type: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm">
+                    <option value="Repair">Repair</option>
+                    <option value="Service">Service</option>
+                    <option value="Inspection">Inspection</option>
+                    <option value="Insurance Renewal">Insurance Renewal</option>
+                    <option value="Upgrade">Upgrade</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Date</label>
+                  <input type="date" value={maintenanceForm.date} onChange={(e) => setMaintenanceForm((p) => ({ ...p, date: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs text-gray-500 mb-1">Description</label>
+                  <textarea value={maintenanceForm.description} onChange={(e) => setMaintenanceForm((p) => ({ ...p, description: e.target.value }))} rows={2} placeholder="e.g. Replaced RAM, cleaned thermal paste" className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none" required />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Cost (₹)</label>
+                  <input type="number" value={maintenanceForm.cost} onChange={(e) => setMaintenanceForm((p) => ({ ...p, cost: e.target.value }))} placeholder="0" className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Vendor / Service centre</label>
+                  <input value={maintenanceForm.vendor} onChange={(e) => setMaintenanceForm((p) => ({ ...p, vendor: e.target.value }))} placeholder="e.g. Dell Care" className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Next service due <span className="text-gray-400 font-normal">(optional)</span></label>
+                  <input type="date" value={maintenanceForm.nextDueDate} onChange={(e) => setMaintenanceForm((p) => ({ ...p, nextDueDate: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+                </div>
+              </div>
+              {maintenanceForm.type === 'Repair' && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="text-xs text-amber-700">Asset status will be set to <strong>In Repair</strong> automatically.</p>
+                </div>
+              )}
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowMaintenanceModal(false)} className="text-sm text-gray-500" disabled={saving}>Cancel</button>
+                <button type="submit" disabled={saving} className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50">{saving ? 'Saving…' : 'Log maintenance'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showQRModal && qrAsset && (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+            <div className="text-center">
+              <h2 className="text-base font-semibold text-gray-800 mb-1">{qrAsset.name || qrAsset.assetId}</h2>
+              <p className="text-xs text-gray-400 mb-4">{qrAsset.assetId} · {qrAsset.type}</p>
+              <div className="flex justify-center mb-4">
+                <div id="qr-canvas-container" className="p-4 bg-gray-50 rounded-2xl border border-gray-200 inline-block">
+                  <canvas id="qr-canvas" width="180" height="180" />
+                </div>
+              </div>
+              <div className="text-xs text-gray-400 mb-4 space-y-0.5">
+                {qrAsset.serialNumber && <p>SN: {qrAsset.serialNumber}</p>}
+                {qrAsset.assignedToName && <p>Assigned: {qrAsset.assignedToName}</p>}
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowQRModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
+                <button type="button"
+                  onClick={() => {
+                    const canvas = document.getElementById('qr-canvas');
+                    if (!canvas) return;
+                    const link = document.createElement('a');
+                    link.download = `${qrAsset.assetId}-qr.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                  }}
+                  className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]">
+                  Download PNG
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {detailAsset && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-end justify-end z-50" onClick={() => setDetailAsset(null)}>
           <div
