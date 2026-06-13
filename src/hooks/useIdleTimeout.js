@@ -15,6 +15,7 @@ const WARNING_TIME = IDLE_TIME - WARNING_BEFORE_MS;
 const USER_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll', 'wheel'];
 
 const listenerOpts = { passive: true };
+const LAST_ACTIVE_KEY = 'attendx_last_active_ts';
 
 export function useIdleTimeout({ onWarning, onSignOut, onActive, enabled = true } = {}) {
   const idleTimerRef = useRef(null);
@@ -44,15 +45,30 @@ export function useIdleTimeout({ onWarning, onSignOut, onActive, enabled = true 
 
   const startTimers = useCallback(() => {
     clearTimers();
-
+    try { sessionStorage.setItem(LAST_ACTIVE_KEY, String(Date.now())); } catch { /* ignore */ }
     warningTimerRef.current = setTimeout(() => {
       isWarningRef.current = true;
       onWarningRef.current?.();
     }, WARNING_TIME);
-
     idleTimerRef.current = setTimeout(() => {
       onSignOutRef.current?.();
     }, IDLE_TIME);
+  }, [clearTimers]);
+
+  const checkTimestampAndAct = useCallback(() => {
+    try {
+      const last = Number(sessionStorage.getItem(LAST_ACTIVE_KEY) || 0);
+      if (!last) return;
+      const elapsed = Date.now() - last;
+      if (elapsed >= IDLE_TIME) {
+        clearTimers();
+        isWarningRef.current = false;
+        onSignOutRef.current?.();
+      } else if (elapsed >= WARNING_TIME && !isWarningRef.current) {
+        isWarningRef.current = true;
+        onWarningRef.current?.();
+      }
+    } catch { /* ignore sessionStorage errors */ }
   }, [clearTimers]);
 
   const handleUserActivity = useCallback(() => {
@@ -70,19 +86,30 @@ export function useIdleTimeout({ onWarning, onSignOut, onActive, enabled = true 
       return undefined;
     }
 
-    startTimers();
+    // Check on mount — catches laptop wake or page reload after sleep
+    checkTimestampAndAct();
 
+    startTimers();
     USER_EVENTS.forEach((event) => {
       window.addEventListener(event, handleUserActivity, listenerOpts);
     });
+
+    // Fires when user switches back to this tab or opens laptop lid
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkTimestampAndAct();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       clearTimers();
       USER_EVENTS.forEach((event) => {
         window.removeEventListener(event, handleUserActivity, listenerOpts);
       });
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [enabled, startTimers, clearTimers, handleUserActivity]);
+  }, [enabled, startTimers, clearTimers, handleUserActivity, checkTimestampAndAct]);
 
   return { resetTimer: handleUserActivity };
 }
