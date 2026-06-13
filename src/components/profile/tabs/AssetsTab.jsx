@@ -46,9 +46,10 @@ export default function AssetsTab({
         <button
           type="button"
           onClick={openProfileAssignModal}
-          className="text-xs text-[#1B6B6B] hover:underline"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1B6B6B] text-white text-xs font-medium rounded-xl hover:bg-[#155858] transition-colors"
         >
-          + Assign Asset
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true"><path d="M5.5 2v7M2 5.5h7" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          Assign Asset
         </button>
       )}
     </div>
@@ -68,9 +69,10 @@ export default function AssetsTab({
           <button
             type="button"
             onClick={openProfileAssignModal}
-            className="mt-3 text-sm text-[#1B6B6B] hover:underline"
+            className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-[#1B6B6B] text-white text-sm font-medium rounded-xl hover:bg-[#155858] transition-colors"
           >
-            Assign an asset
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M6 2v8M2 6h8" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            Assign Asset
           </button>
         )}
       </div>
