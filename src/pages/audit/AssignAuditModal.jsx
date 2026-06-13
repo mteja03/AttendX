@@ -46,12 +46,21 @@ export default function AssignAuditModal({
 
   const toggleTemplate = (id) => setSelectedIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
 
-  const auditorEmployees = useMemo(() => {
-    const q = auditorSearch.trim().toLowerCase();
+  // Normalize auditor records — teamMembers may use 'name' instead of 'fullName'
+  const normalizedAuditors = useMemo(() => {
     const source = (auditors && auditors.length > 0)
       ? auditors
       : (employees || []).filter((e) => e.status === 'Active' || !e.status);
-    return source.filter((e) => {
+    return source.map((e) => ({
+      ...e,
+      fullName: (e.fullName || e.name || e.displayName || '').trim() || e.email || '',
+      designation: e.designation || e.role || '',
+    }));
+  }, [auditors, employees]);
+
+  const auditorEmployees = useMemo(() => {
+    const q = auditorSearch.trim().toLowerCase();
+    return normalizedAuditors.filter((e) => {
       if (!q) return true;
       return (
         (e.fullName || '').toLowerCase().includes(q) ||
@@ -60,7 +69,7 @@ export default function AssignAuditModal({
         (e.designation || '').toLowerCase().includes(q)
       );
     });
-  }, [employees, auditors, auditorSearch]);
+  }, [normalizedAuditors, auditorSearch]);
 
   const teamMemberOptions = useMemo(() => {
     const q = teamMemberSearch.trim().toLowerCase();
@@ -326,8 +335,8 @@ export default function AssignAuditModal({
               )}
               {auditorEmployees.map((emp) => (
                 <label key={emp.id} className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors ${auditorId === emp.id ? 'bg-[#E1F5EE]/40' : ''}`}>
-                  <input type="radio" name="lead-auditor" checked={auditorId === emp.id} onChange={() => { setAuditorId(emp.id); setAuditorName(emp.fullName); setAuditorEmail(emp.email || ''); setAuditorPhone(emp.mobile || emp.phone || emp.mobileNumber || ''); }} className="flex-shrink-0 accent-[#1B6B6B]" />
-                  <div className="w-7 h-7 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{emp.fullName?.charAt(0)}</div>
+                  <input type="radio" name="lead-auditor" checked={auditorId === emp.id} onChange={() => { setAuditorId(emp.id); setAuditorName(emp.fullName || emp.name || emp.email || ''); setAuditorEmail(emp.email || ''); setAuditorPhone(emp.mobile || emp.phone || emp.mobileNumber || ''); }} className="flex-shrink-0 accent-[#1B6B6B]" />
+                  <div className="w-7 h-7 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{(emp.fullName || emp.email || '').charAt(0).toUpperCase()}</div>
                   <div className="min-w-0">
                     <p className="text-xs font-medium text-gray-800 truncate">{emp.fullName}</p>
                     <p className="text-xs text-gray-400 truncate">{emp.designation || emp.email}</p>
