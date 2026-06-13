@@ -17,6 +17,7 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { findAndDeleteFolder, deleteFileFromDrive } from '../utils/googleDrive';
+import { updateCompanyCounts } from '../utils/updateCompanyCounts';
 
 const COLOR_PRESETS = [
   { name: 'Teal', value: '#1B6B6B' },
@@ -184,6 +185,7 @@ export default function Companies() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [syncingCounts, setSyncingCounts] = useState(false);
   const [errorLogs, setErrorLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -566,6 +568,19 @@ export default function Companies() {
     }
   };
 
+  const handleSyncAllCounts = async () => {
+    if (syncingCounts || companies.length === 0) return;
+    setSyncingCounts(true);
+    try {
+      await Promise.all(companies.map((c) => updateCompanyCounts(c.id)));
+      success('Employee counts synced for all companies');
+    } catch {
+      showError('Failed to sync counts');
+    } finally {
+      setSyncingCounts(false);
+    }
+  };
+
   return (
     <div className="p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -585,6 +600,19 @@ export default function Companies() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSyncAllCounts}
+            disabled={syncingCounts || loading || companies.length === 0}
+            title="Recount employee totals from Firestore"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-[#1B6B6B] text-sm font-medium px-3 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={syncingCounts ? 'animate-spin' : ''}>
+              <path d="M21 12a9 9 0 11-2.64-6.36" />
+              <path d="M21 3v6h-6" />
+            </svg>
+            {syncingCounts ? 'Syncing…' : 'Sync counts'}
+          </button>
           <button
             type="button"
             onClick={() => navigate('/admin/analytics')}
