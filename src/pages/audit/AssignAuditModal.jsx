@@ -21,6 +21,9 @@ export default function AssignAuditModal({
   const [auditorName,  setAuditorName]  = useState('');
   const [auditorEmail, setAuditorEmail] = useState('');
   const [auditorPhone, setAuditorPhone] = useState('');
+  const [auditorSearch, setAuditorSearch] = useState('');
+  const [teamMemberIds, setTeamMemberIds] = useState([]);
+  const [teamMemberSearch, setTeamMemberSearch] = useState('');
   const [startDate,    setStartDate]    = useState('');
   const [endDate,      setEndDate]      = useState('');
   const [location,     setLocation]     = useState('');
@@ -42,6 +45,47 @@ export default function AssignAuditModal({
   }, [auditTypes, search]);
 
   const toggleTemplate = (id) => setSelectedIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+
+  const auditorEmployees = useMemo(() => {
+    const q = auditorSearch.trim().toLowerCase();
+    return (employees || [])
+      .filter((e) => e.status === 'Active' || !e.status)
+      .filter((e) => {
+        if (!q) return true;
+        return (
+          (e.fullName || '').toLowerCase().includes(q) ||
+          (e.email || '').toLowerCase().includes(q) ||
+          (e.empId || '').toLowerCase().includes(q) ||
+          (e.designation || '').toLowerCase().includes(q)
+        );
+      });
+  }, [employees, auditorSearch]);
+
+  const teamMemberOptions = useMemo(() => {
+    const q = teamMemberSearch.trim().toLowerCase();
+    return (employees || [])
+      .filter((e) => (e.status === 'Active' || !e.status) && e.id !== auditorId)
+      .filter((e) => {
+        if (!q) return true;
+        return (
+          (e.fullName || '').toLowerCase().includes(q) ||
+          (e.email || '').toLowerCase().includes(q) ||
+          (e.empId || '').toLowerCase().includes(q) ||
+          (e.designation || '').toLowerCase().includes(q)
+        );
+      });
+  }, [employees, auditorId, teamMemberSearch]);
+
+  const toggleTeamMember = (emp) => {
+    setTeamMemberIds((prev) =>
+      prev.includes(emp.id) ? prev.filter((x) => x !== emp.id) : [...prev, emp.id],
+    );
+  };
+
+  const selectedTeamMembers = useMemo(
+    () => (employees || []).filter((e) => teamMemberIds.includes(e.id)),
+    [employees, teamMemberIds],
+  );
 
   // ── row editing helpers ────────────────────────────────────────────────────
   const handleUpdateRow = useCallback((tmplId, secId, rowId, colId, value) => {
@@ -152,7 +196,13 @@ export default function AssignAuditModal({
           auditorId,
           auditorName,
           auditorEmail,
-          teamMembers: [],
+          teamMembers: selectedTeamMembers.map((e) => ({
+            id: e.id,
+            fullName: e.fullName || '',
+            email: e.email || '',
+            empId: e.empId || '',
+            designation: e.designation || '',
+          })),
           startDate: startDate || null,
           endDate,
           status: 'Assigned',
@@ -263,8 +313,17 @@ export default function AssignAuditModal({
           {/* ── Lead auditor ── */}
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Lead auditor</p>
+            <input
+              value={auditorSearch}
+              onChange={(e) => setAuditorSearch(e.target.value)}
+              placeholder="Search by name, email or designation…"
+              className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2.5 mb-2 focus:outline-none focus:border-[#1B6B6B]"
+            />
             <div className="max-h-44 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
-              {(employees || []).filter((e) => e.status === 'Active').slice(0, 30).map((emp) => (
+              {auditorEmployees.length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-4">No employees found</p>
+              )}
+              {auditorEmployees.map((emp) => (
                 <label key={emp.id} className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors ${auditorId === emp.id ? 'bg-[#E1F5EE]/40' : ''}`}>
                   <input type="radio" name="lead-auditor" checked={auditorId === emp.id} onChange={() => { setAuditorId(emp.id); setAuditorName(emp.fullName); setAuditorEmail(emp.email || ''); setAuditorPhone(emp.mobile || emp.phone || emp.mobileNumber || ''); }} className="flex-shrink-0 accent-[#1B6B6B]" />
                   <div className="w-7 h-7 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{emp.fullName?.charAt(0)}</div>
@@ -272,6 +331,48 @@ export default function AssignAuditModal({
                     <p className="text-xs font-medium text-gray-800 truncate">{emp.fullName}</p>
                     <p className="text-xs text-gray-400 truncate">{emp.designation || emp.email}</p>
                   </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Team members ── */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Team members
+              <span className="ml-1.5 text-gray-400 font-normal normal-case tracking-normal">optional</span>
+            </p>
+            {teamMemberIds.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {selectedTeamMembers.map((e) => (
+                  <span key={e.id} className="inline-flex items-center gap-1 text-xs bg-[#E1F5EE] text-[#0F6E56] px-2 py-1 rounded-full">
+                    {e.fullName}
+                    <button type="button" onClick={() => toggleTeamMember(e)} className="hover:text-red-500 leading-none ml-0.5">✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <input
+              value={teamMemberSearch}
+              onChange={(e) => setTeamMemberSearch(e.target.value)}
+              placeholder="Search employees to add…"
+              className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2.5 mb-2 focus:outline-none focus:border-[#1B6B6B]"
+            />
+            <div className="max-h-36 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
+              {teamMemberOptions.length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-4">
+                  {auditorId ? 'No other employees found' : 'Select a lead auditor first'}
+                </p>
+              )}
+              {teamMemberOptions.map((emp) => (
+                <label key={emp.id} className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors ${teamMemberIds.includes(emp.id) ? 'bg-[#E1F5EE]/40' : ''}`}>
+                  <input type="checkbox" checked={teamMemberIds.includes(emp.id)} onChange={() => toggleTeamMember(emp)} className="flex-shrink-0 accent-[#1B6B6B] rounded" />
+                  <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-xs font-bold flex-shrink-0">{emp.fullName?.charAt(0)}</div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-gray-800 truncate">{emp.fullName}</p>
+                    <p className="text-xs text-gray-400 truncate">{emp.designation || emp.email}</p>
+                  </div>
+                  {teamMemberIds.includes(emp.id) && <span className="text-[#1B6B6B] text-sm flex-shrink-0 ml-auto">✓</span>}
                 </label>
               ))}
             </div>
