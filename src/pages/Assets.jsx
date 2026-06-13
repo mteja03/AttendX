@@ -151,6 +151,13 @@ const buildAssetIdPrefix = (type) => {
   return map[type] || 'AST';
 };
 
+function SortIcon({ colKey, sortConfig }) {
+  if (sortConfig.key !== colKey) return <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3 4l2-2 2 2M3 6l2 2 2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>;
+  return sortConfig.dir === 'asc'
+    ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3 6l2-2 2 2" stroke="#1B6B6B" strokeWidth="1.5" strokeLinecap="round"/></svg>
+    : <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3 4l2 2 2-2" stroke="#1B6B6B" strokeWidth="1.5" strokeLinecap="round"/></svg>;
+}
+
 export default function Assets() {
   const { companyId } = useParams();
   const navigate = useNavigate();
@@ -257,6 +264,29 @@ export default function Assets() {
   });
   const [formErrors, setFormErrors] = useState({});
   const [showDownload, setShowDownload] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', dir: 'desc' });
+
+  const getAssignmentDuration = (issueDate) => {
+    if (!issueDate) return null;
+    const d = issueDate?.toDate ? issueDate.toDate() : new Date(issueDate);
+    if (isNaN(d.getTime())) return null;
+    const months = Math.floor((Date.now() - d) / (1000 * 60 * 60 * 24 * 30.44));
+    if (months < 1) {
+      const days = Math.floor((Date.now() - d) / (1000 * 60 * 60 * 24));
+      return `${days}d`;
+    }
+    const years = Math.floor(months / 12);
+    const rem = months % 12;
+    if (years > 0) return rem > 0 ? `${years}y ${rem}m` : `${years}y`;
+    return `${months}m`;
+  };
+
+  const handleSort = (key) => {
+    setSortConfig((prev) =>
+      prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' },
+    );
+  };
+
   const [errorModal, setErrorModal] = useState(null);
 
   // Clear error modal on re-login
@@ -445,10 +475,22 @@ export default function Assets() {
     });
   }, [assets, assetFilters, employees, search]);
 
-  const trackableAssets = useMemo(
-    () => filteredAssets.filter((a) => (a.mode || 'trackable') === 'trackable'),
-    [filteredAssets],
-  );
+  const trackableAssets = useMemo(() => {
+    const list = filteredAssets.filter((a) => (a.mode || 'trackable') === 'trackable');
+    const { key, dir } = sortConfig;
+    return list.slice().sort((a, b) => {
+      let av, bv;
+      if (key === 'name') { av = (a.name || '').toLowerCase(); bv = (b.name || '').toLowerCase(); }
+      else if (key === 'type') { av = (a.type || '').toLowerCase(); bv = (b.type || '').toLowerCase(); }
+      else if (key === 'status') { av = (a.status || '').toLowerCase(); bv = (b.status || '').toLowerCase(); }
+      else if (key === 'issueDate') { av = a.issueDate?.seconds || 0; bv = b.issueDate?.seconds || 0; }
+      else if (key === 'assignedTo') { av = (a.assignedToName || '').toLowerCase(); bv = (b.assignedToName || '').toLowerCase(); }
+      else { av = a.createdAt?.seconds || 0; bv = b.createdAt?.seconds || 0; }
+      if (av < bv) return dir === 'asc' ? -1 : 1;
+      if (av > bv) return dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredAssets, sortConfig]);
   const consumableAssets = useMemo(
     () => filteredAssets.filter((a) => (a.mode || 'trackable') === 'consumable'),
     [filteredAssets],
@@ -1370,7 +1412,11 @@ export default function Assets() {
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <div className="bg-white border border-gray-100 rounded-2xl p-4">
+        <button
+          type="button"
+          onClick={() => { setAssetView('all'); setAssetFilters({ assetType: '', status: '', mode: '', assignedTo: '', department: '', branch: '' }); }}
+          className="bg-white border border-gray-100 rounded-2xl p-4 text-left hover:border-[#1B6B6B]/30 hover:bg-[#E1F5EE]/20 transition-colors"
+        >
           <div className="w-9 h-9 rounded-xl bg-[#E1F5EE] flex items-center justify-center mb-3">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F6E56" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           </div>
@@ -1380,8 +1426,12 @@ export default function Assets() {
             <div className="h-full bg-[#1B6B6B] rounded-full" style={{ width: stats.total > 0 ? `${Math.round((stats.assignedIssued / stats.total) * 100)}%` : '0%' }} />
           </div>
           <p className="text-xs text-gray-400 mt-1">{stats.assignedIssued} of {stats.total} in use</p>
-        </div>
-        <div className="bg-white border border-gray-100 rounded-2xl p-4">
+        </button>
+        <button
+          type="button"
+          onClick={() => { setAssetView('trackable'); setAssetFilters((p) => ({ ...p, mode: '' })); }}
+          className="bg-white border border-gray-100 rounded-2xl p-4 text-left hover:border-[#378ADD]/30 hover:bg-[#E6F1FB]/20 transition-colors"
+        >
           <div className="w-9 h-9 rounded-xl bg-[#E6F1FB] flex items-center justify-center mb-3">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#185FA5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
           </div>
@@ -1391,8 +1441,12 @@ export default function Assets() {
             <div className="h-full bg-[#378ADD] rounded-full" style={{ width: stats.trackable > 0 ? `${Math.round((assets.filter((a) => (a.mode || 'trackable') === 'trackable' && a.status === 'Assigned').length / stats.trackable) * 100)}%` : '0%' }} />
           </div>
           <p className="text-xs text-gray-400 mt-1">{assets.filter((a) => (a.mode || 'trackable') === 'trackable' && a.status === 'Assigned').length} assigned</p>
-        </div>
-        <div className="bg-white border border-gray-100 rounded-2xl p-4">
+        </button>
+        <button
+          type="button"
+          onClick={() => { setAssetView('consumable'); setAssetFilters((p) => ({ ...p, mode: '' })); }}
+          className="bg-white border border-gray-100 rounded-2xl p-4 text-left hover:border-[#639922]/30 hover:bg-[#EAF3DE]/20 transition-colors"
+        >
           <div className="w-9 h-9 rounded-xl bg-[#EAF3DE] flex items-center justify-center mb-3">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
           </div>
@@ -1402,8 +1456,12 @@ export default function Assets() {
             <div className="h-full bg-[#639922] rounded-full" style={{ width: stats.consumable > 0 ? '100%' : '0%' }} />
           </div>
           <p className="text-xs text-gray-400 mt-1">{assets.filter((a) => (a.mode || 'trackable') === 'consumable').reduce((s, a) => s + (Number(a.issuedCount) || 0), 0)} issued</p>
-        </div>
-        <div className="bg-white border border-gray-100 rounded-2xl p-4">
+        </button>
+        <button
+          type="button"
+          onClick={() => { setAssetView('all'); setAssetFilters((p) => ({ ...p, status: 'Assigned' })); }}
+          className="bg-white border border-gray-100 rounded-2xl p-4 text-left hover:border-[#639922]/30 hover:bg-[#EAF3DE]/20 transition-colors"
+        >
           <div className="w-9 h-9 rounded-xl bg-[#EAF3DE] flex items-center justify-center mb-3">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
           </div>
@@ -1413,7 +1471,7 @@ export default function Assets() {
             <div className="h-full bg-[#639922] rounded-full" style={{ width: stats.total > 0 ? `${Math.round((stats.assignedIssued / stats.total) * 100)}%` : '0%' }} />
           </div>
           <p className="text-xs text-gray-400 mt-1">{stats.total > 0 ? Math.round((stats.assignedIssued / stats.total) * 100) : 0}% utilisation</p>
-        </div>
+        </button>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
@@ -1618,11 +1676,19 @@ export default function Assets() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Asset ID</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Name &amp; type</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Assigned to</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Issue date</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide cursor-pointer select-none hover:text-gray-600" onClick={() => handleSort('name')}>
+                  <span className="inline-flex items-center gap-1">Name &amp; type <SortIcon colKey="name" sortConfig={sortConfig} /></span>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide cursor-pointer select-none hover:text-gray-600" onClick={() => handleSort('assignedTo')}>
+                  <span className="inline-flex items-center gap-1">Assigned to <SortIcon colKey="assignedTo" sortConfig={sortConfig} /></span>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide cursor-pointer select-none hover:text-gray-600" onClick={() => handleSort('issueDate')}>
+                  <span className="inline-flex items-center gap-1">Issue date <SortIcon colKey="issueDate" sortConfig={sortConfig} /></span>
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Condition</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide cursor-pointer select-none hover:text-gray-600" onClick={() => handleSort('status')}>
+                  <span className="inline-flex items-center gap-1">Status <SortIcon colKey="status" sortConfig={sortConfig} /></span>
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
@@ -1675,7 +1741,14 @@ export default function Assets() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-600">{a.issueDate ? toDisplayDate(a.issueDate) : <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3 text-xs text-slate-600">
+                      {a.issueDate ? (
+                        <div>
+                          <p>{toDisplayDate(a.issueDate)}</p>
+                          {a.status === 'Assigned' && (() => { const d = getAssignmentDuration(a.issueDate); return d ? <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full font-medium">{d} held</span> : null; })()}
+                        </div>
+                      ) : <span className="text-gray-300">—</span>}
+                    </td>
                     <td className="px-4 py-3">
                       {a.condition ? (
                         <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium ${getConditionBadgeClass(a.condition)}`}>{a.condition}</span>
@@ -1785,8 +1858,15 @@ export default function Assets() {
             </tbody>
             </table>
           )}
+          {assetView === 'all' && consumableAssets.length > 0 && trackableAssets.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-3 mt-2 border-t border-gray-100 bg-gray-50/60">
+              <span className="w-2 h-2 rounded-full bg-[#639922] flex-shrink-0" />
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Consumable assets</p>
+              <span className="text-xs text-gray-400 bg-white border border-gray-200 px-2 py-0.5 rounded-full">{consumableAssets.length} types</span>
+            </div>
+          )}
           {(assetView === 'all' || assetView === 'consumable') && consumableAssets.length > 0 && (
-            <div className="mt-6 overflow-x-auto">
+            <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
