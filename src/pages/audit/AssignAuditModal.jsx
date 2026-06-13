@@ -9,7 +9,7 @@ import {
 function stripUndefined(obj) { return JSON.parse(JSON.stringify(obj, (_, v) => (v === undefined ? null : v))); }
 
 export default function AssignAuditModal({
-  companyId, auditTypes, employees, branches, locations, departments,
+  companyId, auditTypes, employees, auditors, branches, locations, departments,
   currentUser, onClose, onAssigned, showSuccess, showError,
 }) {
   const csvFileRef = useRef(null);
@@ -48,18 +48,19 @@ export default function AssignAuditModal({
 
   const auditorEmployees = useMemo(() => {
     const q = auditorSearch.trim().toLowerCase();
-    return (employees || [])
-      .filter((e) => e.status === 'Active' || !e.status)
-      .filter((e) => {
-        if (!q) return true;
-        return (
-          (e.fullName || '').toLowerCase().includes(q) ||
-          (e.email || '').toLowerCase().includes(q) ||
-          (e.empId || '').toLowerCase().includes(q) ||
-          (e.designation || '').toLowerCase().includes(q)
-        );
-      });
-  }, [employees, auditorSearch]);
+    const source = (auditors && auditors.length > 0)
+      ? auditors
+      : (employees || []).filter((e) => e.status === 'Active' || !e.status);
+    return source.filter((e) => {
+      if (!q) return true;
+      return (
+        (e.fullName || '').toLowerCase().includes(q) ||
+        (e.email || '').toLowerCase().includes(q) ||
+        (e.empId || '').toLowerCase().includes(q) ||
+        (e.designation || '').toLowerCase().includes(q)
+      );
+    });
+  }, [employees, auditors, auditorSearch]);
 
   const teamMemberOptions = useMemo(() => {
     const q = teamMemberSearch.trim().toLowerCase();

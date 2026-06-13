@@ -59,6 +59,7 @@ export default function Audit() {
   const [auditTypes, setAuditTypes] = useState([]);
   const [audits, setAudits] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [auditors, setAuditors] = useState([]);
   const [empLoaded, setEmpLoaded] = useState(false);
   const employeesLoadedForRef = useRef(null);
   const [loading, setLoading] = useState(true);
@@ -140,14 +141,19 @@ export default function Audit() {
   useEffect(() => {
     if (!companyId) return;
     if (empLoaded && employeesLoadedForRef.current === companyId && employees.length > 0) return;
-    getDocs(query(collection(db, 'companies', companyId, 'employees'), where('status', '==', 'Active'), limit(500)))
-      .then((snap) => {
-        setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    Promise.all([
+      getDocs(query(collection(db, 'companies', companyId, 'employees'), where('status', '==', 'Active'), limit(500))),
+      getDocs(query(collection(db, 'companies', companyId, 'teamMembers'), where('role', '==', 'auditor'), limit(100))),
+    ])
+      .then(([empSnap, auditorSnap]) => {
+        setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setAuditors(auditorSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setEmpLoaded(true);
         employeesLoadedForRef.current = companyId;
       })
       .catch(() => {
         setEmployees([]);
+        setAuditors([]);
         setEmpLoaded(false);
         employeesLoadedForRef.current = null;
       });
@@ -214,6 +220,7 @@ export default function Audit() {
             currentUser={currentUser}
             userRole={userRole}
             employees={employees}
+            auditors={auditors}
             showSuccess={showSuccess}
             showError={showError}
             setSelectedAudit={setSelectedAudit}

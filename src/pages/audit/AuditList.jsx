@@ -18,7 +18,7 @@ const STATUS_TAB_CONFIG = [
 ];
 
 export default function AuditList({
-  audits, auditTypes, company, companyId, currentUser, userRole, employees,
+  audits, auditTypes, company, companyId, currentUser, userRole, employees, auditors,
   showSuccess, showError, setSelectedAudit, isAuditor, canManage,
 }) {
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -373,6 +373,7 @@ export default function AuditList({
           companyId={companyId}
           auditTypes={auditTypes}
           employees={employees}
+          auditors={auditors}
           branches={company?.branches || []}
           locations={company?.locations || []}
           departments={company?.departments || []}
