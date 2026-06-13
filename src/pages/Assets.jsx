@@ -12,6 +12,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
@@ -279,7 +280,7 @@ export default function Assets() {
         try {
           assetSnap = await getDocs(query(collection(db, 'companies', companyId, 'assets'), orderBy('createdAt', 'desc')));
         } catch {
-          assetSnap = await getDocs(collection(db, 'companies', companyId, 'assets'));
+          assetSnap = await getDocs(query(collection(db, 'companies', companyId, 'assets'), limit(500)));
         }
         setAssets(
           assetSnap.docs.map((d) => ({
@@ -797,10 +798,10 @@ export default function Assets() {
     setShowEditStockModal(true);
   };
 
-  const openReturnConsumableModal = (asset, assignment) => {
+  const openReturnConsumableModal = (asset, assignment, assignmentIdx) => {
     const today = new Date().toISOString().slice(0, 10);
     setReturnConsumableAsset(asset);
-    setReturnConsumableAssignment(assignment);
+    setReturnConsumableAssignment({ ...assignment, _idx: assignmentIdx });
     setReturnConsumableForm({
       quantity: assignment?.quantity || 1,
       date: today,
@@ -916,12 +917,15 @@ export default function Assets() {
       const issuedCount = Number(asset.issuedCount) || 0;
       const existingAssignments = Array.isArray(asset.assignments) ? asset.assignments : [];
 
-      const assignmentIdx = existingAssignments.findIndex(
-        (as) =>
-          as.employeeId === returnConsumableAssignment.employeeId &&
-          !as.returned &&
-          (as.issueDate?.seconds || 0) === (returnConsumableAssignment.issueDate?.seconds || 0),
-      );
+      const assignmentIdx =
+        returnConsumableAssignment._idx != null
+          ? returnConsumableAssignment._idx
+          : existingAssignments.findIndex(
+              (as) =>
+                as.employeeId === returnConsumableAssignment.employeeId &&
+                !as.returned &&
+                (as.issueDate?.seconds || 0) === (returnConsumableAssignment.issueDate?.seconds || 0),
+            );
 
       if (assignmentIdx === -1) {
         showError('Assignment not found');
@@ -1115,25 +1119,51 @@ export default function Assets() {
     ]);
     const XLSX = xlsxMod.default ?? xlsxMod;
     if (!company) return;
-    const rows = filteredAssets.map((a) => ({
-      'Asset ID': a.assetId || '',
-      Name: a.name || '',
-      Type: a.type || '',
-      Brand: a.brand || '',
-      Model: a.model || '',
-      'Serial Number': a.serialNumber || '',
-      Status: a.status || '',
-      'Assigned To': a.assignedToName || '',
-      'Assigned Emp ID': a.assignedToEmpId || '',
-      'Issue Date': a.issueDate ? toDisplayDate(a.issueDate) : '',
-      'Return Date': a.returnDate ? toDisplayDate(a.returnDate) : '',
-      Condition: a.condition || '',
-      'Purchase Date': a.purchaseDate ? toDisplayDate(a.purchaseDate) : '',
-      'Purchase Price': a.purchasePrice ?? '',
-      'Warranty Expiry': a.warrantyExpiry ? toDisplayDate(a.warrantyExpiry) : '',
-      'Is Returnable': a.isReturnable ? 'Yes' : 'No',
-      Notes: a.notes || '',
-    }));
+    const trackableRows = filteredAssets
+      .filter((a) => (a.mode || 'trackable') === 'trackable')
+      .map((a) => ({
+        'Asset ID': a.assetId || '',
+        Name: a.name || '',
+        Type: a.type || '',
+        Brand: a.brand || '',
+        Model: a.model || '',
+        'Serial Number': a.serialNumber || '',
+        Status: a.status || '',
+        'Assigned To': a.assignedToName || '',
+        'Assigned Emp ID': a.assignedToEmpId || '',
+        'Issue Date': a.issueDate ? toDisplayDate(a.issueDate) : '',
+        'Return Date': a.returnDate ? toDisplayDate(a.returnDate) : '',
+        Condition: a.condition || '',
+        'Purchase Date': a.purchaseDate ? toDisplayDate(a.purchaseDate) : '',
+        'Purchase Price': a.purchasePrice ?? '',
+        'Warranty Expiry': a.warrantyExpiry ? toDisplayDate(a.warrantyExpiry) : '',
+        'Is Returnable': a.isReturnable ? 'Yes' : 'No',
+        Notes: a.notes || '',
+      }));
+
+    const consumableRows = filteredAssets
+      .filter((a) => (a.mode || 'trackable') === 'consumable')
+      .map((a) => ({
+        'Asset ID': a.assetId || '',
+        Name: a.name || '',
+        Type: a.type || '',
+        Brand: '',
+        Model: '',
+        'Serial Number': '',
+        Status: `Stock: ${a.availableStock ?? 0} / ${a.totalStock ?? 0}`,
+        'Assigned To': `${a.issuedCount ?? 0} issued`,
+        'Assigned Emp ID': '',
+        'Issue Date': '',
+        'Return Date': '',
+        Condition: '',
+        'Purchase Date': '',
+        'Purchase Price': a.purchasePrice ?? '',
+        'Warranty Expiry': '',
+        'Is Returnable': a.isReturnable ? 'Yes' : 'No',
+        Notes: a.notes || '',
+      }));
+
+    const rows = [...trackableRows, ...consumableRows];
 
     const ws = XLSX.utils.json_to_sheet(rows);
     if (rows.length > 0) {
@@ -1511,8 +1541,14 @@ export default function Assets() {
                             employee={{ fullName: a.assignedToName, photoURL: employees.find((e) => e.id === a.assignedToId)?.photoURL }}
                             size="xs"
                           />
-                          <div>
-                            <p className="text-sm text-gray-700">{a.assignedToName}</p>
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => a.assignedToId && navigate(`/company/${companyId}/employees/${a.assignedToId}`)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && a.assignedToId) navigate(`/company/${companyId}/employees/${a.assignedToId}`); }}
+                            className="cursor-pointer group"
+                          >
+                            <p className="text-sm text-gray-700 group-hover:text-[#1B6B6B] group-hover:underline">{a.assignedToName}</p>
                             <p className="text-[10px] text-slate-400">{a.assignedToEmpId}</p>
                           </div>
                         </div>
@@ -2513,8 +2549,9 @@ export default function Assets() {
                 <p className="text-sm text-slate-500 p-4">No active issued items.</p>
               ) : (
                 (issuedAsset.assignments || [])
-                  .filter((a) => !a.returned)
-                  .map((assignment, idx) => (
+                  .map((assignment, idx) => ({ assignment, idx }))
+                  .filter(({ assignment }) => !assignment.returned)
+                  .map(({ assignment, idx }) => (
                     <div key={idx} className="flex items-center gap-3 py-3 px-4">
                       <EmployeeAvatar
                         employee={{
@@ -2534,7 +2571,7 @@ export default function Assets() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => openReturnConsumableModal(issuedAsset, assignment)}
+                        onClick={() => openReturnConsumableModal(issuedAsset, assignment, idx)}
                         className="text-xs px-2.5 py-1 rounded-lg border text-gray-600 hover:bg-gray-50"
                       >
                         Return
