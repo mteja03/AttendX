@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -370,7 +370,7 @@ export default function AdminUsers() {
         isActive: true,
         auditScope: resolvedAuditScope,
         employeeId: form.selectedEmpId || null,
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
         createdBy: currentUser?.email || '',
         permissions: { ...DEFAULT_MODULE_PERMISSIONS },
       });
