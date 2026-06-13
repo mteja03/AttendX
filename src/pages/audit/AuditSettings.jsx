@@ -301,15 +301,21 @@ export default function AuditSettings({ companyId, auditTypes, userRole, showSuc
   const canDelete = userRole === 'admin' || userRole === 'companyadmin' || userRole === 'hrmanager' || userRole === 'auditmanager';
 
   const handleDeleteTemplate = async (tmpl, e) => {
+    // NOTE: uses live Firestore query at delete time — not stale local state
     e.stopPropagation();
     if (!window.confirm(`Delete "${tmpl.name}"? This cannot be undone.`)) return;
     try {
+      // Live query — don't trust stale local state
       const activeSnap = await getDocs(
-        query(collection(db, 'companies', companyId, 'audits'), where('auditTypeId', '==', tmpl.id), limit(20)),
+        query(
+          collection(db, 'companies', companyId, 'audits'),
+          where('auditTypeId', '==', tmpl.id),
+          where('status', 'in', ['Assigned', 'Scheduled', 'In Progress', 'Submitted', 'Sent Back', 'Under Review']),
+          limit(1),
+        )
       );
-      const active = activeSnap.docs.filter((d) => d.data().status !== 'Closed');
-      if (active.length > 0) {
-        showError(`${active.length} active audit${active.length > 1 ? 's' : ''} use this template — close them first.`);
+      if (!activeSnap.empty) {
+        showError(`An active audit uses this template — close or delete it first.`);
         return;
       }
       await deleteDoc(doc(db, 'companies', companyId, 'auditTypes', tmpl.id));
