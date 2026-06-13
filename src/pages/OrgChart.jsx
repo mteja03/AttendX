@@ -198,19 +198,22 @@ export default function OrgChart() {
           </button>
         </div>
       ) : (
-        <div className="overflow-auto rounded-2xl border border-slate-100 min-h-96 bg-slate-50">
+        <div className="overflow-auto rounded-2xl border border-slate-100 bg-slate-50" style={{ minHeight: '500px' }}>
           <div
             id="org-chart-container"
-            className="overflow-auto bg-[#F8FAFC] min-h-96"
+            className="bg-[#F8FAFC]"
             style={{
               padding: '60px 40px',
               transform: `scale(${zoom})`,
-              transformOrigin: 'top center',
+              transformOrigin: 'top left',
+              transformBox: 'fill-box',
               transition: 'transform 0.2s',
+              width: 'max-content',
               minWidth: '100%',
+              minHeight: '500px',
             }}
           >
-            <div className="flex flex-wrap gap-12 justify-center items-start">
+            <div className="flex gap-12 justify-start items-start flex-nowrap">
               {roots.map((root) => (
                 <OrgNode key={root.id} node={root} search={search} companyId={companyId} navigate={navigate} />
               ))}
