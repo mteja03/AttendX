@@ -17,15 +17,30 @@ export function buildOrgTree(employees) {
   employees.forEach((e) => {
     empMap[e.id] = { ...e, children: [] };
   });
-  const roots = [];
+
+  const trueRoots = [];   // no reportingManagerId at all
+  const orphans = [];     // reportingManagerId set but manager not in dataset
+
   employees.forEach((e) => {
-    if (e.reportingManagerId && empMap[e.reportingManagerId]) {
+    if (!e.reportingManagerId) {
+      trueRoots.push(empMap[e.id]);
+    } else if (empMap[e.reportingManagerId]) {
       empMap[e.reportingManagerId].children.push(empMap[e.id]);
     } else {
-      roots.push(empMap[e.id]);
+      orphans.push(empMap[e.id]);
     }
   });
-  return roots;
+
+  // If we have exactly one true root, attach orphans under it
+  if (trueRoots.length === 1 && orphans.length > 0) {
+    orphans.forEach((o) => trueRoots[0].children.push(o));
+    return trueRoots;
+  }
+
+  // Multiple true roots or no roots — fall back: merge orphans in, sort by name
+  return [...trueRoots, ...orphans].sort((a, b) =>
+    (a.fullName || '').localeCompare(b.fullName || '')
+  );
 }
 
 function maxDepth(node, d = 1) {
