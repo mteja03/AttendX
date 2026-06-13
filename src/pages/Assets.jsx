@@ -7,6 +7,7 @@ import {
   getDocs,
   addDoc,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
   Timestamp,
   query,
@@ -179,10 +180,27 @@ export default function Assets() {
   const [showReturnConsumableModal, setShowReturnConsumableModal] = useState(false);
   const [showEditStockModal, setShowEditStockModal] = useState(false);
   const [showEditAssetModal, setShowEditAssetModal] = useState(false);
+  const [showDeleteAssetModal, setShowDeleteAssetModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
   const [editingAsset, setEditingAsset] = useState(null);
+  const [deletingAsset, setDeletingAsset] = useState(null);
+  const [statusAsset, setStatusAsset] = useState(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [editAssetForm, setEditAssetForm] = useState({
-    name: '', brand: '', model: '', serialNumber: '',
-    condition: '', purchaseDate: '', purchasePrice: '', warrantyExpiry: '', notes: '',
+    name: '',
+    brand: '',
+    model: '',
+    serialNumber: '',
+    condition: 'Good',
+    purchaseDate: '',
+    purchasePrice: '',
+    warrantyExpiry: '',
+    notes: '',
+  });
+  const [statusForm, setStatusForm] = useState({
+    newStatus: '',
+    reason: '',
+    date: '',
   });
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [issueAsset, setIssueAsset] = useState(null);
@@ -798,6 +816,55 @@ export default function Assets() {
     setShowEditStockModal(true);
   };
 
+  const getWarrantyState = (warrantyExpiry) => {
+    if (!warrantyExpiry) return null;
+    const exp = warrantyExpiry?.toDate ? warrantyExpiry.toDate() : new Date(warrantyExpiry);
+    if (isNaN(exp.getTime())) return null;
+    const now = new Date();
+    const daysLeft = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+    if (daysLeft < 0) return { label: 'Warranty expired', color: 'bg-red-100 text-red-700' };
+    if (daysLeft <= 60) return { label: `Warranty: ${daysLeft}d left`, color: 'bg-amber-100 text-amber-700' };
+    return null;
+  };
+
+  const openEditAssetModal = (asset) => {
+    setEditingAsset(asset);
+    setEditAssetForm({
+      name: asset.name || '',
+      brand: asset.brand || '',
+      model: asset.model || '',
+      serialNumber: asset.serialNumber || '',
+      condition: asset.condition || 'Good',
+      purchaseDate: asset.purchaseDate
+        ? (asset.purchaseDate?.toDate ? asset.purchaseDate.toDate() : new Date(asset.purchaseDate))
+            .toISOString().slice(0, 10)
+        : '',
+      purchasePrice: asset.purchasePrice ?? '',
+      warrantyExpiry: asset.warrantyExpiry
+        ? (asset.warrantyExpiry?.toDate ? asset.warrantyExpiry.toDate() : new Date(asset.warrantyExpiry))
+            .toISOString().slice(0, 10)
+        : '',
+      notes: asset.notes || '',
+    });
+    setShowEditAssetModal(true);
+  };
+
+  const openDeleteAssetModal = (asset) => {
+    setDeletingAsset(asset);
+    setDeleteConfirmText('');
+    setShowDeleteAssetModal(true);
+  };
+
+  const openStatusModal = (asset) => {
+    setStatusAsset(asset);
+    setStatusForm({
+      newStatus: '',
+      reason: '',
+      date: new Date().toISOString().slice(0, 10),
+    });
+    setShowStatusModal(true);
+  };
+
   const openReturnConsumableModal = (asset, assignment, assignmentIdx) => {
     const today = new Date().toISOString().slice(0, 10);
     setReturnConsumableAsset(asset);
@@ -991,47 +1058,6 @@ export default function Assets() {
     }
   };
 
-  const openEditAssetModal = (asset) => {
-    setEditingAsset(asset);
-    const toDateStr = (d) => {
-      if (!d) return '';
-      try { const dt = d?.toDate ? d.toDate() : new Date(d); return isNaN(dt.getTime()) ? '' : dt.toISOString().slice(0, 10); } catch { return ''; }
-    };
-    setEditAssetForm({
-      name: asset.name || '',
-      brand: asset.brand || '',
-      model: asset.model || '',
-      serialNumber: asset.serialNumber || '',
-      condition: asset.condition || '',
-      purchaseDate: toDateStr(asset.purchaseDate),
-      purchasePrice: asset.purchasePrice ?? '',
-      warrantyExpiry: toDateStr(asset.warrantyExpiry),
-      notes: asset.notes || '',
-    });
-    setShowEditAssetModal(true);
-  };
-
-  const handleSaveEditAsset = async () => {
-    if (!editingAsset || !companyId) return;
-    try {
-      await updateDoc(doc(db, 'companies', companyId, 'assets', editingAsset.id), {
-        name: editAssetForm.name.trim() || editingAsset.name,
-        brand: editAssetForm.brand.trim(),
-        model: editAssetForm.model.trim(),
-        serialNumber: editAssetForm.serialNumber.trim(),
-        condition: editAssetForm.condition,
-        purchaseDate: editAssetForm.purchaseDate || null,
-        purchasePrice: editAssetForm.purchasePrice !== '' ? Number(editAssetForm.purchasePrice) : null,
-        warrantyExpiry: editAssetForm.warrantyExpiry || null,
-        notes: editAssetForm.notes.trim(),
-      });
-      setShowEditAssetModal(false);
-      success('Asset updated.');
-    } catch {
-      showError('Failed to update asset.');
-    }
-  };
-
   const handleSaveEditStock = async (e) => {
     e.preventDefault();
     if (!companyId || !currentUser || !editStockAsset) return;
@@ -1110,6 +1136,96 @@ export default function Assets() {
     } catch {
       showError('Failed to edit stock');
     }
+  };
+
+  const handleSaveEditAsset = async (e) => {
+    e.preventDefault();
+    if (!companyId || !currentUser || !editingAsset) return;
+    setSaving(true);
+    try {
+      const assetRef = doc(db, 'companies', companyId, 'assets', editingAsset.id);
+      const payload = {
+        name: editAssetForm.name.trim(),
+        brand: editAssetForm.brand.trim() || '',
+        model: editAssetForm.model.trim() || '',
+        serialNumber: editAssetForm.serialNumber.trim() || '',
+        condition: editAssetForm.condition || 'Good',
+        purchaseDate: editAssetForm.purchaseDate
+          ? Timestamp.fromDate(new Date(editAssetForm.purchaseDate))
+          : null,
+        purchasePrice: editAssetForm.purchasePrice ? Number(editAssetForm.purchasePrice) : null,
+        warrantyExpiry: editAssetForm.warrantyExpiry
+          ? Timestamp.fromDate(new Date(editAssetForm.warrantyExpiry))
+          : null,
+        notes: editAssetForm.notes.trim() || '',
+      };
+      await withRetry(() => updateDoc(assetRef, payload), { companyId, action: 'editAsset' });
+      setAssets((prev) =>
+        prev.map((a) => (a.id === editingAsset.id ? { ...a, ...payload } : a)),
+      );
+      setShowEditAssetModal(false);
+      success('Asset updated');
+    } catch (error) {
+      await handleSmartError(error, { action: 'editAsset' }, 'Failed to update asset');
+    }
+    setSaving(false);
+  };
+
+  const handleDeleteAsset = async () => {
+    if (!companyId || !currentUser || !deletingAsset) return;
+    if (deleteConfirmText !== deletingAsset.assetId) return;
+    setSaving(true);
+    try {
+      const assetRef = doc(db, 'companies', companyId, 'assets', deletingAsset.id);
+      await withRetry(() => deleteDoc(assetRef), {
+        companyId,
+        action: 'deleteAsset',
+      });
+      setAssets((prev) => prev.filter((a) => a.id !== deletingAsset.id));
+      setShowDeleteAssetModal(false);
+      setDeletingAsset(null);
+      setDeleteConfirmText('');
+      success(`${deletingAsset.name || deletingAsset.assetId} deleted`);
+    } catch (error) {
+      await handleSmartError(error, { action: 'deleteAsset' }, 'Failed to delete asset');
+    }
+    setSaving(false);
+  };
+
+  const handleSaveStatusChange = async (e) => {
+    e.preventDefault();
+    if (!companyId || !currentUser || !statusAsset || !statusForm.newStatus) return;
+    setSaving(true);
+    try {
+      const assetRef = doc(db, 'companies', companyId, 'assets', statusAsset.id);
+      const historyEntry = {
+        action: statusForm.newStatus.toLowerCase().replace(/\s+/g, '_'),
+        employeeId: null,
+        employeeName: null,
+        date: Timestamp.now(),
+        condition: statusAsset.condition || '',
+        notes: statusForm.reason.trim() || '',
+        performedBy: currentUser.email || '',
+      };
+      const updatePayload = {
+        status: statusForm.newStatus,
+        history: [...(Array.isArray(statusAsset.history) ? statusAsset.history : []), historyEntry],
+      };
+      if (statusForm.newStatus === 'Available') {
+        updatePayload.assignedToId = null;
+        updatePayload.assignedToName = null;
+        updatePayload.assignedToEmpId = null;
+      }
+      await withRetry(() => updateDoc(assetRef, updatePayload), { companyId, action: 'changeAssetStatus' });
+      setAssets((prev) =>
+        prev.map((a) => (a.id === statusAsset.id ? { ...a, ...updatePayload } : a)),
+      );
+      setShowStatusModal(false);
+      success(`Status updated to ${statusForm.newStatus}`);
+    } catch (error) {
+      await handleSmartError(error, { action: 'changeAssetStatus' }, 'Failed to update status');
+    }
+    setSaving(false);
   };
 
   const downloadAssets = async (format) => {
@@ -1569,7 +1685,8 @@ export default function Assets() {
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusBadgeClass(assetStatus)}`}>{assetStatus}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
+                      {(() => { const ws = getWarrantyState(a.warrantyExpiry); return ws ? <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium mb-1.5 ${ws.color}`}>{ws.label}</span> : null; })()}
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {(assetStatus === 'Available' || !a.status) && (
                           <button type="button" onClick={() => openAssignModal(a)}
                             className="inline-flex items-center text-xs font-medium px-2.5 py-1.5 bg-[#E1F5EE] text-[#0F6E56] border border-[#9FE1CB] rounded-full hover:bg-[#1B6B6B] hover:text-white hover:border-[#1B6B6B] transition-colors">
@@ -1588,9 +1705,19 @@ export default function Assets() {
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                         </button>
                         <button type="button" onClick={() => openEditAssetModal(a)}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                          className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
                           title="Edit asset" aria-label="Edit asset">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
+                        <button type="button" onClick={() => openStatusModal(a)}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-colors"
+                          title="Change status" aria-label="Change status">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+                        </button>
+                        <button type="button" onClick={() => openDeleteAssetModal(a)}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors"
+                          title="Delete asset" aria-label="Delete asset">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
                         </button>
                       </div>
                     </td>
@@ -2827,6 +2954,122 @@ export default function Assets() {
           </div>
         </div>
       )}
+      {showEditAssetModal && editingAsset && (
+  <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+    <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-xl sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+      <h2 className="text-lg font-semibold text-gray-800 mb-1">Edit Asset</h2>
+      <p className="text-xs text-gray-400 mb-4">{editingAsset.assetId} · {editingAsset.type}</p>
+      <form onSubmit={handleSaveEditAsset} className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className="block text-xs text-gray-500 mb-1">Asset name</label>
+            <input value={editAssetForm.name} onChange={(e) => setEditAssetForm((p) => ({ ...p, name: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" required />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Brand</label>
+            <input value={editAssetForm.brand} onChange={(e) => setEditAssetForm((p) => ({ ...p, brand: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Model</label>
+            <input value={editAssetForm.model} onChange={(e) => setEditAssetForm((p) => ({ ...p, model: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Serial number</label>
+            <input value={editAssetForm.serialNumber} onChange={(e) => setEditAssetForm((p) => ({ ...p, serialNumber: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm font-mono" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Condition</label>
+            <select value={editAssetForm.condition} onChange={(e) => setEditAssetForm((p) => ({ ...p, condition: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm">
+              {CONDITION_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Purchase date</label>
+            <input type="date" value={editAssetForm.purchaseDate} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchaseDate: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Purchase price (₹)</label>
+            <input type="number" value={editAssetForm.purchasePrice} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchasePrice: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Warranty expiry</label>
+            <input type="date" value={editAssetForm.warrantyExpiry} onChange={(e) => setEditAssetForm((p) => ({ ...p, warrantyExpiry: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs text-gray-500 mb-1">Notes</label>
+            <textarea value={editAssetForm.notes} onChange={(e) => setEditAssetForm((p) => ({ ...p, notes: e.target.value }))} rows={2} className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none" />
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" onClick={() => setShowEditAssetModal(false)} className="text-sm text-gray-500" disabled={saving}>Cancel</button>
+          <button type="submit" disabled={saving} className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50">{saving ? 'Saving…' : 'Save changes'}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
+
+{showStatusModal && statusAsset && (
+  <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
+    <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+      <h2 className="text-lg font-semibold text-gray-800 mb-1">Change status</h2>
+      <p className="text-xs text-gray-400 mb-4">{statusAsset.assetId} · {statusAsset.name} · Currently: <span className="font-medium text-gray-600">{statusAsset.status || 'Available'}</span></p>
+      <form onSubmit={handleSaveStatusChange} className="space-y-4">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">New status</label>
+          <select value={statusForm.newStatus} onChange={(e) => setStatusForm((p) => ({ ...p, newStatus: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" required>
+            <option value="">Select status</option>
+            {STATUS_OPTIONS.filter((s) => s !== 'All' && s !== (statusAsset.status || 'Available')).map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Reason (optional)</label>
+          <textarea value={statusForm.reason} onChange={(e) => setStatusForm((p) => ({ ...p, reason: e.target.value }))} rows={2} placeholder="e.g. Sent for motherboard repair" className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none" />
+        </div>
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" onClick={() => setShowStatusModal(false)} className="text-sm text-gray-500" disabled={saving}>Cancel</button>
+          <button type="submit" disabled={saving || !statusForm.newStatus} className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50">{saving ? 'Saving…' : 'Update status'}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
+
+{showDeleteAssetModal && deletingAsset && (
+  <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4">
+    <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+      <div className="text-center mb-5">
+        <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+        </div>
+        <h3 className="text-base font-semibold text-gray-800 mb-1">Delete asset?</h3>
+        <p className="text-sm text-gray-500">This permanently deletes <strong>{deletingAsset.name || deletingAsset.assetId}</strong> and all its history. Cannot be undone.</p>
+      </div>
+      {deletingAsset.status === 'Assigned' && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl mb-4">
+          <p className="text-xs text-red-700 font-medium">⚠️ This asset is currently assigned to {deletingAsset.assignedToName}. Return it first before deleting.</p>
+        </div>
+      )}
+      {deletingAsset.status !== 'Assigned' && (
+        <>
+          <div className="mb-4">
+            <label className="text-xs text-gray-500 block mb-1.5">Type <strong>{deletingAsset.assetId}</strong> to confirm</label>
+            <input placeholder={deletingAsset.assetId} value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} className="w-full border border-red-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-400" />
+          </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={() => setShowDeleteAssetModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancel</button>
+            <button type="button" disabled={deleteConfirmText !== deletingAsset.assetId || saving} onClick={handleDeleteAsset} className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed">{saving ? 'Deleting…' : 'Delete permanently'}</button>
+          </div>
+        </>
+      )}
+      {deletingAsset.status === 'Assigned' && (
+        <button type="button" onClick={() => setShowDeleteAssetModal(false)} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
+      )}
+    </div>
+  </div>
+)}
       {errorModal && (
         <ErrorModal
           errorType={errorModal}
@@ -2837,67 +3080,6 @@ export default function Assets() {
             await signOut();
           }}
         />
-      )}
-      {showEditAssetModal && editingAsset && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800">Edit Asset</h3>
-              <button type="button" onClick={() => setShowEditAssetModal(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400">✕</button>
-            </div>
-            <div className="px-5 py-4 space-y-3">
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Asset Name *</label>
-                <input value={editAssetForm.name} onChange={(e) => setEditAssetForm((p) => ({ ...p, name: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Serial Number</label>
-                  <input value={editAssetForm.serialNumber} onChange={(e) => setEditAssetForm((p) => ({ ...p, serialNumber: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Condition</label>
-                  <select value={editAssetForm.condition} onChange={(e) => setEditAssetForm((p) => ({ ...p, condition: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] bg-white">
-                    <option value="">Select</option>
-                    {['New', 'Good', 'Fair', 'Poor', 'Damaged'].map((c) => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Brand</label>
-                  <input value={editAssetForm.brand} onChange={(e) => setEditAssetForm((p) => ({ ...p, brand: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Model</label>
-                  <input value={editAssetForm.model} onChange={(e) => setEditAssetForm((p) => ({ ...p, model: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Purchase Date</label>
-                  <input type="date" value={editAssetForm.purchaseDate} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchaseDate: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Purchase Price (₹)</label>
-                  <input type="number" value={editAssetForm.purchasePrice} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchasePrice: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Warranty Expiry</label>
-                <input type="date" value={editAssetForm.warrantyExpiry} onChange={(e) => setEditAssetForm((p) => ({ ...p, warrantyExpiry: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Notes</label>
-                <textarea value={editAssetForm.notes} onChange={(e) => setEditAssetForm((p) => ({ ...p, notes: e.target.value }))} rows={2} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] resize-none" />
-              </div>
-            </div>
-            <div className="flex gap-2 px-5 pb-5">
-              <button type="button" onClick={() => setShowEditAssetModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
-              <button type="button" onClick={handleSaveEditAsset} className="flex-1 py-2.5 rounded-xl bg-[#1B6B6B] text-white text-sm font-medium hover:bg-[#155858] transition-colors">Save Changes</button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
