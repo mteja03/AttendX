@@ -1062,7 +1062,7 @@ export default function Dashboard() {
           onKeyDown={(ev) => {
             if (ev.key === 'Enter' || ev.key === ' ') navigate(`/company/${companyId}/calendar`);
           }}
-          className="bg-white border border-gray-100 rounded-2xl p-4 mb-6 cursor-pointer hover:border-[#4ECDC4] transition-colors group"
+          className="bg-white border border-gray-100 rounded-2xl p-4 mb-6 cursor-pointer hover:border-[#1B6B6B] transition-colors group"
         >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 flex-wrap">

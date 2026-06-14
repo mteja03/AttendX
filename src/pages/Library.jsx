@@ -1242,7 +1242,7 @@ export default function Library() {
                   onKeyDown={(ev) => {
                     if (ev.key === 'Enter' || ev.key === ' ') setViewingPolicy(policy);
                   }}
-                  className="bg-white border border-gray-200 rounded-2xl p-5 hover:border-[#4ECDC4] transition-colors cursor-pointer text-left"
+                  className="bg-white border border-gray-200 rounded-2xl p-5 hover:border-[#1B6B6B] transition-colors cursor-pointer text-left"
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3 min-w-0">
@@ -1382,7 +1382,7 @@ export default function Library() {
                     onKeyDown={(ev) => {
                       if (ev.key === 'Enter' || ev.key === ' ') setViewingRole(role);
                     }}
-                    className="bg-white border border-gray-100 rounded-2xl p-5 cursor-pointer hover:border-[#4ECDC4] hover:shadow-sm transition-all text-left"
+                    className="bg-white border border-gray-100 rounded-2xl p-5 cursor-pointer hover:border-[#1B6B6B] hover:shadow-sm transition-all text-left"
                   >
                     <div className="flex items-start justify-between mb-3 gap-2">
                       <div className="min-w-0">

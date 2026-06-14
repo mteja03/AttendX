@@ -2858,7 +2858,7 @@ export default function Employees() {
                             setShowManagerDropdown(true);
                           }
                         }}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#4ECDC4]"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B]"
                       >
                         {form.reportingManagerId ? (
                           <div className="flex items-center gap-2 min-w-0">

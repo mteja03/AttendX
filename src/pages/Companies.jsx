@@ -759,7 +759,7 @@ export default function Companies() {
           {filteredCompanies.map((c) => (
             <div
               key={c.id}
-              className={`bg-white border border-gray-100 rounded-2xl p-5 hover:border-[#4ECDC4] hover:shadow-sm transition-all flex flex-col relative ${
+              className={`bg-white border border-gray-100 rounded-2xl p-5 hover:border-[#1B6B6B] hover:shadow-sm transition-all flex flex-col relative ${
                 c.isActive === false ? 'opacity-60' : ''
               }`}
             >

@@ -1313,7 +1313,7 @@ export default function Leave() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') setShowEmpDropdown(true);
                         }}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#4ECDC4] min-h-[38px]"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[38px]"
                       >
                         <span className="text-gray-400">Select employee...</span>
                         <span className="text-gray-400 text-xs shrink-0">▾</span>

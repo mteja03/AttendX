@@ -99,6 +99,9 @@ export default function TeamMembers() {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [memberRoleFilter, setMemberRoleFilter] = useState('');
+  const [memberStatusFilter, setMemberStatusFilter] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showEmpPicker, setShowEmpPicker] = useState(false);
   const [empPickerSearch, setEmpPickerSearch] = useState('');
@@ -172,6 +175,35 @@ export default function TeamMembers() {
       return !linked && !byEmail;
     });
   }, [employees, members]);
+
+  const filteredMembers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    return members.filter((m) => {
+      const emp = m._emp;
+      if (q) {
+        const haystack = [
+          m.name,
+          emp?.fullName,
+          m.email,
+          emp?.empId,
+          emp?.department,
+          ROLE_LABELS[m.role],
+          m.role,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      if (memberRoleFilter && m.role !== memberRoleFilter) return false;
+      if (memberStatusFilter) {
+        const active = m.isActive !== false;
+        if (memberStatusFilter === 'active' && !active) return false;
+        if (memberStatusFilter === 'inactive' && active) return false;
+      }
+      return true;
+    });
+  }, [members, memberSearch, memberRoleFilter, memberStatusFilter]);
 
   const formatLastLogin = (v) => {
     if (!v) return 'Never';
@@ -369,7 +401,7 @@ export default function TeamMembers() {
               <button
                 type="button"
                 onClick={openAddModal}
-                className="px-4 py-2 bg-[#1B6B6B] text-white rounded-lg text-sm font-medium hover:bg-[#155858]"
+                className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
               >
                 + Grant Access
               </button>
@@ -393,20 +425,42 @@ export default function TeamMembers() {
       {loading ? (
         <PageLoader />
       ) : (
+        <>
+          <div className="mb-4 flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <input
+                value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)}
+                placeholder="Search by name or email..."
+                className="w-full rounded-xl border border-gray-200 py-2.5 pl-9 pr-4 text-sm focus:border-[#1B6B6B] focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20"
+              />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">🔍</span>
+            </div>
+            <select value={memberRoleFilter} onChange={(e) => setMemberRoleFilter(e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none min-w-[130px]">
+              <option value="">All Roles</option>
+              {TEAM_MEMBER_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            </select>
+            <select value={memberStatusFilter} onChange={(e) => setMemberStatusFilter(e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-[#1B6B6B] focus:outline-none min-w-[120px]">
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
         <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500">
+            <thead>
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Employee</th>
-                <th className="px-4 py-3 text-left font-medium">Role</th>
-                <th className="px-4 py-3 text-left font-medium">Email</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-left font-medium">Last Login</th>
-                <th className="px-4 py-3 text-left font-medium">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 bg-gray-50">Member</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 bg-gray-50">Role</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 bg-gray-50">Email</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 bg-gray-50">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 bg-gray-50">Last login</th>
+                <th className="px-4 py-3 bg-gray-50"></th>
               </tr>
             </thead>
             <tbody>
-              {members.map((m) => {
+              {filteredMembers.map((m) => {
                 const emp = m._emp;
                 const active = m.isActive !== false;
                 return (
@@ -458,7 +512,7 @@ export default function TeamMembers() {
                               e.stopPropagation();
                               setMenuOpenForId((id) => (id === m.id ? null : m.id));
                             }}
-                            className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-lg leading-none"
+                            className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-lg leading-none"
                             aria-label="More actions"
                           >
                             ⋯
@@ -537,27 +591,35 @@ export default function TeamMembers() {
                   </tr>
                 );
               })}
-              {members.length === 0 && (
+              {filteredMembers.length === 0 && (
                 <tr>
                   <td className="px-4 py-8 text-center text-slate-500" colSpan={6}>
-                    No team members with login for this company yet.
+                    {members.length === 0
+                      ? 'No team members with login for this company yet.'
+                      : 'No team members match your filters.'}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black/30 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
           <div
-            className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 sm:my-8 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 max-h-[90vh] overflow-hidden flex flex-col"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-semibold text-slate-800">Grant AttendX Access</h2>
-            <p className="text-sm text-gray-500 mt-1 mb-4">Select an employee to give them login access to this company</p>
-
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-800">Grant AttendX access</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Select an employee and assign their role</p>
+              </div>
+              <button type="button" onClick={() => setShowAddModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-xs">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
             <div className="relative mb-4">
               <div
                 role="button"
@@ -569,7 +631,7 @@ export default function TeamMembers() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') setShowEmpPicker(true);
                 }}
-                className="w-full border rounded-xl px-3 py-2.5 cursor-pointer flex items-center justify-between hover:border-[#4ECDC4]"
+                className="w-full border rounded-xl px-3 py-2.5 cursor-pointer flex items-center justify-between hover:border-[#1B6B6B]"
               >
                 {selectedEmployee ? (
                   <div className="flex items-center gap-3">
@@ -676,7 +738,7 @@ export default function TeamMembers() {
                       if (e.key === 'Enter' || e.key === ' ') setGrantRole(role);
                     }}
                     className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                      grantRole === role ? 'border-[#4ECDC4] bg-[#E8F5F5]' : 'border-gray-200 hover:border-gray-300'
+                      grantRole === role ? 'border-[#1B6B6B] bg-[#E8F5F5]' : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
                     <div
@@ -708,7 +770,7 @@ export default function TeamMembers() {
                                 : 'View employees, manage assets'}
                       </p>
                     </div>
-                    {grantRole === role && <span className="text-[#4ECDC4] text-lg">✓</span>}
+                    {grantRole === role && <span className="text-[#1B6B6B] text-lg">✓</span>}
                   </div>
                 ))}
               </div>
@@ -730,18 +792,10 @@ export default function TeamMembers() {
               </div>
             )}
 
-            <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => setShowAddModal(false)} className="text-sm text-slate-500" disabled={saving}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleGrantAccess}
-                disabled={saving}
-                className="px-4 py-2 bg-[#1B6B6B] text-white rounded-lg text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : 'Grant Access'}
-              </button>
+            </div>
+            <div className="flex gap-3 px-5 py-4 border-t border-gray-100 flex-shrink-0">
+              <button type="button" onClick={() => setShowAddModal(false)} disabled={saving} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button type="button" onClick={handleGrantAccess} disabled={saving} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50">{saving ? 'Saving…' : 'Grant Access'}</button>
             </div>
           </div>
         </div>
@@ -754,17 +808,9 @@ export default function TeamMembers() {
             <p className="text-sm text-slate-600 mb-4">
               Remove {removeConfirm.name || removeConfirm.email}&apos;s access? They will no longer be able to log in.
             </p>
-            <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setRemoveConfirm(null)} className="text-slate-500 text-sm">
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleRemoveMember(removeConfirm)}
-                className="rounded-lg bg-red-600 text-white text-sm font-medium px-4 py-2"
-              >
-                Remove
-              </button>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setRemoveConfirm(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button type="button" onClick={() => handleRemoveMember(removeConfirm)} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600">Remove</button>
             </div>
           </div>
         </div>
@@ -773,18 +819,19 @@ export default function TeamMembers() {
       {changeRoleFor && (
         <div className="fixed inset-0 bg-black/30 flex items-end sm:items-center justify-center z-[60] sm:p-4">
           <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">Change role</h3>
-            <select
-              value={newRoleValue}
-              onChange={(e) => setNewRoleValue(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm mb-4"
-            >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-800">Change role</h3>
+              <button type="button" onClick={() => setChangeRoleFor(null)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-xs">✕</button>
+            </div>
+            <div className="space-y-2 mb-4">
               {TEAM_MEMBER_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABELS[r]}
-                </option>
+                <div key={r} role="button" tabIndex={0} onClick={() => setNewRoleValue(r)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setNewRoleValue(r); }} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${newRoleValue === r ? 'border-[#1B6B6B] bg-[#E8F5F5]' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${r === 'hrmanager' ? 'bg-[#EEEDFE] text-[#3C3489]' : r === 'auditmanager' ? 'bg-[#FAECE7] text-[#993C1D]' : r === 'auditor' ? 'bg-[#F1EFE8] text-[#5F5E5A]' : r === 'itmanager' ? 'bg-[#FAEEDA] text-[#854F0B]' : 'bg-[#E1F5EE] text-[#0F6E56]'}`}>{(ROLE_LABELS[r] || r).charAt(0)}</div>
+                  <div className="flex-1"><p className="text-sm font-medium text-gray-800">{ROLE_LABELS[r]}</p></div>
+                  {newRoleValue === r && <span className="text-[#1B6B6B] text-sm">✓</span>}
+                </div>
               ))}
-            </select>
+            </div>
             {newRoleValue === 'auditmanager' && (
               <div className="mb-4">
                 <label className="text-xs text-gray-500 block mb-1.5">Audit Scope</label>
@@ -799,13 +846,9 @@ export default function TeamMembers() {
                 </select>
               </div>
             )}
-            <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setChangeRoleFor(null)} className="text-slate-500 text-sm">
-                Cancel
-              </button>
-              <button type="button" onClick={handleChangeRole} className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2">
-                Save
-              </button>
+            <div className="flex gap-3 pt-2 border-t border-gray-100">
+              <button type="button" onClick={() => setChangeRoleFor(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button type="button" onClick={handleChangeRole} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]">Save</button>
             </div>
           </div>
         </div>
@@ -878,7 +921,7 @@ export default function TeamMembers() {
                       }}
                       className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
                         isOn
-                          ? 'bg-[#E8F5F5] border-[#4ECDC4]'
+                          ? 'bg-[#E8F5F5] border-[#1B6B6B]'
                           : 'bg-white border-gray-100 hover:border-gray-200'
                       }`}
                     >
@@ -918,7 +961,7 @@ export default function TeamMembers() {
                       });
                       setPermissionsForm(all);
                     }}
-                    className="px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-medium hover:bg-green-100"
+                    className="px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-xl text-xs font-medium hover:bg-green-100"
                   >
                     ✅ Enable All
                   </button>
@@ -931,7 +974,7 @@ export default function TeamMembers() {
                       });
                       setPermissionsForm(none);
                     }}
-                    className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-medium hover:bg-red-100"
+                    className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-medium hover:bg-red-100"
                   >
                     ❌ Disable All
                   </button>
@@ -940,7 +983,7 @@ export default function TeamMembers() {
                     onClick={() =>
                       setPermissionsForm({ ...(DEFAULT_PERMISSIONS[permissionsTarget.role] || {}) })
                     }
-                    className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-medium hover:bg-blue-100"
+                    className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-xs font-medium hover:bg-blue-100"
                   >
                     🔄 Role Defaults
                   </button>
