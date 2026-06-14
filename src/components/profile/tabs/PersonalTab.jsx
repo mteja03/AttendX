@@ -1,7 +1,8 @@
 import { toDisplayDate, toDateString, formatLakhs } from '../../../utils';
 import { whatsappUrl } from '../../../utils/whatsappUrl';
 
-export default function PersonalTab({ employee, canEditEmployees, canViewBankDetails, isInactive, showSalary, setShowSalary, openEdit, tenure, getAge, navigate, companyId, company }) {
+export default function PersonalTab({ employee, canEditEmployees, canViewBankDetails, isInactive, showSalary, setShowSalary, openEdit, tenure, getAge, navigate, companyId, company, userRole }) {
+  const isITManager = userRole === 'itmanager';
   return (
     <div className="space-y-6">
   {/* Identity */}
@@ -294,11 +295,12 @@ export default function PersonalTab({ employee, canEditEmployees, canViewBankDet
       </div>
     </div>
   )}
+  {!isITManager && (
   <div className="bg-white rounded-xl border border-slate-200 p-4">
     <h3 className="font-medium text-slate-800 mb-3">Compensation</h3>
     {!showSalary ? (
       <div className="flex items-center gap-3">
-        <span className="text-slate-400 select-none">₹ ••••••••</span>
+        {isITManager ? null : <span className="text-slate-400 select-none">₹ ••••••••</span>}
         <button type="button" onClick={() => setShowSalary(true)} className="text-sm text-[#1B6B6B] hover:underline">Show</button>
       </div>
     ) : (
@@ -336,7 +338,8 @@ export default function PersonalTab({ employee, canEditEmployees, canViewBankDet
       </div>
     )}
   </div>
-  {(employee.pfApplicable ||
+  )}
+  {!isITManager && (employee.pfApplicable ||
     employee.esicApplicable ||
     employee.pfNumber ||
     employee.esicNumber ||
@@ -381,7 +384,7 @@ export default function PersonalTab({ employee, canEditEmployees, canViewBankDet
       )}
     </div>
   )}
-  {canViewBankDetails &&
+  {!isITManager && canViewBankDetails &&
     (employee.bankName ||
       employee.accountHolderName ||
       employee.ifscCode ||
@@ -429,7 +432,7 @@ export default function PersonalTab({ employee, canEditEmployees, canViewBankDet
         </div>
       </div>
     )}
-  {(employee.panNumber || employee.aadhaarNumber || employee.drivingLicenceNumber) && (
+  {!isITManager && (employee.panNumber || employee.aadhaarNumber || employee.drivingLicenceNumber) && (
     <div className="bg-white border border-gray-100 rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-4">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1B6B6B" strokeWidth="2">

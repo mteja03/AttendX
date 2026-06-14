@@ -3962,6 +3962,7 @@ export default function EmployeeProfile() {
         navigate={navigate}
         companyId={companyId}
         company={company}
+        userRole={userRole}
       />
       )}
       {tab === 'documents' && (

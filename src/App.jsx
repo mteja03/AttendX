@@ -270,7 +270,7 @@ function AppRoutes() {
             <Route
               path="orgchart"
               element={
-                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager']}>
+                <RoleRoute allowedRoles={['admin', 'companyadmin', 'hrmanager', 'itmanager']}>
                   <ErrorBoundary>
                     <OrgChart />
                   </ErrorBoundary>
