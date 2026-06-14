@@ -266,7 +266,13 @@ export function AuthProvider({ children }) {
             setSentryUser(firebaseUser);
             setRole(roleVal);
             setCompanyId(resolvedCompanyId || null);
-            setUserPermissions(d.permissions ?? DEFAULT_PERMISSIONS[roleVal] ?? {});
+            // Fixed-permission roles always use defaults — ignore any saved permissions
+            // so stale permissions from a previous role don't bleed through.
+            const FIXED_PERMISSION_ROLES = ['auditor', 'itmanager', 'auditmanager'];
+            const resolvedPermissions = FIXED_PERMISSION_ROLES.includes(roleVal)
+              ? DEFAULT_PERMISSIONS[roleVal] ?? {}
+              : d.permissions ?? DEFAULT_PERMISSIONS[roleVal] ?? {};
+            setUserPermissions(resolvedPermissions);
             let resolvedScope = d.auditScope != null && d.auditScope !== '' ? d.auditScope : null;
             if (!resolvedScope && roleVal === 'auditmanager') resolvedScope = fallbackScope;
             setAuditScope(resolvedScope);

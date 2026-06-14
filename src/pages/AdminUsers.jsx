@@ -3,7 +3,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, se
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { canAccessUserManagement, ROLE_COLORS, ROLE_LABELS } from '../utils/roles';
+import { canAccessUserManagement, DEFAULT_PERMISSIONS, ROLE_COLORS, ROLE_LABELS } from '../utils/roles';
 
 const DEFAULT_MODULE_PERMISSIONS = {
   employees: true,
@@ -422,6 +422,10 @@ export default function AdminUsers() {
         role: form.role,
         companyId: currentUserRole === 'admin' ? form.companyId || null : authCompanyId || null,
         auditScope: form.role === 'auditmanager' ? form.auditScope || 'both' : null,
+        // Reset permissions to new role defaults when role changes
+        ...(form.role !== editingUser.role
+          ? { permissions: DEFAULT_PERMISSIONS[form.role] ?? {} }
+          : {}),
       };
       await updateDoc(doc(db, 'users', editingUser.id), payload);
       setUsers((prev) => prev.map((u) => (u.id === editingUser.id ? { ...u, ...payload } : u)));
