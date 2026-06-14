@@ -1517,37 +1517,32 @@ export default function Assets() {
 
   useEffect(() => {
     if (!showQRModal || !qrAsset) return;
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       const canvas = document.getElementById('qr-canvas');
       if (!canvas) return;
-      const ctx = canvas.getContext('2d');
       const url = `${window.location.origin}/company/${companyId}/assets?id=${qrAsset.id}`;
-      const size = 180;
-      const qrSize = 33;
-      ctx.clearRect(0, 0, size, size);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, size, size);
-      const cellSize = Math.floor(size / qrSize);
-      const offset = Math.floor((size - qrSize * cellSize) / 2);
-      let hash = 0;
-      for (let i = 0; i < url.length; i++) { hash = ((hash << 5) - hash) + url.charCodeAt(i); hash |= 0; }
-      ctx.fillStyle = '#1B6B6B';
-      for (let r = 0; r < qrSize; r++) {
-        for (let c = 0; c < qrSize; c++) {
-          const isCorner = (r < 7 && c < 7) || (r < 7 && c >= qrSize - 7) || (r >= qrSize - 7 && c < 7);
-          const seed = (hash ^ (r * 31 + c * 17)) & 1;
-          if (isCorner || seed) {
-            ctx.fillRect(offset + c * cellSize, offset + r * cellSize, cellSize - 1, cellSize - 1);
-          }
+      try {
+        if (typeof window.QRCode === 'undefined') {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
         }
+        canvas.innerHTML = '';
+        new window.QRCode(canvas, {
+          text: url,
+          width: 180,
+          height: 180,
+          colorDark: '#1B6B6B',
+          colorLight: '#ffffff',
+          correctLevel: window.QRCode.CorrectLevel.M,
+        });
+      } catch {
+        if (import.meta.env.DEV) console.warn('QR generation failed');
       }
-      [[0,0],[0,qrSize-7],[qrSize-7,0]].forEach(([tr,tc]) => {
-        ctx.strokeStyle = '#1B6B6B';
-        ctx.lineWidth = cellSize;
-        ctx.strokeRect(offset + tc * cellSize + cellSize / 2, offset + tr * cellSize + cellSize / 2, 6 * cellSize, 6 * cellSize);
-        ctx.fillStyle = '#1B6B6B';
-        ctx.fillRect(offset + (tc + 2) * cellSize, offset + (tr + 2) * cellSize, 3 * cellSize, 3 * cellSize);
-      });
     }, 50);
     return () => clearTimeout(timer);
   }, [showQRModal, qrAsset, companyId]);
@@ -3376,7 +3371,7 @@ export default function Assets() {
               <p className="text-xs text-gray-400 mb-4">{qrAsset.assetId} · {qrAsset.type}</p>
               <div className="flex justify-center mb-4">
                 <div id="qr-canvas-container" className="p-4 bg-gray-50 rounded-2xl border border-gray-200 inline-block">
-                  <canvas id="qr-canvas" width="180" height="180" />
+                  <div id="qr-canvas" style={{ width: 180, height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
                 </div>
               </div>
               <div className="text-xs text-gray-400 mb-4 space-y-0.5">
@@ -3387,11 +3382,15 @@ export default function Assets() {
                 <button type="button" onClick={() => setShowQRModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
                 <button type="button"
                   onClick={() => {
-                    const canvas = document.getElementById('qr-canvas');
-                    if (!canvas) return;
+                    const container = document.getElementById('qr-canvas');
+                    if (!container) return;
+                    const innerCanvas = container.querySelector('canvas');
+                    const innerImg = container.querySelector('img');
+                    const href = innerCanvas ? innerCanvas.toDataURL('image/png') : innerImg?.src;
+                    if (!href) return;
                     const link = document.createElement('a');
                     link.download = `${qrAsset.assetId}-qr.png`;
-                    link.href = canvas.toDataURL('image/png');
+                    link.href = href;
                     link.click();
                   }}
                   className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]">

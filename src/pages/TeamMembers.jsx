@@ -20,7 +20,7 @@ import PageHeader from '../components/PageHeader';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { toDisplayDate } from '../utils';
-import { ROLE_LABELS, ROLE_COLORS } from '../utils/roles';
+import { ROLE_LABELS, ROLE_COLORS, DEFAULT_PERMISSIONS } from '../utils/roles';
 
 const ROLE_INFO_CARDS = [
   {
@@ -52,83 +52,7 @@ const ROLE_INFO_CARDS = [
 
 const TEAM_MEMBER_ROLES = ['hrmanager', 'manager', 'itmanager', 'auditmanager', 'auditor'];
 
-const DEFAULT_PERMISSIONS = {
-  hrmanager: {
-    employees: true,
-    leave: true,
-    calendar: true,
-    documents: true,
-    policies: true,
-    assets: true,
-    reports: true,
-    audit: false,
-    team: true,
-    orgchart: true,
-    settings: true,
-    onboarding: true,
-    offboarding: true,
-  },
-  manager: {
-    employees: false,
-    leave: true,
-    calendar: true,
-    documents: false,
-    policies: false,
-    assets: false,
-    reports: true,
-    audit: false,
-    team: false,
-    orgchart: true,
-    settings: false,
-    onboarding: false,
-    offboarding: false,
-  },
-  itmanager: {
-    employees: false,
-    leave: false,
-    calendar: true,
-    documents: false,
-    policies: false,
-    assets: true,
-    reports: true,
-    audit: false,
-    team: false,
-    orgchart: false,
-    settings: false,
-    onboarding: false,
-    offboarding: false,
-  },
-  auditmanager: {
-    employees: false,
-    leave: false,
-    calendar: false,
-    documents: false,
-    policies: false,
-    assets: false,
-    reports: false,
-    audit: true,
-    team: false,
-    orgchart: false,
-    settings: false,
-    onboarding: false,
-    offboarding: false,
-  },
-  auditor: {
-    employees: false,
-    leave: false,
-    calendar: false,
-    documents: false,
-    policies: false,
-    assets: false,
-    reports: false,
-    audit: true,
-    team: false,
-    orgchart: false,
-    settings: false,
-    onboarding: false,
-    offboarding: false,
-  },
-};
+// Single source of truth — imported from roles.js
 
 const ALL_PERMISSIONS = [
   { key: 'employees', label: 'Employees', icon: '🧑‍💼' },
