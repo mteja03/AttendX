@@ -5,6 +5,7 @@ import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from
 import {
   doc,
   getDoc,
+  onSnapshot,
   setDoc,
   updateDoc,
   serverTimestamp,
@@ -56,10 +57,11 @@ async function resolveUserFromTeamMembers(emailNorm) {
         photoURL: tm.photoURL || '',
       },
       usersRef: null,
+      listenRef: activeDoc.ref,
     };
   } catch (e) {
     if (import.meta.env.DEV) console.warn('Team member lookup failed', e);
-    return { data: null, usersRef: null };
+    return { data: null, usersRef: null, listenRef: null };
   }
 }
 
@@ -92,7 +94,28 @@ export function AuthProvider({ children }) {
   const [authError, setAuthError] = useState('');
 
   useEffect(() => {
+    let unsubUserDoc = null;
+    const cleanupUserDoc = () => {
+      if (unsubUserDoc) {
+        unsubUserDoc();
+        unsubUserDoc = null;
+      }
+    };
+
+    const resetAuthState = () => {
+      setSentryUser(null);
+      setCurrentUser(null);
+      setRole(null);
+      setCompanyId(null);
+      setUserPermissions(null);
+      setAuditScope(null);
+      setIsCompanyAdmin(false);
+    };
+
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      // Tear down any previous user-doc listener before handling a new auth state.
+      cleanupUserDoc();
+
       if (!firebaseUser || !firebaseUser.email) {
         setCurrentUser(null);
         setSentryUser(null);
@@ -117,6 +140,8 @@ export function AuthProvider({ children }) {
         try {
           const email = firebaseUser.email?.toLowerCase();
           let userDocRef = null;
+          let listenRef = null;
+          let listenSource = null; // 'users' | 'teamMember'
           let data = null;
 
           let ref = doc(db, 'users', email || '');
@@ -147,86 +172,43 @@ export function AuthProvider({ children }) {
             }
           }
 
+          if (userDocRef) {
+            listenRef = userDocRef;
+            listenSource = 'users';
+          }
+
           if (!data) {
             const tmRes = await resolveUserFromTeamMembers(email);
             if (tmRes.data) {
               data = tmRes.data;
               userDocRef = tmRes.usersRef;
+              if (tmRes.listenRef) {
+                listenRef = tmRes.listenRef;
+                listenSource = 'teamMember';
+              }
             }
           }
 
           if (!data) {
             await signOut(auth);
-            setSentryUser(null);
-            setCurrentUser(null);
-            setRole(null);
-            setCompanyId(null);
-            setUserPermissions(null);
-            setAuditScope(null);
-            setIsCompanyAdmin(false);
+            resetAuthState();
             setAuthError('Access denied. Contact your HR admin to get access.');
             setLoading(false);
             return;
           }
 
-          const companyAdminRole = data.role === 'companyadmin';
-          const roleVal = data.role || null;
-
-          if (data.isActive === false) {
-            await signOut(auth);
-            setSentryUser(null);
-            setCurrentUser(null);
-            setRole(null);
-            setCompanyId(null);
-            setUserPermissions(null);
-            setAuditScope(null);
-            setIsCompanyAdmin(false);
-            setAuthError('Your account has been deactivated. Contact HR admin.');
-            setLoading(false);
-            return;
-          }
-
-          if (!roleVal || !VALID_ROLES.includes(roleVal)) {
-            await signOut(auth);
-            setSentryUser(null);
-            setCurrentUser(null);
-            setRole(null);
-            setCompanyId(null);
-            setUserPermissions(null);
-            setAuditScope(null);
-            setIsCompanyAdmin(false);
-            setAuthError('Access denied. Contact your HR admin to get access.');
-            setLoading(false);
-            return;
-          }
-
-          const resolvedCompanyId = normalizeCompanyId(data.companyId);
-
-          setCurrentUser(firebaseUser);
-          setSentryUser(firebaseUser);
-          setRole(roleVal);
-          if (resolvedCompanyId) {
-            setCompanyId(resolvedCompanyId);
-          } else {
-            setCompanyId(null);
-          }
-          setUserPermissions(data.permissions ?? DEFAULT_PERMISSIONS[roleVal] ?? {});
-          // For audit managers, auditScope must exist. If missing from users doc, try teamMembers as fallback.
-          let resolvedScope = data.auditScope != null && data.auditScope !== '' ? data.auditScope : null;
-          if (!resolvedScope && roleVal === 'auditmanager') {
-            // Try to get from teamMembers
+          // One-time fallback: auditmanager missing scope → pull from teamMembers and patch users doc.
+          let fallbackScope = null;
+          if ((data.auditScope == null || data.auditScope === '') && data.role === 'auditmanager') {
             try {
               const tmQuery = query(collectionGroup(db, 'teamMembers'), where('email', '==', email), limit(1));
               const tmSnap = await getDocs(tmQuery);
               if (!tmSnap.empty) {
                 const tmData = tmSnap.docs[0].data();
                 if (tmData.auditScope) {
-                  resolvedScope = tmData.auditScope;
-                  // Also patch the users doc so it's consistent next time
+                  fallbackScope = tmData.auditScope;
                   if (userDocRef) {
-                    updateDoc(userDocRef, {
-                      auditScope: tmData.auditScope,
-                    }).catch(() => {});
+                    updateDoc(userDocRef, { auditScope: tmData.auditScope }).catch(() => {});
                   }
                 }
               }
@@ -234,9 +216,76 @@ export function AuthProvider({ children }) {
               // ignore
             }
           }
-          setAuditScope(resolvedScope);
-          setIsCompanyAdmin(companyAdminRole);
-          setAuthError('');
+
+          // Normalize a raw snapshot (users doc or teamMember doc) into the fields we consume.
+          const transformSnap = (snapshot) => {
+            if (listenSource === 'teamMember') {
+              const tm = snapshot.data() || {};
+              return {
+                role: tm.role,
+                companyId: snapshot.ref.parent.parent.id,
+                auditScope: tm.auditScope ?? null,
+                permissions: tm.permissions ?? null,
+                isActive: tm.isActive !== false,
+              };
+            }
+            const raw = snapshot.data() || {};
+            return {
+              role: raw.role,
+              companyId: raw.companyId,
+              auditScope: raw.auditScope ?? null,
+              permissions: raw.permissions ?? null,
+              isActive: raw.isActive !== false,
+            };
+          };
+
+          // Applies role/permissions/companyId/auditScope/isActive. Returns false (and signs out)
+          // when the account is deactivated or the role becomes invalid.
+          const applyUserData = (d) => {
+            const companyAdminRole = d.role === 'companyadmin';
+            const roleVal = d.role || null;
+
+            if (d.isActive === false) {
+              signOut(auth).catch(() => {});
+              resetAuthState();
+              setAuthError('Your account has been deactivated. Contact HR admin.');
+              setLoading(false);
+              return false;
+            }
+
+            if (!roleVal || !VALID_ROLES.includes(roleVal)) {
+              signOut(auth).catch(() => {});
+              resetAuthState();
+              setAuthError('Access denied. Contact your HR admin to get access.');
+              setLoading(false);
+              return false;
+            }
+
+            const resolvedCompanyId = normalizeCompanyId(d.companyId);
+            setCurrentUser(firebaseUser);
+            setSentryUser(firebaseUser);
+            setRole(roleVal);
+            setCompanyId(resolvedCompanyId || null);
+            setUserPermissions(d.permissions ?? DEFAULT_PERMISSIONS[roleVal] ?? {});
+            let resolvedScope = d.auditScope != null && d.auditScope !== '' ? d.auditScope : null;
+            if (!resolvedScope && roleVal === 'auditmanager') resolvedScope = fallbackScope;
+            setAuditScope(resolvedScope);
+            setIsCompanyAdmin(companyAdminRole);
+            setAuthError('');
+            return true;
+          };
+
+          // Initial apply from the doc we just resolved.
+          const applied = applyUserData({
+            role: data.role,
+            companyId: data.companyId,
+            auditScope: data.auditScope ?? null,
+            permissions: data.permissions ?? null,
+            isActive: data.isActive !== false,
+          });
+          if (!applied) return;
+
+          // One-time side effects: lastLogin write + Drive token handling.
           if (userDocRef) {
             try {
               await updateDoc(userDocRef, {
@@ -287,19 +336,32 @@ export function AuthProvider({ children }) {
             setGoogleAccessToken(null);
           }
           setLoading(false);
+
+          // Live listener: role/permissions/isActive changes propagate without re-login.
+          if (listenRef) {
+            unsubUserDoc = onSnapshot(
+              listenRef,
+              (snapshot) => {
+                if (!snapshot.exists()) {
+                  signOut(auth).catch(() => {});
+                  resetAuthState();
+                  setAuthError('Your account has been removed. Contact your HR admin.');
+                  return;
+                }
+                applyUserData(transformSnap(snapshot));
+              },
+              (listenErr) => {
+                if (import.meta.env.DEV) console.warn('User doc live listener error', listenErr);
+              },
+            );
+          }
         } catch (error) {
           captureError(error, { context: 'checkWhitelist' });
           if (import.meta.env.DEV) {
-            if (import.meta.env.DEV) console.error('Error checking users whitelist', error);
+            console.error('Error checking users whitelist', error);
           }
           await signOut(auth);
-          setSentryUser(null);
-          setCurrentUser(null);
-          setRole(null);
-          setCompanyId(null);
-          setUserPermissions(null);
-          setAuditScope(null);
-          setIsCompanyAdmin(false);
+          resetAuthState();
           setAuthError('Access denied. Contact your HR admin to get access.');
           setLoading(false);
         }
@@ -309,7 +371,10 @@ export function AuthProvider({ children }) {
       checkWhitelist();
     });
 
-    return () => unsubscribe();
+    return () => {
+      cleanupUserDoc();
+      unsubscribe();
+    };
   }, []);
 
   const persistDriveToken = useCallback((accessToken) => {
