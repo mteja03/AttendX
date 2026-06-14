@@ -454,16 +454,16 @@ export default function AssignAuditModal({
                                 {rows.length > 20 && <span className="text-xs text-gray-400">· Re-upload CSV to edit all rows</span>}
                               </div>
                               {prefilledCols.length > 0 && (
-                                <div className="overflow-x-auto rounded-xl border border-gray-100">
+                                <div className="overflow-auto rounded-xl border border-gray-100" style={{ maxHeight: 280 }}>
                                   <table style={{ fontSize: 11, width: '100%', borderCollapse: 'collapse' }}>
                                     <thead>
                                       <tr style={{ background: '#F9FAFB' }}>
-                                        {prefilledCols.map((col) => <th key={col.id} style={{ textAlign: 'left', padding: '5px 8px', fontSize: 10, fontWeight: 500, color: '#6B7280', borderBottom: '0.5px solid #F3F4F6', whiteSpace: 'nowrap' }}>{col.label}</th>)}
+                                        {prefilledCols.map((col) => <th key={col.id} style={{ textAlign: 'left', padding: '5px 8px', fontSize: 10, fontWeight: 500, color: '#6B7280', borderBottom: '0.5px solid #F3F4F6', whiteSpace: 'nowrap', position: 'sticky', top: 0, background: '#F9FAFB', zIndex: 1 }}>{col.label}</th>)}
                                         {rows.length <= 20 && <th style={{ width: 28 }} />}
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {(rows.length <= 20 ? rows : rows.slice(0, 3)).map((row) => (
+                                      {rows.map((row) => (
                                         <tr key={row.id} style={{ borderBottom: '0.5px solid #F9FAFB' }}>
                                           {prefilledCols.map((col) => (
                                             <td key={col.id} style={{ padding: '3px 6px' }}>
@@ -477,7 +477,6 @@ export default function AssignAuditModal({
                                           {rows.length <= 20 && <td style={{ padding: '3px 4px', textAlign: 'center' }}><button type="button" onClick={() => handleDeleteRow(tmpl.id, sec.id, row.id)} style={{ fontSize: 12, color: '#D1D5DB', cursor: 'pointer', background: 'none', border: 'none' }}>✕</button></td>}
                                         </tr>
                                       ))}
-                                      {rows.length > 20 && <tr><td colSpan={prefilledCols.length} style={{ padding: '5px 10px', fontSize: 10, color: '#9CA3AF', textAlign: 'center' }}>… {rows.length - 3} more rows</td></tr>}
                                     </tbody>
                                   </table>
                                 </div>
