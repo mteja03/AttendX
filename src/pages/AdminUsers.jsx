@@ -5,6 +5,54 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { canAccessUserManagement, DEFAULT_PERMISSIONS, ROLE_COLORS, ROLE_LABELS } from '../utils/roles';
 
+const ROLE_INFO = {
+  companyadmin: {
+    label: 'Company Admin',
+    color: '#185FA5',
+    bg: '#E6F1FB',
+    summary: 'Full access to all modules and settings for their company.',
+    can: ['Dashboard', 'Employees (full)', 'Leave', 'Assets', 'Documents', 'Library', 'Org Chart', 'Reports', 'Audit', 'Settings'],
+    cannot: [],
+    note: null,
+  },
+  hrmanager: {
+    label: 'HR Manager',
+    color: '#3C3489',
+    bg: '#EEEDFE',
+    summary: 'Full HR access. Cannot manage audits or platform settings.',
+    can: ['Dashboard', 'Employees (full)', 'Leave', 'Assets', 'Documents', 'Library', 'Org Chart', 'Reports'],
+    cannot: ['Audit', 'Settings'],
+    note: null,
+  },
+  itmanager: {
+    label: 'IT Manager',
+    color: '#854F0B',
+    bg: '#FAEEDA',
+    summary: 'Asset management and read-only employee access.',
+    can: ['Employees (read only)', 'Assets (full)', 'Org Chart', 'Calendar'],
+    cannot: ['Leave', 'Documents', 'Library', 'Reports', 'Audit', 'Settings'],
+    note: 'On employee profiles: sees personal info and employment details only. Salary, bank details, PAN, and Aadhaar are hidden.',
+  },
+  auditmanager: {
+    label: 'Audit Manager',
+    color: '#993C1D',
+    bg: '#FAECE7',
+    summary: 'Creates, assigns, and reviews audits. No HR module access.',
+    can: ['Audit (create, assign, review, close)'],
+    cannot: ['Employees', 'Leave', 'Assets', 'Documents', 'Library', 'Reports', 'Settings'],
+    note: 'Audit scope (Internal / External / Both) is set separately below.',
+  },
+  auditor: {
+    label: 'Auditor',
+    color: '#5F5E5A',
+    bg: '#F1EFE8',
+    summary: 'Can only fill audits that are assigned to them.',
+    can: ['Assigned audits only'],
+    cannot: ['All other modules'],
+    note: 'Auditor sees their audit list and can submit findings. Cannot create or review audits.',
+  },
+};
+
 const DEFAULT_MODULE_PERMISSIONS = {
   employees: true,
   leave: true,
@@ -230,6 +278,7 @@ export default function AdminUsers() {
   const [permissionDraft, setPermissionDraft] = useState(DEFAULT_MODULE_PERMISSIONS);
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [showRoleInfo, setShowRoleInfo] = useState(false);
   const empRef = useRef(null);
   const [form, setForm] = useState({ email: '', name: '', role: '', companyId: '', auditScope: 'both', selectedEmpId: '' });
   const isUserAdmin = canAccessUserManagement(currentUserRole);
@@ -705,11 +754,65 @@ export default function AdminUsers() {
               )}
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Role *</label>
-                <select value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value, auditScope: e.target.value === 'auditmanager' ? 'both' : null }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs text-gray-500">Role *</label>
+                  {form.role && ROLE_INFO[form.role] && (
+                    <button
+                      type="button"
+                      onClick={() => setShowRoleInfo((v) => !v)}
+                      className={`text-xs flex items-center gap-1 px-2 py-0.5 rounded-lg border transition-colors ${showRoleInfo ? 'border-[#1B6B6B] bg-[#E8F5F5] text-[#1B6B6B]' : 'border-gray-200 text-gray-400 hover:text-[#1B6B6B] hover:border-[#1B6B6B]'}`}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true"><circle cx="6" cy="6" r="5.5" stroke="currentColor"/><path d="M6 5.5v3M6 3.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                      {showRoleInfo ? 'Hide info' : 'What can they do?'}
+                    </button>
+                  )}
+                </div>
+                <select
+                  value={form.role}
+                  onChange={(e) => {
+                    setForm((p) => ({ ...p, role: e.target.value, auditScope: e.target.value === 'auditmanager' ? 'both' : null }));
+                    setShowRoleInfo(false);
+                  }}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
+                >
                   <option value="">Select role...</option>
                   {roleOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                 </select>
+                {showRoleInfo && form.role && ROLE_INFO[form.role] && (() => {
+                  const info = ROLE_INFO[form.role];
+                  return (
+                    <div className="mt-2 rounded-xl border border-gray-100 overflow-hidden">
+                      <div className="px-3 py-2.5 flex items-center gap-2" style={{ background: info.bg }}>
+                        <span className="text-xs font-semibold" style={{ color: info.color }}>{info.label}</span>
+                        <span className="text-xs" style={{ color: info.color, opacity: 0.8 }}>—</span>
+                        <span className="text-xs" style={{ color: info.color, opacity: 0.8 }}>{info.summary}</span>
+                      </div>
+                      <div className="px-3 py-2.5 bg-white space-y-2">
+                        <div>
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Can access</p>
+                          <div className="flex flex-wrap gap-1">
+                            {info.can.map((item) => (
+                              <span key={item} className="text-xs px-2 py-0.5 rounded-full bg-[#E1F5EE] text-[#0F6E56] font-medium">{item}</span>
+                            ))}
+                          </div>
+                        </div>
+                        {info.cannot.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">No access</p>
+                            <div className="flex flex-wrap gap-1">
+                              {info.cannot.map((item) => (
+                                <span key={item} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">{item}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {info.note && (
+                          <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">{info.note}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {form.role === 'auditmanager' && (
@@ -724,7 +827,7 @@ export default function AdminUsers() {
               )}
 
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => { setShowAddModal(false); setEditingUser(null); }} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancel</button>
+                <button type="button" onClick={() => { setShowAddModal(false); setEditingUser(null); setShowRoleInfo(false); }} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancel</button>
                 <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold disabled:opacity-50">{saving ? 'Saving...' : editingUser ? 'Save Changes' : 'Add User'}</button>
               </div>
             </form>
