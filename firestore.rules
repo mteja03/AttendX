@@ -316,6 +316,7 @@ service cloud.firestore {
         allow read: if isActive() && (
           isAdmin()
           || canManageCompany(companyId)
+          || canAccessAudit(companyId)
         );
 
         allow create, update: if isActive() && (

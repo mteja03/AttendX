@@ -141,22 +141,25 @@ export default function Audit() {
   useEffect(() => {
     if (!companyId) return;
     if (empLoaded && employeesLoadedForRef.current === companyId && employees.length > 0) return;
-    Promise.all([
+    Promise.allSettled([
       getDocs(query(collection(db, 'companies', companyId, 'employees'), where('status', '==', 'Active'), limit(500))),
       getDocs(query(collection(db, 'companies', companyId, 'teamMembers'), where('role', '==', 'auditor'), limit(100))),
-    ])
-      .then(([empSnap, auditorSnap]) => {
-        setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setAuditors(auditorSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setEmpLoaded(true);
-        employeesLoadedForRef.current = companyId;
-      })
-      .catch(() => {
+    ]).then(([empResult, auditorResult]) => {
+      if (empResult.status === 'fulfilled') {
+        setEmployees(empResult.value.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } else {
         setEmployees([]);
+        if (import.meta.env.DEV) console.warn('Employees fetch failed:', empResult.reason);
+      }
+      if (auditorResult.status === 'fulfilled') {
+        setAuditors(auditorResult.value.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } else {
         setAuditors([]);
-        setEmpLoaded(false);
-        employeesLoadedForRef.current = null;
-      });
+        if (import.meta.env.DEV) console.warn('Auditors fetch failed:', auditorResult.reason);
+      }
+      setEmpLoaded(true);
+      employeesLoadedForRef.current = companyId;
+    });
   }, [companyId, empLoaded, employees.length]);
 
   if (!companyId) {
