@@ -147,6 +147,16 @@ export default function AssignAuditModal({
   };
 
   // ── validate & assign ──────────────────────────────────────────────────────
+  const [previewMode, setPreviewMode] = useState(false);
+
+  const openPreview = () => {
+    if (!selectedIds.length)  { showError('Select at least one template'); return; }
+    if (!auditorId)            { showError('Select a lead auditor'); return; }
+    if (!endDate)              { showError('End date is required'); return; }
+    if (!location && !branch)  { showError('Select a location or branch'); return; }
+    setPreviewMode(true);
+  };
+
   const handleAssign = async () => {
     if (!selectedIds.length)  { showError('Select at least one template'); return; }
     if (!auditorId)            { showError('Select a lead auditor'); return; }
@@ -454,11 +464,11 @@ export default function AssignAuditModal({
                                 {rows.length > 20 && <span className="text-xs text-gray-400">· Re-upload CSV to edit all rows</span>}
                               </div>
                               {prefilledCols.length > 0 && (
-                                <div className="overflow-auto rounded-xl border border-gray-100" style={{ maxHeight: 280 }}>
-                                  <table style={{ fontSize: 11, width: '100%', borderCollapse: 'collapse' }}>
+                                <div className="overflow-x-auto overflow-y-auto rounded-xl border border-gray-100" style={{ maxHeight: 280 }}>
+                                  <table style={{ fontSize: 11, width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
                                     <thead>
                                       <tr style={{ background: '#F9FAFB' }}>
-                                        {prefilledCols.map((col) => <th key={col.id} style={{ textAlign: 'left', padding: '5px 8px', fontSize: 10, fontWeight: 500, color: '#6B7280', borderBottom: '0.5px solid #F3F4F6', whiteSpace: 'nowrap', position: 'sticky', top: 0, background: '#F9FAFB', zIndex: 1 }}>{col.label}</th>)}
+                                        {prefilledCols.map((col) => <th key={col.id} style={{ textAlign: 'left', padding: '5px 8px', fontSize: 10, fontWeight: 500, color: '#6B7280', borderBottom: '0.5px solid #F3F4F6', whiteSpace: 'nowrap', position: 'sticky', top: 0, background: '#F9FAFB', zIndex: 1, minWidth: 90 }}>{col.label}</th>)}
                                         {rows.length <= 20 && <th style={{ width: 28 }} />}
                                       </tr>
                                     </thead>
@@ -496,11 +506,93 @@ export default function AssignAuditModal({
 
         <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0 flex gap-2">
           <button type="button" onClick={onClose} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancel</button>
-          <button type="button" onClick={handleAssign} disabled={assigning || !selectedIds.length || !auditorId || !endDate} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
-            {assigning ? 'Assigning…' : `Assign${selectedIds.length > 1 ? ` ${selectedIds.length} audits` : ' audit'}`}
+          <button type="button" onClick={openPreview} disabled={!selectedIds.length || !auditorId || !endDate} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
+            Review{selectedIds.length > 1 ? ` ${selectedIds.length} audits` : ' audit'} →
           </button>
         </div>
       </div>
+
+      {previewMode && (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-[70] sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg flex flex-col max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-800">Review before assigning</h2>
+                <p className="text-xs text-gray-400 mt-0.5">{selectedTemplates.length} template{selectedTemplates.length !== 1 ? 's' : ''} · check details before sending</p>
+              </div>
+              <button type="button" onClick={() => setPreviewMode(false)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-xs">✕</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Assignment summary</p>
+              <div className="space-y-1.5 mb-4 pb-4 border-b border-gray-100">
+                <div className="flex justify-between text-xs"><span className="text-gray-500">Lead auditor</span><span className="font-medium text-gray-800">{auditorName || '—'}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-gray-500">Team members</span><span className="font-medium text-gray-800">{selectedTeamMembers.length > 0 ? `${selectedTeamMembers.length} added` : 'None'}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-gray-500">Branch / Location</span><span className="font-medium text-gray-800">{branch || location || '—'}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-gray-500">Due date</span><span className="font-medium text-gray-800">{endDate || '—'}</span></div>
+              </div>
+
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Templates ({selectedTemplates.length})</p>
+              <div className="space-y-3">
+                {selectedTemplates.map((tmpl) => {
+                  const recordSecs = (tmpl.sections || []).filter((s) => s.sectionType === SECTION_TYPES.RECORDS);
+                  return (
+                    <div key={tmpl.id} className="border border-gray-100 rounded-xl overflow-hidden">
+                      <div className="px-3 py-2.5 bg-gray-50 flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-800">{tmpl.name}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#E6F1FB] text-[#185FA5]">{tmpl.templateType === 'record' || isUnifiedTemplate(tmpl) ? 'Unified' : 'Checklist'}</span>
+                      </div>
+                      {recordSecs.length > 0 && recordSecs.map((sec) => {
+                        const rows = recordData?.[tmpl.id]?.[sec.id] || [];
+                        const cols = (sec.columns || []).filter((c) => c.type?.startsWith('prefilled'));
+                        return (
+                          <div key={sec.id} className="px-3 py-2.5">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xs text-gray-600">{sec.name}</span>
+                              {rows.length === 0 ? (
+                                <span className="text-[11px] text-amber-600 font-medium">⚠ No records uploaded</span>
+                              ) : (
+                                <span className="text-[11px] text-green-700 font-medium">✓ {rows.length} record{rows.length !== 1 ? 's' : ''}</span>
+                              )}
+                            </div>
+                            {rows.length > 0 && cols.length > 0 && (
+                              <div className="overflow-x-auto overflow-y-auto rounded-lg border border-gray-100" style={{ maxHeight: 160 }}>
+                                <table style={{ fontSize: 10, width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
+                                  <thead>
+                                    <tr style={{ background: '#F9FAFB' }}>
+                                      {cols.map((col) => <th key={col.id} style={{ textAlign: 'left', padding: '4px 6px', fontSize: 9, fontWeight: 500, color: '#6B7280', borderBottom: '0.5px solid #F3F4F6', whiteSpace: 'nowrap', position: 'sticky', top: 0, background: '#F9FAFB', minWidth: 70 }}>{col.label}</th>)}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {rows.map((row) => (
+                                      <tr key={row.id} style={{ borderBottom: '0.5px solid #F9FAFB' }}>
+                                        {cols.map((col) => (
+                                          <td key={col.id} style={{ padding: '3px 6px', fontSize: 10, color: '#374151', whiteSpace: 'nowrap' }}>{row.data?.[col.id] || '—'}</td>
+                                        ))}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex gap-3 px-5 py-4 border-t border-gray-100 flex-shrink-0">
+              <button type="button" onClick={() => setPreviewMode(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">← Back to edit</button>
+              <button type="button" onClick={handleAssign} disabled={assigning} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-semibold disabled:opacity-40">
+                {assigning ? 'Assigning…' : 'Confirm & assign'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <input ref={csvFileRef} type="file" accept=".csv" className="hidden" onChange={handleCSVUpload} />
     </div>
