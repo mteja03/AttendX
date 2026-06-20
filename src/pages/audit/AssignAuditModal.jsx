@@ -252,7 +252,7 @@ export default function AssignAuditModal({
 
       setAuditRefCounter((p) => p + selectedTemplates.length);
       setAssignedAudits(created);
-      onAssigned?.();
+      setPreviewMode(false);
     } catch (e) {
       showError('Assign failed: ' + e.message);
       if (import.meta.env.DEV) console.error(e);
@@ -270,7 +270,7 @@ export default function AssignAuditModal({
 
     return (
       <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
-        <div role="presentation" className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div role="presentation" className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { onAssigned?.(); onClose?.(); }} />
         <div className="relative bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl p-6 shadow-sm sm:mx-4">
           <div className="text-center mb-4">
             <div className="w-14 h-14 bg-[#E1F5EE] rounded-full flex items-center justify-center text-2xl mx-auto mb-3">✅</div>
@@ -285,7 +285,7 @@ export default function AssignAuditModal({
           ) : (
             <div className="mb-3 p-3 bg-amber-50 border border-amber-100 rounded-xl text-center"><p className="text-xs text-amber-700">No phone number on record for {first.name}</p></div>
           )}
-          <button type="button" onClick={onClose} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Done</button>
+          <button type="button" onClick={() => { onAssigned?.(); onClose(); }} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Done</button>
         </div>
       </div>
     );
