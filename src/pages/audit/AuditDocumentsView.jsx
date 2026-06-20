@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase/config';
 import { formatAuditDocSize, auditDocViewLabel } from './auditHelpers';
@@ -62,7 +62,7 @@ export default function AuditDocumentsView({ audits, companyId, userRole, showSu
       const auditSnap = await getDoc(auditRef);
       if (auditSnap.exists()) {
         const updatedDocs = (auditSnap.data().auditDocuments || []).filter((d) => d.id !== docItem.id);
-        await updateDoc(auditRef, { auditDocuments: updatedDocs, updatedAt: new Date() });
+        await updateDoc(auditRef, { auditDocuments: updatedDocs, updatedAt: serverTimestamp() });
       }
       showSuccess(`"${docItem.name}" deleted`);
     } catch (e) {
@@ -84,7 +84,7 @@ export default function AuditDocumentsView({ audits, companyId, userRole, showSu
         if (auditSnap.exists()) {
           const expiredIds = new Set(docs.map((d) => d.id));
           const remaining = (auditSnap.data().auditDocuments || []).filter((d) => !expiredIds.has(d.id));
-          await updateDoc(auditRef, { auditDocuments: remaining, updatedAt: new Date() });
+          await updateDoc(auditRef, { auditDocuments: remaining, updatedAt: serverTimestamp() });
         }
       }
       showSuccess(`${expiredDocs.length} expired document${expiredDocs.length !== 1 ? 's' : ''} deleted`);

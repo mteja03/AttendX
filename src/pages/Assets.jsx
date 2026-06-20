@@ -343,7 +343,7 @@ export default function Assets() {
       try {
         let assetSnap;
         try {
-          assetSnap = await getDocs(query(collection(db, 'companies', companyId, 'assets'), orderBy('createdAt', 'desc')));
+          assetSnap = await getDocs(query(collection(db, 'companies', companyId, 'assets'), orderBy('createdAt', 'desc'), limit(500)));
         } catch {
           assetSnap = await getDocs(query(collection(db, 'companies', companyId, 'assets'), limit(500)));
         }

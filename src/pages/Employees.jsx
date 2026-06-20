@@ -724,7 +724,7 @@ export default function Employees() {
       if (!term || term.length < 2 || !collRef) return;
       setLoading(true);
       try {
-        const snap = await getDocs(query(collRef, orderBy('fullName', 'asc')));
+        const snap = await getDocs(query(collRef, orderBy('fullName', 'asc'), limit(500)));
         const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         const t = term.toLowerCase();
         const filtered = all.filter(

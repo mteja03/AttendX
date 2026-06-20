@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { addDoc, updateDoc, deleteDoc, getDocs, query, where, limit, collection, doc } from 'firebase/firestore';
+import { addDoc, updateDoc, deleteDoc, getDocs, query, where, limit, collection, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { AUDIT_COLORS, SECTION_TYPES, QA_QUESTION_TYPES, COLUMN_TYPES, SECTION_META, RISK_LEVELS, moveArr } from './auditHelpers';
 
@@ -379,7 +379,7 @@ export default function AuditSettings({ companyId, auditTypes, userRole, showSuc
         await updateDoc(doc(db, 'companies', companyId, 'auditTypes', editingType.id), payload);
         showSuccess('Template updated');
       } else {
-        await addDoc(collection(db, 'companies', companyId, 'auditTypes'), { ...payload, createdAt: new Date() });
+        await addDoc(collection(db, 'companies', companyId, 'auditTypes'), { ...payload, createdAt: serverTimestamp() });
         showSuccess('Template created!');
       }
       closeModal();

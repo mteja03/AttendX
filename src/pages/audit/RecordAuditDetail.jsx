@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { updateDoc, doc } from 'firebase/firestore';
+import { updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import {
   effStatus, formatDate, statusMeta,
@@ -256,7 +256,7 @@ export default function RecordAuditDetail({
   const handleMarkUnderReview = async () => {
     try {
       setSaving(true);
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Under Review', reviewStartedAt: new Date(), reviewStartedBy: currentUser?.email || '', updatedAt: new Date() });
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Under Review', reviewStartedAt: serverTimestamp(), reviewStartedBy: currentUser?.email || '', updatedAt: serverTimestamp() });
       showSuccess('Audit under review');
       handleDetailClose();
     } catch { showError('Failed to update status'); } finally { setSaving(false); }
@@ -266,7 +266,7 @@ export default function RecordAuditDetail({
     if (openFindings.length > 0) { showError(`Resolve all ${openFindings.length} finding${openFindings.length !== 1 ? 's' : ''} first`); return; }
     try {
       setSaving(true);
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Closed', closedAt: new Date(), closedBy: currentUser?.email || '', managerNotes: adminNotes, auditRating, closeFeedback: closeFeedback.trim(), updatedAt: new Date() });
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Closed', closedAt: serverTimestamp(), closedBy: currentUser?.email || '', managerNotes: adminNotes, auditRating, closeFeedback: closeFeedback.trim(), updatedAt: serverTimestamp() });
       showSuccess('Audit closed!');
       setClosedAuditData({ phone: auditorPhone, name: audit.auditorName, refId: audit.auditRefId, typeName: audit.auditTypeName, branch: audit.branch, rating: auditRating });
     } catch { showError('Failed to close audit'); } finally { setSaving(false); }
@@ -277,7 +277,7 @@ export default function RecordAuditDetail({
     try {
       setSaving(true);
       const reason = sendBackReason.trim();
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Sent Back', sentBackAt: new Date(), sentBackBy: currentUser?.email || '', sentBackReason: reason, updatedAt: new Date() });
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Sent Back', sentBackAt: serverTimestamp(), sentBackBy: currentUser?.email || '', sentBackReason: reason, updatedAt: serverTimestamp() });
       showSuccess('Audit sent back to auditor');
       setSentBackTo({ phone: auditorPhone, name: audit.auditorName, reason, refId: audit.auditRefId });
       setSendBackReason('');

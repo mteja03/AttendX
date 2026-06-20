@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { updateDoc, doc } from 'firebase/firestore';
+import { updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase/config';
 import {
@@ -113,7 +113,7 @@ export default function UnifiedAuditDetail({
       const newDoc = { id: Date.now().toString(), name: file.name, url, storagePath: path, size: file.size, type: file.type, uploadedBy: currentUser?.email || '', uploadedAt: new Date().toISOString() };
       const updated = [...auditDocs, newDoc];
       setAuditDocs(updated);
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updated, updatedAt: new Date() });
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updated, updatedAt: serverTimestamp() });
       showSuccess(`${file.name} uploaded`);
     } catch (err) {
       showError('Upload failed: ' + err.message);
@@ -131,7 +131,7 @@ export default function UnifiedAuditDetail({
       }
       const updated = auditDocs.filter((d) => d.id !== docItem.id);
       setAuditDocs(updated);
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updated, updatedAt: new Date() });
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updated, updatedAt: serverTimestamp() });
       showSuccess('Document removed');
     } catch (err) {
       showError('Remove failed: ' + err.message);
@@ -150,7 +150,7 @@ export default function UnifiedAuditDetail({
         const newStatus = effStatus(safeAudit.status) === 'Assigned' ? 'In Progress' : safeAudit.status;
         await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
           sectionResponses: respUpd, findings: findUpd, adminNotes: notesUpd,
-          status: newStatus, updatedAt: new Date(), updatedBy: currentUser?.email || '',
+          status: newStatus, updatedAt: serverTimestamp(), updatedBy: currentUser?.email || '',
         });
         if (!isMountedRef.current) return;
         setLastSaved(new Date());
@@ -237,21 +237,21 @@ export default function UnifiedAuditDetail({
       setSubmitting(true);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
         sectionResponses, findings: findingsData, adminNotes,
-        status: 'Submitted', submittedAt: new Date(), submittedBy: currentUser?.email || '', updatedAt: new Date(),
+        status: 'Submitted', submittedAt: serverTimestamp(), submittedBy: currentUser?.email || '', updatedAt: serverTimestamp(),
       });
       showSuccess('Submitted!'); setShowSubmit(false); onClose();
     } catch (e) { showError('Submit failed: ' + e.message); } finally { setSubmitting(false); }
   };
 
   const handleMarkUnderReview = async () => {
-    try { setSaving(true); await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Under Review', reviewStartedAt: new Date(), reviewStartedBy: currentUser?.email || '', updatedAt: new Date() }); showSuccess('Review started — go through each section then close from Overview'); } catch { showError('Failed'); } finally { setSaving(false); }
+    try { setSaving(true); await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Under Review', reviewStartedAt: serverTimestamp(), reviewStartedBy: currentUser?.email || '', updatedAt: serverTimestamp() }); showSuccess('Review started — go through each section then close from Overview'); } catch { showError('Failed'); } finally { setSaving(false); }
   };
 
   const handleCloseAudit = async () => {
     if (openFindings.length) { showError(`Resolve all ${openFindings.length} finding${openFindings.length !== 1 ? 's' : ''} first`); return; }
     try {
       setSaving(true);
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Closed', closedAt: new Date(), closedBy: currentUser?.email || '', managerNotes: adminNotes, auditRating, closeFeedback: closeFeedback.trim(), updatedAt: new Date() });
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Closed', closedAt: serverTimestamp(), closedBy: currentUser?.email || '', managerNotes: adminNotes, auditRating, closeFeedback: closeFeedback.trim(), updatedAt: serverTimestamp() });
       showSuccess('Audit closed!');
       setClosedData({ phone: auditorPhone, name: safeAudit.auditorName, refId: safeAudit.auditRefId, typeName: safeAudit.auditTypeName, branch: safeAudit.branch, rating: auditRating });
     } catch { showError('Failed to close audit'); } finally { setSaving(false); }
@@ -261,7 +261,7 @@ export default function UnifiedAuditDetail({
     if (!sendBackReason.trim()) { showError('Add a reason'); return; }
     try {
       setSaving(true);
-      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Sent Back', sentBackAt: new Date(), sentBackBy: currentUser?.email || '', sentBackReason: sendBackReason.trim(), updatedAt: new Date() });
+      await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { status: 'Sent Back', sentBackAt: serverTimestamp(), sentBackBy: currentUser?.email || '', sentBackReason: sendBackReason.trim(), updatedAt: serverTimestamp() });
       showSuccess('Audit sent back');
       setSentBackTo({ phone: auditorPhone, name: safeAudit.auditorName, reason: sendBackReason.trim(), refId: safeAudit.auditRefId });
       setSendBackReason('');

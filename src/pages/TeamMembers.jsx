@@ -128,7 +128,7 @@ export default function TeamMembers() {
     setLoading(true);
     try {
       const [usersSnap, empSnap] = await Promise.all([
-        getDocs(query(collection(db, 'users'), where('companyId', '==', companyId))),
+        getDocs(query(collection(db, 'users'), where('companyId', '==', companyId), limit(200))),
         getDocs(query(collection(db, 'companies', companyId, 'employees'), limit(500))),
       ]);
       const emps = empSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -224,7 +224,7 @@ export default function TeamMembers() {
     setSaving(true);
     try {
       const userRef = doc(db, 'users', email);
-      const existingSnap = await getDocs(query(collection(db, 'users'), where('email', '==', email)));
+      const existingSnap = await getDocs(query(collection(db, 'users'), where('email', '==', email), limit(1)));
       let userDocId = email;
 
       if (!existingSnap.empty) {
@@ -359,7 +359,7 @@ export default function TeamMembers() {
           updatedAt: new Date(),
         });
       }
-      await updateDoc(doc(db, 'users', permissionsTarget.id), { permissions: permissionsForm }).catch(() => {});
+      await updateDoc(doc(db, 'users', permissionsTarget.id), { permissions: permissionsForm });
       success(
         `Permissions updated for ${permissionsTarget.name || permissionsTarget.email || 'member'}`,
       );
