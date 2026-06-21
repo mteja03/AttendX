@@ -683,6 +683,7 @@ export default function Leave() {
         {showBalance ? '▼' : '▶'} Leave Balance
       </button>
       {showBalance && (
+        <>
         <div className="lg:hidden space-y-3 mb-6">
           {Object.entries(leaveBalance).map(([empId, row]) => {
             const emp = employeeMap[empId];
@@ -777,6 +778,7 @@ export default function Leave() {
           </table>
           <p className="text-xs text-gray-400 px-4 py-2 border-t border-slate-100">* Pro-rated based on joining date (calendar year).</p>
         </div>
+        </>
       )}
 
       <div className="overflow-x-auto scrollbar-none -mx-4 px-4 lg:mx-0 lg:px-0 mb-4">

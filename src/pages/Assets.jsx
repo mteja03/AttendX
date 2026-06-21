@@ -2152,6 +2152,7 @@ export default function Assets() {
             </div>
           )}
           {(assetView === 'all' || assetView === 'consumable') && consumableAssets.length > 0 && (
+            <>
             <div className="lg:hidden space-y-3">
               {consumableAssets.map((a) => {
                 const total = Number(a.totalStock) || 0;
@@ -2261,6 +2262,7 @@ export default function Assets() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
           {assetView === 'consumable' && consumableAssets.length === 0 && (
             <div className="mt-6 p-6 text-center text-slate-500 text-sm">No consumable assets found.</div>
