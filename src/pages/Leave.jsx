@@ -1465,7 +1465,7 @@ export default function Leave() {
         />
       )}
       {rejectLeaveModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center sm:p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
               <h3 className="text-sm font-semibold text-gray-800">Reject Leave Request</h3>

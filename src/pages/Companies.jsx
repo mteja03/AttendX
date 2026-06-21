@@ -914,7 +914,7 @@ export default function Companies() {
       )}
 
       {(showAddModal || editingCompany) && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/30 flex items-end sm:items-center justify-center z-50 sm:p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <h2 className="text-lg font-semibold text-slate-800 mb-4">
               {editingCompany ? 'Edit Company' : 'Add Company'}
@@ -1010,7 +1010,7 @@ export default function Companies() {
       )}
 
       {deactivateConfirm && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/30 flex items-end sm:items-center justify-center z-50 sm:p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-2">Deactivate company?</h3>
             <p className="text-sm text-slate-600 mb-4">
@@ -1037,7 +1037,7 @@ export default function Companies() {
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/30 flex items-end sm:items-center justify-center z-50 sm:p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-2">Delete Company?</h3>
             <p className="text-sm text-slate-600 mb-4">

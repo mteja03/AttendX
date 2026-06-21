@@ -585,7 +585,7 @@ export default function RecordAuditDetail({
         {showOverview && (
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {/* Record stats */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="border rounded-xl p-3 text-center bg-gray-50 border-gray-100"><p className="text-xl font-bold text-gray-800">{fillProgress.total}</p><p className="text-xs text-gray-400 mt-0.5">Total records</p></div>
               <div className="border rounded-xl p-3 text-center bg-green-50 border-green-100"><p className="text-xl font-bold text-green-700">{fillProgress.filled}</p><p className="text-xs text-green-600 mt-0.5">Filled</p></div>
               {score !== null ? (

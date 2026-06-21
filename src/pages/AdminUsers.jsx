@@ -685,8 +685,8 @@ export default function AdminUsers() {
       </div>
 
       {(showAddModal || editingUser) && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-800">{editingUser ? 'Edit User' : 'Add User'}</h3>
               <button type="button" onClick={() => { setShowAddModal(false); setEditingUser(null); }} className="text-gray-400 hover:text-gray-600">✕</button>
@@ -702,7 +702,7 @@ export default function AdminUsers() {
               </div>
             )}
             {!editingUser && (
-              <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
                 {[{ id: 'employee', icon: '👤', label: 'Select Employee', sub: 'From your employee list' }, { id: 'manual', icon: '✉️', label: 'Enter Manually', sub: 'Gmail + Full Name' }].map((m) => (
                   <button key={m.id} type="button" onClick={() => { setAddMethod(m.id); setForm((prev) => ({ ...prev, email: '', name: '', selectedEmpId: '' })); setEmpSearch(''); }} className={`p-4 rounded-xl border-2 text-left transition-all ${addMethod === m.id ? 'border-[#1B6B6B] bg-[#E8F5F5]' : 'border-gray-200 hover:border-gray-300'}`}>
                     <span className="text-2xl block mb-2">{m.icon}</span>
@@ -837,7 +837,7 @@ export default function AdminUsers() {
 
       {editingPermissionsUser && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-slate-800 mb-1">Permissions</h3>
             <p className="text-sm text-gray-400 mb-4">{editingPermissionsUser.name || editingPermissionsUser.email} · {ROLE_LABELS[editingPermissionsUser.role] || editingPermissionsUser.role}</p>
             <div className="space-y-2">
@@ -860,7 +860,7 @@ export default function AdminUsers() {
 
       {removeConfirm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full max-w-sm p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-2">Remove user?</h3>
             <p className="text-sm text-slate-600 mb-4">This will permanently delete <strong>{removeConfirm.name || removeConfirm.email}</strong>.</p>
             <div className="flex justify-end gap-3">

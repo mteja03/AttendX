@@ -401,7 +401,7 @@ export default function AssignAuditModal({
           {/* ── Schedule ── */}
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Schedule</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div><label className="text-xs text-gray-400 block mb-1">Start date</label><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#1B6B6B]" /></div>
               <div><label className="text-xs text-gray-400 block mb-1">End date *</label><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#1B6B6B]" /></div>
             </div>
@@ -520,7 +520,7 @@ export default function AssignAuditModal({
                 <h2 className="text-sm font-semibold text-gray-800">Review before assigning</h2>
                 <p className="text-xs text-gray-400 mt-0.5">{selectedTemplates.length} template{selectedTemplates.length !== 1 ? 's' : ''} · check details before sending</p>
               </div>
-              <button type="button" onClick={() => setPreviewMode(false)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-xs">✕</button>
+              <button type="button" onClick={() => setPreviewMode(false)} className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-xs">✕</button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4">

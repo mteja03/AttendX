@@ -1903,7 +1903,7 @@ export default function Employees() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-500">
                   <div>
                     <span className="text-gray-400">Designation</span>
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -2458,7 +2458,7 @@ export default function Employees() {
 
               <div className="mt-6 p-4 bg-[#E1F5EE] rounded-xl border border-[#9FE1CB]">
                 <p className="text-xs font-medium text-[#0F6E56] mb-2">Ready to add employee</p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[
                     { l: 'Name', v: form.fullName },
                     { l: 'Emp ID', v: form.empId || '(auto)' },

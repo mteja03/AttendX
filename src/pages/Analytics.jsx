@@ -84,7 +84,7 @@ function SkeletonPage() {
     <div className="p-8 animate-pulse">
       <div className="h-7 w-52 bg-gray-200 rounded-lg mb-2" />
       <div className="h-4 w-32 bg-gray-100 rounded mb-8" />
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[1, 2, 3, 4].map((i) => <div key={i} className="h-24 bg-gray-100 rounded-2xl" />)}
       </div>
       <div className="grid grid-cols-2 gap-4 mb-4">
@@ -407,7 +407,7 @@ export default function Analytics() {
         </ChartCard>
 
         <ChartCard title="Audit performance" sub="Closed vs overdue per company">
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             {[
               { label: 'Total', val: kpis.totalAudits, color: '#374151' },
               { label: 'Closed', val: kpis.closedAudits, color: '#3B6D11' },

@@ -617,7 +617,7 @@ export default function TeamMembers() {
                 <h2 className="text-sm font-semibold text-gray-800">Grant AttendX access</h2>
                 <p className="text-xs text-gray-400 mt-0.5">Select an employee and assign their role</p>
               </div>
-              <button type="button" onClick={() => setShowAddModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-xs">✕</button>
+              <button type="button" onClick={() => setShowAddModal(false)} className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-xs">✕</button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4">
             <div className="relative mb-4">
@@ -821,7 +821,7 @@ export default function TeamMembers() {
           <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-800">Change role</h3>
-              <button type="button" onClick={() => setChangeRoleFor(null)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-xs">✕</button>
+              <button type="button" onClick={() => setChangeRoleFor(null)} className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-xs">✕</button>
             </div>
             <div className="space-y-2 mb-4">
               {TEAM_MEMBER_ROLES.map((r) => (

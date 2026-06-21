@@ -2435,7 +2435,7 @@ export default function Assets() {
 
               {/* Step 1 — Mode picker */}
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Step 1 — Asset mode</p>
-              <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
                 {[
                   {
                     mode: 'trackable',
@@ -2499,7 +2499,7 @@ export default function Assets() {
                     const shown = relevantTypes.slice(0, 8);
                     const typeIcons = { Laptop: '💻', Desktop: '🖥️', 'Mobile Phone': '📱', 'SIM Card': '📶', Tablet: '📟', 'ID Card': '🪪', 'Access Card': '💳', Uniform: '👔', Headset: '🎧', Charger: '🔌', Vehicle: '🚗', Tools: '🔧', Furniture: '🪑' };
                     return (
-                      <div className="grid grid-cols-4 gap-2 mb-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
                         {shown.map((t) => (
                           <button
                             key={t.name}
@@ -2554,7 +2554,7 @@ export default function Assets() {
 
                   {selectedAddAssetMode === 'trackable' ? (
                     <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Asset name</label>
                           <input name="name" value={form.name} onChange={handleFormChange} placeholder={`e.g. ${form.type} — Dell`} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
@@ -2569,7 +2569,7 @@ export default function Assets() {
                           {formErrors.assetId && <p className="text-red-500 text-xs mt-1">{formErrors.assetId}</p>}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Brand</label>
                           <input name="brand" value={form.brand} onChange={handleFormChange} placeholder="e.g. Dell, Apple" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
@@ -2590,7 +2590,7 @@ export default function Assets() {
                         <label className="block text-xs font-medium text-gray-500 mb-1.5">Item name</label>
                         <input name="name" value={form.name} onChange={handleFormChange} placeholder={`e.g. ${form.type}`} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Total quantity in stock</label>
                           <input type="number" name="totalStock" value={form.totalStock} onChange={handleFormChange} placeholder="0" min={0} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
@@ -2621,7 +2621,7 @@ export default function Assets() {
                     <span className="ml-2 text-gray-300 font-normal normal-case tracking-normal">optional</span>
                   </p>
 
-                  <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                     {selectedAddAssetMode === 'trackable' ? (
                       <>
                         <div>
@@ -2638,7 +2638,7 @@ export default function Assets() {
                         </div>
                       </>
                     ) : (
-                      <div className="col-span-3 grid grid-cols-2 gap-3">
+                      <div className="col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Price per unit (₹)</label>
                           <input type="number" name="purchasePrice" value={form.purchasePrice} onChange={handleFormChange} placeholder="0" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
@@ -2648,7 +2648,7 @@ export default function Assets() {
                   </div>
 
                   {selectedAddAssetMode === 'trackable' && (
-                    <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                       <div>
                         <label className="block text-xs font-medium text-gray-500 mb-1.5">Condition</label>
                         <select name="condition" value={form.condition} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]">
@@ -3428,7 +3428,7 @@ export default function Assets() {
                 {(() => { const ws = getWarrantyState(detailAsset.warrantyExpiry); return ws ? <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${ws.color}`}>{ws.label}</span> : null; })()}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { label: 'Brand', value: detailAsset.brand },
                   { label: 'Model', value: detailAsset.model },
