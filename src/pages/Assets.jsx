@@ -2152,7 +2152,38 @@ export default function Assets() {
             </div>
           )}
           {(assetView === 'all' || assetView === 'consumable') && consumableAssets.length > 0 && (
-            <div className="overflow-x-auto">
+            <div className="lg:hidden space-y-3">
+              {consumableAssets.map((a) => {
+                const total = Number(a.totalStock) || 0;
+                const available = Number(a.availableStock) || 0;
+                const issuedCount = Number(a.issuedCount) || 0;
+                const pct = total ? Math.min((available / total) * 100, 100) : 0;
+                return (
+                  <div key={a.id} className="bg-white border border-gray-100 rounded-2xl p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-9 h-9 rounded-lg bg-green-50 flex items-center justify-center text-lg flex-shrink-0">{getAssetIcon(a.type)}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{a.name || '—'}</p>
+                        <p className="text-xs text-gray-400">{a.type || '—'} · {a.assetId || ''}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                        <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs text-gray-500 whitespace-nowrap">{available} / {total}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>{issuedCount} issued · {available} available</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {consumableAssets.length === 0 && (
+                <div className="text-center py-6 text-sm text-gray-400">No consumable assets</div>
+              )}
+            </div>
+            <div className="hidden lg:block overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
