@@ -1,17 +1,33 @@
-import { collection, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getCountFromServer, query, updateDoc, where, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 export async function updateCompanyCounts(companyId) {
   if (!companyId) return;
   try {
-    const snap = await getDocs(collection(db, 'companies', companyId, 'employees'));
-    const employees = snap.docs.map((d) => d.data());
+    const employeesRef = collection(db, 'companies', companyId, 'employees');
+    const countDocs = async (refOrQuery) => {
+      const snap = await getCountFromServer(refOrQuery);
+      return snap.data().count || 0;
+    };
+    const [
+      employeeCount,
+      activeEmployeeCount,
+      inactiveEmployeeCount,
+      noticePeriodCount,
+      offboardingCount,
+    ] = await Promise.all([
+      countDocs(employeesRef),
+      countDocs(query(employeesRef, where('status', '==', 'Active'))),
+      countDocs(query(employeesRef, where('status', '==', 'Inactive'))),
+      countDocs(query(employeesRef, where('status', '==', 'Notice Period'))),
+      countDocs(query(employeesRef, where('status', '==', 'Offboarding'))),
+    ]);
     const counts = {
-      employeeCount: employees.length,
-      activeEmployeeCount: employees.filter((e) => e.status === 'Active').length,
-      inactiveEmployeeCount: employees.filter((e) => e.status === 'Inactive').length,
-      noticePeriodCount: employees.filter((e) => e.status === 'Notice Period').length,
-      offboardingCount: employees.filter((e) => e.status === 'Offboarding').length,
+      employeeCount,
+      activeEmployeeCount,
+      inactiveEmployeeCount,
+      noticePeriodCount,
+      offboardingCount,
       lastActivityAt: serverTimestamp(),
     };
     await updateDoc(doc(db, 'companies', companyId), counts);

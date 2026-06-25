@@ -445,7 +445,7 @@ export default function Employees() {
   const { success, error: showError } = useToast();
   const { currentUser, role: userRole, signOut } = useAuth();
   const { company } = useCompany();
-  const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
+  const canEditEmployees = userRole === 'admin' || userRole === 'companyadmin' || userRole === 'hrmanager';
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);

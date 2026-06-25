@@ -191,7 +191,7 @@ function getDriveConfig() {
     email = clientEmail.value() || process.env.DRIVE_CLIENT_EMAIL;
     key = privateKey.value() || process.env.DRIVE_PRIVATE_KEY;
     root = rootFolderId.value() || process.env.DRIVE_ROOT_FOLDER_ID;
-  } catch (e) {
+  } catch {
     email = process.env.DRIVE_CLIENT_EMAIL;
     key = process.env.DRIVE_PRIVATE_KEY;
     root = process.env.DRIVE_ROOT_FOLDER_ID;
@@ -1082,4 +1082,3 @@ exports.dailyAuditActionOverdue = functions.pubsub
 
     return null;
   });
-

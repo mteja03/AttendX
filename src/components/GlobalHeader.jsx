@@ -35,12 +35,35 @@ export default function GlobalHeader({ onOpenMenu } = {}) {
 
     const unsubs = [];
     let leaveItems = [];
-    let auditItems = [];
+    let auditItemsBySource = { email: [], legacyId: [] };
+    const email = currentUser.email?.toLowerCase() || '';
 
     const updateState = () => {
-      const all = [...leaveItems, ...auditItems].sort((a, b) => b.timestamp - a.timestamp);
+      const seen = new Set();
+      const all = [...leaveItems, ...auditItemsBySource.email, ...auditItemsBySource.legacyId]
+        .filter((item) => {
+          if (seen.has(item.id)) return false;
+          seen.add(item.id);
+          return true;
+        })
+        .sort((a, b) => b.timestamp - a.timestamp);
       setPendingCount(all.length);
       setNotifications(all.slice(0, 5));
+    };
+
+    const updateAuditItems = (source, snap) => {
+      auditItemsBySource = {
+        ...auditItemsBySource,
+        [source]: snap.docs.map((d) => ({
+          id: `audit-${d.id}`,
+          type: 'audit',
+          title: 'New audit assigned',
+          subtitle: d.data().auditTypeName || 'Audit',
+          timestamp: d.data().createdAt?.toDate?.() || new Date(),
+          link: `/company/${effectiveCompanyId}/audit`,
+        })),
+      };
+      updateState();
     };
 
     if (role === 'admin' || role === 'companyadmin' || role === 'hrmanager') {
@@ -64,24 +87,25 @@ export default function GlobalHeader({ onOpenMenu } = {}) {
     }
 
     if (role === 'auditor' || role === 'auditmanager') {
-      const auditQuery = query(
-        collection(db, `companies/${effectiveCompanyId}/audits`),
-        where('auditorId', '==', currentUser.uid),
-        where('status', '==', 'Assigned'),
-        limit(10),
-      );
-      const unsubAudit = onSnapshot(auditQuery, (snap) => {
-        auditItems = snap.docs.map((d) => ({
-          id: `audit-${d.id}`,
-          type: 'audit',
-          title: 'New audit assigned',
-          subtitle: d.data().auditTypeName || 'Audit',
-          timestamp: d.data().createdAt?.toDate?.() || new Date(),
-          link: `/company/${effectiveCompanyId}/audit`,
-        }));
-        updateState();
-      });
-      unsubs.push(unsubAudit);
+      if (email) {
+        const auditByEmailQuery = query(
+          collection(db, `companies/${effectiveCompanyId}/audits`),
+          where('auditorEmail', '==', email),
+          where('status', '==', 'Assigned'),
+          limit(10),
+        );
+        unsubs.push(onSnapshot(auditByEmailQuery, (snap) => updateAuditItems('email', snap)));
+      }
+
+      if (currentUser.uid) {
+        const auditByUidQuery = query(
+          collection(db, `companies/${effectiveCompanyId}/audits`),
+          where('auditorId', '==', currentUser.uid),
+          where('status', '==', 'Assigned'),
+          limit(10),
+        );
+        unsubs.push(onSnapshot(auditByUidQuery, (snap) => updateAuditItems('legacyId', snap)));
+      }
     }
 
     return () => {

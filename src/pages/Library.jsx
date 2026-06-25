@@ -525,8 +525,8 @@ export default function Library() {
   const { currentUser, role } = useAuth();
   const { company } = useCompany();
   const { success, error: showError } = useToast();
-  const canEdit = role === 'admin' || role === 'hrmanager';
-  const canDeletePolicy = role === 'admin' || role === 'hrmanager';
+  const canEdit = role === 'admin' || role === 'companyadmin' || role === 'hrmanager';
+  const canDeletePolicy = role === 'admin' || role === 'companyadmin' || role === 'hrmanager';
 
   useEffect(() => {
     trackPageView('Library');

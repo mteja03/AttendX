@@ -660,9 +660,9 @@ export default function EmployeeProfile() {
   const isHRManager = userRole === 'hrmanager';
   const isCompanyAdmin = userRole === 'companyadmin';
   const canViewBankDetails = isAdmin || isHRManager || isCompanyAdmin;
-  const canDeleteEmployee = userRole === 'admin';
-  const canEditEmployees = userRole === 'admin' || userRole === 'hrmanager';
-  const canUploadPhoto = userRole === 'admin' || userRole === 'hrmanager';
+  const canDeleteEmployee = userRole === 'admin' || userRole === 'companyadmin';
+  const canEditEmployees = userRole === 'admin' || userRole === 'companyadmin' || userRole === 'hrmanager';
+  const canUploadPhoto = userRole === 'admin' || userRole === 'companyadmin' || userRole === 'hrmanager';
   const hasDriveUploadRole = PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(userRole);
   const { success, error: showError } = useToast();
   const [employee, setEmployee] = useState(null);

@@ -54,6 +54,7 @@ export default function AssignAuditModal({
     return source.map((e) => ({
       ...e,
       fullName: (e.fullName || e.name || e.displayName || '').trim() || e.email || '',
+      email: (e.email || '').trim().toLowerCase(),
       designation: e.designation || e.role || '',
     }));
   }, [auditors, employees]);
@@ -219,7 +220,7 @@ export default function AssignAuditModal({
           teamMembers: selectedTeamMembers.map((e) => ({
             id: e.id,
             fullName: e.fullName || '',
-            email: e.email || '',
+            email: (e.email || '').trim().toLowerCase(),
             empId: e.empId || '',
             designation: e.designation || '',
           })),
@@ -345,7 +346,7 @@ export default function AssignAuditModal({
               )}
               {auditorEmployees.map((emp) => (
                 <label key={emp.id} className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors ${auditorId === emp.id ? 'bg-[#E1F5EE]/40' : ''}`}>
-                  <input type="radio" name="lead-auditor" checked={auditorId === emp.id} onChange={() => { setAuditorId(emp.id); setAuditorName(emp.fullName || emp.name || emp.email || ''); setAuditorEmail(emp.email || ''); setAuditorPhone(emp.mobile || emp.phone || emp.mobileNumber || ''); }} className="flex-shrink-0 accent-[#1B6B6B]" />
+                  <input type="radio" name="lead-auditor" checked={auditorId === emp.id} onChange={() => { setAuditorId(emp.id); setAuditorName(emp.fullName || emp.name || emp.email || ''); setAuditorEmail((emp.email || '').trim().toLowerCase()); setAuditorPhone(emp.mobile || emp.phone || emp.mobileNumber || ''); }} className="flex-shrink-0 accent-[#1B6B6B]" />
                   <div className="w-7 h-7 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{(emp.fullName || emp.email || '').charAt(0).toUpperCase()}</div>
                   <div className="min-w-0">
                     <p className="text-xs font-medium text-gray-800 truncate">{emp.fullName}</p>

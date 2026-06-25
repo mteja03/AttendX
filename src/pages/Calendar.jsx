@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   addDoc,
@@ -11,7 +11,6 @@ import {
   query,
   serverTimestamp,
   where,
-  writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,7 +18,7 @@ import { useToast } from '../contexts/ToastContext';
 import { toDisplayDate, toJSDate } from '../utils';
 import {
   WEEKDAYS,
-  INDIAN_HOLIDAYS_2026,
+  getIndianHolidayEvents,
   COLOR_PRESETS,
   getEventStyle,
   dateKey,
@@ -33,7 +32,7 @@ export default function Calendar() {
   const navigate = useNavigate();
   const { currentUser, role } = useAuth();
   const { success, error: showError } = useToast();
-  const canManage = role === 'admin' || role === 'hrmanager';
+  const canManage = role === 'admin' || role === 'companyadmin' || role === 'hrmanager';
 
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
@@ -87,42 +86,6 @@ export default function Calendar() {
     color: '#1B6B6B',
   });
 
-  const seedHolidaysIfNeeded = useCallback(async () => {
-    if (!companyId || !currentUser?.email) return;
-    const colRef = collection(db, 'companies', companyId, 'events');
-    const snap = await getDocs(colRef);
-    const hasHoliday = snap.docs.some((d) => d.data().type === 'holiday');
-    if (hasHoliday) return;
-    const batch = writeBatch(db);
-    const ts = serverTimestamp();
-    INDIAN_HOLIDAYS_2026.forEach((h) => {
-      const ref = doc(colRef);
-      batch.set(ref, {
-        title: h.title,
-        type: 'holiday',
-        date: new Date(`${h.date}T12:00:00`),
-        endDate: null,
-        description: '',
-        color: '#EF4444',
-        isPublic: true,
-        createdAt: ts,
-        createdBy: currentUser.email,
-      });
-    });
-    await batch.commit();
-  }, [companyId, currentUser]);
-
-  useEffect(() => {
-    if (!companyId) return;
-    (async () => {
-      try {
-        await seedHolidaysIfNeeded();
-      } catch (e) {
-        if (import.meta.env.DEV) console.error(e);
-      }
-    })();
-  }, [companyId, seedHolidaysIfNeeded]);
-
   useEffect(() => {
     if (!companyId) return () => {};
     const unsub = onSnapshot(
@@ -171,9 +134,35 @@ export default function Calendar() {
     [leaveList, employees],
   );
 
+  const [builtinHolidayEvents, setBuiltinHolidayEvents] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const events = await getIndianHolidayEvents(viewYear);
+        if (!cancelled) {
+          setBuiltinHolidayEvents(events);
+        }
+      } catch (err) {
+        if (import.meta.env.DEV) console.error('Holiday load failed:', err);
+        if (!cancelled) {
+          setBuiltinHolidayEvents([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [viewYear]);
+
   const combinedEvents = useMemo(() => {
     const list = [];
     const y = viewYear;
+
+    builtinHolidayEvents.forEach((ev) => {
+      list.push({ ...ev, source: 'builtin' });
+    });
 
     fsEvents.forEach((ev) => {
       expandEventDays(ev).forEach((e) => list.push({ ...e, source: 'firestore' }));
@@ -236,8 +225,17 @@ export default function Calendar() {
       }
     });
 
-    return list;
-  }, [fsEvents, employees, validLeaves, viewYear]);
+    const deduped = new Map();
+    list.forEach((event) => {
+      const eventDate = event._day || event.date;
+      const key = `${event.type || 'event'}|${dateKey(eventDate)}|${String(event.title || '').trim().toLowerCase()}`;
+      if (!deduped.has(key)) {
+        deduped.set(key, event);
+      }
+    });
+
+    return [...deduped.values()];
+  }, [builtinHolidayEvents, fsEvents, employees, validLeaves, viewYear]);
 
   const eventsByDay = useMemo(() => {
     const map = {};

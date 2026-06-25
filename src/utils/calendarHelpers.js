@@ -2,20 +2,52 @@ import { toJSDate } from './index';
 
 export const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-export const INDIAN_HOLIDAYS_2026 = [
-  { title: "New Year's Day", date: '2026-01-01', type: 'holiday' },
-  { title: 'Republic Day', date: '2026-01-26', type: 'holiday' },
-  { title: 'Holi', date: '2026-03-03', type: 'holiday' },
-  { title: 'Good Friday', date: '2026-04-03', type: 'holiday' },
-  { title: 'Dr. Ambedkar Jayanti', date: '2026-04-14', type: 'holiday' },
-  { title: 'Labour Day', date: '2026-05-01', type: 'holiday' },
-  { title: 'Independence Day', date: '2026-08-15', type: 'holiday' },
-  { title: 'Gandhi Jayanti', date: '2026-10-02', type: 'holiday' },
-  { title: 'Dussehra', date: '2026-10-20', type: 'holiday' },
-  { title: 'Diwali', date: '2026-11-08', type: 'holiday' },
-  { title: 'Diwali Holiday', date: '2026-11-09', type: 'holiday' },
-  { title: 'Christmas', date: '2026-12-25', type: 'holiday' },
-];
+let indiaHolidaysPromise = null;
+
+async function getIndiaHolidays() {
+  if (!indiaHolidaysPromise) {
+    indiaHolidaysPromise = import('date-holidays').then((mod) => {
+      const Holidays = mod.default ?? mod;
+      const holidays = new Holidays('IN');
+      try {
+        holidays.setLanguages('en');
+      } catch {
+        // Keep the library default if the English locale is unavailable.
+      }
+      return holidays;
+    });
+  }
+  return indiaHolidaysPromise;
+}
+
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export async function getIndianHolidayEvents(year) {
+  const indiaHolidays = await getIndiaHolidays();
+  return indiaHolidays
+    .getHolidays(year)
+    .filter((holiday) => holiday?.type === 'public')
+    .map((holiday) => {
+      const start = holiday.start instanceof Date ? holiday.start : new Date(holiday.date);
+      const safeStart = Number.isNaN(start.getTime()) ? new Date(year, 0, 1, 12, 0, 0) : start;
+      return {
+        id: `holiday_${year}_${dateKey(safeStart)}_${slugify(holiday.name)}`,
+        title: holiday.name,
+        type: 'holiday',
+        date: safeStart,
+        endDate: null,
+        description: '',
+        color: '#EF4444',
+        isPublic: true,
+        source: 'builtin',
+      };
+    });
+}
 
 export const COLOR_PRESETS = ['#1B6B6B', '#4ECDC4', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#10B981'];
 

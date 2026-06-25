@@ -120,7 +120,7 @@ export default function TeamMembers() {
   const [savingPerms, setSavingPerms] = useState(false);
   const actionsMenuRef = useRef(null);
 
-  const canAddManagers = userRole === 'admin' || userRole === 'hrmanager';
+  const canAddManagers = userRole === 'admin' || userRole === 'companyadmin' || userRole === 'hrmanager';
   const roleOptions = availableRolesToAdd(userRole);
 
   const fetchData = useCallback(async () => {
