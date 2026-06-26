@@ -14,7 +14,7 @@ import {
   arrayUnion,
   deleteField,
 } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, uploadBytesResumable, getBlob, deleteObject } from 'firebase/storage';
 import Cropper from 'react-easy-crop';
 import { db, storage } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -1325,9 +1325,9 @@ export default function EmployeeProfile() {
       fileName: file.name,
     });
 
-    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-    return { downloadURL };
   };
+
+  const getEmployeeDocumentPath = (employeeId, docId) => `companies/${companyId}/documents/${employeeId}/${docId}`;
 
   const openEdit = () => {
     if (!employee) return;
@@ -1660,17 +1660,14 @@ export default function EmployeeProfile() {
     try {
       const categoryFromChecklist = findDocCategory(docId, activeChecklist);
       const finalCategoryName = categoryFromChecklist || activeChecklist[0]?.category || 'Documents';
-      const timestamp = Date.now();
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = `companies/${companyId}/documents/${employee.id}/${timestamp}_${safeName}`;
-      const { downloadURL } = await uploadFileWithProgress({ file, path, docId, mode: 'upload' });
+      const path = getEmployeeDocumentPath(employee.id, effectiveDocType.id);
+      await uploadFileWithProgress({ file, path, docId, mode: 'upload' });
       const entry = {
         id: effectiveDocType.id,
         name: effectiveDocType.name,
         category: finalCategoryName,
         fileName: file.name,
         storagePath: path,
-        downloadURL,
         uploadedAt: new Date(),
         uploadedBy: currentUser?.email || null,
         fileSize: file.size,
@@ -1710,18 +1707,15 @@ export default function EmployeeProfile() {
     setUploadingDocId(docId);
     setReplacingDocId(docId);
     try {
-      const timestamp = Date.now();
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = `companies/${companyId}/documents/${employee.id}/${timestamp}_${safeName}`;
+      const path = getEmployeeDocumentPath(employee.id, effectiveDocType.id);
       const oldStoragePath = docEntry.storagePath;
-      const { downloadURL } = await uploadFileWithProgress({ file, path, docId, mode: 'replace' });
+      await uploadFileWithProgress({ file, path, docId, mode: 'replace' });
       const newEntry = {
         ...docEntry,
         id: effectiveDocType.id,
         name: effectiveDocType.name,
         fileName: file.name,
         storagePath: path,
-        downloadURL,
         uploadedAt: new Date(),
         uploadedBy: currentUser?.email || null,
         fileSize: file.size,
@@ -1729,7 +1723,7 @@ export default function EmployeeProfile() {
       const nextDocuments = [...(employee?.documents || []).filter((d) => d?.id !== docId), newEntry];
       await persistEmployeeDocuments(nextDocuments);
       if (oldStoragePath && oldStoragePath !== path) {
-        void deleteObject(storageRef(storage, oldStoragePath)).catch(() => {});
+        await deleteObject(storageRef(storage, oldStoragePath));
       }
       success(`${docEntry.name} replaced successfully`);
     } catch (err) {
@@ -1765,16 +1759,41 @@ export default function EmployeeProfile() {
   const handleViewDoc = async (docEntry) => {
     if (!docEntry?.storagePath) return;
     setViewingDocId(docEntry.id || docEntry.storagePath);
-    const popup = window.open('', '_blank', 'noopener,noreferrer');
+    const popup = window.open('', '_blank');
     try {
+      if (popup?.document) {
+        popup.document.open();
+        popup.document.write(`
+          <html>
+            <head>
+              <title>Loading document...</title>
+              <style>
+                body { font-family: sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; color: #1f2937; background: #f8fafc; }
+                .wrap { text-align: center; }
+                .spinner { width: 32px; height: 32px; border-radius: 9999px; border: 3px solid #cbd5e1; border-top-color: #1B6B6B; animation: spin 1s linear infinite; margin: 0 auto 12px; }
+                @keyframes spin { to { transform: rotate(360deg); } }
+              </style>
+            </head>
+            <body>
+              <div class="wrap">
+                <div class="spinner"></div>
+                <div>Loading document...</div>
+              </div>
+            </body>
+          </html>
+        `);
+        popup.document.close();
+      }
       const fileRef = storageRef(storage, docEntry.storagePath);
-      const url = docEntry.downloadURL || await getDownloadURL(fileRef);
+      const blob = await getBlob(fileRef);
+      const url = URL.createObjectURL(blob);
       if (popup) {
         popup.location.href = url;
         popup.focus();
       } else {
-        window.open(url, '_blank', 'noopener,noreferrer');
+        window.open(url, '_blank');
       }
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
     } catch {
       if (popup && !popup.closed) popup.close();
       showError('Failed to load document');
@@ -1787,13 +1806,15 @@ export default function EmployeeProfile() {
     setViewingDocId(docEntry.id || docEntry.storagePath);
     try {
       const fileRef = storageRef(storage, docEntry.storagePath);
-      const blobUrl = docEntry.downloadURL || await getDownloadURL(fileRef);
+      const blob = await getBlob(fileRef);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
       a.download = docEntry.fileName || 'document';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
     } catch {
       showError('Failed to load document');
     }
