@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, isTokenValid } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
-import { PLATFORM_CONFIG } from '../config/constants';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
@@ -300,14 +299,6 @@ export default function GlobalHeader({ onOpenMenu } = {}) {
                   <span className="inline-block mt-2 px-2 py-0.5 rounded-md text-[10px] font-medium bg-[#E1F5EE] text-[#0F6E56] uppercase tracking-wide">
                     {role}
                   </span>
-                )}
-                {PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(role) && (
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isTokenValid() ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                    <span className="text-xs text-gray-500">
-                      Drive: {isTokenValid() ? 'Connected' : 'Session expired'}
-                    </span>
-                  </div>
                 )}
               </div>
               {effectiveCompanyId && (

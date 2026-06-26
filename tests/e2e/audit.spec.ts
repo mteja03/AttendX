@@ -23,6 +23,11 @@ test.describe('Audit', () => {
     // Audit page has icon-only view toggles — verify status filter tabs instead
     // which are the reliable signal that the audit board has loaded
     await page.waitForSelector('text=Assigned', { timeout: 20_000, state: 'visible' });
+    const listViewButton = page.getByRole('button', { name: 'List' });
+    if (await listViewButton.count()) {
+      await listViewButton.first().click();
+      await page.waitForTimeout(1000);
+    }
     const body = await page.locator('body').textContent() ?? '';
     expect(body).toMatch(/Assigned|In Progress|Under Review|Closed/);
     // Also verify audit list has loaded (ref IDs present)

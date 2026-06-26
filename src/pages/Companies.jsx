@@ -13,10 +13,10 @@ import {
   limit,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { ref as storageRef, deleteObject, listAll } from 'firebase/storage';
+import { db, storage } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { findAndDeleteFolder, deleteFileFromDrive } from '../utils/googleDrive';
 import { updateCompanyCounts } from '../utils/updateCompanyCounts';
 
 const COLOR_PRESETS = [
@@ -172,7 +172,7 @@ function CardSkeleton() {
 
 export default function Companies() {
   const navigate = useNavigate();
-  const { currentUser, getValidToken, role: userRole } = useAuth();
+  const { currentUser, role: userRole } = useAuth();
   const { success, error: showError } = useToast();
   const [companies, setCompanies] = useState([]);
   const [users, setUsers] = useState([]);
@@ -475,8 +475,7 @@ export default function Companies() {
     setDeleting(true);
     const companyId = company.id;
     const companyName = company.name || 'Company';
-    let driveCleanupOk = true;
-    let driveToken = null;
+    let storageCleanupOk = true;
 
     try {
       const employeesSnap = await getDocs(collection(db, 'companies', companyId, 'employees'));
@@ -489,36 +488,19 @@ export default function Companies() {
         return;
       }
 
-      // Step 1 — Collect all Drive file IDs from all employees (none when subcollection is empty)
-      const driveFileIds = [];
-      employeesSnap.docs.forEach((empDoc) => {
-        const data = empDoc.data();
-        const docs = data.documents || [];
-        docs.forEach((d) => {
-          if (d.fileId) driveFileIds.push(d.fileId);
-        });
-      });
-
-      // Step 2 & 3 — Delete all Drive files and company folder
-      driveToken = await getValidToken();
-      if (driveToken) {
-        for (const fileId of driveFileIds) {
-          try {
-            await deleteFileFromDrive(driveToken, fileId);
-          } catch {
-            driveCleanupOk = false;
-          }
+      try {
+        const docsRef = storageRef(storage, `companies/${companyId}/documents`);
+        const docsList = await listAll(docsRef);
+        await Promise.allSettled(docsList.items.map((item) => deleteObject(item)));
+        for (const prefix of docsList.prefixes) {
+          const subList = await listAll(prefix);
+          await Promise.allSettled(subList.items.map((item) => deleteObject(item)));
         }
-        try {
-          await findAndDeleteFolder(driveToken, companyName, 'AttendX HR Documents');
-        } catch {
-          driveCleanupOk = false;
-        }
-      } else {
-        driveCleanupOk = false;
+      } catch {
+        storageCleanupOk = false;
       }
 
-      // Step 4 — Delete Firestore data (existing logic)
+      // Delete Firestore data
       await deleteSubcollection(companyId, 'attendance');
       await deleteSubcollection(companyId, 'leave');
       await deleteSubcollection(companyId, 'employees');
@@ -534,17 +516,11 @@ export default function Companies() {
 
       setDeleteConfirm(null);
 
-      // Step 5 — Toast based on Drive cleanup status
-      if (driveCleanupOk) {
+      // Toast based on storage cleanup status
+      if (storageCleanupOk) {
         success('Company and all documents deleted permanently');
-      } else if (!driveToken) {
-        showError(
-          'Company deleted. Please manually remove the company folder from Google Drive (Google Drive access token not available).',
-        );
       } else {
-        showError(
-          `Company deleted. Please manually remove the ${companyName} folder from Google Drive.`,
-        );
+        showError('Company deleted. Some stored documents may need manual cleanup.');
       }
     } catch (err) {
       if (import.meta.env.DEV) console.error(err);

@@ -15,16 +15,15 @@ import {
   arrayRemove,
   deleteField,
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import Cropper from 'react-easy-crop';
-import { db, app } from '../firebase/config';
+import { db, storage } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { PLATFORM_CONFIG } from '../config/constants';
 import { SkeletonTable } from '../components/SkeletonRow';
 import { useCompany } from '../contexts/CompanyContext';
 import { useToast } from '../contexts/ToastContext';
 import { DOCUMENT_CHECKLIST, getDocById } from '../utils/documentTypes';
-import { uploadEmployeeDocument, deleteFileFromDrive } from '../utils/googleDrive';
 import { toDisplayDate, toJSDate, toDateString, formatLakhs } from '../utils';
 import { whatsappUrl } from '../utils/whatsappUrl';
 import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
@@ -654,7 +653,7 @@ export default function EmployeeProfile() {
   const { companyId, empId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { currentUser, getValidToken, isTokenValid, role: authRole, signOut } = useAuth();
+  const { currentUser, role: authRole, signOut } = useAuth();
   const userRole = authRole;
   const isAdmin = userRole === 'admin';
   const isHRManager = userRole === 'hrmanager';
@@ -667,7 +666,6 @@ export default function EmployeeProfile() {
   const { success, error: showError } = useToast();
   const [employee, setEmployee] = useState(null);
   const isInactive = employee?.status === 'Inactive';
-  const isDriveConnected = hasDriveUploadRole && isTokenValid();
   const showDocManageUi = hasDriveUploadRole && !isInactive;
   const { company } = useCompany();
   const [allEmployees, setAllEmployees] = useState([]);
@@ -1530,18 +1528,11 @@ export default function EmployeeProfile() {
       }
 
       try {
-        const token = await getValidToken();
-        if (token) {
-          const { findAndDeleteFolder } = await import('../utils/googleDrive');
-          await findAndDeleteFolder(
-            token,
-            `${employee.empId} - ${employee.fullName}`,
-            getCompanyName(),
-          );
-        }
-      } catch (driveErr) {
-        if (import.meta.env.DEV) console.warn('Drive cleanup failed:', driveErr);
-      }
+        const { ref: sRef, listAll: sListAll, deleteObject: sDeleteObject } = await import('firebase/storage');
+        const empDocsRef = sRef(storage, `companies/${companyId}/documents/${employee.id}`);
+        const empDocsList = await sListAll(empDocsRef);
+        await Promise.allSettled(empDocsList.items.map((item) => sDeleteObject(item)));
+      } catch { /* ignore storage cleanup errors */ }
 
       try {
         await deleteEmployeePhoto(companyId, empId);
@@ -1565,11 +1556,6 @@ export default function EmployeeProfile() {
     } finally {
       setDeleting(false);
     }
-  };
-
-  const driveAccessError = (err) => {
-    const msg = err?.message || 'Upload failed';
-    showError(msg);
   };
 
   const validateFile = (file, docType) => {
@@ -1602,11 +1588,6 @@ export default function EmployeeProfile() {
 
   const handleUploadChecklistDoc = async (file, docId, docName) => {
     if (!employee) return;
-    const token = await getValidToken();
-    if (!token) {
-      showError('Please sign in again to upload documents');
-      return;
-    }
     const docType =
       activeChecklist
         .flatMap((c) => c.documents || [])
@@ -1629,24 +1610,22 @@ export default function EmployeeProfile() {
     try {
       const categoryFromChecklist = findDocCategory(docId, activeChecklist);
       const finalCategoryName = categoryFromChecklist || activeChecklist[0]?.category || 'Documents';
-      const result = await uploadEmployeeDocument(
-        token,
-        file,
-        getCompanyName(),
-        employee.empId,
-        employee.fullName,
-        finalCategoryName,
-      );
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `companies/${companyId}/documents/${employee.id}/${timestamp}_${safeName}`;
+      const fileRef = storageRef(storage, path);
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
       const entry = {
         id: effectiveDocType.id,
         name: effectiveDocType.name,
         category: finalCategoryName,
         fileName: file.name,
-        fileId: result.fileId,
-        webViewLink: result.webViewLink,
+        storagePath: path,
+        url,
         uploadedAt: new Date(),
         uploadedBy: currentUser?.email || null,
-        fileSize: result.fileSize,
+        fileSize: file.size,
       };
       if (empRef) {
         await updateDoc(empRef, {
@@ -1657,19 +1636,14 @@ export default function EmployeeProfile() {
       }
       success(`${docName} uploaded successfully`);
     } catch (err) {
-      driveAccessError(err);
+      showError(err?.message || 'Upload failed');
     }
     setUploadingDocId(null);
   };
 
   const handleReplaceDoc = async (file, docId) => {
     const docEntry = docByType[docId];
-    if (!docEntry?.fileId) return;
-    const token = await getValidToken();
-    if (!token) {
-      showError('Please sign in again to upload documents');
-      return;
-    }
+    if (!docEntry) return;
     const docType =
       activeChecklist
         .flatMap((c) => c.documents || [])
@@ -1689,31 +1663,31 @@ export default function EmployeeProfile() {
       return;
     }
     setUploadingDocId(docId);
-    setReplacingDocId(docEntry.fileId);
+    setReplacingDocId(docId);
     try {
-      try {
-        await deleteFileFromDrive(token, docEntry.fileId);
-      } catch {
-        // ignore Drive delete failure
+      if (docEntry.storagePath) {
+        try {
+          await deleteObject(storageRef(storage, docEntry.storagePath));
+        } catch {
+          // old file may not exist
+        }
       }
-      const result = await uploadEmployeeDocument(
-        token,
-        file,
-        getCompanyName(),
-        employee.empId,
-        employee.fullName,
-        docEntry.category,
-      );
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `companies/${companyId}/documents/${employee.id}/${timestamp}_${safeName}`;
+      const fileRef = storageRef(storage, path);
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
       const newEntry = {
         ...docEntry,
         id: effectiveDocType.id,
         name: effectiveDocType.name,
         fileName: file.name,
-        fileId: result.fileId,
-        webViewLink: result.webViewLink,
+        storagePath: path,
+        url,
         uploadedAt: new Date(),
         uploadedBy: currentUser?.email || null,
-        fileSize: result.fileSize,
+        fileSize: file.size,
       };
       if (empRef) {
         await updateDoc(empRef, {
@@ -1727,26 +1701,22 @@ export default function EmployeeProfile() {
       }
       success(`${docEntry.name} replaced successfully`);
     } catch (err) {
-      driveAccessError(err);
+      showError(err?.message || 'Replace failed');
     }
     setUploadingDocId(null);
     setReplacingDocId(null);
   };
 
   const handleDeleteChecklistDoc = async (docEntry) => {
-    if (!docEntry?.fileId) return;
-    const token = await getValidToken();
-    if (!token) {
-      showError('Please sign in again to upload documents');
-      return;
-    }
-    let driveFailed = false;
-    setDeletingDocId(docEntry.fileId);
+    if (!docEntry) return;
+    setDeletingDocId(docEntry.id);
     try {
-      try {
-        await deleteFileFromDrive(token, docEntry.fileId);
-      } catch {
-        driveFailed = true;
+      if (docEntry.storagePath) {
+        try {
+          await deleteObject(storageRef(storage, docEntry.storagePath));
+        } catch {
+          // ignore
+        }
       }
       if (empRef) {
         await updateDoc(empRef, {
@@ -1755,20 +1725,17 @@ export default function EmployeeProfile() {
         });
         await refreshEmployee();
       }
-      if (driveFailed) {
-        showError('File removed from records (may have already been deleted from Drive)');
-      } else {
-        success('Document deleted');
-      }
+      success('Document deleted');
     } catch (err) {
-      driveAccessError(err);
+      showError(err?.message || 'Delete failed');
     }
     setDeletingDocId(null);
     setDeleteConfirm(null);
   };
 
   const handleViewDoc = (docEntry) => {
-    if (docEntry?.webViewLink) window.open(docEntry.webViewLink, '_blank');
+    const link = docEntry?.url || docEntry?.webViewLink;
+    if (link) window.open(link, '_blank');
   };
 
   const formatDocDate = (v) => toDisplayDate(v);
@@ -3976,7 +3943,6 @@ export default function EmployeeProfile() {
           documentCompletion={documentCompletion}
           progressColor={progressColor}
           showDocManageUi={showDocManageUi}
-          isDriveConnected={isDriveConnected}
           hasDriveUploadRole={hasDriveUploadRole}
           isInactive={isInactive}
           uploadingDocId={uploadingDocId}
@@ -3992,9 +3958,6 @@ export default function EmployeeProfile() {
           formatFileSizeDetailed={formatFileSizeDetailed}
           getFileExt={getFileExt}
           getFileIconColor={getFileIconColor}
-          getValidToken={getValidToken}
-          success={success}
-          showError={showError}
         />
       )}
 
@@ -5544,8 +5507,7 @@ export default function EmployeeProfile() {
 
                     const blob = await getCroppedBlob(rawImageSrc, croppedAreaPixels);
 
-                    const storage = getStorage(app);
-                    const photoRef = ref(storage, `companies/${companyId}/employees/${empId}/profile.jpg`);
+                    const photoRef = storageRef(storage, `companies/${companyId}/employees/${empId}/profile.jpg`);
 
                     const snapshot = await uploadBytes(photoRef, blob, {
                       contentType: 'image/jpeg',

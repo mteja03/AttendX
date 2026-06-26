@@ -8,7 +8,6 @@ export default function DocumentsTab({
   documentCompletion,
   progressColor,
   showDocManageUi,
-  isDriveConnected,
   hasDriveUploadRole,
   isInactive,
   uploadingDocId,
@@ -24,9 +23,6 @@ export default function DocumentsTab({
   formatFileSizeDetailed,
   getFileExt,
   getFileIconColor,
-  getValidToken,
-  success,
-  showError,
 }) {
   return (
 <div className="space-y-6">
@@ -52,38 +48,11 @@ export default function DocumentsTab({
       </div>
     </div>
   )}
-  {hasDriveUploadRole && !isInactive && !isDriveConnected && (
-    <div className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl mb-4 gap-3 flex-wrap">
-      <div className="flex items-center gap-3 min-w-0">
-        <span className="text-xl shrink-0">⚠️</span>
-        <div>
-          <p className="text-sm font-semibold text-amber-800">Drive session expired</p>
-          <p className="text-xs text-amber-600 mt-0.5">
-            Upload buttons are disabled. Refresh to continue uploading.
-          </p>
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={async () => {
-          const token = await getValidToken();
-          if (token) {
-            success('✓ Drive reconnected!');
-          } else {
-            showError('Please sign out and sign in again');
-          }
-        }}
-        className="px-4 py-2 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 whitespace-nowrap flex-shrink-0"
-      >
-        🔄 Refresh Session
-      </button>
-    </div>
-  )}
 
   {uploadingDocId && (
     <div className="rounded-xl border border-[#4ECDC4] bg-[#4ECDC4]/10 p-3 text-sm text-[#1B6B6B] font-medium flex items-center gap-2">
       <span className="animate-spin rounded-full h-4 w-4 border-2 border-[#4ECDC4] border-t-transparent" />
-      Uploading to Google Drive...
+      Uploading document...
     </div>
   )}
 
@@ -123,12 +92,13 @@ export default function DocumentsTab({
             {cat.documents.map((doc) => {
               const uploaded = docByType[doc.id];
               const uploading = uploadingDocId === doc.id;
-              const isReplacing = uploaded?.fileId && replacingDocId === uploaded.fileId;
-              const isDeleting = uploaded?.fileId && deletingDocId === uploaded.fileId;
+              const isReplacing = replacingDocId === doc.id;
+              const isDeleting = deletingDocId === doc.id;
               const rowBusy = uploading || isReplacing || isDeleting;
               const acceptList = Array.isArray(doc.accepts) ? doc.accepts : ['.pdf', '.jpg', '.jpeg', '.png'];
               const acceptAttr = acceptList.join(',');
               const hint = `${acceptList.map((e) => e.replace('.', '').toUpperCase()).join(', ')} · Max ${doc.maxSizeMB || 5}MB`;
+              const viewLink = uploaded?.url || uploaded?.webViewLink;
               return (
                 <li key={doc.id} className="px-4" title={hint}>
                   {uploaded ? (
@@ -147,7 +117,7 @@ export default function DocumentsTab({
                         </p>
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
-                        {uploaded.webViewLink && (
+                        {viewLink && (
                           <button
                             type="button"
                             onClick={() => handleViewDoc(uploaded)}
@@ -159,10 +129,8 @@ export default function DocumentsTab({
                         )}
                         {showDocManageUi && (
                           <label
-                            title={
-                              !isDriveConnected ? 'Refresh Drive session to upload' : 'Replace document'
-                            }
-                            className={`${rowBusy || !isDriveConnected ? 'pointer-events-none opacity-50' : ''}`}
+                            title="Replace document"
+                            className={rowBusy ? 'pointer-events-none opacity-50' : ''}
                           >
                             <span className="px-2.5 py-1 text-xs font-medium text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors inline-block cursor-pointer">
                               Replace
@@ -171,7 +139,7 @@ export default function DocumentsTab({
                               type="file"
                               className="hidden"
                               accept={acceptAttr}
-                              disabled={rowBusy || !isDriveConnected}
+                              disabled={rowBusy}
                               onChange={(e) => {
                                 const f = e.target.files?.[0];
                                 if (f) handleReplaceDoc(f, doc.id);
@@ -184,15 +152,9 @@ export default function DocumentsTab({
                           <button
                             type="button"
                             onClick={() => setDeleteConfirm({ type: 'checklist', doc: uploaded })}
-                            disabled={rowBusy || !isDriveConnected}
-                            title={
-                              !isDriveConnected ? 'Refresh Drive session to upload' : 'Delete document'
-                            }
-                            className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 ${
-                              isDriveConnected
-                                ? 'text-red-500 bg-red-50 hover:bg-red-100'
-                                : 'text-gray-400 bg-gray-100 cursor-not-allowed'
-                            }`}
+                            disabled={rowBusy}
+                            title="Delete document"
+                            className="px-2.5 py-1 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 text-red-500 bg-red-50 hover:bg-red-100"
                           >
                             Delete
                           </button>
@@ -228,15 +190,9 @@ export default function DocumentsTab({
                                 const input = document.getElementById(`doc-upload-${doc.id}`);
                                 if (input) input.click();
                               }}
-                              disabled={uploadingDocId === doc.id || !isDriveConnected}
-                              title={
-                                !isDriveConnected ? 'Refresh Drive session to upload' : 'Upload document'
-                              }
-                              className={`w-full sm:w-auto min-h-[44px] px-4 inline-flex items-center justify-center text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
-                                isDriveConnected
-                                  ? 'bg-[#1B6B6B] text-white hover:bg-[#155858] active:bg-[#0f4444] disabled:opacity-50'
-                                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                              }`}
+                              disabled={uploadingDocId === doc.id}
+                              title="Upload document"
+                              className="w-full sm:w-auto min-h-[44px] px-4 inline-flex items-center justify-center text-sm font-medium rounded-lg transition-colors whitespace-nowrap bg-[#1B6B6B] text-white hover:bg-[#155858] active:bg-[#0f4444] disabled:opacity-50"
                             >
                               {uploadingDocId === doc.id ? 'Uploading...' : 'Upload'}
                             </button>
@@ -245,7 +201,7 @@ export default function DocumentsTab({
                               type="file"
                               className="hidden"
                               accept={acceptAttr}
-                              disabled={!!uploadingDocId || !isDriveConnected}
+                              disabled={!!uploadingDocId}
                               onChange={(e) => {
                                 const f = e.target.files?.[0];
                                 if (f) handleUploadChecklistDoc(f, doc.id, doc.name);
@@ -272,7 +228,7 @@ export default function DocumentsTab({
     <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6">
         <h3 className="text-lg font-semibold text-slate-800 mb-2">Delete {deleteConfirm.doc.name}?</h3>
-        <p className="text-sm text-slate-600 mb-4">File will be removed from Google Drive.</p>
+        <p className="text-sm text-slate-600 mb-4">This file will be permanently removed.</p>
         <div className="flex justify-end gap-3">
           <button type="button" onClick={() => setDeleteConfirm(null)} className="text-slate-500 text-sm">Cancel</button>
             <button

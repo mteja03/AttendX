@@ -242,7 +242,7 @@ export default function Documents() {
       <div className="mb-6">
         <PageHeader
           title="Documents"
-          subtitle="Company document completion overview (Google Drive)"
+          subtitle="Company document completion overview"
           actions={
             <div className="relative">
               <button

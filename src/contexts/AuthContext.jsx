@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 // Context files intentionally export multiple values — fast refresh limitation accepted for provider files.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import {
   doc,
   getDoc,
@@ -67,26 +67,10 @@ async function resolveUserFromTeamMembers(emailNorm) {
 
 const AuthContext = createContext(null);
 
-export function roleNeedsDriveAccess(r) {
-  return !!r && PLATFORM_CONFIG.DRIVE_UPLOAD_ROLES.includes(r);
-}
-
-/** Drive access token still within stored expiry window (55 min buffer) */
-export function isTokenValid() {
-  try {
-    const expiry = sessionStorage.getItem('gat_expiry');
-    if (!expiry) return false;
-    return Date.now() < parseInt(expiry, 10);
-  } catch {
-    return false;
-  }
-}
-
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [role, setRole] = useState(null);
   const [companyId, setCompanyId] = useState(null);
-  const [googleAccessToken, setGoogleAccessToken] = useState(null);
   const [userPermissions, setUserPermissions] = useState(null);
   const [auditScope, setAuditScope] = useState(null);
   const [isCompanyAdmin, setIsCompanyAdmin] = useState(false);
@@ -124,13 +108,6 @@ export function AuthProvider({ children }) {
         setUserPermissions(null);
         setAuditScope(null);
         setIsCompanyAdmin(false);
-        setGoogleAccessToken(null);
-        try {
-          sessionStorage.removeItem('gat');
-          sessionStorage.removeItem('gat_expiry');
-        } catch {
-          // ignore
-        }
         setLoading(false);
         setAuthError('');
         return;
@@ -291,7 +268,7 @@ export function AuthProvider({ children }) {
           });
           if (!applied) return;
 
-          // One-time side effects: lastLogin write + Drive token handling.
+          // One-time side effects: lastLogin write.
           if (userDocRef) {
             try {
               await updateDoc(userDocRef, {
@@ -301,45 +278,6 @@ export function AuthProvider({ children }) {
             } catch {
               // ignore lastLogin write failures (e.g. rules)
             }
-          }
-          try {
-            try {
-              await firebaseUser.getIdTokenResult();
-            } catch (tokenErr) {
-              if (import.meta.env.DEV) console.warn('Could not refresh ID token:', tokenErr);
-            }
-
-            const userRole = data.role || null;
-            const needsDrive = roleNeedsDriveAccess(userRole);
-
-            if (needsDrive) {
-              const stored = sessionStorage.getItem('gat');
-              const expiryStr = sessionStorage.getItem('gat_expiry');
-              const expiry = expiryStr ? parseInt(expiryStr, 10) : null;
-              const tokenStillValid = !!(stored && expiry && Date.now() < expiry);
-
-              if (stored && tokenStillValid) {
-                setGoogleAccessToken(stored);
-              } else {
-                try {
-                  sessionStorage.removeItem('gat');
-                  sessionStorage.removeItem('gat_expiry');
-                } catch {
-                  // ignore
-                }
-                setGoogleAccessToken(null);
-              }
-            } else {
-              try {
-                sessionStorage.removeItem('gat');
-                sessionStorage.removeItem('gat_expiry');
-              } catch {
-                // ignore
-              }
-              setGoogleAccessToken(null);
-            }
-          } catch {
-            setGoogleAccessToken(null);
           }
           setLoading(false);
 
@@ -383,58 +321,10 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const persistDriveToken = useCallback((accessToken) => {
-    if (!accessToken) return;
-    setGoogleAccessToken(accessToken);
-    try {
-      sessionStorage.setItem('gat', accessToken);
-      const expiry = Date.now() + PLATFORM_CONFIG.DRIVE_TOKEN_EXPIRY_MS;
-      sessionStorage.setItem('gat_expiry', String(expiry));
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const getValidToken = useCallback(async () => {
-    if (!roleNeedsDriveAccess(role)) {
-      return null;
-    }
-
-    try {
-      const stored = sessionStorage.getItem('gat');
-      const expiryStr = sessionStorage.getItem('gat_expiry');
-      const expiry = expiryStr ? parseInt(expiryStr, 10) : 0;
-      if (stored && expiry && Date.now() < expiry) {
-        setGoogleAccessToken(stored);
-        return stored;
-      }
-    } catch {
-      /* ignore */
-    }
-
-    try {
-      const user = auth.currentUser;
-      if (!user) return null;
-      const result = await signInWithPopup(auth, googleProvider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const accessToken = credential?.accessToken;
-      if (accessToken) {
-        persistDriveToken(accessToken);
-        return accessToken;
-      }
-    } catch (e) {
-      if (import.meta.env.DEV) console.error('Token refresh failed:', e);
-      return null;
-    }
-    return null;
-  }, [persistDriveToken, role]);
-
   const signInWithGoogle = useCallback(async () => {
     setAuthError('');
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const accessToken = credential?.accessToken ?? null;
 
     const adminEmail = PLATFORM_CONFIG.ADMIN_EMAIL.toLowerCase();
     if (user?.email?.toLowerCase() === adminEmail) {
@@ -455,40 +345,11 @@ export function AuthProvider({ children }) {
       }
     }
 
-    const emailLower = user?.email?.toLowerCase();
-    let userRef = doc(db, 'users', emailLower || '');
-    let userSnap = await getDoc(userRef);
-    if (!userSnap.exists()) {
-      userRef = doc(db, 'users', user.uid);
-      userSnap = await getDoc(userRef);
-    }
-
-    const userRole = userSnap.exists() ? userSnap.data()?.role : null;
-    const needsDrive = roleNeedsDriveAccess(userRole);
-
-    if (needsDrive && accessToken) {
-      persistDriveToken(accessToken);
-    } else {
-      try {
-        sessionStorage.removeItem('gat');
-        sessionStorage.removeItem('gat_expiry');
-      } catch {
-        // ignore
-      }
-      setGoogleAccessToken(null);
-    }
     trackLogin();
-  }, [persistDriveToken]);
+  }, []);
 
   const signOutUser = useCallback(async () => {
     trackLogout();
-    try {
-      sessionStorage.removeItem('gat');
-      sessionStorage.removeItem('gat_expiry');
-    } catch {
-      // ignore
-    }
-    setGoogleAccessToken(null);
     setAuditScope(null);
     setIsCompanyAdmin(false);
     setSentryUser(null);
@@ -504,9 +365,6 @@ export function AuthProvider({ children }) {
       userPermissions,
       auditScope,
       isCompanyAdmin,
-      googleAccessToken,
-      getValidToken,
-      isTokenValid,
       loading,
       authError,
       signInWithGoogle,
@@ -519,8 +377,6 @@ export function AuthProvider({ children }) {
       userPermissions,
       auditScope,
       isCompanyAdmin,
-      googleAccessToken,
-      getValidToken,
       loading,
       authError,
       signInWithGoogle,
