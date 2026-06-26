@@ -1759,43 +1759,19 @@ export default function EmployeeProfile() {
   const handleViewDoc = async (docEntry) => {
     if (!docEntry?.storagePath) return;
     setViewingDocId(docEntry.id || docEntry.storagePath);
-    const popup = window.open('', '_blank');
     try {
-      if (popup?.document) {
-        popup.document.open();
-        popup.document.write(`
-          <html>
-            <head>
-              <title>Loading document...</title>
-              <style>
-                body { font-family: sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; color: #1f2937; background: #f8fafc; }
-                .wrap { text-align: center; }
-                .spinner { width: 32px; height: 32px; border-radius: 9999px; border: 3px solid #cbd5e1; border-top-color: #1B6B6B; animation: spin 1s linear infinite; margin: 0 auto 12px; }
-                @keyframes spin { to { transform: rotate(360deg); } }
-              </style>
-            </head>
-            <body>
-              <div class="wrap">
-                <div class="spinner"></div>
-                <div>Loading document...</div>
-              </div>
-            </body>
-          </html>
-        `);
-        popup.document.close();
-      }
       const fileRef = storageRef(storage, docEntry.storagePath);
       const blob = await getBlob(fileRef);
       const url = URL.createObjectURL(blob);
-      if (popup) {
-        popup.location.href = url;
-        popup.focus();
-      } else {
-        window.open(url, '_blank');
-      }
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       setTimeout(() => URL.revokeObjectURL(url), 120000);
     } catch {
-      if (popup && !popup.closed) popup.close();
       showError('Failed to load document');
     }
     setViewingDocId(null);
