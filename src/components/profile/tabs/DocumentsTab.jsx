@@ -13,12 +13,14 @@ export default function DocumentsTab({
   uploadingDocId,
   replacingDocId,
   deletingDocId,
+  viewingDocId,
   deleteConfirm,
   setDeleteConfirm,
   handleUploadChecklistDoc,
   handleReplaceDoc,
   handleDeleteChecklistDoc,
   handleViewDoc,
+  handleDownloadDoc,
   formatDocDate,
   formatFileSizeDetailed,
   getFileExt,
@@ -94,11 +96,12 @@ export default function DocumentsTab({
               const uploading = uploadingDocId === doc.id;
               const isReplacing = replacingDocId === doc.id;
               const isDeleting = deletingDocId === doc.id;
-              const rowBusy = uploading || isReplacing || isDeleting;
+              const isViewing = viewingDocId === (uploaded?.id || uploaded?.storagePath);
+              const rowBusy = uploading || isReplacing || isDeleting || isViewing;
               const acceptList = Array.isArray(doc.accepts) ? doc.accepts : ['.pdf', '.jpg', '.jpeg', '.png'];
               const acceptAttr = acceptList.join(',');
               const hint = `${acceptList.map((e) => e.replace('.', '').toUpperCase()).join(', ')} · Max ${doc.maxSizeMB || 5}MB`;
-              const viewLink = uploaded?.url || uploaded?.webViewLink;
+              const canView = uploaded?.storagePath;
               return (
                 <li key={doc.id} className="px-4" title={hint}>
                   {uploaded ? (
@@ -117,14 +120,24 @@ export default function DocumentsTab({
                         </p>
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
-                        {viewLink && (
+                        {canView && (
                           <button
                             type="button"
                             onClick={() => handleViewDoc(uploaded)}
                             disabled={rowBusy}
                             className="px-2.5 py-1 text-xs font-medium text-[#1B6B6B] bg-[#E8F5F5] rounded-lg hover:bg-[#C5E8E8] transition-colors disabled:opacity-50"
                           >
-                            View
+                            {isViewing ? 'Loading…' : 'View'}
+                          </button>
+                        )}
+                        {canView && (
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadDoc(uploaded)}
+                            disabled={rowBusy}
+                            className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
+                          >
+                            {isViewing ? 'Loading…' : 'Download'}
                           </button>
                         )}
                         {showDocManageUi && (

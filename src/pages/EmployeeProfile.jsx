@@ -15,7 +15,7 @@ import {
   arrayRemove,
   deleteField,
 } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, getBlob, deleteObject } from 'firebase/storage';
 import Cropper from 'react-easy-crop';
 import { db, storage } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -742,6 +742,7 @@ export default function EmployeeProfile() {
   const [uploadingDocId, setUploadingDocId] = useState(null);
   const [deletingDocId, setDeletingDocId] = useState(null);
   const [replacingDocId, setReplacingDocId] = useState(null);
+  const [viewingDocId, setViewingDocId] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const leaveFetchedRef = useRef(false);
   const assetsFetchedRef = useRef(false);
@@ -1615,14 +1616,12 @@ export default function EmployeeProfile() {
       const path = `companies/${companyId}/documents/${employee.id}/${timestamp}_${safeName}`;
       const fileRef = storageRef(storage, path);
       await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
       const entry = {
         id: effectiveDocType.id,
         name: effectiveDocType.name,
         category: finalCategoryName,
         fileName: file.name,
         storagePath: path,
-        url,
         uploadedAt: new Date(),
         uploadedBy: currentUser?.email || null,
         fileSize: file.size,
@@ -1677,14 +1676,12 @@ export default function EmployeeProfile() {
       const path = `companies/${companyId}/documents/${employee.id}/${timestamp}_${safeName}`;
       const fileRef = storageRef(storage, path);
       await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
       const newEntry = {
         ...docEntry,
         id: effectiveDocType.id,
         name: effectiveDocType.name,
         fileName: file.name,
         storagePath: path,
-        url,
         uploadedAt: new Date(),
         uploadedBy: currentUser?.email || null,
         fileSize: file.size,
@@ -1733,9 +1730,39 @@ export default function EmployeeProfile() {
     setDeleteConfirm(null);
   };
 
-  const handleViewDoc = (docEntry) => {
-    const link = docEntry?.url || docEntry?.webViewLink;
-    if (link) window.open(link, '_blank');
+  const handleViewDoc = async (docEntry) => {
+    if (!docEntry?.storagePath) return;
+    setViewingDocId(docEntry.id || docEntry.storagePath);
+    try {
+      const fileRef = storageRef(storage, docEntry.storagePath);
+      const blob = await getBlob(fileRef);
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch {
+      showError('Failed to load document');
+    }
+    setViewingDocId(null);
+  };
+
+  const handleDownloadDoc = async (docEntry) => {
+    if (!docEntry?.storagePath) return;
+    setViewingDocId(docEntry.id || docEntry.storagePath);
+    try {
+      const fileRef = storageRef(storage, docEntry.storagePath);
+      const blob = await getBlob(fileRef);
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = docEntry.fileName || 'document';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    } catch {
+      showError('Failed to download document');
+    }
+    setViewingDocId(null);
   };
 
   const formatDocDate = (v) => toDisplayDate(v);
@@ -3948,12 +3975,14 @@ export default function EmployeeProfile() {
           uploadingDocId={uploadingDocId}
           replacingDocId={replacingDocId}
           deletingDocId={deletingDocId}
+          viewingDocId={viewingDocId}
           deleteConfirm={deleteConfirm}
           setDeleteConfirm={setDeleteConfirm}
           handleUploadChecklistDoc={handleUploadChecklistDoc}
           handleReplaceDoc={handleReplaceDoc}
           handleDeleteChecklistDoc={handleDeleteChecklistDoc}
           handleViewDoc={handleViewDoc}
+          handleDownloadDoc={handleDownloadDoc}
           formatDocDate={formatDocDate}
           formatFileSizeDetailed={formatFileSizeDetailed}
           getFileExt={getFileExt}
@@ -5518,6 +5547,7 @@ export default function EmployeeProfile() {
                       },
                     });
 
+                    const { getDownloadURL } = await import('firebase/storage');
                     const url = await getDownloadURL(snapshot.ref);
 
                     await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { photoURL: url });
