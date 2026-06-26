@@ -15,7 +15,7 @@ import {
   arrayRemove,
   deleteField,
 } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, getBlob, deleteObject } from 'firebase/storage';
 import Cropper from 'react-easy-crop';
 import { db, storage } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -1735,8 +1735,10 @@ export default function EmployeeProfile() {
     setViewingDocId(docEntry.id || docEntry.storagePath);
     try {
       const fileRef = storageRef(storage, docEntry.storagePath);
-      const url = await getDownloadURL(fileRef);
-      window.open(url, '_blank');
+      const blob = await getBlob(fileRef);
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
     } catch {
       showError('Failed to load document');
     }
@@ -1748,9 +1750,7 @@ export default function EmployeeProfile() {
     setViewingDocId(docEntry.id || docEntry.storagePath);
     try {
       const fileRef = storageRef(storage, docEntry.storagePath);
-      const url = await getDownloadURL(fileRef);
-      const res = await fetch(url);
-      const blob = await res.blob();
+      const blob = await getBlob(fileRef);
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
@@ -1760,7 +1760,7 @@ export default function EmployeeProfile() {
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
     } catch {
-      showError('Failed to download document');
+      showError('Failed to load document');
     }
     setViewingDocId(null);
   };
@@ -5547,6 +5547,7 @@ export default function EmployeeProfile() {
                       },
                     });
 
+                    const { getDownloadURL } = await import('firebase/storage');
                     const url = await getDownloadURL(snapshot.ref);
 
                     await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { photoURL: url });
