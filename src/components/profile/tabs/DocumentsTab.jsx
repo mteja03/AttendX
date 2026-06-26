@@ -14,6 +14,7 @@ export default function DocumentsTab({
   replacingDocId,
   deletingDocId,
   viewingDocId,
+  uploadProgress,
   deleteConfirm,
   setDeleteConfirm,
   handleUploadChecklistDoc,
@@ -51,10 +52,21 @@ export default function DocumentsTab({
     </div>
   )}
 
-  {uploadingDocId && (
-    <div className="rounded-xl border border-[#4ECDC4] bg-[#4ECDC4]/10 p-3 text-sm text-[#1B6B6B] font-medium flex items-center gap-2">
-      <span className="animate-spin rounded-full h-4 w-4 border-2 border-[#4ECDC4] border-t-transparent" />
-      Uploading document...
+  {uploadingDocId && uploadProgress && (
+    <div className="rounded-xl border border-[#4ECDC4] bg-[#4ECDC4]/10 p-3 text-sm text-[#1B6B6B] font-medium">
+      <div className="flex items-center gap-2">
+        <span className="animate-spin rounded-full h-4 w-4 border-2 border-[#4ECDC4] border-t-transparent" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate">
+            {uploadProgress.mode === 'replace' ? 'Replacing document...' : 'Uploading document...'}
+          </p>
+          <p className="text-xs text-[#1B6B6B]/70 truncate">{uploadProgress.fileName}</p>
+        </div>
+        <span className="text-xs font-semibold tabular-nums">{uploadProgress.percent}%</span>
+      </div>
+      <div className="mt-2 h-2 rounded-full bg-white/70 overflow-hidden">
+        <div className="h-full rounded-full bg-[#1B6B6B] transition-all" style={{ width: `${uploadProgress.percent}%` }} />
+      </div>
     </div>
   )}
 
@@ -97,6 +109,8 @@ export default function DocumentsTab({
               const isReplacing = replacingDocId === doc.id;
               const isDeleting = deletingDocId === doc.id;
               const isViewing = viewingDocId === (uploaded?.id || uploaded?.storagePath);
+              const currentProgress = uploadProgress?.docId === doc.id ? uploadProgress.percent : null;
+              const currentMode = uploadProgress?.docId === doc.id ? uploadProgress.mode : null;
               const rowBusy = uploading || isReplacing || isDeleting || isViewing;
               const acceptList = Array.isArray(doc.accepts) ? doc.accepts : ['.pdf', '.jpg', '.jpeg', '.png'];
               const acceptAttr = acceptList.join(',');
@@ -105,6 +119,7 @@ export default function DocumentsTab({
               return (
                 <li key={doc.id} className="px-4" title={hint}>
                   {uploaded ? (
+                    <>
                     <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex items-center gap-3 w-full">
                       <div
                         className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-white text-xs font-bold ${getFileIconColor(uploaded.fileName || doc.name)}`}
@@ -174,7 +189,20 @@ export default function DocumentsTab({
                         )}
                       </div>
                     </div>
+                    {currentProgress != null && (
+                      <div className="mt-2 rounded-lg bg-white/80 p-2">
+                        <div className="flex items-center justify-between text-[11px] text-gray-500 mb-1">
+                          <span>{currentMode === 'replace' ? 'Replacing...' : 'Uploading...'}</span>
+                          <span className="font-semibold tabular-nums">{currentProgress}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+                          <div className="h-full rounded-full bg-[#1B6B6B] transition-all" style={{ width: `${currentProgress}%` }} />
+                        </div>
+                      </div>
+                    )}
+                    </>
                   ) : (
+                    <>
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 px-1 sm:px-0 border-b last:border-0 gap-2">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 border-gray-300" />
@@ -207,7 +235,9 @@ export default function DocumentsTab({
                               title="Upload document"
                               className="w-full sm:w-auto min-h-[44px] px-4 inline-flex items-center justify-center text-sm font-medium rounded-lg transition-colors whitespace-nowrap bg-[#1B6B6B] text-white hover:bg-[#155858] active:bg-[#0f4444] disabled:opacity-50"
                             >
-                              {uploadingDocId === doc.id ? 'Uploading...' : 'Upload'}
+                              {uploadingDocId === doc.id
+                                ? `${currentProgress ?? 0}%`
+                                : 'Upload'}
                             </button>
                             <input
                               id={`doc-upload-${doc.id}`}
@@ -227,6 +257,20 @@ export default function DocumentsTab({
                         )}
                       </div>
                     </div>
+                    {currentProgress != null && (
+                      <div className="px-1 pb-3">
+                        <div className="rounded-lg bg-[#E8F5F5] p-2">
+                          <div className="flex items-center justify-between text-[11px] text-[#1B6B6B] mb-1">
+                            <span>{currentMode === 'replace' ? 'Replacing...' : 'Uploading...'}</span>
+                            <span className="font-semibold tabular-nums">{currentProgress}%</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-white/70 overflow-hidden">
+                            <div className="h-full rounded-full bg-[#1B6B6B] transition-all" style={{ width: `${currentProgress}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    </>
                   )}
                 </li>
               );

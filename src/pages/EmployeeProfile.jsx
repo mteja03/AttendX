@@ -12,10 +12,9 @@ import {
   Timestamp,
   serverTimestamp,
   arrayUnion,
-  arrayRemove,
   deleteField,
 } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, getBlob, deleteObject } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import Cropper from 'react-easy-crop';
 import { db, storage } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -743,6 +742,7 @@ export default function EmployeeProfile() {
   const [deletingDocId, setDeletingDocId] = useState(null);
   const [replacingDocId, setReplacingDocId] = useState(null);
   const [viewingDocId, setViewingDocId] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const leaveFetchedRef = useRef(false);
   const assetsFetchedRef = useRef(false);
@@ -1280,6 +1280,55 @@ export default function EmployeeProfile() {
     setEmployee({ id: snap.id, ...data });
   };
 
+  const persistEmployeeDocuments = async (nextDocuments) => {
+    if (!empRef) return;
+    await updateDoc(empRef, {
+      documents: nextDocuments,
+      updatedAt: serverTimestamp(),
+    });
+    setEmployee((prev) => (prev ? { ...prev, documents: nextDocuments } : prev));
+  };
+
+  const uploadFileWithProgress = async ({ file, path, docId, mode }) => {
+    const fileRef = storageRef(storage, path);
+    const uploadTask = uploadBytesResumable(fileRef, file);
+    setUploadProgress({
+      docId,
+      mode,
+      percent: 0,
+      fileName: file.name,
+    });
+
+    await new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const percent = snapshot.totalBytes
+            ? Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)
+            : 0;
+          setUploadProgress({
+            docId,
+            mode,
+            percent,
+            fileName: file.name,
+          });
+        },
+        reject,
+        resolve,
+      );
+    });
+
+    setUploadProgress({
+      docId,
+      mode,
+      percent: 100,
+      fileName: file.name,
+    });
+
+    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+    return { downloadURL };
+  };
+
   const openEdit = () => {
     if (!employee) return;
     setForm({
@@ -1614,30 +1663,27 @@ export default function EmployeeProfile() {
       const timestamp = Date.now();
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const path = `companies/${companyId}/documents/${employee.id}/${timestamp}_${safeName}`;
-      const fileRef = storageRef(storage, path);
-      await uploadBytes(fileRef, file);
+      const { downloadURL } = await uploadFileWithProgress({ file, path, docId, mode: 'upload' });
       const entry = {
         id: effectiveDocType.id,
         name: effectiveDocType.name,
         category: finalCategoryName,
         fileName: file.name,
         storagePath: path,
+        downloadURL,
         uploadedAt: new Date(),
         uploadedBy: currentUser?.email || null,
         fileSize: file.size,
       };
-      if (empRef) {
-        await updateDoc(empRef, {
-          documents: arrayUnion(entry),
-          updatedAt: serverTimestamp(),
-        });
-        await refreshEmployee();
-      }
+      const nextDocuments = [...(employee?.documents || []).filter((d) => d?.id !== entry.id), entry];
+      await persistEmployeeDocuments(nextDocuments);
       success(`${docName} uploaded successfully`);
     } catch (err) {
       showError(err?.message || 'Upload failed');
+    } finally {
+      setUploadingDocId(null);
+      setUploadProgress(null);
     }
-    setUploadingDocId(null);
   };
 
   const handleReplaceDoc = async (file, docId) => {
@@ -1664,44 +1710,35 @@ export default function EmployeeProfile() {
     setUploadingDocId(docId);
     setReplacingDocId(docId);
     try {
-      if (docEntry.storagePath) {
-        try {
-          await deleteObject(storageRef(storage, docEntry.storagePath));
-        } catch {
-          // old file may not exist
-        }
-      }
       const timestamp = Date.now();
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const path = `companies/${companyId}/documents/${employee.id}/${timestamp}_${safeName}`;
-      const fileRef = storageRef(storage, path);
-      await uploadBytes(fileRef, file);
+      const oldStoragePath = docEntry.storagePath;
+      const { downloadURL } = await uploadFileWithProgress({ file, path, docId, mode: 'replace' });
       const newEntry = {
         ...docEntry,
         id: effectiveDocType.id,
         name: effectiveDocType.name,
         fileName: file.name,
         storagePath: path,
+        downloadURL,
         uploadedAt: new Date(),
         uploadedBy: currentUser?.email || null,
         fileSize: file.size,
       };
-      if (empRef) {
-        await updateDoc(empRef, {
-          documents: arrayRemove(docEntry),
-        });
-        await updateDoc(empRef, {
-          documents: arrayUnion(newEntry),
-          updatedAt: serverTimestamp(),
-        });
-        await refreshEmployee();
+      const nextDocuments = [...(employee?.documents || []).filter((d) => d?.id !== docId), newEntry];
+      await persistEmployeeDocuments(nextDocuments);
+      if (oldStoragePath && oldStoragePath !== path) {
+        void deleteObject(storageRef(storage, oldStoragePath)).catch(() => {});
       }
       success(`${docEntry.name} replaced successfully`);
     } catch (err) {
       showError(err?.message || 'Replace failed');
+    } finally {
+      setUploadingDocId(null);
+      setReplacingDocId(null);
+      setUploadProgress(null);
     }
-    setUploadingDocId(null);
-    setReplacingDocId(null);
   };
 
   const handleDeleteChecklistDoc = async (docEntry) => {
@@ -1715,13 +1752,8 @@ export default function EmployeeProfile() {
           // ignore
         }
       }
-      if (empRef) {
-        await updateDoc(empRef, {
-          documents: arrayRemove(docEntry),
-          updatedAt: serverTimestamp(),
-        });
-        await refreshEmployee();
-      }
+      const nextDocuments = (employee?.documents || []).filter((d) => d?.id !== docEntry.id);
+      await persistEmployeeDocuments(nextDocuments);
       success('Document deleted');
     } catch (err) {
       showError(err?.message || 'Delete failed');
@@ -1733,13 +1765,18 @@ export default function EmployeeProfile() {
   const handleViewDoc = async (docEntry) => {
     if (!docEntry?.storagePath) return;
     setViewingDocId(docEntry.id || docEntry.storagePath);
+    const popup = window.open('', '_blank', 'noopener,noreferrer');
     try {
       const fileRef = storageRef(storage, docEntry.storagePath);
-      const blob = await getBlob(fileRef);
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, '_blank');
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+      const url = docEntry.downloadURL || await getDownloadURL(fileRef);
+      if (popup) {
+        popup.location.href = url;
+        popup.focus();
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
     } catch {
+      if (popup && !popup.closed) popup.close();
       showError('Failed to load document');
     }
     setViewingDocId(null);
@@ -1750,15 +1787,13 @@ export default function EmployeeProfile() {
     setViewingDocId(docEntry.id || docEntry.storagePath);
     try {
       const fileRef = storageRef(storage, docEntry.storagePath);
-      const blob = await getBlob(fileRef);
-      const blobUrl = URL.createObjectURL(blob);
+      const blobUrl = docEntry.downloadURL || await getDownloadURL(fileRef);
       const a = document.createElement('a');
       a.href = blobUrl;
       a.download = docEntry.fileName || 'document';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
     } catch {
       showError('Failed to load document');
     }
@@ -3976,6 +4011,7 @@ export default function EmployeeProfile() {
           replacingDocId={replacingDocId}
           deletingDocId={deletingDocId}
           viewingDocId={viewingDocId}
+          uploadProgress={uploadProgress}
           deleteConfirm={deleteConfirm}
           setDeleteConfirm={setDeleteConfirm}
           handleUploadChecklistDoc={handleUploadChecklistDoc}
