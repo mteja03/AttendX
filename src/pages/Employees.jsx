@@ -830,10 +830,16 @@ export default function Employees() {
     [],
   );
   const employmentTypes = company?.employmentTypes?.length ? company.employmentTypes : DEFAULT_EMPLOYMENT_TYPES;
-  const branches = company?.branches?.length ? company.branches : DEFAULT_BRANCHES;
+  const structuredLocations = useMemo(() => {
+    const raw = company?.locations || [];
+    if (raw.length > 0 && typeof raw[0] === 'object' && raw[0].branches) return raw;
+    return [];
+  }, [company?.locations]);
+  const allBranchNames = useMemo(() => structuredLocations.flatMap((l) => (l.branches || []).map((b) => b.name)), [structuredLocations]);
+  const branches = allBranchNames.length > 0 ? allBranchNames : (company?.branches || []).map((b) => typeof b === 'object' ? b.name : b);
   const qualifications = company?.qualifications?.length ? company.qualifications : DEFAULT_QUALIFICATIONS;
   const categories = company?.categories?.length ? company.categories : DEFAULT_CATEGORIES;
-  const locationFilterOptions = useMemo(() => company?.locations || [], [company?.locations]);
+  const locationFilterOptions = useMemo(() => structuredLocations.map((l) => l.name), [structuredLocations]);
 
   const activeFilterCount = useMemo(
     () => Object.values(filters).filter((v) => v !== '' && v != null).length,
@@ -2748,8 +2754,12 @@ export default function Employees() {
                     <label className="block text-xs font-medium text-slate-600 mb-1">Branch</label>
                     <select name="branch" value={form.branch} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20">
                       <option value="">—</option>
-                      {branches.map((b) => <option key={b} value={b}>{b}</option>)}
-                      {!branches.includes('Other') && <option value="Other">Other</option>}
+                      {(() => {
+                        const loc = structuredLocations.find((l) => l.name === form.location);
+                        const branchList = loc ? (loc.branches || []).map((b) => b.name) : branches;
+                        return branchList.map((b) => <option key={b} value={b}>{b}</option>);
+                      })()}
+                      <option value="Other">Other</option>
                     </select>
                   </div>
                   <div className="sm:col-span-2 relative" ref={locationDropdownRef}>
@@ -2783,31 +2793,32 @@ export default function Employees() {
                           />
                         </div>
                         <div className="overflow-y-auto max-h-40">
-                          {(company?.locations || [])
+                          {locationFilterOptions
                             .filter((l) => !locationSearch || l.toLowerCase().includes(locationSearch.toLowerCase()))
-                            .map((loc) => (
+                            .map((locName) => (
                               <div
-                                key={loc}
+                                key={locName}
                                 role="button"
                                 tabIndex={0}
                                 onClick={() => {
-                                  setForm((prev) => ({ ...prev, location: loc }));
+                                  setForm((prev) => ({ ...prev, location: locName, branch: '' }));
                                   setShowLocationDropdown(false);
                                   setLocationSearch('');
                                 }}
                                 onKeyDown={(ev) => {
                                   if (ev.key === 'Enter' || ev.key === ' ') {
-                                    setForm((prev) => ({ ...prev, location: loc }));
+                                    setForm((prev) => ({ ...prev, location: locName, branch: '' }));
                                     setShowLocationDropdown(false);
                                     setLocationSearch('');
                                   }
                                 }}
                                 className="px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer text-sm border-b border-gray-50 last:border-0"
                               >
-                                {loc}
+                                {locName}
+                                <span className="text-[10px] text-gray-400 ml-2">{(structuredLocations.find((l) => l.name === locName)?.branches || []).length} branches</span>
                               </div>
                             ))}
-                          {(company?.locations || []).length === 0 && (
+                          {locationFilterOptions.length === 0 && (
                             <div className="px-3 py-4 text-center text-sm text-gray-400">
                               No locations configured.
                               <br />

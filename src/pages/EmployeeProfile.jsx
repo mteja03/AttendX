@@ -890,7 +890,13 @@ export default function EmployeeProfile() {
 
   const departments = company?.departments?.length ? company.departments : DEFAULT_DEPARTMENTS;
   const employmentTypes = company?.employmentTypes?.length ? company.employmentTypes : DEFAULT_EMPLOYMENT_TYPES;
-  const branches = company?.branches?.length ? company.branches : DEFAULT_BRANCHES;
+  const structuredLocations = useMemo(() => {
+    const raw = company?.locations || [];
+    if (raw.length > 0 && typeof raw[0] === 'object' && raw[0].branches) return raw;
+    return [];
+  }, [company?.locations]);
+  const allBranchNames = useMemo(() => structuredLocations.flatMap((l) => (l.branches || []).map((b) => b.name)), [structuredLocations]);
+  const branches = allBranchNames.length > 0 ? allBranchNames : (company?.branches || []).map((b) => (typeof b === 'object' ? b.name : b));
   const qualifications = company?.qualifications?.length ? company.qualifications : DEFAULT_QUALIFICATIONS;
   const categories = company?.categories?.length ? company.categories : DEFAULT_CATEGORIES;
 
@@ -4151,7 +4157,7 @@ export default function EmployeeProfile() {
                         <div><label className="block text-xs text-slate-600 mb-1">Emp ID</label><input value={form.empId} onChange={(e) => setForm((p) => ({ ...p, empId: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" /></div>
                         <div><label className="block text-xs text-slate-600 mb-1">Joining Date</label><input type="date" value={form.joiningDate} onChange={(e) => setForm((p) => ({ ...p, joiningDate: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
                         <div><label className="block text-xs text-slate-600 mb-1">Department</label><select value={form.department} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{departments.map((d) => <option key={d} value={d}>{d}</option>)}{!departments.includes('Other') && <option value="Other">Other</option>}</select></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Branch</label><select value={form.branch} onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{branches.map((b) => <option key={b} value={b}>{b}</option>)}{!branches.includes('Other') && <option value="Other">Other</option>}</select></div>
+                        <div><label className="block text-xs text-slate-600 mb-1">Branch</label><select value={form.branch} onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{(() => { const loc = structuredLocations.find((l) => l.name === form.location); const list = loc ? (loc.branches || []).map((b) => b.name) : branches; return list.map((b) => <option key={b} value={b}>{b}</option>); })()}<option value="Other">Other</option></select></div>
                         <div><label className="block text-xs text-slate-600 mb-1">Employment Type</label><select value={form.employmentType} onChange={(e) => setForm((p) => ({ ...p, employmentType: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}{!employmentTypes.includes('Other') && <option value="Other">Other</option>}</select></div>
                         <div><label className="block text-xs text-slate-600 mb-1">Category</label><select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}{!categories.includes('Other') && <option value="Other">Other</option>}</select></div>
                       </div>
@@ -4171,10 +4177,10 @@ export default function EmployeeProfile() {
                               <input autoFocus placeholder="Search location..." value={locationSearch} onChange={(e) => setLocationSearch(e.target.value)} className="w-full text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#1B6B6B]" onClick={(e) => e.stopPropagation()} />
                             </div>
                             <div className="overflow-y-auto max-h-40">
-                              {(company?.locations || []).filter((l) => !locationSearch || l.toLowerCase().includes(locationSearch.toLowerCase())).map((loc) => (
-                                <div key={loc} role="button" tabIndex={0} onClick={() => { setForm((prev) => ({ ...prev, location: loc })); setShowLocationDropdown(false); setLocationSearch(''); }} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { setForm((prev) => ({ ...prev, location: loc })); setShowLocationDropdown(false); setLocationSearch(''); } }} className="px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer text-sm border-b last:border-0">{loc}</div>
+                              {structuredLocations.map((l) => l.name).filter((l) => !locationSearch || l.toLowerCase().includes(locationSearch.toLowerCase())).map((loc) => (
+                                <div key={loc} role="button" tabIndex={0} onClick={() => { setForm((prev) => ({ ...prev, location: loc, branch: '' })); setShowLocationDropdown(false); setLocationSearch(''); }} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { setForm((prev) => ({ ...prev, location: loc, branch: '' })); setShowLocationDropdown(false); setLocationSearch(''); } }} className="px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer text-sm border-b last:border-0">{loc}</div>
                               ))}
-                              {(company?.locations || []).length === 0 && <div className="px-3 py-4 text-center text-sm text-gray-400">No locations configured.<br />Add in Settings → Manage Lists</div>}
+                              {structuredLocations.length === 0 && <div className="px-3 py-4 text-center text-sm text-gray-400">No locations configured.<br />Add in Settings → Manage Lists</div>}
                             </div>
                           </div>
                         )}
