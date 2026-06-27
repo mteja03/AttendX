@@ -16,6 +16,17 @@ export default function AuditDocumentsView({ audits, companyId, userRole, showSu
 
   const canDelete = userRole === 'admin' || userRole === 'companyadmin';
 
+  const getDocPath = (d) => {
+    if (d?.storagePath) return d.storagePath;
+    if (d?.url) {
+      try {
+        const match = d.url.match(/\/o\/(.+?)(\?|$)/);
+        if (match) return decodeURIComponent(match[1]);
+      } catch { /* ignore */ }
+    }
+    return null;
+  };
+
   const allDocs = useMemo(() => {
     const docs = [];
     (audits || []).forEach((a) => {
@@ -58,7 +69,8 @@ export default function AuditDocumentsView({ audits, companyId, userRole, showSu
     if (!window.confirm(`Delete "${docItem.name}"?`)) return;
     try {
       setDeleting(docItem.id);
-      if (docItem.storagePath) await deleteObject(storageRef(storage, docItem.storagePath)).catch(() => {});
+      const delPath = getDocPath(docItem);
+      if (delPath) await deleteObject(storageRef(storage, delPath)).catch(() => {});
       const auditRef = doc(db, 'companies', companyId, 'audits', docItem.auditId);
       const auditSnap = await getDoc(auditRef);
       if (auditSnap.exists()) {
@@ -78,7 +90,7 @@ export default function AuditDocumentsView({ audits, companyId, userRole, showSu
       setCleaningUp(true);
       const byAudit = {};
       expiredDocs.forEach((d) => { if (!byAudit[d.auditId]) byAudit[d.auditId] = []; byAudit[d.auditId].push(d); });
-      await Promise.allSettled(expiredDocs.filter((d) => d.storagePath).map((d) => deleteObject(storageRef(storage, d.storagePath))));
+      await Promise.allSettled(expiredDocs.map((d) => { const p = getDocPath(d); return p ? deleteObject(storageRef(storage, p)) : Promise.resolve(); }));
       for (const [auditId, docs] of Object.entries(byAudit)) {
         const auditRef = doc(db, 'companies', companyId, 'audits', auditId);
         const auditSnap = await getDoc(auditRef);
@@ -192,7 +204,9 @@ export default function AuditDocumentsView({ audits, companyId, userRole, showSu
                       onClick={async () => {
                         setLoadingDocId(d.id);
                         try {
-                          const fileRef = storageRef(storage, d.storagePath || d.url);
+                          const path = getDocPath(d);
+                          if (!path) return;
+                          const fileRef = storageRef(storage, path);
                           const blob = await getBlob(fileRef);
                           const blobUrl = URL.createObjectURL(blob);
                           window.open(blobUrl, '_blank');
@@ -207,7 +221,9 @@ export default function AuditDocumentsView({ audits, companyId, userRole, showSu
                       onClick={async () => {
                         setLoadingDocId(d.id);
                         try {
-                          const fileRef = storageRef(storage, d.storagePath || d.url);
+                          const path = getDocPath(d);
+                          if (!path) return;
+                          const fileRef = storageRef(storage, path);
                           const blob = await getBlob(fileRef);
                           const blobUrl = URL.createObjectURL(blob);
                           const a = document.createElement('a');

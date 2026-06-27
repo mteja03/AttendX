@@ -99,6 +99,17 @@ export default function UnifiedAuditDetail({
   const auditorPhone = auditorEmployee?.mobile || auditorEmployee?.phone || auditorEmployee?.mobileNumber || '';
 
   /* ── audit document upload / delete ─────────────────────────────── */
+  const getDocPath = (docItem) => {
+    if (docItem?.storagePath) return docItem.storagePath;
+    if (docItem?.url) {
+      try {
+        const match = docItem.url.match(/\/o\/(.+?)(\?|$)/);
+        if (match) return decodeURIComponent(match[1]);
+      } catch { /* ignore */ }
+    }
+    return null;
+  };
+
   const handleDocUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -133,10 +144,11 @@ export default function UnifiedAuditDetail({
   };
 
   const handleDocView = async (docItem) => {
-    if (!docItem?.storagePath) return;
-    setViewingDocId(docItem.id || docItem.storagePath);
+    const path = getDocPath(docItem);
+    if (!path) return;
+    setViewingDocId(docItem.id || docItem.storagePath || docItem.url);
     try {
-      const fileRef = storageRef(storage, docItem.storagePath);
+      const fileRef = storageRef(storage, path);
       const blob = await getBlob(fileRef);
       const blobUrl = URL.createObjectURL(blob);
       window.open(blobUrl, '_blank');
@@ -148,10 +160,11 @@ export default function UnifiedAuditDetail({
   };
 
   const handleDocDownload = async (docItem) => {
-    if (!docItem?.storagePath) return;
-    setViewingDocId(docItem.id || docItem.storagePath);
+    const path = getDocPath(docItem);
+    if (!path) return;
+    setViewingDocId(docItem.id || docItem.storagePath || docItem.url);
     try {
-      const fileRef = storageRef(storage, docItem.storagePath);
+      const fileRef = storageRef(storage, path);
       const blob = await getBlob(fileRef);
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -167,8 +180,9 @@ export default function UnifiedAuditDetail({
 
   const handleDocDelete = async (docItem) => {
     try {
-      if (docItem.storagePath) {
-        await deleteObject(storageRef(storage, docItem.storagePath)).catch(() => {});
+      const delPath = getDocPath(docItem);
+      if (delPath) {
+        await deleteObject(storageRef(storage, delPath)).catch(() => {});
       }
       const updated = auditDocs.filter((d) => d.id !== docItem.id);
       setAuditDocs(updated);
@@ -819,7 +833,7 @@ export default function UnifiedAuditDetail({
                         <p className="text-xs font-medium text-gray-800 truncate">{d.name}</p>
                         <p className="text-xs text-gray-400">{d.size ? `${(d.size / 1024 / 1024).toFixed(1)} MB` : ''}{d.uploadedBy ? ` · ${d.uploadedBy}` : ''}</p>
                       </div>
-                      {d.storagePath && (
+                      {(d.storagePath || d.url) && (
                         <>
                           <button
                             type="button"

@@ -72,6 +72,17 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
 
+  const getDocPath = (d) => {
+    if (d?.storagePath) return d.storagePath;
+    if (d?.url) {
+      try {
+        const match = d.url.match(/\/o\/(.+?)(\?|$)/);
+        if (match) return decodeURIComponent(match[1]);
+      } catch { /* ignore */ }
+    }
+    return null;
+  };
+
   const handleDetailClose = useCallback(() => {
     const id = safeAudit.id;
     if (id && typeof sessionStorage !== 'undefined') {
@@ -551,8 +562,11 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
   const handleDocDelete = async (docRecord) => {
     if (!window.confirm(`Delete "${docRecord.name}"?`)) return;
     try {
-      const storageRef = ref(storage, docRecord.storagePath);
-      await deleteObject(storageRef).catch(() => {});
+      const delPath = getDocPath(docRecord);
+      if (delPath) {
+        const storageRef = ref(storage, delPath);
+        await deleteObject(storageRef).catch(() => {});
+      }
       const updatedDocs = auditDocs.filter((d) => d.id !== docRecord.id);
       setAuditDocs(updatedDocs);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updatedDocs });
@@ -698,7 +712,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                 <div class="doc-name">${esc(d.name)}</div>
                 <div class="doc-meta">${formatAuditDocSize(d.size)} · ${esc(d.uploadedByName || '')}${d.uploadedAt ? ` · ${fmtDate(d.uploadedAt)}` : ''}</div>
               </div>
-              ${d.url ? `<a class="doc-link" href="${esc(d.url)}">View</a>` : ''}
+              ${(d.storagePath || d.url) ? '<span class="doc-link">[Document attached]</span>' : ''}
             </div>`;
         }).join('')}
       </div>`;
@@ -1781,7 +1795,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                           key={docRecord.id}
                           className="p-3 bg-gray-50 border border-gray-100 rounded-xl hover:border-gray-200 transition-all"
                         >
-                          {isAuditDocImageType(docRecord.type) && docRecord.url && (
+                          {isAuditDocImageType(docRecord.type) && getDocPath(docRecord) && (
                             <div className="mb-2">
                               <button
                                 type="button"
@@ -1790,7 +1804,9 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                                   e.stopPropagation();
                                   (async () => {
                                     try {
-                                      const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                      const dp = getDocPath(docRecord);
+                                      if (!dp) return;
+                                      const fileRef = ref(storage, dp);
                                       const blob = await getBlob(fileRef);
                                       const blobUrl = URL.createObjectURL(blob);
                                       window.open(blobUrl, '_blank');
@@ -1800,7 +1816,18 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                                 }}
                               >
                                 <img
-                                  src={docRecord.url}
+                                  src=""
+                                  ref={(img) => {
+                                    if (img && !img.dataset.loaded) {
+                                      img.dataset.loaded = 'true';
+                                      const p = getDocPath(docRecord);
+                                      if (p) {
+                                        getBlob(ref(storage, p)).then((blob) => {
+                                          img.src = URL.createObjectURL(blob);
+                                        }).catch(() => {});
+                                      }
+                                    }
+                                  }}
                                   alt={docRecord.name}
                                   loading="lazy"
                                   className="w-full max-h-32 object-cover rounded-xl border border-gray-100"
@@ -1834,10 +1861,19 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
                               <a
-                                href={docRecord.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
+                                href="#"
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  const p = getDocPath(docRecord);
+                                  if (!p) return;
+                                  try {
+                                    const blob = await getBlob(ref(storage, p));
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    window.open(blobUrl, '_blank');
+                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+                                  } catch { /* ignore */ }
+                                }}
                                 className="flex items-center gap-1 rounded-xl bg-[#E8F5F5] px-2.5 py-1.5 text-xs font-medium text-[#1B6B6B] transition-colors hover:bg-[#1B6B6B] hover:text-white"
                                 title="View document"
                               >
@@ -1847,7 +1883,9 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   try {
-                                    const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                    const dp = getDocPath(docRecord);
+                                    if (!dp) return;
+                                    const fileRef = ref(storage, dp);
                                     const blob = await getBlob(fileRef);
                                     const blobUrl = URL.createObjectURL(blob);
                                     const a = document.createElement('a');
@@ -1898,7 +1936,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                     <div className="space-y-2">
                       {auditDocs.map((docRecord) => (
                         <div key={docRecord.id} className="p-3 bg-gray-50 border border-gray-100 rounded-xl">
-                          {isAuditDocImageType(docRecord.type) && docRecord.url && (
+                          {isAuditDocImageType(docRecord.type) && getDocPath(docRecord) && (
                             <div className="mb-2">
                               <button
                                 type="button"
@@ -1907,7 +1945,9 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                                   e.stopPropagation();
                                   (async () => {
                                     try {
-                                      const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                      const dp = getDocPath(docRecord);
+                                      if (!dp) return;
+                                      const fileRef = ref(storage, dp);
                                       const blob = await getBlob(fileRef);
                                       const blobUrl = URL.createObjectURL(blob);
                                       window.open(blobUrl, '_blank');
@@ -1917,7 +1957,18 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                                 }}
                               >
                                 <img
-                                  src={docRecord.url}
+                                  src=""
+                                  ref={(img) => {
+                                    if (img && !img.dataset.loaded) {
+                                      img.dataset.loaded = 'true';
+                                      const p = getDocPath(docRecord);
+                                      if (p) {
+                                        getBlob(ref(storage, p)).then((blob) => {
+                                          img.src = URL.createObjectURL(blob);
+                                        }).catch(() => {});
+                                      }
+                                    }
+                                  }}
                                   alt={docRecord.name}
                                   loading="lazy"
                                   className="w-full max-h-32 object-cover rounded-xl border border-gray-100"
@@ -1945,10 +1996,19 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
                               <a
-                                href={docRecord.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
+                                href="#"
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  const p = getDocPath(docRecord);
+                                  if (!p) return;
+                                  try {
+                                    const blob = await getBlob(ref(storage, p));
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    window.open(blobUrl, '_blank');
+                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+                                  } catch { /* ignore */ }
+                                }}
                                 className="flex items-center gap-1 rounded-xl bg-[#E8F5F5] px-2.5 py-1.5 text-xs font-medium text-[#1B6B6B] transition-colors hover:bg-[#1B6B6B] hover:text-white"
                                 title="View document"
                               >
@@ -1958,7 +2018,9 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   try {
-                                    const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                    const dp = getDocPath(docRecord);
+                                    if (!dp) return;
+                                    const fileRef = ref(storage, dp);
                                     const blob = await getBlob(fileRef);
                                     const blobUrl = URL.createObjectURL(blob);
                                     const a = document.createElement('a');
@@ -2078,7 +2140,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                   <div className="space-y-2">
                     {auditDocs.map((docRecord) => (
                       <div key={docRecord.id} className="p-2.5 bg-gray-50 rounded-xl hover:bg-[#E8F5F5] transition-colors group">
-                        {isAuditDocImageType(docRecord.type) && docRecord.url && (
+                        {isAuditDocImageType(docRecord.type) && getDocPath(docRecord) && (
                           <div className="mb-2">
                             <button
                               type="button"
@@ -2087,7 +2149,9 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                                 e.stopPropagation();
                                 (async () => {
                                   try {
-                                    const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                    const dp = getDocPath(docRecord);
+                                    if (!dp) return;
+                                    const fileRef = ref(storage, dp);
                                     const blob = await getBlob(fileRef);
                                     const blobUrl = URL.createObjectURL(blob);
                                     window.open(blobUrl, '_blank');
@@ -2097,7 +2161,18 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                               }}
                             >
                               <img
-                                src={docRecord.url}
+                                src=""
+                                ref={(img) => {
+                                  if (img && !img.dataset.loaded) {
+                                    img.dataset.loaded = 'true';
+                                    const p = getDocPath(docRecord);
+                                    if (p) {
+                                      getBlob(ref(storage, p)).then((blob) => {
+                                        img.src = URL.createObjectURL(blob);
+                                      }).catch(() => {});
+                                    }
+                                  }
+                                }}
                                 alt={docRecord.name}
                                 loading="lazy"
                                 className="w-full max-h-32 object-cover rounded-xl border border-gray-100"
@@ -2115,10 +2190,19 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
                             <a
-                              href={docRecord.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
+                              href="#"
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const p = getDocPath(docRecord);
+                                if (!p) return;
+                                try {
+                                  const blob = await getBlob(ref(storage, p));
+                                  const blobUrl = URL.createObjectURL(blob);
+                                  window.open(blobUrl, '_blank');
+                                  setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+                                } catch { /* ignore */ }
+                              }}
                               className="flex items-center gap-1 rounded-xl bg-[#E8F5F5] px-2.5 py-1.5 text-xs font-medium text-[#1B6B6B] transition-colors hover:bg-[#1B6B6B] hover:text-white"
                               title="View document"
                             >
@@ -2128,7 +2212,9 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 try {
-                                  const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                  const dp = getDocPath(docRecord);
+                                  if (!dp) return;
+                                  const fileRef = ref(storage, dp);
                                   const blob = await getBlob(fileRef);
                                   const blobUrl = URL.createObjectURL(blob);
                                   const a = document.createElement('a');
