@@ -514,7 +514,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
       const timestamp = Date.now();
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const filename = `${timestamp}_${safeName}`;
-      const storagePath = `audits/${companyId}/${audit.id}/${filename}`;
+      const storagePath = `companies/${companyId}/audits/${audit.id}/${filename}`;
       const storageRef = ref(storage, storagePath);
       const uploadTask = uploadBytesResumable(storageRef, file);
       await new Promise((resolve, reject) => {
