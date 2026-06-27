@@ -222,14 +222,22 @@ export default function AssignAuditModal({
           verifyRadius: requireLocation ? verifyRadius : null,
           branchLat: (() => {
             if (!branch) return null;
-            const branchList = branches || [];
-            const found = branchList.find((b) => (typeof b === 'object' ? b.name : b) === branch);
+            const loc = (locations || []).find((l) => (typeof l === 'object' ? l.name : l) === location);
+            if (loc && typeof loc === 'object' && loc.branches) {
+              const found = loc.branches.find((b) => b.name === branch);
+              return found?.lat ?? null;
+            }
+            const found = (branches || []).find((b) => (typeof b === 'object' ? b.name : b) === branch);
             return found && typeof found === 'object' ? found.lat ?? null : null;
           })(),
           branchLng: (() => {
             if (!branch) return null;
-            const branchList = branches || [];
-            const found = branchList.find((b) => (typeof b === 'object' ? b.name : b) === branch);
+            const loc = (locations || []).find((l) => (typeof l === 'object' ? l.name : l) === location);
+            if (loc && typeof loc === 'object' && loc.branches) {
+              const found = loc.branches.find((b) => b.name === branch);
+              return found?.lng ?? null;
+            }
+            const found = (branches || []).find((b) => (typeof b === 'object' ? b.name : b) === branch);
             return found && typeof found === 'object' ? found.lng ?? null : null;
           })(),
           locationCheck: null,
@@ -432,16 +440,22 @@ export default function AssignAuditModal({
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Location</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <select value={location} onChange={(e) => setLocation(e.target.value)} className="text-xs border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
+              <select value={location} onChange={(e) => { setLocation(e.target.value); setBranch(''); }} className="text-xs border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
                 <option value="">Location</option>
-                {(locations || []).map((l) => <option key={l.id || l}>{l.name || l}</option>)}
+                {(locations || []).map((l) => {
+                  const name = typeof l === 'object' ? l.name : l;
+                  return <option key={name} value={name}>{name}</option>;
+                })}
               </select>
               <select value={branch} onChange={(e) => setBranch(e.target.value)} className="text-xs border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
                 <option value="">Branch</option>
-                {(branches || []).map((b) => {
-                  const name = typeof b === 'object' ? b.name : b;
-                  return <option key={name} value={name}>{name}</option>;
-                })}
+                {(() => {
+                  const loc = (locations || []).find((l) => (typeof l === 'object' ? l.name : l) === location);
+                  const branchList = loc && typeof loc === 'object' && loc.branches
+                    ? loc.branches.map((b) => b.name)
+                    : (branches || []).map((b) => typeof b === 'object' ? b.name : b);
+                  return branchList.map((name) => <option key={name} value={name}>{name}</option>);
+                })()}
               </select>
               <select value={department} onChange={(e) => setDepartment(e.target.value)} className="text-xs border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
                 <option value="">Department</option>
