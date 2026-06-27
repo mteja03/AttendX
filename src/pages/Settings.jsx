@@ -30,12 +30,12 @@ function normalizeLocations(company) {
     return raw;
   }
 
-  // Old format — flat string arrays. Migrate.
+  // Old format — flat string arrays. Smart-match branches to locations.
   const locationNames = raw.map((l) => (typeof l === 'string' ? l : l.name || l));
   const branchList = (Array.isArray(oldBranches) ? oldBranches : []).map((b, i) => {
     const obj = typeof b === 'string' ? { name: b } : b;
     return {
-      id: obj.id || `br_${Date.now()}_${i}`,
+      id: `br_${Date.now()}_${i}`,
       name: obj.name || '',
       address: obj.address || '',
       managerId: obj.managerId || null,
@@ -52,11 +52,33 @@ function normalizeLocations(company) {
     return [{ id: `loc_${Date.now()}`, name: 'General', branches: branchList }];
   }
 
-  return locationNames.map((name, i) => ({
-    id: `loc_${Date.now()}_${i}`,
-    name,
-    branches: branchList.map((br) => ({ ...br, id: `br_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}` })),
-  }));
+  // Match branches to locations by name (case-insensitive, fuzzy)
+  const normalize = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const matched = new Set();
+  const result = locationNames.map((locName, i) => {
+    const locKey = normalize(locName);
+    const matchingBranches = branchList.filter((br) => {
+      const brKey = normalize(br.name);
+      // Exact match or close match (one contains the other)
+      return brKey === locKey || (brKey.length > 3 && locKey.length > 3 && (brKey.includes(locKey) || locKey.includes(brKey)));
+    });
+    matchingBranches.forEach((br) => matched.add(br.name));
+    return {
+      id: `loc_${Date.now()}_${i}`,
+      name: locName,
+      branches: matchingBranches.length > 0
+        ? matchingBranches
+        : [{ id: `br_self_${Date.now()}_${i}`, name: locName, address: '', managerId: null, managerName: '', lat: null, lng: null, phone: '', active: true }],
+    };
+  });
+
+  // Any unmatched branches go under first location
+  const unmatched = branchList.filter((br) => !matched.has(br.name));
+  if (unmatched.length > 0 && result.length > 0) {
+    result[0] = { ...result[0], branches: [...result[0].branches, ...unmatched] };
+  }
+
+  return result;
 }
 
 const FORMAT_OPTIONS = [
