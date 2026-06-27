@@ -7,6 +7,7 @@ import {
   SECTION_TYPES, QA_QUESTION_TYPES, COLUMN_TYPES, SECTION_META,
   getSectionFillProgress, getUnifiedFillProgress, getUnifiedAuditScore,
 } from './auditHelpers';
+import LocationVerification from './LocationVerification';
 
 const ROWS_PER_PAGE = 100;
 const SEVERITIES = [
@@ -62,6 +63,9 @@ export default function UnifiedAuditDetail({
   const [auditDocs,    setAuditDocs]    = useState(() => safeAudit.auditDocuments || []);
   const [docUploading, setDocUploading] = useState(false);
   const [viewingDocId, setViewingDocId] = useState(null);
+  const [showVerification, setShowVerification] = useState(
+    effStatus(safeAudit.status) === 'Assigned' && (safeAudit.requireLocation || safeAudit.requireSelfie),
+  );
 
   const saveTimeoutRef = useRef(null);
   const isMountedRef   = useRef(true);
@@ -202,7 +206,7 @@ export default function UnifiedAuditDetail({
       try {
         isSavingRef.current = true;
         setAutoSaving(true);
-        const newStatus = effStatus(safeAudit.status) === 'Assigned' ? 'In Progress' : safeAudit.status;
+        const newStatus = (effStatus(safeAudit.status) === 'Assigned' && !showVerification) ? 'In Progress' : safeAudit.status;
         await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
           sectionResponses: respUpd, findings: findUpd, adminNotes: notesUpd,
           status: newStatus, updatedAt: serverTimestamp(), updatedBy: currentUser?.email || '',
@@ -212,7 +216,7 @@ export default function UnifiedAuditDetail({
       } catch (e) { if (import.meta.env.DEV) console.error('Auto-save failed:', e); }
       finally { isSavingRef.current = false; if (isMountedRef.current) setAutoSaving(false); }
     }, 1500);
-  }, [audit.id, companyId, currentUser, isClosed, safeAudit.status]);
+  }, [audit.id, companyId, currentUser, isClosed, safeAudit.status, showVerification]);
 
   /* ── section response helpers ────────────────────────────────────────── */
   const mutateSec = useCallback((secId, updater) => {
@@ -952,6 +956,27 @@ export default function UnifiedAuditDetail({
             )}
           </div>
         </div>
+      )}
+
+      {showVerification && (
+        <LocationVerification
+          audit={safeAudit}
+          companyId={companyId}
+          currentUser={currentUser}
+          onSkip={() => setShowVerification(false)}
+          onComplete={async ({ locationCheck, checkInSelfie }) => {
+            try {
+              await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+                status: 'In Progress',
+                locationCheck: locationCheck || null,
+                checkInSelfie: checkInSelfie || null,
+                updatedAt: serverTimestamp(),
+                updatedBy: currentUser?.email || '',
+              });
+            } catch { /* ignore */ }
+            setShowVerification(false);
+          }}
+        />
       )}
     </div>
   );

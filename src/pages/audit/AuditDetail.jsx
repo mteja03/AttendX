@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { updateDoc, doc } from 'firebase/firestore';
+import { updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getBlob, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase/config';
 import {
@@ -7,6 +7,7 @@ import {
   stableStringify, formatAuditDocSize, fileDocIconType, auditDocViewLabel, isAuditDocImageType,
 } from './auditHelpers';
 import { WhatsAppButton } from '../../utils/whatsapp';
+import LocationVerification from './LocationVerification';
 
 export default function AuditDetail({ audit, company, companyId, currentUser, employees, onClose, showSuccess, showError, isAuditor, canManage }) {
   const safeAudit = audit || {};
@@ -71,6 +72,9 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
+  const [showVerification, setShowVerification] = useState(
+    effStatus(audit.status) === 'Assigned' && (audit.requireLocation || audit.requireSelfie),
+  );
 
   const getDocPath = (d) => {
     if (d?.storagePath) return d.storagePath;
@@ -254,10 +258,10 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
     if (!checklistEditable) return;
     const updated = checklistReview.map((i) => (i.id === id ? { ...i, result } : i));
     setChecklistReview(updated);
-    if (effStatus(audit.status) === 'Assigned') {
+    if (effStatus(audit.status) === 'Assigned' && !showVerification) {
       updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
         status: 'In Progress',
-        updatedAt: new Date(),
+        updatedAt: serverTimestamp(),
         updatedBy: currentUser?.email || '',
       }).catch(() => {});
     }
@@ -2754,6 +2758,27 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
             )}
           </div>
         </div>
+      )}
+
+      {showVerification && (
+        <LocationVerification
+          audit={audit}
+          companyId={companyId}
+          currentUser={currentUser}
+          onSkip={() => setShowVerification(false)}
+          onComplete={async ({ locationCheck, checkInSelfie }) => {
+            try {
+              await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
+                status: 'In Progress',
+                locationCheck: locationCheck || null,
+                checkInSelfie: checkInSelfie || null,
+                updatedAt: serverTimestamp(),
+                updatedBy: currentUser?.email || '',
+              });
+            } catch { /* ignore */ }
+            setShowVerification(false);
+          }}
+        />
       )}
     </div>
   );
