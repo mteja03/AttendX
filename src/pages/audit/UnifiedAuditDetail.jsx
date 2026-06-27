@@ -63,6 +63,7 @@ export default function UnifiedAuditDetail({
   const [auditDocs,    setAuditDocs]    = useState(() => safeAudit.auditDocuments || []);
   const [docUploading, setDocUploading] = useState(false);
   const [viewingDocId, setViewingDocId] = useState(null);
+  const [selfieViewUrl, setSelfieViewUrl] = useState(null);
   const [showVerification, setShowVerification] = useState(
     effStatus(safeAudit.status) === 'Assigned' && (safeAudit.requireLocation || safeAudit.requireSelfie),
   );
@@ -772,9 +773,17 @@ export default function UnifiedAuditDetail({
                 </span>
               )}
               {safeAudit.checkInSelfie && (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
-                  📸 Selfie captured
-                </span>
+                <button type="button" onClick={async () => {
+                  if (!safeAudit.checkInSelfie?.storagePath) return;
+                  try {
+                    const fileRef = storageRef(storage, safeAudit.checkInSelfie.storagePath);
+                    const blob = await getBlob(fileRef);
+                    const blobUrl = URL.createObjectURL(blob);
+                    setSelfieViewUrl(blobUrl);
+                  } catch { /* ignore */ }
+                }} className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors cursor-pointer">
+                  📸 View selfie
+                </button>
               )}
               {safeAudit.locationCheck?.timestamp && (
                 <span className="text-[10px] text-gray-400">
@@ -987,6 +996,25 @@ export default function UnifiedAuditDetail({
               <div className="mb-4"><label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Final comments (optional)</label><textarea value={closeFeedback} onChange={(e) => setCloseFeedback(e.target.value)} rows={3} placeholder="Observations, recommendations…" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]" /></div>
               <div className="flex gap-2"><button type="button" onClick={() => { setShowClose(false); setAuditRating(0); setCloseFeedback(''); }} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancel</button><button type="button" onClick={handleCloseAudit} disabled={saving} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold disabled:opacity-50">{saving?'Closing…':'✅ Close Audit'}</button></div></>
             )}
+          </div>
+        </div>
+      )}
+
+      {selfieViewUrl && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[65] p-4" onClick={() => { URL.revokeObjectURL(selfieViewUrl); setSelfieViewUrl(null); }}>
+          <div className="bg-white rounded-2xl overflow-hidden max-w-sm w-full shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Check-in selfie</p>
+                <p className="text-xs text-gray-400">{safeAudit.auditorName} · {safeAudit.branch || safeAudit.location || '—'}</p>
+              </div>
+              <button type="button" onClick={() => { URL.revokeObjectURL(selfieViewUrl); setSelfieViewUrl(null); }} className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 text-xs">✕</button>
+            </div>
+            <img src={selfieViewUrl} alt="Auditor check-in selfie" className="w-full" style={{ transform: 'scaleX(-1)' }} />
+            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+              <span>{safeAudit.locationCheck?.verified ? `✓ On-site · ${safeAudit.locationCheck.distanceFromBranch}m` : safeAudit.locationCheck ? `⚠ ${(safeAudit.locationCheck.distanceFromBranch / 1000).toFixed(1)} km away` : ''}</span>
+              <span>{safeAudit.locationCheck?.timestamp ? new Date(safeAudit.locationCheck.timestamp?.seconds ? safeAudit.locationCheck.timestamp.seconds * 1000 : safeAudit.locationCheck.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</span>
+            </div>
           </div>
         </div>
       )}
