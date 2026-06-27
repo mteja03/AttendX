@@ -787,6 +787,19 @@ export default function Settings() {
             if (import.meta.env.DEV) console.log(`Renamed branch "${oldName}" → "${newName}" for ${affected.length} employees`);
           } catch { showError('Branch renamed but some employee records failed to update'); }
         }
+
+        // Also cascade to audit docs
+        try {
+          const { getDocs: gd, query: q, collection: col, where: w, limit: lim } = await import('firebase/firestore');
+          const auditSnap = await gd(q(col(db, 'companies', companyId, 'audits'), w('branch', '==', oldName), lim(200)));
+          if (!auditSnap.empty) {
+            const auditBatch = writeBatch(db);
+            auditSnap.docs.forEach((d) => {
+              auditBatch.update(d.ref, { branch: newName, updatedAt: serverTimestamp() });
+            });
+            await auditBatch.commit();
+          }
+        } catch { /* audits rename failed silently */ }
       }
     }
 
@@ -2228,6 +2241,19 @@ export default function Settings() {
                       await batch.commit();
                     } catch { showError('Location renamed but some employee records failed to update'); }
                   }
+
+                  // Also cascade to audit docs
+                  try {
+                    const { getDocs: gd, query: q, collection: col, where: w, limit: lim } = await import('firebase/firestore');
+                    const auditSnap = await gd(q(col(db, 'companies', companyId, 'audits'), w('location', '==', oldName), lim(200)));
+                    if (!auditSnap.empty) {
+                      const auditBatch = writeBatch(db);
+                      auditSnap.docs.forEach((d) => {
+                        auditBatch.update(d.ref, { location: newName, updatedAt: serverTimestamp() });
+                      });
+                      await auditBatch.commit();
+                    }
+                  } catch { /* audits rename failed silently */ }
                 }
 
                 setEditingLocation(null);
