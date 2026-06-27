@@ -223,7 +223,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
             findings: newFindings,
             adminNotes: newAdminNotes,
             auditDocuments: docs || [],
-            updatedAt: new Date(),
+            updatedAt: serverTimestamp(),
             updatedBy: currentUser?.email || '',
           };
           if (checklistEditable || !isAuditor) {
@@ -365,7 +365,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
         submittedAt: new Date(),
         submittedBy: currentUser?.email || '',
         checklistLocked: true,
-        updatedAt: new Date(),
+        updatedAt: serverTimestamp(),
         updatedBy: currentUser?.email || '',
         timeMetrics: {
           startedAt: safeAudit.locationCheck?.timestamp || safeAudit.updatedAt || null,
@@ -399,7 +399,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
         status: 'Under Review',
         reviewStartedAt: new Date(),
         reviewStartedBy: currentUser?.email || '',
-        updatedAt: new Date(),
+        updatedAt: serverTimestamp(),
       });
       showSuccess('Audit under review');
       handleDetailClose();
@@ -425,7 +425,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
         managerNotes: adminNotes,
         auditRating,
         closeFeedback: closeFeedback.trim(),
-        updatedAt: new Date(),
+        updatedAt: serverTimestamp(),
       });
 
       showSuccess('Audit closed!');
@@ -458,7 +458,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
         sentBackBy: currentUser?.email || '',
         sentBackReason: reason,
         checklistLocked: false,
-        updatedAt: new Date(),
+        updatedAt: serverTimestamp(),
       });
 
       showSuccess('Audit sent back to auditor');

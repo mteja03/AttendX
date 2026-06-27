@@ -356,7 +356,7 @@ export default function TeamMembers() {
       if (tmId) {
         await updateDoc(doc(db, 'companies', companyId, 'teamMembers', tmId), {
           permissions: permissionsForm,
-          updatedAt: new Date(),
+          updatedAt: serverTimestamp(),
         });
       }
       await updateDoc(doc(db, 'users', permissionsTarget.id), { permissions: permissionsForm });

@@ -263,7 +263,7 @@ export default function AssignAuditModal({
           adminNotes: '',
           createdAt: serverTimestamp(),
           createdBy: currentUser?.email || '',
-          updatedAt: new Date(),
+          updatedAt: serverTimestamp(),
         });
 
         const ref = doc(db, 'companies', companyId, 'audits', `${refId}_${Date.now()}_${i}`);

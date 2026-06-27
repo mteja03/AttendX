@@ -374,7 +374,7 @@ export default function AuditSettings({ companyId, auditTypes, userRole, showSuc
     }
     try {
       setSaving(true);
-      const payload = stripUndefined({ name: name.trim(), color, auditCategory, riskLevel, description: description.trim() || null, sections, updatedAt: new Date() });
+      const payload = stripUndefined({ name: name.trim(), color, auditCategory, riskLevel, description: description.trim() || null, sections, updatedAt: serverTimestamp() });
       if (editingType) {
         await updateDoc(doc(db, 'companies', companyId, 'auditTypes', editingType.id), payload);
         showSuccess('Template updated');

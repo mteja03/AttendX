@@ -136,7 +136,7 @@ export default function RecordAuditDetail({
             findings: updatedFindings,
             adminNotes: updatedNotes,
             status: newStatus,
-            updatedAt: new Date(),
+            updatedAt: serverTimestamp(),
             updatedBy: currentUser?.email || '',
           });
           if (!isMountedRef.current) return;
@@ -244,7 +244,7 @@ export default function RecordAuditDetail({
         status: 'Submitted',
         submittedAt: new Date(),
         submittedBy: currentUser?.email || '',
-        updatedAt: new Date(),
+        updatedAt: serverTimestamp(),
         updatedBy: currentUser?.email || '',
       });
       showSuccess('Submitted!');

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { updateDoc, doc } from 'firebase/firestore';
+import { updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { AUDIT_STATUSES, effStatus, formatDate, getAuditScore, isAuditOverdue, statusMeta, isRecordType, getRecordFillProgress, getRecordAuditScore } from './auditHelpers';
 import { whatsappUrl } from '../../utils/whatsappUrl';
@@ -41,7 +41,7 @@ export default function AuditTableRow({
     }
     try {
       setSaving(true);
-      const payload = { status: newStatus, updatedAt: new Date(), ...(newStatus === 'Closed' && !audit.closedAt && { closedAt: new Date() }) };
+      const payload = { status: newStatus, updatedAt: serverTimestamp(), ...(newStatus === 'Closed' && !audit.closedAt && { closedAt: serverTimestamp() }) };
       if (newStatus === 'Under Review' && effCur === 'Submitted') {
         payload.reviewStartedAt = new Date();
         payload.reviewStartedBy = currentUser?.email || '';

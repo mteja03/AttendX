@@ -7,6 +7,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -1511,7 +1512,7 @@ export default function Settings() {
         const templateRef = doc(db, 'companies', companyId, 'settings', 'onboardingTemplate');
         await withRetry(() => setDoc(templateRef, {
           tasks: cleanTasks,
-          updatedAt: new Date(),
+          updatedAt: serverTimestamp(),
           updatedBy: currentUser?.email || 'admin',
         }), { companyId, action: 'saveOnboardingTemplate' });
 
@@ -1796,7 +1797,7 @@ export default function Settings() {
         const templateRef = doc(db, 'companies', companyId, 'settings', 'offboardingTemplate');
         await withRetry(() => setDoc(templateRef, {
           tasks: cleanTasks,
-          updatedAt: new Date(),
+          updatedAt: serverTimestamp(),
           updatedBy: currentUser?.email || 'admin',
         }), { companyId, action: 'saveOffboardingTemplate' });
         success(`Offboarding template saved! ${cleanTasks.length} tasks saved.`);
