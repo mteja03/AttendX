@@ -2249,7 +2249,7 @@ export default function Settings() {
             </div>
             <div className="mb-4">
               <label className="text-xs text-gray-500 block mb-1">General Manager</label>
-              <input type="text" placeholder="Search employees..." value={gmSearch} onChange={(e) => setGmSearch(e.target.value)} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 mb-1 focus:outline-none focus:border-[#1B6B6B]" />
+              <input type="text" placeholder="🔍 Search by name or designation..." value={gmSearch} onChange={(e) => setGmSearch(e.target.value)} className="w-full text-xs border border-gray-100 rounded-lg px-3 py-1.5 mb-1.5 bg-gray-50 focus:outline-none focus:border-[#1B6B6B] focus:bg-white" />
               <select value={locationForm.generalManagerId || ''} onChange={(e) => { const emp = employees.find((em) => em.id === e.target.value); setLocationForm((p) => ({ ...p, generalManagerId: e.target.value || null, generalManagerName: emp ? (emp.fullName || emp.name || '') : '' })); }} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
                 <option value="">Select employee…</option>
                 {employees.filter((e) => e.status === 'Active').filter((e) => { const q = gmSearch.toLowerCase(); return !q || (e.fullName || e.name || e.email || '').toLowerCase().includes(q) || (e.designation || '').toLowerCase().includes(q); }).map((e) => <option key={e.id} value={e.id}>{e.fullName || e.name || e.email} — {e.designation || e.role || ''}</option>)}
@@ -2328,7 +2328,7 @@ export default function Settings() {
               </div>
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Branch manager</label>
-                <input type="text" placeholder="Search employees..." value={branchManagerSearch} onChange={(e) => setBranchManagerSearch(e.target.value)} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 mb-1 focus:outline-none focus:border-[#1B6B6B]" />
+                <input type="text" placeholder="🔍 Search by name or designation..." value={branchManagerSearch} onChange={(e) => setBranchManagerSearch(e.target.value)} className="w-full text-xs border border-gray-100 rounded-lg px-3 py-1.5 mb-1.5 bg-gray-50 focus:outline-none focus:border-[#1B6B6B] focus:bg-white" />
                 <select value={branchForm.managerId || ''} onChange={(e) => { const emp = employees.find((em) => em.id === e.target.value); setBranchForm((p) => ({ ...p, managerId: e.target.value || null, managerName: emp ? (emp.fullName || emp.name || '') : '' })); }} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
                   <option value="">Select employee…</option>
                   {(() => {
