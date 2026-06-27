@@ -8,6 +8,7 @@ import {
   setDoc,
   updateDoc,
   serverTimestamp,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -342,6 +343,7 @@ export default function Settings() {
   const [branchForm, setBranchForm] = useState({ name: '', address: '', managerId: null, managerName: '', lat: null, lng: null, phone: '' });
   const [locationForm, setLocationForm] = useState({ name: '' });
   const [savingLocBranch, setSavingLocBranch] = useState(false);
+  const [expandedLocation, setExpandedLocation] = useState(null);
 
   const structuredLocations = useMemo(() => normalizeLocations(company), [company]);
 
@@ -762,6 +764,32 @@ export default function Settings() {
       return { ...loc, branches: [...existing, { ...branchForm, id: `br_${Date.now()}`, name: branchForm.name.trim(), active: true }] };
     });
     await saveLocations(updated);
+
+    // Cascade rename to employees if branch name changed
+    if (branchForm.id) {
+      const oldBranch = structuredLocations
+        .flatMap((l) => l.branches || [])
+        .find((b) => b.id === branchForm.id);
+      const oldName = oldBranch?.name;
+      const newName = branchForm.name.trim();
+      if (oldName && newName && oldName !== newName) {
+        const affected = employees.filter((e) => e.branch === oldName);
+        if (affected.length > 0) {
+          try {
+            const batch = writeBatch(db);
+            affected.forEach((emp) => {
+              batch.update(doc(db, 'companies', companyId, 'employees', emp.id), {
+                branch: newName,
+                updatedAt: serverTimestamp(),
+              });
+            });
+            await batch.commit();
+            if (import.meta.env.DEV) console.log(`Renamed branch "${oldName}" → "${newName}" for ${affected.length} employees`);
+          } catch { showError('Branch renamed but some employee records failed to update'); }
+        }
+      }
+    }
+
     setBranchForm({ name: '', address: '', managerId: null, managerName: '', lat: null, lng: null, phone: '' });
     setEditingBranchInLocation(null);
   };
@@ -1135,21 +1163,22 @@ export default function Settings() {
             const locEmpCount = (loc.branches || []).reduce((sum, br) => sum + employees.filter((e) => e.branch === br.name).length, 0);
             return (
               <div key={loc.id} className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="flex items-center gap-3 px-3 py-3 bg-gray-50/50 hover:bg-gray-50">
+                <div className="flex items-center gap-3 px-3 py-3 bg-gray-50/50 hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedLocation((prev) => prev === loc.id ? null : loc.id)}>
                   <div className="w-8 h-8 rounded-lg bg-[#E1F5EE] flex items-center justify-center flex-shrink-0">
                     <span className="text-sm">📍</span>
                   </div>
+                  <span className={`text-gray-400 text-xs transition-transform ${expandedLocation === loc.id ? 'rotate-90' : ''}`}>▶</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800">{loc.name}</p>
                     <p className="text-[10px] text-gray-400">{(loc.branches || []).length} branch{(loc.branches || []).length !== 1 ? 'es' : ''} · {locEmpCount} emp</p>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
-                    <button type="button" onClick={() => { setLocationForm({ name: loc.name, id: loc.id }); setEditingLocation('edit'); }} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 text-xs min-h-[44px] min-w-[44px]">✏️</button>
-                    <button type="button" onClick={() => handleDeleteLocation(loc.id)} disabled={locEmpCount > 0} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 text-xs disabled:opacity-30 min-h-[44px] min-w-[44px]">🗑️</button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setLocationForm({ name: loc.name, id: loc.id }); setEditingLocation('edit'); }} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 text-xs min-h-[44px] min-w-[44px]">✏️</button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteLocation(loc.id); }} disabled={locEmpCount > 0} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 text-xs disabled:opacity-30 min-h-[44px] min-w-[44px]">🗑️</button>
                   </div>
                 </div>
 
-                <div className="px-3 pb-3 border-t border-gray-100">
+                {expandedLocation === loc.id && <div className="px-3 pb-3 border-t border-gray-100">
                   {(loc.branches || []).map((br) => {
                     const brEmpCount = employees.filter((e) => e.branch === br.name).length;
                     return (
@@ -1181,7 +1210,7 @@ export default function Settings() {
                     );
                   })}
                   <button type="button" onClick={() => { setBranchForm({ name: '', address: '', managerId: null, managerName: '', lat: null, lng: null, phone: '' }); setEditingBranchInLocation(loc.id); }} className="mt-2 w-full py-2 border border-dashed border-gray-200 rounded-lg text-xs text-gray-400 hover:text-gray-600 hover:border-gray-300 flex items-center justify-center gap-1">+ Add branch</button>
-                </div>
+                </div>}
               </div>
             );
           })}
@@ -2180,6 +2209,27 @@ export default function Settings() {
               if (locationForm.id) {
                 const updated = structuredLocations.map((l) => l.id === locationForm.id ? { ...l, name: locationForm.name.trim() } : l);
                 await saveLocations(updated);
+
+                // Cascade rename to employees if location name changed
+                const oldLoc = structuredLocations.find((l) => l.id === locationForm.id);
+                const oldName = oldLoc?.name;
+                const newName = locationForm.name.trim();
+                if (oldName && newName && oldName !== newName) {
+                  const affected = employees.filter((e) => e.location === oldName);
+                  if (affected.length > 0) {
+                    try {
+                      const batch = writeBatch(db);
+                      affected.forEach((emp) => {
+                        batch.update(doc(db, 'companies', companyId, 'employees', emp.id), {
+                          location: newName,
+                          updatedAt: serverTimestamp(),
+                        });
+                      });
+                      await batch.commit();
+                    } catch { showError('Location renamed but some employee records failed to update'); }
+                  }
+                }
+
                 setEditingLocation(null);
               } else {
                 await handleAddLocation();
