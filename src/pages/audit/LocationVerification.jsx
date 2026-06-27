@@ -72,7 +72,7 @@ export default function LocationVerification({ audit, companyId, currentUser, on
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     );
-  }, [audit.branchLat, audit.branchLng, audit.branch, audit.location]);
+  }, [audit.branchLat, audit.branchLng, audit.branch, audit.location, audit.verifyRadius]);
 
   const openCamera = useCallback(async () => {
     setSelfieStatus('capturing');
