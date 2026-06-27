@@ -340,7 +340,7 @@ export function AuthProvider({ children }) {
           role: 'admin',
           companyId: null,
           isActive: true,
-          createdAt: new Date(),
+          createdAt: serverTimestamp(),
         });
       }
     }

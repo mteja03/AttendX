@@ -397,7 +397,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
       setSaving(true);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
         status: 'Under Review',
-        reviewStartedAt: new Date(),
+        reviewStartedAt: serverTimestamp(),
         reviewStartedBy: currentUser?.email || '',
         updatedAt: serverTimestamp(),
       });
@@ -454,7 +454,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
       const reason = sendBackReason.trim();
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
         status: 'Sent Back',
-        sentBackAt: new Date(),
+        sentBackAt: serverTimestamp(),
         sentBackBy: currentUser?.email || '',
         sentBackReason: reason,
         checklistLocked: false,

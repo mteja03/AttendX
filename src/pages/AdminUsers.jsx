@@ -433,7 +433,7 @@ export default function AdminUsers() {
           isActive: true,
           auditScope: resolvedAuditScope,
           employeeId: form.selectedEmpId || null,
-          createdAt: new Date(),
+          createdAt: serverTimestamp(),
         },
         ...prev,
       ]);
