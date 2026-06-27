@@ -97,7 +97,7 @@ export const ATTENDX_PRINT_STYLES = `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 2px solid #4ECDC4;
+    border-bottom: 2px solid #1B6B6B;
     margin-bottom: 24px;
   }
 
@@ -188,7 +188,7 @@ export const ATTENDX_PRINT_STYLES = `
 
   .print-highlight-card {
     background: #E8F5F5;
-    border: 1px solid #4ECDC4;
+    border: 1px solid #1B6B6B;
     border-radius: 10px;
     padding: 16px;
     margin-bottom: 16px;

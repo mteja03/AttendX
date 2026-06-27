@@ -188,7 +188,7 @@ export default function OffboardingTab({
           <div className="w-full bg-gray-100 rounded-full h-2 mb-6">
             <div
               className={`h-2 rounded-full transition-all ${
-                offPct === 100 ? 'bg-green-500' : offPct > 50 ? 'bg-[#4ECDC4]' : 'bg-amber-500'
+                offPct === 100 ? 'bg-green-500' : offPct > 50 ? 'bg-[#1B6B6B]' : 'bg-amber-500'
               }`}
               style={{ width: `${Math.min(offPct, 100)}%` }}
             />

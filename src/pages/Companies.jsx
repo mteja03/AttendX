@@ -685,7 +685,7 @@ export default function Companies() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search companies..."
-          className="w-full max-w-md rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
+          className="w-full max-w-md rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20 focus:border-[#1B6B6B]"
         />
         <select
           value={industryFilter}
@@ -905,7 +905,7 @@ export default function Companies() {
                   name="name"
                   value={form.name}
                   onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20 focus:border-[#1B6B6B]"
                   required
                 />
               </div>
@@ -945,7 +945,7 @@ export default function Companies() {
                   name="industry"
                   value={form.industry}
                   onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20 focus:border-[#1B6B6B]"
                 >
                   <option value="">— Select —</option>
                   {INDUSTRIES.map((ind) => (
@@ -960,7 +960,7 @@ export default function Companies() {
                   name="location"
                   value={form.location}
                   onChange={handleFormChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4]"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20 focus:border-[#1B6B6B]"
                 />
               </div>
               <div className="flex justify-end gap-3 pt-2">

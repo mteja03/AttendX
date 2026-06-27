@@ -32,7 +32,7 @@ const TIMELINE_COLORS = {
   teal: {
     dot: 'bg-[#1B6B6B]',
     bg: 'bg-[#E8F5F5]',
-    border: 'border-[#4ECDC4]/30',
+    border: 'border-[#1B6B6B]/30',
     text: 'text-[#1B6B6B]',
   },
   red: {

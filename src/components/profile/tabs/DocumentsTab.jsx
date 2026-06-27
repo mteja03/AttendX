@@ -53,9 +53,9 @@ export default function DocumentsTab({
   )}
 
   {uploadingDocId && uploadProgress && (
-    <div className="rounded-xl border border-[#4ECDC4] bg-[#4ECDC4]/10 p-3 text-sm text-[#1B6B6B] font-medium">
+    <div className="rounded-xl border border-[#1B6B6B] bg-[#1B6B6B]/10 p-3 text-sm text-[#1B6B6B] font-medium">
       <div className="flex items-center gap-2">
-        <span className="animate-spin rounded-full h-4 w-4 border-2 border-[#4ECDC4] border-t-transparent" />
+        <span className="animate-spin rounded-full h-4 w-4 border-2 border-[#1B6B6B] border-t-transparent" />
         <div className="min-w-0 flex-1">
           <p className="truncate">
             {uploadProgress.mode === 'replace' ? 'Replacing document...' : 'Uploading document...'}

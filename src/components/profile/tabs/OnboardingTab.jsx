@@ -63,7 +63,7 @@ export default function OnboardingTab({
         <p className="text-xs text-gray-400 mt-1">{onboardingPct}% Complete</p>
         <div className="mt-3 w-full max-w-md bg-gray-100 rounded-full h-2">
           <div
-            className="bg-[#4ECDC4] h-2 rounded-full"
+            className="bg-[#1B6B6B] h-2 rounded-full"
             style={{ width: `${Math.min(onboardingPct, 100)}%` }}
           />
         </div>
