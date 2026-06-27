@@ -363,9 +363,11 @@ export default function Settings() {
   const [editingLocation, setEditingLocation] = useState(null);
   const [editingBranchInLocation, setEditingBranchInLocation] = useState(null);
   const [branchForm, setBranchForm] = useState({ name: '', address: '', managerId: null, managerName: '', lat: null, lng: null, phone: '' });
-  const [locationForm, setLocationForm] = useState({ name: '' });
+  const [locationForm, setLocationForm] = useState({ name: '', generalManagerId: null, generalManagerName: '' });
   const [savingLocBranch, setSavingLocBranch] = useState(false);
   const [expandedLocation, setExpandedLocation] = useState(null);
+  const [branchManagerSearch, setBranchManagerSearch] = useState('');
+  const [gmSearch, setGmSearch] = useState('');
 
   const structuredLocations = useMemo(() => normalizeLocations(company), [company]);
 
@@ -758,9 +760,10 @@ export default function Settings() {
     const name = locationForm.name.trim();
     if (!name) return;
     if (structuredLocations.some((l) => l.name.toLowerCase() === name.toLowerCase())) { showError('Location already exists'); return; }
-    const updated = [...structuredLocations, { id: `loc_${Date.now()}`, name, branches: [] }];
+    const updated = [...structuredLocations, { id: `loc_${Date.now()}`, name, branches: [], generalManagerId: locationForm.generalManagerId || null, generalManagerName: locationForm.generalManagerName || '' }];
     await saveLocations(updated);
-    setLocationForm({ name: '' });
+    setLocationForm({ name: '', generalManagerId: null, generalManagerName: '' });
+    setGmSearch('');
     setEditingLocation(null);
   };
 
@@ -826,6 +829,7 @@ export default function Settings() {
     }
 
     setBranchForm({ name: '', address: '', managerId: null, managerName: '', lat: null, lng: null, phone: '' });
+    setBranchManagerSearch('');
     setEditingBranchInLocation(null);
   };
 
@@ -1205,10 +1209,13 @@ export default function Settings() {
                   <span className={`text-gray-400 text-xs transition-transform ${expandedLocation === loc.id ? 'rotate-90' : ''}`}>▶</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800">{loc.name}</p>
-                    <p className="text-[10px] text-gray-400">{(loc.branches || []).length} branch{(loc.branches || []).length !== 1 ? 'es' : ''} · {locEmpCount} emp</p>
+                    <p className="text-[10px] text-gray-400">
+                      {(loc.branches || []).length} branch{(loc.branches || []).length !== 1 ? 'es' : ''} · {locEmpCount} emp
+                      {loc.generalManagerName && <span className="ml-1.5 text-purple-600">· GM: {loc.generalManagerName}</span>}
+                    </p>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setLocationForm({ name: loc.name, id: loc.id }); setEditingLocation('edit'); }} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 text-xs min-h-[44px] min-w-[44px]">✏️</button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setLocationForm({ name: loc.name, id: loc.id, generalManagerId: loc.generalManagerId || null, generalManagerName: loc.generalManagerName || '' }); setGmSearch(''); setEditingLocation('edit'); }} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 text-xs min-h-[44px] min-w-[44px]">✏️</button>
                     <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteLocation(loc.id); }} disabled={locEmpCount > 0} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 text-xs disabled:opacity-30 min-h-[44px] min-w-[44px]">🗑️</button>
                   </div>
                 </div>
@@ -1237,21 +1244,21 @@ export default function Settings() {
                             </div>
                           </div>
                           <div className="flex gap-1 flex-shrink-0">
-                            <button type="button" onClick={() => { setBranchForm({ ...br }); setEditingBranchInLocation(loc.id); }} className="w-6 h-6 flex items-center justify-center rounded border border-gray-200 text-gray-400 hover:bg-gray-100 text-[10px] min-h-[44px] min-w-[44px]">✏️</button>
+                            <button type="button" onClick={() => { setBranchForm({ ...br }); setBranchManagerSearch(''); setEditingBranchInLocation(loc.id); }} className="w-6 h-6 flex items-center justify-center rounded border border-gray-200 text-gray-400 hover:bg-gray-100 text-[10px] min-h-[44px] min-w-[44px]">✏️</button>
                             <button type="button" onClick={() => handleDeleteBranch(loc.id, br.id)} disabled={brEmpCount > 0} className="w-6 h-6 flex items-center justify-center rounded border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 text-[10px] disabled:opacity-30 min-h-[44px] min-w-[44px]">🗑️</button>
                           </div>
                         </div>
                       </div>
                     );
                   })}
-                  <button type="button" onClick={() => { setBranchForm({ name: '', address: '', managerId: null, managerName: '', lat: null, lng: null, phone: '' }); setEditingBranchInLocation(loc.id); }} className="mt-2 w-full py-2 border border-dashed border-gray-200 rounded-lg text-xs text-gray-400 hover:text-gray-600 hover:border-gray-300 flex items-center justify-center gap-1">+ Add branch</button>
+                  <button type="button" onClick={() => { setBranchForm({ name: '', address: '', managerId: null, managerName: '', lat: null, lng: null, phone: '' }); setBranchManagerSearch(''); setEditingBranchInLocation(loc.id); }} className="mt-2 w-full py-2 border border-dashed border-gray-200 rounded-lg text-xs text-gray-400 hover:text-gray-600 hover:border-gray-300 flex items-center justify-center gap-1">+ Add branch</button>
                 </div>}
               </div>
             );
           })}
         </div>
 
-        <button type="button" onClick={() => { setLocationForm({ name: '' }); setEditingLocation('add'); }} className="mt-3 w-full py-2.5 border border-dashed border-gray-200 rounded-xl text-xs text-[#1B6B6B] hover:border-[#1B6B6B] hover:bg-[#E8F5F5] flex items-center justify-center gap-1 font-medium">+ Add location</button>
+        <button type="button" onClick={() => { setLocationForm({ name: '', generalManagerId: null, generalManagerName: '' }); setGmSearch(''); setEditingLocation('add'); }} className="mt-3 w-full py-2.5 border border-dashed border-gray-200 rounded-xl text-xs text-[#1B6B6B] hover:border-[#1B6B6B] hover:bg-[#E8F5F5] flex items-center justify-center gap-1 font-medium">+ Add location</button>
       </div>
     </div>
   );
@@ -2234,15 +2241,24 @@ export default function Settings() {
           <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-sm p-5 shadow-xl">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-800">{locationForm.id ? 'Edit location' : 'Add location'}</h3>
-              <button type="button" onClick={() => setEditingLocation(null)} className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 text-xs">✕</button>
+              <button type="button" onClick={() => { setEditingLocation(null); setGmSearch(''); }} className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 text-xs">✕</button>
             </div>
             <div className="mb-4">
               <label className="text-xs text-gray-500 block mb-1">Location name</label>
               <input type="text" value={locationForm.name} onChange={(e) => setLocationForm((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. Hyderabad" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#1B6B6B]" />
             </div>
+            <div className="mb-4">
+              <label className="text-xs text-gray-500 block mb-1">General Manager</label>
+              <input type="text" placeholder="Search employees..." value={gmSearch} onChange={(e) => setGmSearch(e.target.value)} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 mb-1 focus:outline-none focus:border-[#1B6B6B]" />
+              <select value={locationForm.generalManagerId || ''} onChange={(e) => { const emp = employees.find((em) => em.id === e.target.value); setLocationForm((p) => ({ ...p, generalManagerId: e.target.value || null, generalManagerName: emp ? (emp.fullName || emp.name || '') : '' })); }} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
+                <option value="">Select employee…</option>
+                {employees.filter((e) => e.status === 'Active').filter((e) => { const q = gmSearch.toLowerCase(); return !q || (e.fullName || e.name || e.email || '').toLowerCase().includes(q) || (e.designation || '').toLowerCase().includes(q); }).map((e) => <option key={e.id} value={e.id}>{e.fullName || e.name || e.email} — {e.designation || e.role || ''}</option>)}
+              </select>
+              <p className="text-[10px] text-gray-400 mt-0.5">All employees shown — GM can manage across locations</p>
+            </div>
             <button type="button" disabled={savingLocBranch || !locationForm.name.trim()} onClick={async () => {
               if (locationForm.id) {
-                const updated = structuredLocations.map((l) => l.id === locationForm.id ? { ...l, name: locationForm.name.trim() } : l);
+                const updated = structuredLocations.map((l) => l.id === locationForm.id ? { ...l, name: locationForm.name.trim(), generalManagerId: locationForm.generalManagerId || null, generalManagerName: locationForm.generalManagerName || '' } : l);
                 await saveLocations(updated);
 
                 // Cascade rename to employees if location name changed
@@ -2279,6 +2295,7 @@ export default function Settings() {
                 }
 
                 setEditingLocation(null);
+                setGmSearch('');
               } else {
                 await handleAddLocation();
               }
@@ -2298,7 +2315,7 @@ export default function Settings() {
                 <h3 className="text-sm font-semibold text-gray-800">{branchForm.id ? 'Edit branch' : 'Add branch'}</h3>
                 <p className="text-xs text-gray-400 mt-0.5">{structuredLocations.find((l) => l.id === editingBranchInLocation)?.name || ''}</p>
               </div>
-              <button type="button" onClick={() => setEditingBranchInLocation(null)} className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 text-xs">✕</button>
+              <button type="button" onClick={() => { setEditingBranchInLocation(null); setBranchManagerSearch(''); }} className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 text-xs">✕</button>
             </div>
             <div className="space-y-3">
               <div>
@@ -2311,10 +2328,20 @@ export default function Settings() {
               </div>
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Branch manager</label>
+                <input type="text" placeholder="Search employees..." value={branchManagerSearch} onChange={(e) => setBranchManagerSearch(e.target.value)} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 mb-1 focus:outline-none focus:border-[#1B6B6B]" />
                 <select value={branchForm.managerId || ''} onChange={(e) => { const emp = employees.find((em) => em.id === e.target.value); setBranchForm((p) => ({ ...p, managerId: e.target.value || null, managerName: emp ? (emp.fullName || emp.name || '') : '' })); }} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
                   <option value="">Select employee…</option>
-                  {employees.filter((e) => e.status === 'Active').map((e) => <option key={e.id} value={e.id}>{e.fullName || e.name || e.email} — {e.designation || e.role || ''}</option>)}
+                  {(() => {
+                    const locName = structuredLocations.find((l) => l.id === editingBranchInLocation)?.name || '';
+                    const q = branchManagerSearch.toLowerCase();
+                    return employees
+                      .filter((e) => e.status === 'Active')
+                      .filter((e) => !locName || (e.location || '') === locName)
+                      .filter((e) => !q || (e.fullName || e.name || e.email || '').toLowerCase().includes(q) || (e.designation || '').toLowerCase().includes(q))
+                      .map((e) => <option key={e.id} value={e.id}>{e.fullName || e.name || e.email} — {e.designation || e.role || ''}</option>);
+                  })()}
                 </select>
+                {branchManagerSearch && <p className="text-[10px] text-gray-400 mt-0.5">Showing employees at {structuredLocations.find((l) => l.id === editingBranchInLocation)?.name || 'this location'}</p>}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
