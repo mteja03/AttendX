@@ -3920,8 +3920,9 @@ export default function EmployeeProfile() {
             },
             {
               label: 'Location',
-              value: employee.location || employee.branch || '—',
+              value: employee.location || '—',
             },
+            { label: 'Branch', value: employee.branch || '—' },
             {
               label: 'Reporting to',
               value: employee.reportingManagerName || '—',
