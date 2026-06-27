@@ -766,7 +766,7 @@ export default function Settings() {
 
   const handleDeleteLocation = async (locId) => {
     const loc = structuredLocations.find((l) => l.id === locId);
-    const totalEmp = (loc?.branches || []).reduce((sum, br) => sum + employees.filter((e) => e.branch === br.name).length, 0);
+    const totalEmp = employees.filter((e) => (e.location || '') === loc?.name).length;
     if (totalEmp > 0) { showError(`Cannot delete — ${totalEmp} employees assigned to branches in this location`); return; }
     const updated = structuredLocations.filter((l) => l.id !== locId);
     await saveLocations(updated);
@@ -1195,7 +1195,7 @@ export default function Settings() {
 
         <div className="space-y-3">
           {structuredLocations.map((loc) => {
-            const locEmpCount = (loc.branches || []).reduce((sum, br) => sum + employees.filter((e) => e.branch === br.name).length, 0);
+            const locEmpCount = employees.filter((e) => (e.location || '') === loc.name).length;
             return (
               <div key={loc.id} className="border border-gray-100 rounded-xl overflow-hidden">
                 <div className="flex items-center gap-3 px-3 py-3 bg-gray-50/50 hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedLocation((prev) => prev === loc.id ? null : loc.id)}>
