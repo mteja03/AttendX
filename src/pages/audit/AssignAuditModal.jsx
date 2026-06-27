@@ -31,6 +31,7 @@ export default function AssignAuditModal({
   const [department,   setDepartment]   = useState('');
   const [requireLocation, setRequireLocation] = useState(true);
   const [requireSelfie, setRequireSelfie] = useState(true);
+  const [verifyRadius, setVerifyRadius] = useState(500);
   const [recordData,   setRecordData]   = useState({});   // { [tmplId]: { [sectionId]: Row[] } }
   const [assigning,    setAssigning]    = useState(false);
   const [assignedAudits, setAssignedAudits] = useState(null);
@@ -218,6 +219,7 @@ export default function AssignAuditModal({
           department: department || null,
           requireLocation,
           requireSelfie,
+          verifyRadius: requireLocation ? verifyRadius : null,
           branchLat: (() => {
             if (!branch) return null;
             const branchList = branches || [];
@@ -464,6 +466,17 @@ export default function AssignAuditModal({
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${requireLocation ? 'translate-x-5' : ''}`} />
                 </button>
               </label>
+              {requireLocation && (
+                <div className="flex items-center gap-2 ml-11 -mt-1 mb-1">
+                  <span className="text-[10px] text-gray-400">Radius:</span>
+                  {[200, 500, 1000, 2000].map((r) => (
+                    <button key={r} type="button" onClick={() => setVerifyRadius(r)}
+                      className={`text-[10px] px-2 py-1 rounded-lg font-medium transition-colors ${verifyRadius === r ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                      {r >= 1000 ? `${r / 1000} km` : `${r}m`}
+                    </button>
+                  ))}
+                </div>
+              )}
               <label className="flex items-center justify-between p-3 border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50">
                 <div className="flex items-center gap-2.5">
                   <span className="text-base">🤳</span>
@@ -587,7 +600,7 @@ export default function AssignAuditModal({
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-500">Verification</span>
                     <span className="font-medium text-gray-800">
-                      {[requireLocation && '📍 Location', requireSelfie && '🤳 Selfie'].filter(Boolean).join(' + ')}
+                      {[requireLocation && `📍 Location (${verifyRadius >= 1000 ? `${verifyRadius / 1000} km` : `${verifyRadius}m`})`, requireSelfie && '🤳 Selfie'].filter(Boolean).join(' + ')}
                     </span>
                   </div>
                 )}

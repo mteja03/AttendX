@@ -53,7 +53,8 @@ export default function LocationVerification({ audit, companyId, currentUser, on
         const lng = pos.coords.longitude;
         const accuracy = Math.round(pos.coords.accuracy);
         const distance = Math.round(haversineMeters(lat, lng, audit.branchLat, audit.branchLng));
-        const verified = distance <= 500;
+        const radius = audit.verifyRadius || 500;
+        const verified = distance <= radius;
         const data = {
           lat,
           lng,
