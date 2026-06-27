@@ -2755,18 +2755,6 @@ export default function Employees() {
                       </div>
                     )}
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Branch</label>
-                    <select name="branch" value={form.branch} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20">
-                      <option value="">—</option>
-                      {(() => {
-                        const loc = structuredLocations.find((l) => l.name === form.location);
-                        const branchList = loc ? (loc.branches || []).map((b) => b.name) : branches;
-                        return branchList.map((b) => <option key={b} value={b}>{b}</option>);
-                      })()}
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
                   <div className="sm:col-span-2 relative" ref={locationDropdownRef}>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Location</label>
                     <div
@@ -2833,6 +2821,18 @@ export default function Employees() {
                         </div>
                       </div>
                     )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Branch</label>
+                    <select name="branch" value={form.branch} onChange={handleFormChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20">
+                      <option value="">—</option>
+                      {(() => {
+                        const loc = structuredLocations.find((l) => l.name === form.location);
+                        const branchList = loc ? (loc.branches || []).map((b) => b.name) : branches;
+                        return branchList.map((b) => <option key={b} value={b}>{b}</option>);
+                      })()}
+                      <option value="Other">Other</option>
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Employment Type</label>
