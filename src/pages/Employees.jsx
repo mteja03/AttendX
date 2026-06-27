@@ -577,6 +577,8 @@ export default function Employees() {
   }, [showLocationDropdown]);
 
   const [showDownload, setShowDownload] = useState(false);
+  const [viewMode, setViewMode] = useState('list');
+  const [locationDrill, setLocationDrill] = useState(null);
 
   const collRef = useMemo(
     () => (companyId ? collection(db, 'companies', companyId, 'employees') : null),
@@ -1341,6 +1343,16 @@ export default function Employees() {
             </button>
           ))}
         </div>
+        <div className="inline-flex rounded-xl border border-gray-200 overflow-hidden flex-shrink-0">
+          <button type="button" onClick={() => { setViewMode('list'); setLocationDrill(null); }}
+            className={`px-3 py-2 text-xs font-medium transition-colors min-h-[44px] ${viewMode === 'list' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
+            List
+          </button>
+          <button type="button" onClick={() => { setViewMode('location'); setLocationDrill(null); }}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-l border-gray-200 min-h-[44px] ${viewMode === 'location' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
+            Location
+          </button>
+        </div>
         <input
           type="text"
           value={search}
@@ -1682,6 +1694,8 @@ export default function Employees() {
             </div>
           </div>
 
+          {viewMode === 'list' ? (
+          <>
           <div className="hidden lg:block overflow-x-auto overflow-y-auto max-h-[70vh] border border-slate-200 rounded-xl bg-white">
           <table className="min-w-[1400px] w-full text-sm">
             <thead className="bg-slate-50 text-slate-500 sticky top-0 z-10">
@@ -2090,6 +2104,91 @@ export default function Employees() {
                   `Load more (${Math.max(0, displayTotal - employees.length)} remaining)`
                 )}
               </button>
+            </div>
+          )}
+          </>
+          ) : (
+            <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+              {!locationDrill ? (
+                <>
+                  <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">All locations</p>
+                    <p className="text-xs text-gray-400">{(() => { const locs = new Set(filtered.map((e) => e.location).filter(Boolean)); return `${locs.size} location${locs.size !== 1 ? 's' : ''}`; })()}</p>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {(() => {
+                      const locMap = {};
+                      filtered.forEach((e) => {
+                        const loc = e.location || '—';
+                        if (!locMap[loc]) locMap[loc] = [];
+                        locMap[loc].push(e);
+                      });
+                      return Object.entries(locMap).sort((a, b) => a[0].localeCompare(b[0])).map(([loc, emps]) => {
+                        const branchSet = new Set(emps.map((e) => e.branch).filter(Boolean));
+                        return (
+                          <div key={loc} className="flex items-center gap-3 px-5 py-3 hover:bg-[#E8F5F5]/30 cursor-pointer transition-colors" onClick={() => setLocationDrill(loc)}>
+                            <div className="w-9 h-9 rounded-xl bg-[#E1F5EE] flex items-center justify-center flex-shrink-0">
+                              <span className="text-sm">📍</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800">{loc}</p>
+                              <p className="text-[10px] text-gray-400">{branchSet.size} branch{branchSet.size !== 1 ? 'es' : ''}</p>
+                            </div>
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-gray-800">{emps.length}</p>
+                                <p className="text-[10px] text-gray-400">employees</p>
+                              </div>
+                              <span className="text-gray-300 text-xs">›</span>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 text-xs">
+                    <button type="button" onClick={() => setLocationDrill(null)} className="text-[#1B6B6B] font-medium hover:underline">All locations</button>
+                    <span className="text-gray-300">›</span>
+                    <span className="text-gray-700 font-medium">{locationDrill}</span>
+                    <span className="ml-auto text-gray-400">{filtered.filter((e) => (e.location || '—') === locationDrill).length} employees</span>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {(() => {
+                      const locEmps = filtered.filter((e) => (e.location || '—') === locationDrill);
+                      const branchMap = {};
+                      locEmps.forEach((e) => {
+                        const br = e.branch || '—';
+                        if (!branchMap[br]) branchMap[br] = [];
+                        branchMap[br].push(e);
+                      });
+                      return Object.entries(branchMap).sort((a, b) => a[0].localeCompare(b[0])).map(([br, emps]) => (
+                        <div key={br} className="px-5 py-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs">🏢</span>
+                            <p className="text-xs font-semibold text-gray-600">{br}</p>
+                            <span className="text-[10px] text-gray-400 ml-auto">{emps.length} emp</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                            {emps.map((emp) => (
+                              <div key={emp.id} onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-gray-100 hover:bg-[#E8F5F5]/30 cursor-pointer transition-colors">
+                                <div className="w-8 h-8 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{(emp.fullName || emp.name || '?').charAt(0)}</div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-medium text-gray-800 truncate">{emp.fullName || emp.name || emp.email}</p>
+                                  <p className="text-[10px] text-gray-400 truncate">{emp.designation || emp.department || '—'}</p>
+                                </div>
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${emp.status === 'Active' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{emp.status || 'Active'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </>
