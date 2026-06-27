@@ -302,7 +302,7 @@ export function AuthProvider({ children }) {
         } catch (error) {
           captureError(error, { context: 'checkWhitelist' });
           if (import.meta.env.DEV) {
-            console.error('Error checking users whitelist', error);
+            if (import.meta.env.DEV) console.error('Error checking users whitelist', error);
           }
           await signOut(auth);
           resetAuthState();
