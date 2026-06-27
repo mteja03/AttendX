@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { updateDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, getBlob, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase/config';
 import {
   effStatus, formatDate, statusMeta,
@@ -61,6 +61,7 @@ export default function UnifiedAuditDetail({
 
   const [auditDocs,    setAuditDocs]    = useState(() => safeAudit.auditDocuments || []);
   const [docUploading, setDocUploading] = useState(false);
+  const [viewingDocId, setViewingDocId] = useState(null);
 
   const saveTimeoutRef = useRef(null);
   const isMountedRef   = useRef(true);
@@ -109,8 +110,15 @@ export default function UnifiedAuditDetail({
       const path = `companies/${companyId}/audits/${audit.id}/${Date.now()}_${file.name}`;
       const sRef = storageRef(storage, path);
       await uploadBytes(sRef, file);
-      const url  = await getDownloadURL(sRef);
-      const newDoc = { id: Date.now().toString(), name: file.name, url, storagePath: path, size: file.size, type: file.type, uploadedBy: currentUser?.email || '', uploadedAt: new Date().toISOString() };
+      const newDoc = {
+        id: Date.now().toString(),
+        name: file.name,
+        storagePath: path,
+        size: file.size,
+        type: file.type,
+        uploadedBy: currentUser?.email || '',
+        uploadedAt: new Date().toISOString(),
+      };
       const updated = [...auditDocs, newDoc];
       setAuditDocs(updated);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), { auditDocuments: updated, updatedAt: serverTimestamp() });
@@ -122,6 +130,24 @@ export default function UnifiedAuditDetail({
       setDocUploading(false);
       e.target.value = '';
     }
+  };
+
+  const handleDocView = async (docItem) => {
+    if (!docItem?.storagePath) {
+      if (docItem?.url) window.open(docItem.url, '_blank');
+      return;
+    }
+    setViewingDocId(docItem.id || docItem.storagePath);
+    try {
+      const fileRef = storageRef(storage, docItem.storagePath);
+      const blob = await getBlob(fileRef);
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+    } catch {
+      showError('Failed to load document');
+    }
+    setViewingDocId(null);
   };
 
   const handleDocDelete = async (docItem) => {
@@ -778,7 +804,16 @@ export default function UnifiedAuditDetail({
                         <p className="text-xs font-medium text-gray-800 truncate">{d.name}</p>
                         <p className="text-xs text-gray-400">{d.size ? `${(d.size / 1024 / 1024).toFixed(1)} MB` : ''}{d.uploadedBy ? ` · ${d.uploadedBy}` : ''}</p>
                       </div>
-                      <a href={d.url} target="_blank" rel="noreferrer" className="text-xs text-[#1B6B6B] font-medium hover:underline flex-shrink-0 px-2 py-1 rounded-lg hover:bg-[#E8F5F5]">View</a>
+                      {(d.storagePath || d.url) && (
+                        <button
+                          type="button"
+                          onClick={() => handleDocView(d)}
+                          disabled={viewingDocId === (d.id || d.storagePath)}
+                          className="text-xs text-[#1B6B6B] font-medium hover:underline flex-shrink-0 px-2 py-1 rounded-lg hover:bg-[#E8F5F5] disabled:opacity-50"
+                        >
+                          {viewingDocId === (d.id || d.storagePath) ? 'Loading…' : 'View'}
+                        </button>
+                      )}
                       {(isEditable || (canManage && !isClosed)) && (
                         <button type="button" onClick={() => handleDocDelete(d)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 flex-shrink-0 transition-colors">✕</button>
                       )}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { updateDoc, doc } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, uploadBytesResumable, getBlob, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase/config';
 import {
   effStatus, formatDate, getAuditScore, statusMeta,
@@ -517,12 +517,10 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
           resolve,
         );
       });
-      const url = await getDownloadURL(uploadTask.snapshot.ref);
       const uploadedByRole = 'auditor';
       const docRecord = {
         id: `doc_${timestamp}`,
         name: file.name,
-        url,
         storagePath,
         size: file.size,
         type: file.type,
@@ -1790,7 +1788,15 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                                 className="w-full p-0 border-0 bg-transparent rounded-xl overflow-hidden cursor-zoom-in"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  window.open(docRecord.url, '_blank', 'noopener,noreferrer');
+                                  (async () => {
+                                    try {
+                                      const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                      const blob = await getBlob(fileRef);
+                                      const blobUrl = URL.createObjectURL(blob);
+                                      window.open(blobUrl, '_blank');
+                                      setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+                                    } catch { /* ignore */ }
+                                  })();
                                 }}
                               >
                                 <img
@@ -1892,7 +1898,15 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                                 className="w-full p-0 border-0 bg-transparent rounded-xl overflow-hidden cursor-zoom-in"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  window.open(docRecord.url, '_blank', 'noopener,noreferrer');
+                                  (async () => {
+                                    try {
+                                      const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                      const blob = await getBlob(fileRef);
+                                      const blobUrl = URL.createObjectURL(blob);
+                                      window.open(blobUrl, '_blank');
+                                      setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+                                    } catch { /* ignore */ }
+                                  })();
                                 }}
                               >
                                 <img
@@ -2057,7 +2071,15 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                               className="w-full p-0 border-0 bg-transparent rounded-xl overflow-hidden cursor-zoom-in"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                window.open(docRecord.url, '_blank', 'noopener,noreferrer');
+                                (async () => {
+                                  try {
+                                    const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                    const blob = await getBlob(fileRef);
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    window.open(blobUrl, '_blank');
+                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+                                  } catch { /* ignore */ }
+                                })();
                               }}
                             >
                               <img
