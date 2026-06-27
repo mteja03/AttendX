@@ -133,10 +133,7 @@ export default function UnifiedAuditDetail({
   };
 
   const handleDocView = async (docItem) => {
-    if (!docItem?.storagePath) {
-      if (docItem?.url) window.open(docItem.url, '_blank');
-      return;
-    }
+    if (!docItem?.storagePath) return;
     setViewingDocId(docItem.id || docItem.storagePath);
     try {
       const fileRef = storageRef(storage, docItem.storagePath);
@@ -147,6 +144,24 @@ export default function UnifiedAuditDetail({
     } catch {
       showError('Failed to load document');
     }
+    setViewingDocId(null);
+  };
+
+  const handleDocDownload = async (docItem) => {
+    if (!docItem?.storagePath) return;
+    setViewingDocId(docItem.id || docItem.storagePath);
+    try {
+      const fileRef = storageRef(storage, docItem.storagePath);
+      const blob = await getBlob(fileRef);
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = docItem.name || 'document';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    } catch { /* ignore */ }
     setViewingDocId(null);
   };
 
@@ -804,15 +819,26 @@ export default function UnifiedAuditDetail({
                         <p className="text-xs font-medium text-gray-800 truncate">{d.name}</p>
                         <p className="text-xs text-gray-400">{d.size ? `${(d.size / 1024 / 1024).toFixed(1)} MB` : ''}{d.uploadedBy ? ` · ${d.uploadedBy}` : ''}</p>
                       </div>
-                      {(d.storagePath || d.url) && (
-                        <button
-                          type="button"
-                          onClick={() => handleDocView(d)}
-                          disabled={viewingDocId === (d.id || d.storagePath)}
-                          className="text-xs text-[#1B6B6B] font-medium hover:underline flex-shrink-0 px-2 py-1 rounded-lg hover:bg-[#E8F5F5] disabled:opacity-50"
-                        >
-                          {viewingDocId === (d.id || d.storagePath) ? 'Loading…' : 'View'}
-                        </button>
+                      {d.storagePath && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleDocView(d)}
+                            disabled={viewingDocId === (d.id || d.storagePath)}
+                            className="text-xs text-[#1B6B6B] font-medium hover:underline flex-shrink-0 px-2 py-1 rounded-lg hover:bg-[#E8F5F5] disabled:opacity-50"
+                          >
+                            {viewingDocId === (d.id || d.storagePath) ? 'Loading…' : 'View'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDocDownload(d)}
+                            disabled={viewingDocId === (d.id || d.storagePath)}
+                            className="text-xs text-slate-600 font-medium flex-shrink-0 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50"
+                            title="Download"
+                          >
+                            ↓
+                          </button>
+                        </>
                       )}
                       {(isEditable || (canManage && !isClosed)) && (
                         <button type="button" onClick={() => handleDocDelete(d)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 flex-shrink-0 transition-colors">✕</button>

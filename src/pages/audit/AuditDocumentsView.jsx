@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, deleteObject } from 'firebase/storage';
+import { ref as storageRef, getBlob, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase/config';
 import { formatAuditDocSize, auditDocViewLabel } from './auditHelpers';
 
@@ -12,6 +12,7 @@ export default function AuditDocumentsView({ audits, companyId, userRole, showSu
   const [deleting, setDeleting] = useState(null);
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [cleaningUp, setCleaningUp] = useState(false);
+  const [loadingDocId, setLoadingDocId] = useState(null);
 
   const canDelete = userRole === 'admin' || userRole === 'companyadmin';
 
@@ -57,7 +58,7 @@ export default function AuditDocumentsView({ audits, companyId, userRole, showSu
     if (!window.confirm(`Delete "${docItem.name}"?`)) return;
     try {
       setDeleting(docItem.id);
-      if (docItem.storagePath) await deleteObject(ref(storage, docItem.storagePath)).catch(() => {});
+      if (docItem.storagePath) await deleteObject(storageRef(storage, docItem.storagePath)).catch(() => {});
       const auditRef = doc(db, 'companies', companyId, 'audits', docItem.auditId);
       const auditSnap = await getDoc(auditRef);
       if (auditSnap.exists()) {
@@ -77,7 +78,7 @@ export default function AuditDocumentsView({ audits, companyId, userRole, showSu
       setCleaningUp(true);
       const byAudit = {};
       expiredDocs.forEach((d) => { if (!byAudit[d.auditId]) byAudit[d.auditId] = []; byAudit[d.auditId].push(d); });
-      await Promise.allSettled(expiredDocs.filter((d) => d.storagePath).map((d) => deleteObject(ref(storage, d.storagePath))));
+      await Promise.allSettled(expiredDocs.filter((d) => d.storagePath).map((d) => deleteObject(storageRef(storage, d.storagePath))));
       for (const [auditId, docs] of Object.entries(byAudit)) {
         const auditRef = doc(db, 'companies', companyId, 'audits', auditId);
         const auditSnap = await getDoc(auditRef);
@@ -187,10 +188,41 @@ export default function AuditDocumentsView({ audits, companyId, userRole, showSu
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <a href={d.url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 rounded-xl bg-[#E8F5F5] px-2.5 py-1.5 text-xs font-medium text-[#1B6B6B] hover:bg-[#1B6B6B] hover:text-white transition-colors">
-                      {auditDocViewLabel(d.type)}
-                    </a>
+                    <button type="button" disabled={loadingDocId === d.id}
+                      onClick={async () => {
+                        setLoadingDocId(d.id);
+                        try {
+                          const fileRef = storageRef(storage, d.storagePath || d.url);
+                          const blob = await getBlob(fileRef);
+                          const blobUrl = URL.createObjectURL(blob);
+                          window.open(blobUrl, '_blank');
+                          setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+                        } catch { /* ignore */ }
+                        setLoadingDocId(null);
+                      }}
+                      className="flex items-center gap-1 rounded-xl bg-[#E8F5F5] px-2.5 py-1.5 text-xs font-medium text-[#1B6B6B] hover:bg-[#1B6B6B] hover:text-white transition-colors disabled:opacity-50">
+                      {loadingDocId === d.id ? 'Loading…' : auditDocViewLabel(d.type)}
+                    </button>
+                    <button type="button" disabled={loadingDocId === d.id}
+                      onClick={async () => {
+                        setLoadingDocId(d.id);
+                        try {
+                          const fileRef = storageRef(storage, d.storagePath || d.url);
+                          const blob = await getBlob(fileRef);
+                          const blobUrl = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = blobUrl;
+                          a.download = d.name || 'document';
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+                        } catch { /* ignore */ }
+                        setLoadingDocId(null);
+                      }}
+                      className="flex items-center gap-1 rounded-xl bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 transition-colors disabled:opacity-50">
+                      ↓
+                    </button>
                     {canDelete && (
                       <button type="button" disabled={deleting === d.id} onClick={() => handleDeleteDoc(d)}
                         className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-40"

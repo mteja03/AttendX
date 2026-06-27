@@ -1843,15 +1843,22 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                               >
                                 {auditDocViewLabel(docRecord.type)}
                               </a>
-                              <a
-                                href={docRecord.url}
-                                download={docRecord.name}
-                                onClick={(e) => e.stopPropagation()}
-                                className="flex h-8 w-8 items-center justify-center rounded-xl text-[#1B6B6B] hover:bg-gray-200 text-xs"
-                                title="Download"
-                              >
-                                ⬇️
-                              </a>
+                              <button type="button" className="ml-1 px-2 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 hover:bg-slate-200 transition-colors"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                    const blob = await getBlob(fileRef);
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = blobUrl;
+                                    a.download = docRecord.name || docRecord.fileName || 'document';
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+                                  } catch { /* ignore */ }
+                                }}>↓</button>
                               {canDeleteAuditorDoc(docRecord) && (
                                 <button
                                   type="button"
@@ -1947,15 +1954,22 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                               >
                                 {auditDocViewLabel(docRecord.type)}
                               </a>
-                              <a
-                                href={docRecord.url}
-                                download={docRecord.name}
-                                onClick={(e) => e.stopPropagation()}
-                                className="flex h-8 w-8 items-center justify-center rounded-xl text-[#1B6B6B] hover:bg-gray-200 text-xs"
-                                title="Download"
-                              >
-                                ⬇️
-                              </a>
+                              <button type="button" className="ml-1 px-2 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 hover:bg-slate-200 transition-colors"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                    const blob = await getBlob(fileRef);
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = blobUrl;
+                                    a.download = docRecord.name || docRecord.fileName || 'document';
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+                                  } catch { /* ignore */ }
+                                }}>↓</button>
                             </div>
                           </div>
                         </div>
@@ -2110,15 +2124,22 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
                             >
                               {auditDocViewLabel(docRecord.type)}
                             </a>
-                            <a
-                              href={docRecord.url}
-                              download={docRecord.name}
-                              onClick={(e) => e.stopPropagation()}
-                              className="flex h-8 w-8 items-center justify-center rounded-xl text-[#1B6B6B] hover:bg-gray-200 text-xs"
-                              title="Download"
-                            >
-                              ⬇️
-                            </a>
+                            <button type="button" className="ml-1 px-2 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 hover:bg-slate-200 transition-colors"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  const fileRef = ref(storage, docRecord.storagePath || docRecord.url);
+                                  const blob = await getBlob(fileRef);
+                                  const blobUrl = URL.createObjectURL(blob);
+                                  const a = document.createElement('a');
+                                  a.href = blobUrl;
+                                  a.download = docRecord.name || docRecord.fileName || 'document';
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                  setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+                                } catch { /* ignore */ }
+                              }}>↓</button>
                           </div>
                         </div>
                       </div>
