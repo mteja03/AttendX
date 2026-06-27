@@ -1018,24 +1018,27 @@ export default function UnifiedAuditDetail({
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-gray-500">
-                {safeAudit.locationCheck?.lat != null && (
-                  <div><span className="text-gray-400">Lat:</span> {safeAudit.locationCheck.lat.toFixed(6)}</div>
-                )}
-                {safeAudit.locationCheck?.lng != null && (
-                  <div><span className="text-gray-400">Lng:</span> {safeAudit.locationCheck.lng.toFixed(6)}</div>
+                {safeAudit.locationCheck?.lat != null && safeAudit.locationCheck?.lng != null && (
+                  <div className="col-span-2"><span className="text-gray-400">Auditor GPS:</span> {safeAudit.locationCheck.lat.toFixed(6)}, {safeAudit.locationCheck.lng.toFixed(6)}</div>
                 )}
                 {safeAudit.locationCheck?.branchName && (
-                  <div><span className="text-gray-400">Location:</span> {safeAudit.locationCheck.branchName}</div>
+                  <div><span className="text-gray-400">Branch:</span> {safeAudit.locationCheck.branchName}</div>
                 )}
                 {safeAudit.locationCheck?.accuracy != null && (
                   <div><span className="text-gray-400">GPS accuracy:</span> ±{safeAudit.locationCheck.accuracy}m</div>
                 )}
               </div>
-              {safeAudit.locationCheck?.timestamp && (
-                <div className="text-[10px] text-gray-400 pt-0.5 border-t border-gray-50">
-                  {new Date(safeAudit.locationCheck.timestamp?.seconds ? safeAudit.locationCheck.timestamp.seconds * 1000 : safeAudit.locationCheck.timestamp).toLocaleString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                </div>
-              )}
+              {(() => {
+                const ts = safeAudit.locationCheck?.timestamp || safeAudit.checkInSelfie?.timestamp;
+                if (!ts) return null;
+                const d = new Date(ts?.seconds ? ts.seconds * 1000 : ts?.toDate ? ts.toDate() : ts);
+                if (isNaN(d.getTime())) return null;
+                return (
+                  <div className="text-[10px] text-gray-400 pt-0.5 border-t border-gray-50">
+                    {d.toLocaleString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
