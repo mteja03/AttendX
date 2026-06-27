@@ -83,17 +83,19 @@ service firebase.storage {
         );
     }
 
-    // Audit documents — auditors + managers
+    // Audit documents — auditors + managers + admin
     match /companies/{companyId}/audits/{auditId}/{fileName} {
       allow read: if request.auth != null
         && (
           belongsToCompany(companyId)
           || isAssignedAuditor(companyId, auditId)
+          || userDocData().role == 'admin'
         );
       allow write: if request.auth != null
         && (
           belongsToCompany(companyId)
           || isAssignedAuditor(companyId, auditId)
+          || userDocData().role == 'admin'
         )
         && request.resource.size < 
             20 * 1024 * 1024
@@ -115,6 +117,7 @@ service firebase.storage {
         && (
           belongsToCompany(companyId)
           || isAssignedAuditor(companyId, auditId)
+          || userDocData().role == 'admin'
         );
     }
 
