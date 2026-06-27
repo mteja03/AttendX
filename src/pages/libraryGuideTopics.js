@@ -491,31 +491,31 @@ export const GUIDE_TOPICS = [
     content: [
       {
         type: 'rule',
-        title: 'Google Drive Required',
-        text: 'Documents are stored in Google Drive. You must connect your Google Drive account before uploading. The sidebar shows "Drive: Connected" or "Drive: Session expired".',
+        title: 'Secure Document Storage',
+        text: 'Documents are stored securely in Firebase Storage. No external accounts or connections needed — uploading works automatically when you are signed in to AttendX.',
       },
       {
         type: 'steps',
         items: [
           {
             step: 1,
-            title: 'Connect Drive',
-            desc: 'If sidebar shows "Drive: Session expired" — click it to reconnect. Drive sessions expire every few hours for security.',
+            title: 'Upload Document',
+            desc: 'Employee profile → Documents tab → click Upload next to the document type. Accepts PDF and image files up to 10 MB.',
           },
           {
             step: 2,
-            title: 'Upload Document',
-            desc: 'Employee profile → Documents tab → click Upload next to the document type. Upload buttons are disabled when Drive is expired.',
+            title: 'View Document',
+            desc: 'Click View to open the document in a new tab. Documents are loaded securely — the link is temporary and cannot be shared externally.',
           },
           {
             step: 3,
-            title: 'View Document',
-            desc: 'Click View to open in Google Drive in a new tab. Documents are auto-organised by employee name and Emp ID.',
+            title: 'Download Document',
+            desc: 'Click the Download button to save the file to your device. You can then share the downloaded file via WhatsApp or email.',
           },
           {
             step: 4,
             title: 'Replace Document',
-            desc: 'Click Replace to upload a newer version. The old file is replaced in Drive.',
+            desc: 'Click Replace to upload a newer version. The old file is automatically removed from storage.',
           },
           {
             step: 5,
@@ -536,8 +536,13 @@ export const GUIDE_TOPICS = [
       },
       {
         type: 'rule',
+        title: 'Document Links Are Not Shareable',
+        text: 'When you click View, the document opens using a temporary secure link that only works in your browser session. To share a document, use the Download button and send the actual file.',
+      },
+      {
+        type: 'rule',
         title: 'Inactive Employee Documents',
-        text: 'Documents for Inactive employees are read-only. Upload, Replace, and Delete buttons are hidden. Documents can still be viewed.',
+        text: 'Documents for Inactive employees are read-only. Upload, Replace, and Delete buttons are hidden. Documents can still be viewed and downloaded.',
       },
     ],
   },
@@ -742,12 +747,12 @@ export const GUIDE_TOPICS = [
           {
             step: 1,
             title: 'Create a Template',
-            desc: 'Audit → Templates tab → + New Template. Add checklist items organised into sections. Set category (Internal or External) and risk level.',
+            desc: 'Audit → Templates tab → + New Template. Choose section types: Checklist (Pass/Fail items), Records (CSV data with prefilled columns), or Q&A (open questions). Set category (Internal or External) and risk level.',
           },
           {
             step: 2,
             title: 'Assign an Audit',
-            desc: 'Audit → + Assign Audit. Select template(s), auditor, branch, start date, and due date. Multiple templates can be assigned at once.',
+            desc: 'Audit → + Assign Audit. Select template(s), lead auditor, team members, branch, and due date. For Records templates, upload CSV data. Review everything in the Preview step before confirming.',
           },
           {
             step: 3,
@@ -780,6 +785,16 @@ export const GUIDE_TOPICS = [
         type: 'rule',
         title: 'Duplicate Templates',
         text: 'Use the Copy button on any template to duplicate it as a starting point for a new template. Edit the copy to suit the new audit type.',
+      },
+      {
+        type: 'rule',
+        title: 'Preview Before Assigning',
+        text: 'Before the audit is assigned, a Preview screen shows the full summary — lead auditor, team members, branch, due date, and the actual uploaded record data per template. Review everything before clicking Confirm & Assign.',
+      },
+      {
+        type: 'rule',
+        title: 'Audit Documents Are Secure',
+        text: 'Documents uploaded to audits use temporary secure links that cannot be shared externally. Use the Download button to save files locally and share them manually.',
       },
       {
         type: 'tip',
@@ -850,7 +865,7 @@ export const GUIDE_TOPICS = [
           ['Warning', '5-minute warning banner before sign out'],
           ['Stay signed in', 'Click Stay Signed In to reset the 4-hour timer'],
           ['Activity detection', 'Mouse, keyboard, scroll, touch all reset the timer'],
-          ['Google Drive session', 'Separate session — refresh when Upload buttons are disabled'],
+          ['Document access', 'Secure per-session — documents are fetched on demand, links expire automatically'],
           ['Sign out', 'Click Sign Out in the sidebar bottom at any time'],
         ],
       },
