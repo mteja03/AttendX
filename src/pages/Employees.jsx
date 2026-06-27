@@ -833,7 +833,12 @@ export default function Employees() {
   const structuredLocations = useMemo(() => {
     const raw = company?.locations || [];
     if (raw.length > 0 && typeof raw[0] === 'object' && raw[0].branches) return raw;
-    return [];
+    // Old format — flat strings. Create simple structure.
+    return raw.map((l, i) => ({
+      id: `loc_${i}`,
+      name: typeof l === 'string' ? l : (l.name || String(l)),
+      branches: [],
+    }));
   }, [company?.locations]);
   const allBranchNames = useMemo(() => structuredLocations.flatMap((l) => (l.branches || []).map((b) => b.name)), [structuredLocations]);
   const branches = allBranchNames.length > 0 ? allBranchNames : (company?.branches || []).map((b) => typeof b === 'object' ? b.name : b);
