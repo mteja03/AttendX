@@ -24,7 +24,7 @@ function OrgNode({ node, search, companyId, navigate }) {
         }}
         className={`
           relative bg-white border-2 rounded-2xl p-3 w-44 cursor-pointer text-center transition-all hover:shadow-md
-          ${isHighlighted ? 'border-[#4ECDC4] shadow-[0_0_0_3px_rgba(78,205,196,0.15)]' : 'border-gray-100 hover:border-[#1B6B6B]'}
+          ${isHighlighted ? 'border-[#1B6B6B] shadow-[0_0_0_3px_rgba(27,107,107,0.15)]' : 'border-gray-100 hover:border-[#1B6B6B]'}
         `}
       >
         <EmployeeAvatar
