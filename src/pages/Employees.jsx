@@ -2163,7 +2163,7 @@ export default function Employees() {
                       src={newEmpPhotoSrc}
                       alt="Preview"
                       loading="lazy"
-                      className="w-24 h-24 rounded-full object-cover ring-4 ring-[#E8F5F5] border-2 border-[#4ECDC4]"
+                      className="w-24 h-24 rounded-full object-cover ring-4 ring-[#E8F5F5] border-2 border-[#1B6B6B]"
                     />
                   ) : (
                     <div className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400">
@@ -2903,7 +2903,7 @@ export default function Employees() {
                               placeholder="Search by name or ID..."
                               value={managerSearch}
                               onChange={(e) => setManagerSearch(e.target.value)}
-                              className="w-full text-sm px-2 py-1.5 border border-slate-200 rounded focus:outline-none focus:border-[#4ECDC4]"
+                              className="w-full text-sm px-2 py-1.5 border border-slate-200 rounded focus:outline-none focus:border-[#1B6B6B]"
                               onClick={(e) => e.stopPropagation()}
                             />
                           </div>
@@ -3514,7 +3514,7 @@ export default function Employees() {
                 onCropComplete={(_, pixels) => setNewEmpCroppedPixels(pixels)}
                 style={{
                   cropAreaStyle: {
-                    border: '3px solid #4ECDC4',
+                    border: '3px solid #1B6B6B',
                     boxShadow: '0 0 0 9999px rgba(0,0,0,0.6)',
                   },
                 }}

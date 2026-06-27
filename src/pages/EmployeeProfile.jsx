@@ -1811,7 +1811,7 @@ export default function EmployeeProfile() {
   const getFileIconColor = (fileName) => {
     const ext = fileName?.split('.').pop()?.toLowerCase();
     if (ext === 'pdf') return 'bg-red-500';
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'bg-[#4ECDC4]';
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'bg-[#1B6B6B]';
     if (['xls', 'xlsx'].includes(ext)) return 'bg-green-600';
     if (['doc', 'docx'].includes(ext)) return 'bg-[#155858]';
     return 'bg-gray-500';
@@ -5521,7 +5521,7 @@ export default function EmployeeProfile() {
                 style={{
                   containerStyle: { borderRadius: '0' },
                   cropAreaStyle: {
-                    border: '3px solid #4ECDC4',
+                    border: '3px solid #1B6B6B',
                     boxShadow: '0 0 0 9999px rgba(0,0,0,0.6)',
                   },
                 }}

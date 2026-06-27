@@ -919,7 +919,7 @@ export default function Companies() {
                   value={form.initials}
                   onChange={handleFormChange}
                   maxLength={2}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4ECDC4] uppercase"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B6B6B]/20 uppercase"
                 />
               </div>
               <div>

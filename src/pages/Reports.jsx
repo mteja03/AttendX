@@ -2461,7 +2461,7 @@ export default function Reports() {
                       </span>
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#4ECDC4] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      <div className="h-full bg-[#1B6B6B] rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );

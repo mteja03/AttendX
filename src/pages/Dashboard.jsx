@@ -98,11 +98,11 @@ const CELEBRATION_COLORS = {
   },
   work: {
     bg: 'bg-[#E8F5F5]',
-    border: 'border-[#4ECDC4]/30',
+    border: 'border-[#1B6B6B]/30',
     text: 'text-[#1B6B6B]',
     avatar: 'bg-[#E8F5F5] text-[#1B6B6B]',
     badge: 'bg-[#E8F5F5] text-[#1B6B6B]',
-    dot: 'bg-[#4ECDC4]',
+    dot: 'bg-[#1B6B6B]',
   },
 };
 
@@ -135,7 +135,7 @@ function CelebrationItem({ item, showDate, companyId, employees, navigate }) {
           navigate(`/company/${companyId}/employees/${item.empId}`);
         }
       }}
-      className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4ECDC4] cursor-pointer"
+      className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B6B6B]/20 cursor-pointer"
     >
       <div
         className={`flex items-center gap-3 p-3 rounded-xl border ${colors.bg} ${colors.border} transition-all hover:shadow-sm`}
@@ -1188,7 +1188,7 @@ export default function Dashboard() {
                     </div>
                     <div className="w-24 bg-gray-100 rounded-full h-2">
                       <div
-                        className="bg-[#4ECDC4] h-2 rounded-full"
+                        className="bg-[#1B6B6B] h-2 rounded-full"
                         style={{ width: `${Math.min(emp._onboardingPct || 0, 100)}%` }}
                       />
                     </div>
@@ -1394,7 +1394,7 @@ export default function Dashboard() {
                 {[
                   { icon: '🎂', label: 'Birthday', color: 'bg-pink-400' },
                   { icon: '💍', label: 'Wedding', color: 'bg-purple-400' },
-                  { icon: '🏆', label: 'Work', color: 'bg-[#4ECDC4]' },
+                  { icon: '🏆', label: 'Work', color: 'bg-[#1B6B6B]' },
                 ].map((l) => (
                   <div key={l.label} className="flex items-center gap-1.5">
                     <span className={`w-2 h-2 rounded-full ${l.color}`} aria-hidden />

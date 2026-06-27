@@ -1707,7 +1707,7 @@ export default function Assets() {
             placeholder="Search by asset, ID, serial, or employee..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 min-h-[44px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#4ECDC4]"
+            className="flex-1 min-h-[44px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#1B6B6B]/20"
           />
           <div className="flex flex-shrink-0">
             <button

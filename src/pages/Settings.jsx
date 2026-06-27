@@ -1158,7 +1158,7 @@ export default function Settings() {
               value={newLeaveTypeName}
               onChange={(e) => setNewLeaveTypeName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddLeaveType()}
-              className="flex-1 min-w-32 text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#4ECDC4]"
+              className="flex-1 min-w-32 text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#1B6B6B]"
             />
             <div className="flex flex-col">
               <input
@@ -1381,7 +1381,7 @@ export default function Settings() {
                   if (e.key === 'Enter') addDocType(section.id);
                 }}
                 placeholder="Add document type..."
-                className="flex-1 text-sm border rounded px-2 py-1.5 focus:outline-none focus:border-[#4ECDC4]"
+                className="flex-1 text-sm border rounded px-2 py-1.5 focus:outline-none focus:border-[#1B6B6B]"
               />
               <button
                 type="button"
@@ -1693,7 +1693,7 @@ export default function Settings() {
                               type="checkbox"
                               checked={!!t.isRequired}
                               onChange={(e) => updateTask(t.id, 'isRequired', e.target.checked)}
-                              className="rounded border-slate-300 text-[#1B6B6B] focus:ring-[#4ECDC4]"
+                              className="rounded border-slate-300 text-[#1B6B6B] focus:ring-[#1B6B6B]/20"
                             />
                             <label htmlFor={`req_${t.id}`} className="text-xs text-slate-700">
                               Required
@@ -1957,7 +1957,7 @@ export default function Settings() {
                               type="checkbox"
                               checked={!!t.isRequired}
                               onChange={(e) => updateTask(t.id, 'isRequired', e.target.checked)}
-                              className="rounded border-slate-300 text-[#1B6B6B] focus:ring-[#4ECDC4]"
+                              className="rounded border-slate-300 text-[#1B6B6B] focus:ring-[#1B6B6B]/20"
                             />
                             <label htmlFor={`off_req_${t.id}`} className="text-xs text-slate-700">
                               Required

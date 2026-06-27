@@ -33,7 +33,7 @@ const LIBRARY_TABS = [
 const GUIDE_COLORS = {
   teal: {
     bg: 'bg-[#E8F5F5]',
-    border: 'border-[#4ECDC4]/40',
+    border: 'border-[#1B6B6B]/40',
     icon: 'bg-[#1B6B6B] text-white',
     badge: 'bg-[#1B6B6B] text-white',
     text: 'text-[#1B6B6B]',
@@ -2540,7 +2540,7 @@ export default function Library() {
             </div>
 
             <div className="p-4 sm:p-6 flex-1 overflow-y-auto space-y-6">
-              <div className="p-4 rounded-xl bg-[#E8F5F5] border border-[#4ECDC4] text-center">
+              <div className="p-4 rounded-xl bg-[#E8F5F5] border border-[#1B6B6B] text-center">
                 <p className="text-xs text-[#1B6B6B] mb-1">Salary band (per month)</p>
                 <p className="text-xl font-bold text-[#1B6B6B]">
                   ₹{formatLakhs(viewingRole.salaryBand?.min)}/month — ₹{formatLakhs(viewingRole.salaryBand?.max)}/month

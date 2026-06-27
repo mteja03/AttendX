@@ -579,7 +579,7 @@ export function AuditorDashboard({ audits, currentUser }) {
       )}
 
       {myAudits.filter((a) => effStatus(a.status) !== 'Closed').length > 0 && (
-        <div className="bg-[#E8F5F5] border border-[#4ECDC4]/30 rounded-2xl p-4">
+        <div className="bg-[#E8F5F5] border border-[#1B6B6B]/30 rounded-2xl p-4">
           <p className="text-sm font-medium text-[#1B6B6B] mb-1">💡 How to submit an audit</p>
           <p className="text-xs text-[#1B6B6B]/70 leading-relaxed">
             Go to the <strong>Audits tab</strong> → click your assigned audit → fill the <strong>checklist</strong> → go to{' '}
