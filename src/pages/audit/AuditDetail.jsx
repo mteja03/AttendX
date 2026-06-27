@@ -420,7 +420,7 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
       setSaving(true);
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
         status: 'Closed',
-        closedAt: new Date(),
+        closedAt: serverTimestamp(),
         closedBy: currentUser?.email || '',
         managerNotes: adminNotes,
         auditRating,
