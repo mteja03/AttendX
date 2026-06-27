@@ -54,7 +54,7 @@ function normalizeLocations(company) {
   return locationNames.map((name, i) => ({
     id: `loc_${Date.now()}_${i}`,
     name,
-    branches: i === 0 ? branchList : [],
+    branches: branchList.map((br) => ({ ...br, id: `br_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}` })),
   }));
 }
 
