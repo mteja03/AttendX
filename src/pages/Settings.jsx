@@ -19,6 +19,11 @@ import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 import { trackPageView } from '../utils/analytics';
 
+function normalizeBranches(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map((b) => (typeof b === 'string' ? { name: b, lat: null, lng: null } : { name: b.name || '', lat: b.lat ?? null, lng: b.lng ?? null }));
+}
+
 const FORMAT_OPTIONS = [
   { ext: '.pdf', label: 'PDF' },
   { ext: '.jpg', label: 'JPG' },
@@ -40,7 +45,7 @@ const SIZE_OPTIONS = [
   { value: 25, label: '25 MB' },
 ];
 
-const DEFAULT_BRANCHES = ['Head Office', 'Branch 1'];
+const DEFAULT_BRANCHES = [{ name: 'Head Office', lat: null, lng: null }, { name: 'Branch 1', lat: null, lng: null }];
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Sales', 'HR', 'Finance', 'Operations', 'Marketing', 'Design', 'Legal'];
 const DEFAULT_EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Probation', 'Consultant'];
 const DEFAULT_QUALIFICATIONS = ['10th Pass', '12th Pass', 'Diploma', 'Graduate (B.A./B.Com/B.Sc)', 'Graduate (B.E./B.Tech)', 'Post Graduate (M.A./M.Com/M.Sc)', 'Post Graduate (M.E./M.Tech/MBA)', 'Doctorate (PhD)', 'Other'];
@@ -331,6 +336,7 @@ export default function Settings() {
   const [showOffCategoryPicker, setShowOffCategoryPicker] = useState(false);
   const [policiesForOnboarding, setPoliciesForOnboarding] = useState([]);
   const [errorModal, setErrorModal] = useState(null);
+  const [editingBranch, setEditingBranch] = useState(null);
 
   // Clear error modal on re-login
   useEffect(() => {
@@ -512,7 +518,11 @@ export default function Settings() {
     loadTemplate();
   }, [activeTab, companyId, showError]);
 
-  const getList = (key, defaults) => (company?.[key]?.length ? company[key] : defaults);
+  const getList = (key, defaults) => {
+    const raw = company?.[key]?.length ? company[key] : defaults;
+    if (key === 'branches') return normalizeBranches(raw);
+    return raw;
+  };
   const getCount = (field) => (value) => employees.filter((e) => (e[field] || '').trim() === value).length;
 
   const countLeaveUsesForLt = (lt) =>
@@ -659,13 +669,18 @@ export default function Settings() {
     const name = addValue.trim();
     if (!name) return;
     const list = getList(sectionKey, defaults);
-    if (list.includes(name)) {
+    const listNames = sectionKey === 'branches'
+      ? normalizeBranches(list).map((b) => b.name)
+      : list;
+    if (listNames.includes(name)) {
       showError('Already exists');
       return;
     }
     setSaving(true);
     try {
-      const next = [...list, name];
+      const next = sectionKey === 'branches'
+        ? [...normalizeBranches(list), { name, lat: null, lng: null }]
+        : [...list, name];
       await withRetry(
         () => updateDoc(doc(db, 'companies', companyId), { [sectionKey]: next }),
         { companyId, action: 'addListItem', section: sectionKey },
@@ -690,7 +705,9 @@ export default function Settings() {
     if (count > 0) return;
     try {
       const list = getList(sectionKey, defaults);
-      const next = list.filter((x) => x !== name);
+      const next = sectionKey === 'branches'
+        ? normalizeBranches(list).filter((b) => b.name !== name)
+        : list.filter((x) => x !== name);
       await withRetry(
         () => updateDoc(doc(db, 'companies', companyId), { [sectionKey]: next }),
         { companyId, action: 'removeListItem', section: sectionKey },
@@ -973,7 +990,9 @@ export default function Settings() {
         section.key === 'benefits'
           ? (value) =>
               employees.filter((e) => (e.customBenefits || []).some((b) => (b?.name || '').trim() === value)).length
-          : getCount(section.field);
+          : section.key === 'branches'
+            ? (value) => getCount(section.field)(typeof value === 'object' ? value.name : value)
+            : getCount(section.field);
       const meta = SECTION_META[section.key] || {};
 
       return (
@@ -982,20 +1001,41 @@ export default function Settings() {
 
           <div className="max-h-48 overflow-y-auto space-y-0.5 mb-3 pr-1 settings-list">
             {items.map((item) => {
-              const empCount = countFn(item);
+              const name = section.key === 'branches'
+                ? (typeof item === 'object' ? item.name : item)
+                : item;
+              const empCount = countFn(section.key === 'branches' ? item : name);
               return (
                 <div
-                  key={item}
+                  key={name}
                   className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-gray-50"
                 >
-                  <span className="flex-1 text-sm text-gray-800 truncate mr-2">{item}</span>
+                  <span className="flex-1 text-sm text-gray-800 truncate mr-2 flex items-center min-w-0">
+                    {name}
+                    {section.key === 'branches' && (() => {
+                      const branchObj = typeof item === 'object' ? item : { name: item, lat: null, lng: null };
+                      const hasCoords = branchObj.lat != null && branchObj.lng != null;
+                      return (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingBranch(branchObj);
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded-full ml-2 flex-shrink-0 ${hasCoords ? 'bg-[#EAF3DE] text-[#3B6D11]' : 'bg-amber-50 text-amber-600'}`}
+                        >
+                          {hasCoords ? `📍 ${branchObj.lat.toFixed(4)}, ${branchObj.lng.toFixed(4)}` : '📍 Set coordinates'}
+                        </button>
+                      );
+                    })()}
+                  </span>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <span className={`text-xs whitespace-nowrap ${empCount > 0 ? 'text-gray-600' : 'text-gray-300'}`}>
                       {empCount} emp
                     </span>
                     <button
                       type="button"
-                      onClick={() => setDeleteConfirm({ section: section.key, name: item, defaults: section.defaults })}
+                      onClick={() => setDeleteConfirm({ section: section.key, name, defaults: section.defaults })}
                       className="w-5 h-5 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded text-xs flex-shrink-0 disabled:opacity-30"
                       disabled={empCount > 0}
                       title={empCount > 0 ? `Cannot delete — used by ${empCount} employees` : 'Remove'}
@@ -2010,6 +2050,50 @@ export default function Settings() {
                 Delete
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {editingBranch && (
+        <div className="fixed inset-0 bg-black/30 flex items-end sm:items-center justify-center z-50 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-sm p-5 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-800">Set coordinates — {editingBranch.name}</h3>
+              <button type="button" onClick={() => setEditingBranch(null)} className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 text-xs">✕</button>
+            </div>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Latitude</label>
+                <input type="number" step="any" value={editingBranch.lat ?? ''} onChange={(e) => setEditingBranch((p) => ({ ...p, lat: e.target.value ? parseFloat(e.target.value) : null }))} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#1B6B6B]" placeholder="e.g. 17.3850" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Longitude</label>
+                <input type="number" step="any" value={editingBranch.lng ?? ''} onChange={(e) => setEditingBranch((p) => ({ ...p, lng: e.target.value ? parseFloat(e.target.value) : null }))} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#1B6B6B]" placeholder="e.g. 78.4867" />
+              </div>
+            </div>
+            <button type="button" onClick={async () => {
+              if (!navigator.geolocation) { showError('Geolocation not supported'); return; }
+              navigator.geolocation.getCurrentPosition(
+                (pos) => setEditingBranch((p) => ({ ...p, lat: parseFloat(pos.coords.latitude.toFixed(6)), lng: parseFloat(pos.coords.longitude.toFixed(6)) })),
+                () => showError('Could not get location'),
+                { enableHighAccuracy: true, timeout: 10000 },
+              );
+            }} className="w-full mb-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2">
+              📍 Use my current location
+            </button>
+            <button type="button" onClick={async () => {
+              const list = normalizeBranches(getList('branches', DEFAULT_BRANCHES));
+              const updated = list.map((b) => b.name === editingBranch.name ? { ...b, lat: editingBranch.lat, lng: editingBranch.lng } : b);
+              try {
+                await updateDoc(doc(db, 'companies', companyId), { branches: updated });
+                setCompany((prev) => prev ? { ...prev, branches: updated } : null);
+                setEditingBranch(null);
+                success('Coordinates saved');
+              } catch {
+                showError('Failed to save coordinates');
+              }
+            }} disabled={editingBranch.lat == null || editingBranch.lng == null} className="w-full py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium disabled:opacity-40">
+              Save coordinates
+            </button>
           </div>
         </div>
       )}

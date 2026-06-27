@@ -29,6 +29,8 @@ export default function AssignAuditModal({
   const [location,     setLocation]     = useState('');
   const [branch,       setBranch]       = useState('');
   const [department,   setDepartment]   = useState('');
+  const [requireLocation, setRequireLocation] = useState(true);
+  const [requireSelfie, setRequireSelfie] = useState(true);
   const [recordData,   setRecordData]   = useState({});   // { [tmplId]: { [sectionId]: Row[] } }
   const [assigning,    setAssigning]    = useState(false);
   const [assignedAudits, setAssignedAudits] = useState(null);
@@ -214,6 +216,22 @@ export default function AssignAuditModal({
           branch: branch || null,
           location: location || null,
           department: department || null,
+          requireLocation,
+          requireSelfie,
+          branchLat: (() => {
+            if (!branch) return null;
+            const branchList = branches || [];
+            const found = branchList.find((b) => (typeof b === 'object' ? b.name : b) === branch);
+            return found && typeof found === 'object' ? found.lat ?? null : null;
+          })(),
+          branchLng: (() => {
+            if (!branch) return null;
+            const branchList = branches || [];
+            const found = branchList.find((b) => (typeof b === 'object' ? b.name : b) === branch);
+            return found && typeof found === 'object' ? found.lng ?? null : null;
+          })(),
+          locationCheck: null,
+          checkInSelfie: null,
           auditorId,
           auditorName,
           auditorEmail,
@@ -418,12 +436,46 @@ export default function AssignAuditModal({
               </select>
               <select value={branch} onChange={(e) => setBranch(e.target.value)} className="text-xs border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
                 <option value="">Branch</option>
-                {(branches || []).map((b) => <option key={b.id || b}>{b.name || b}</option>)}
+                {(branches || []).map((b) => {
+                  const name = typeof b === 'object' ? b.name : b;
+                  return <option key={name} value={name}>{name}</option>;
+                })}
               </select>
               <select value={department} onChange={(e) => setDepartment(e.target.value)} className="text-xs border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
                 <option value="">Department</option>
                 {(departments || []).map((d) => <option key={d.id || d}>{d.name || d}</option>)}
               </select>
+            </div>
+          </div>
+
+          {/* ── Verification ── */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Audit verification</p>
+            <div className="space-y-2">
+              <label className="flex items-center justify-between p-3 border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base">📍</span>
+                  <div>
+                    <p className="text-xs font-medium text-gray-800">Verify location</p>
+                    <p className="text-[10px] text-gray-400">GPS check when auditor starts the audit</p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setRequireLocation((v) => !v)} className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${requireLocation ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}>
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${requireLocation ? 'translate-x-5' : ''}`} />
+                </button>
+              </label>
+              <label className="flex items-center justify-between p-3 border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base">🤳</span>
+                  <div>
+                    <p className="text-xs font-medium text-gray-800">Check-in selfie</p>
+                    <p className="text-[10px] text-gray-400">Photo proof of auditor at the site</p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setRequireSelfie((v) => !v)} className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${requireSelfie ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}>
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${requireSelfie ? 'translate-x-5' : ''}`} />
+                </button>
+              </label>
             </div>
           </div>
 
@@ -531,6 +583,14 @@ export default function AssignAuditModal({
                 <div className="flex justify-between text-xs"><span className="text-gray-500">Team members</span><span className="font-medium text-gray-800">{selectedTeamMembers.length > 0 ? `${selectedTeamMembers.length} added` : 'None'}</span></div>
                 <div className="flex justify-between text-xs"><span className="text-gray-500">Branch / Location</span><span className="font-medium text-gray-800">{branch || location || '—'}</span></div>
                 <div className="flex justify-between text-xs"><span className="text-gray-500">Due date</span><span className="font-medium text-gray-800">{endDate || '—'}</span></div>
+                {(requireLocation || requireSelfie) && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Verification</span>
+                    <span className="font-medium text-gray-800">
+                      {[requireLocation && '📍 Location', requireSelfie && '🤳 Selfie'].filter(Boolean).join(' + ')}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Templates ({selectedTemplates.length})</p>
