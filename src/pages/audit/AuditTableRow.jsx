@@ -43,7 +43,7 @@ export default function AuditTableRow({
       setSaving(true);
       const payload = { status: newStatus, updatedAt: serverTimestamp(), ...(newStatus === 'Closed' && !audit.closedAt && { closedAt: serverTimestamp() }) };
       if (newStatus === 'Under Review' && effCur === 'Submitted') {
-        payload.reviewStartedAt = new Date();
+        payload.reviewStartedAt = serverTimestamp();
         payload.reviewStartedBy = currentUser?.email || '';
       }
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), payload);
