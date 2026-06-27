@@ -366,6 +366,19 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
         checklistLocked: true,
         updatedAt: new Date(),
         updatedBy: currentUser?.email || '',
+        timeMetrics: {
+          startedAt: safeAudit.locationCheck?.timestamp || safeAudit.updatedAt || null,
+          submittedAt: serverTimestamp(),
+          durationMinutes: (() => {
+            const start = safeAudit.locationCheck?.timestamp?.seconds
+              ? safeAudit.locationCheck.timestamp.seconds * 1000
+              : safeAudit.locationCheck?.timestamp
+              ? new Date(safeAudit.locationCheck.timestamp).getTime()
+              : null;
+            if (!start) return null;
+            return Math.round((Date.now() - start) / 60000);
+          })(),
+        },
       });
 
       showSuccess('Submitted!');
@@ -1083,6 +1096,26 @@ export default function AuditDetail({ audit, company, companyId, currentUser, em
               <p className="text-sm font-semibold text-red-700 mb-1">↩ Sent back for corrections</p>
               {audit.sentBackReason && (
                 <p className="text-xs text-red-600">Manager note: {audit.sentBackReason}</p>
+              )}
+            </div>
+          )}
+
+          {(audit.locationCheck || audit.checkInSelfie) && (
+            <div className="flex flex-wrap items-center gap-2 px-5 py-2.5 border-b border-gray-100 bg-gray-50/50">
+              {audit.locationCheck && (
+                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${audit.locationCheck.verified ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {audit.locationCheck.verified ? '✓' : '⚠'} {audit.locationCheck.verified ? `On-site · ${audit.locationCheck.distanceFromBranch}m from ${audit.locationCheck.branchName || 'branch'}` : `${(audit.locationCheck.distanceFromBranch / 1000).toFixed(1)} km from ${audit.locationCheck.branchName || 'branch'}`}
+                </span>
+              )}
+              {audit.checkInSelfie && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
+                  📸 Selfie captured
+                </span>
+              )}
+              {audit.locationCheck?.timestamp && (
+                <span className="text-[10px] text-gray-400">
+                  {new Date(audit.locationCheck.timestamp?.seconds ? audit.locationCheck.timestamp.seconds * 1000 : audit.locationCheck.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </span>
               )}
             </div>
           )}

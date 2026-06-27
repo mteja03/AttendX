@@ -164,7 +164,21 @@ export default function AuditTableRow({
 
         <div className="min-w-0">
           {audit.branch ? (
-            <><p className="text-sm text-gray-700 truncate">{audit.branch}</p><p className="text-xs text-gray-400 truncate mt-0.5">{[audit.location, audit.department].filter(Boolean).join(' · ')}</p></>
+            <>
+              <p className="text-sm text-gray-700 truncate">{audit.branch}</p>
+              <p className="text-xs text-gray-400 truncate mt-0.5">{[audit.location, audit.department].filter(Boolean).join(' · ')}</p>
+              {audit.locationCheck && (
+                <span className={`inline-flex items-center gap-1 text-[10px] font-medium mt-1 px-1.5 py-0.5 rounded-full ${audit.locationCheck.verified ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {audit.locationCheck.verified ? '✓' : '⚠'} {audit.locationCheck.verified ? `${audit.locationCheck.distanceFromBranch}m` : `${(audit.locationCheck.distanceFromBranch / 1000).toFixed(1)} km`}
+                </span>
+              )}
+              {audit.checkInSelfie && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium mt-1 ml-1 px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700">📸</span>
+              )}
+              {(audit.requireLocation || audit.requireSelfie) && !audit.locationCheck && !audit.checkInSelfie && effStatus(audit.status) !== 'Assigned' && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium mt-1 px-1.5 py-0.5 rounded-full bg-red-50 text-red-600">⚠ No verification</span>
+              )}
+            </>
           ) : <span className="text-sm text-gray-300">—</span>}
         </div>
 

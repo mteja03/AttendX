@@ -297,6 +297,19 @@ export default function UnifiedAuditDetail({
       await updateDoc(doc(db, 'companies', companyId, 'audits', audit.id), {
         sectionResponses, findings: findingsData, adminNotes,
         status: 'Submitted', submittedAt: serverTimestamp(), submittedBy: currentUser?.email || '', updatedAt: serverTimestamp(),
+        timeMetrics: {
+          startedAt: safeAudit.locationCheck?.timestamp || safeAudit.updatedAt || null,
+          submittedAt: serverTimestamp(),
+          durationMinutes: (() => {
+            const start = safeAudit.locationCheck?.timestamp?.seconds
+              ? safeAudit.locationCheck.timestamp.seconds * 1000
+              : safeAudit.locationCheck?.timestamp
+              ? new Date(safeAudit.locationCheck.timestamp).getTime()
+              : null;
+            if (!start) return null;
+            return Math.round((Date.now() - start) / 60000);
+          })(),
+        },
       });
       showSuccess('Submitted!'); setShowSubmit(false); onClose();
     } catch (e) { showError('Submit failed: ' + e.message); } finally { setSubmitting(false); }
@@ -748,6 +761,26 @@ export default function UnifiedAuditDetail({
             <div className="mb-2 p-2.5 bg-red-50 border border-red-200 rounded-xl">
               <p className="text-xs font-semibold text-red-700 mb-0.5">↩ Sent back for corrections</p>
               <p className="text-xs text-red-600">{safeAudit.sentBackReason}</p>
+            </div>
+          )}
+
+          {(safeAudit.locationCheck || safeAudit.checkInSelfie) && (
+            <div className="flex flex-wrap items-center gap-2 px-5 py-2.5 border-b border-gray-100 bg-gray-50/50">
+              {safeAudit.locationCheck && (
+                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${safeAudit.locationCheck.verified ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {safeAudit.locationCheck.verified ? '✓' : '⚠'} {safeAudit.locationCheck.verified ? `On-site · ${safeAudit.locationCheck.distanceFromBranch}m from ${safeAudit.locationCheck.branchName || 'branch'}` : `${(safeAudit.locationCheck.distanceFromBranch / 1000).toFixed(1)} km from ${safeAudit.locationCheck.branchName || 'branch'}`}
+                </span>
+              )}
+              {safeAudit.checkInSelfie && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
+                  📸 Selfie captured
+                </span>
+              )}
+              {safeAudit.locationCheck?.timestamp && (
+                <span className="text-[10px] text-gray-400">
+                  {new Date(safeAudit.locationCheck.timestamp?.seconds ? safeAudit.locationCheck.timestamp.seconds * 1000 : safeAudit.locationCheck.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
             </div>
           )}
 
