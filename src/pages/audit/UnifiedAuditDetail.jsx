@@ -1011,9 +1011,31 @@ export default function UnifiedAuditDetail({
               <button type="button" onClick={() => { URL.revokeObjectURL(selfieViewUrl); setSelfieViewUrl(null); }} className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 text-xs">✕</button>
             </div>
             <img src={selfieViewUrl} alt="Auditor check-in selfie" className="w-full" style={{ transform: 'scaleX(-1)' }} />
-            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-              <span>{safeAudit.locationCheck?.verified ? `✓ On-site · ${safeAudit.locationCheck.distanceFromBranch}m` : safeAudit.locationCheck ? `⚠ ${(safeAudit.locationCheck.distanceFromBranch / 1000).toFixed(1)} km away` : ''}</span>
-              <span>{safeAudit.locationCheck?.timestamp ? new Date(safeAudit.locationCheck.timestamp?.seconds ? safeAudit.locationCheck.timestamp.seconds * 1000 : safeAudit.locationCheck.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</span>
+            <div className="px-4 py-3 border-t border-gray-100 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className={`font-medium ${safeAudit.locationCheck?.verified ? 'text-green-700' : 'text-amber-700'}`}>
+                  {safeAudit.locationCheck?.verified ? `✓ On-site · ${safeAudit.locationCheck.distanceFromBranch}m from ${safeAudit.locationCheck.branchName || 'branch'}` : safeAudit.locationCheck ? `⚠ ${(safeAudit.locationCheck.distanceFromBranch / 1000).toFixed(1)} km from ${safeAudit.locationCheck.branchName || 'branch'}` : ''}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-gray-500">
+                {safeAudit.locationCheck?.lat != null && (
+                  <div><span className="text-gray-400">Lat:</span> {safeAudit.locationCheck.lat.toFixed(6)}</div>
+                )}
+                {safeAudit.locationCheck?.lng != null && (
+                  <div><span className="text-gray-400">Lng:</span> {safeAudit.locationCheck.lng.toFixed(6)}</div>
+                )}
+                {safeAudit.locationCheck?.branchName && (
+                  <div><span className="text-gray-400">Location:</span> {safeAudit.locationCheck.branchName}</div>
+                )}
+                {safeAudit.locationCheck?.accuracy != null && (
+                  <div><span className="text-gray-400">GPS accuracy:</span> ±{safeAudit.locationCheck.accuracy}m</div>
+                )}
+              </div>
+              {safeAudit.locationCheck?.timestamp && (
+                <div className="text-[10px] text-gray-400 pt-0.5 border-t border-gray-50">
+                  {new Date(safeAudit.locationCheck.timestamp?.seconds ? safeAudit.locationCheck.timestamp.seconds * 1000 : safeAudit.locationCheck.timestamp).toLocaleString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </div>
+              )}
             </div>
           </div>
         </div>

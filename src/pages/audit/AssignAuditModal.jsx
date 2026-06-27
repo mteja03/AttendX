@@ -469,12 +469,10 @@ export default function AssignAuditModal({
               {requireLocation && (
                 <div className="flex items-center gap-2 ml-11 -mt-1 mb-1">
                   <span className="text-[10px] text-gray-400">Radius:</span>
-                  {[200, 500, 1000, 2000].map((r) => (
-                    <button key={r} type="button" onClick={() => setVerifyRadius(r)}
-                      className={`text-[10px] px-2 py-1 rounded-lg font-medium transition-colors ${verifyRadius === r ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                      {r >= 1000 ? `${r / 1000} km` : `${r}m`}
-                    </button>
-                  ))}
+                  <div className="flex items-center gap-1">
+                    <input type="number" min="50" max="50000" step="50" value={verifyRadius} onChange={(e) => setVerifyRadius(Math.max(50, parseInt(e.target.value, 10) || 500))} className="w-20 text-[11px] border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:border-[#1B6B6B] text-center" />
+                    <span className="text-[10px] text-gray-400">meters</span>
+                  </div>
                 </div>
               )}
               <label className="flex items-center justify-between p-3 border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50">
