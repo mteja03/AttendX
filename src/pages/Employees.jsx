@@ -1696,20 +1696,19 @@ export default function Employees() {
 
           {viewMode === 'list' ? (
           <>
-          <div className="hidden lg:block overflow-x-auto overflow-y-auto max-h-[70vh] border border-slate-200 rounded-xl bg-white">
-          <table className="min-w-[1400px] w-full text-sm">
+          <div className="hidden lg:block overflow-y-auto max-h-[70vh] border border-slate-200 rounded-xl bg-white">
+          <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-500 sticky top-0 z-10">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Emp ID</th>
-                <th className="px-4 py-3 text-left font-medium">Name + Email</th>
-                <th className="px-4 py-3 text-left font-medium">Department</th>
-                <th className="px-4 py-3 text-left font-medium">Designation</th>
-                <th className="px-4 py-3 text-left font-medium">Phone</th>
-                <th className="px-4 py-3 text-left font-medium">Joining Date</th>
-                <th className="px-4 py-3 text-left font-medium">Branch</th>
-                <th className="px-4 py-3 text-left font-medium">Location</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-left font-medium">Actions</th>
+                <th className="px-3 py-3 text-left font-medium">Emp ID</th>
+                <th className="px-3 py-3 text-left font-medium">Name + Email</th>
+                <th className="px-3 py-3 text-left font-medium">Phone</th>
+                <th className="px-3 py-3 text-left font-medium">Designation</th>
+                <th className="px-3 py-3 text-left font-medium">Department</th>
+                <th className="px-3 py-3 text-left font-medium">Location</th>
+                <th className="px-3 py-3 text-left font-medium">Branch</th>
+                <th className="px-3 py-3 text-left font-medium">Status</th>
+                <th className="px-3 py-3 text-left font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1726,27 +1725,26 @@ export default function Employees() {
                       borderLeft: `3px solid ${STATUS_BORDER_COLOR[emp.status] || getDeptColor(emp.department)}`,
                     }}
                   >
-                    <td className="px-4 py-3 font-mono text-slate-700">{emp.empId || '—'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
+                    <td className="px-3 py-3 font-mono text-slate-700 text-xs">{emp.empId || '—'}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2.5">
                         <EmployeeAvatar employee={emp} size="sm" />
-                        <div>
-                          <p className="text-sm font-medium text-slate-800">{emp.fullName || '—'}</p>
-                          <p className="text-xs text-slate-500">{emp.email || '—'}</p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{emp.fullName || '—'}</p>
+                          <p className="text-xs text-slate-500 truncate">{emp.email || '—'}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{emp.department || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700">
+                    <td className="px-3 py-3 text-slate-700 text-xs">{emp.phone || '—'}</td>
+                    <td className="px-3 py-3 text-slate-700 text-xs">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span>{emp.designation || '—'}</span>
                         <EmployeeStatusSubline emp={emp} />
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{emp.phone || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700">{toDisplayDate(emp.joiningDate)}</td>
-                    <td className="px-4 py-3 text-slate-700">{emp.branch || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700">{emp.location || '—'}</td>
+                    <td className="px-3 py-3 text-slate-700 text-xs">{emp.department || '—'}</td>
+                    <td className="px-3 py-3 text-slate-700 text-xs">{emp.location || '—'}</td>
+                    <td className="px-3 py-3 text-slate-700 text-xs">{emp.branch || '—'}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={emp.status || 'Active'} />
                       {(emp.offboarding?.phase === 'exit_tasks' || emp.offboarding?.status === 'in_progress') && (
@@ -1761,16 +1759,16 @@ export default function Employees() {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#1B6B6B] text-xs font-medium hover:underline">
-                        {canEditEmployees ? 'View Profile' : 'View'}
+                        View
                       </button>
                     </td>
                   </tr>
                 ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="p-0">
+                  <td colSpan={9} className="p-0">
                     <EmptyState
                       illustration={
                         <div className="w-16 h-16 rounded-2xl bg-[#E1F5EE] flex items-center justify-center">
