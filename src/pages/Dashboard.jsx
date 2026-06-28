@@ -219,12 +219,15 @@ function StatCard({
   subLabelColor,
   rightLabel,
   sparkData,
+  to,
 }) {
   const tc = STAT_TREND_COLORS[trendDir] || STAT_TREND_COLORS.neutral;
   const maxBar = sparkData ? Math.max(...sparkData) : 0;
+  const Wrapper = to ? Link : 'div';
+  const wrapperProps = to ? { to } : {};
 
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-4 flex flex-col gap-3">
+    <Wrapper {...wrapperProps} className={`bg-white border border-gray-100 rounded-2xl p-4 flex flex-col gap-3 ${to ? 'hover:border-[#1B6B6B] hover:shadow-sm transition-all cursor-pointer' : ''}`}>
       <div className="flex items-start justify-between">
         <div
           className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -276,14 +279,14 @@ function StatCard({
           ))}
         </div>
       )}
-    </div>
+    </Wrapper>
   );
 }
 
 export default function Dashboard() {
   const { companyId } = useParams();
   const navigate = useNavigate();
-  const { role } = useAuth();
+  const { role, name } = useAuth();
   const { success, error: showError } = useToast();
   const [employees, setEmployees] = useState([]);
   const [leaveList, setLeaveList] = useState([]);
@@ -900,8 +903,36 @@ export default function Dashboard() {
 
   const statsLoading = !employeesLoaded || !leaveLoaded;
 
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  })();
+  const todayStr = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const firstName = (name || '').split(' ')[0] || '';
+
   return (
     <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-lg sm:text-xl font-semibold text-gray-800">
+            {greeting}{firstName ? `, ${firstName}` : ''}
+          </h1>
+          <p className="text-sm text-gray-400 mt-0.5">{todayStr}</p>
+        </div>
+        <div className="flex gap-2">
+          <Link to={`/company/${companyId}/leave`} className="inline-flex items-center justify-center gap-2 min-h-[44px] rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-4 py-2">
+            <CalendarIcon className="w-4 h-4" />
+            Leave requests
+          </Link>
+          <button type="button" onClick={() => navigate(`/company/${companyId}/employees`)} className="inline-flex items-center justify-center gap-2 min-h-[44px] rounded-xl bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2">
+            <UserAddIcon className="w-4 h-4" />
+            Add employee
+          </button>
+        </div>
+      </div>
+
       {statsLoading ? (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
           {[...Array(6)].map((_, i) => (
@@ -919,6 +950,7 @@ export default function Dashboard() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
           <StatCard
+            to={`/company/${companyId}/employees`}
             iconBg="#E1F5EE"
             icon={
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -948,6 +980,7 @@ export default function Dashboard() {
           />
 
           <StatCard
+            to={`/company/${companyId}/leave`}
             iconBg="#FAEEDA"
             icon={
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -969,6 +1002,7 @@ export default function Dashboard() {
           />
 
           <StatCard
+            to={`/company/${companyId}/employees`}
             iconBg="#E6F1FB"
             icon={
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -984,6 +1018,7 @@ export default function Dashboard() {
           />
 
           <StatCard
+            to={`/company/${companyId}/employees`}
             iconBg="#FCEBEB"
             icon={
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -1015,6 +1050,7 @@ export default function Dashboard() {
           />
 
           <StatCard
+            to={`/company/${companyId}/employees`}
             iconBg="#EEEDFE"
             icon={
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -1148,6 +1184,7 @@ export default function Dashboard() {
         </div>
       )}
 
+      {onboardingEmployees.length > 0 ? (
       <div className="bg-white border rounded-xl p-4 mb-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -1204,7 +1241,13 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+      ) : (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-100 rounded-xl mb-3 text-xs text-gray-400">
+          <span>🎯</span> Onboarding — no active tasks
+        </div>
+      )}
 
+          {offboardingEmployees.length > 0 ? (
           <div className="bg-white border rounded-xl p-4 mb-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -1277,24 +1320,11 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-
-      <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3 mb-6">
-        <button
-          type="button"
-          onClick={() => navigate(`/company/${companyId}/employees`)}
-          className="inline-flex items-center justify-center gap-2 min-h-[44px] rounded-lg bg-[#1B6B6B] hover:bg-[#155858] active:bg-[#0f4444] text-white text-sm font-medium px-4 py-2"
-        >
-          <UserAddIcon className="w-4 h-4" />
-          Add Employee
-        </button>
-        <Link
-          to={`/company/${companyId}/leave`}
-          className="inline-flex items-center justify-center gap-2 min-h-[44px] rounded-lg border border-slate-300 hover:bg-slate-50 active:bg-slate-100 text-slate-700 text-sm font-medium px-4 py-2"
-        >
-          <CalendarIcon className="w-4 h-4" />
-          View Leave Requests
-        </Link>
-      </div>
+      ) : (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-100 rounded-xl mb-3 text-xs text-gray-400">
+          <span>👋</span> Offboarding — no active tasks
+        </div>
+      )}
 
       <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden mb-6">
         <button
