@@ -9,7 +9,11 @@ import PageLoader from './components/PageLoader';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { VALID_ROLES } from './utils/roles';
 import { ToastProvider } from './contexts/ToastContext';
+import PublicRoute from './components/PublicRoute';
 
+const LandingPage = lazy(() => import('./pages/public/LandingPage'));
+const FeaturesPage = lazy(() => import('./pages/public/FeaturesPage'));
+const AboutPage = lazy(() => import('./pages/public/AboutPage'));
 const Companies = lazy(() => import('./pages/Companies'));
 const AdminUsers = lazy(() => import('./pages/AdminUsers'));
 const Analytics = lazy(() => import('./pages/Analytics'));
@@ -54,7 +58,7 @@ function ProtectedRoute({ children }) {
   }
 
   if (!currentUser) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/home" replace />;
   }
 
   if (role && !VALID_ROLES.includes(role)) {
@@ -122,6 +126,9 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader fullScreen message="Loading..." />}>
       <Routes>
+        <Route path="/home" element={<PublicRoute><Suspense fallback={<PageLoader fullScreen />}><LandingPage /></Suspense></PublicRoute>} />
+        <Route path="/features" element={<PublicRoute><Suspense fallback={<PageLoader fullScreen />}><FeaturesPage /></Suspense></PublicRoute>} />
+        <Route path="/about" element={<PublicRoute><Suspense fallback={<PageLoader fullScreen />}><AboutPage /></Suspense></PublicRoute>} />
         <Route path="/login" element={<LoginRoute />} />
         <Route
           path="/"
@@ -289,7 +296,7 @@ function AppRoutes() {
             />
           </Route>
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
     </Suspense>
   );
