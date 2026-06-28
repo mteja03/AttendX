@@ -2249,12 +2249,33 @@ export default function Settings() {
             </div>
             <div className="mb-4">
               <label className="text-xs text-gray-500 block mb-1">General Manager</label>
-              <input type="text" placeholder="🔍 Search by name or designation..." value={gmSearch} onChange={(e) => setGmSearch(e.target.value)} className="w-full text-xs border border-gray-100 rounded-lg px-3 py-1.5 mb-1.5 bg-gray-50 focus:outline-none focus:border-[#1B6B6B] focus:bg-white" />
-              <select value={locationForm.generalManagerId || ''} onChange={(e) => { const emp = employees.find((em) => em.id === e.target.value); setLocationForm((p) => ({ ...p, generalManagerId: e.target.value || null, generalManagerName: emp ? (emp.fullName || emp.name || '') : '' })); }} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
-                <option value="">Select employee…</option>
-                {employees.filter((e) => e.status === 'Active').filter((e) => { const q = gmSearch.toLowerCase(); return !q || (e.fullName || e.name || e.email || '').toLowerCase().includes(q) || (e.designation || '').toLowerCase().includes(q); }).map((e) => <option key={e.id} value={e.id}>{e.fullName || e.name || e.email} — {e.designation || e.role || ''}</option>)}
-              </select>
-              <p className="text-[10px] text-gray-400 mt-0.5">All employees shown — GM can manage across locations</p>
+              {locationForm.generalManagerId ? (
+                <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 bg-white">
+                  <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">{(locationForm.generalManagerName || '?').charAt(0)}</div>
+                  <span className="text-sm text-gray-800 flex-1 truncate">{locationForm.generalManagerName}</span>
+                  <button type="button" onClick={() => { setLocationForm((p) => ({ ...p, generalManagerId: null, generalManagerName: '' })); setGmSearch(''); }} className="text-gray-400 hover:text-red-500 text-xs min-h-[28px] min-w-[28px] flex items-center justify-center" aria-label="Clear">✕</button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input type="text" placeholder="🔍 Search by name or designation..." value={gmSearch} onChange={(e) => setGmSearch(e.target.value)} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
+                  {gmSearch && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-[60] max-h-48 overflow-y-auto">
+                      {(() => {
+                        const q = gmSearch.toLowerCase();
+                        const results = employees.filter((e) => e.status === 'Active').filter((e) => (e.fullName || e.name || e.email || '').toLowerCase().includes(q) || (e.designation || '').toLowerCase().includes(q));
+                        if (results.length === 0) return <p className="px-3 py-2 text-xs text-gray-400">No employees found</p>;
+                        return results.map((e) => (
+                          <button key={e.id} type="button" onClick={() => { setLocationForm((p) => ({ ...p, generalManagerId: e.id, generalManagerName: e.fullName || e.name || '' })); setGmSearch(''); }} className="w-full text-left px-3 py-2 hover:bg-[#E1F5EE] flex items-center gap-2 transition-colors min-h-[40px]">
+                            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 flex-shrink-0">{(e.fullName || e.name || '?').charAt(0)}</div>
+                            <div className="min-w-0"><p className="text-xs font-medium text-gray-800 truncate">{e.fullName || e.name || e.email}</p><p className="text-[10px] text-gray-400 truncate">{e.designation || '—'}</p></div>
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+              <p className="text-[10px] text-gray-400 mt-1">Type to search — GM can manage across locations</p>
             </div>
             <button type="button" disabled={savingLocBranch || !locationForm.name.trim()} onClick={async () => {
               if (locationForm.id) {
@@ -2328,20 +2349,34 @@ export default function Settings() {
               </div>
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Branch manager</label>
-                <input type="text" placeholder="🔍 Search by name or designation..." value={branchManagerSearch} onChange={(e) => setBranchManagerSearch(e.target.value)} className="w-full text-xs border border-gray-100 rounded-lg px-3 py-1.5 mb-1.5 bg-gray-50 focus:outline-none focus:border-[#1B6B6B] focus:bg-white" />
-                <select value={branchForm.managerId || ''} onChange={(e) => { const emp = employees.find((em) => em.id === e.target.value); setBranchForm((p) => ({ ...p, managerId: e.target.value || null, managerName: emp ? (emp.fullName || emp.name || '') : '' })); }} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
-                  <option value="">Select employee…</option>
-                  {(() => {
-                    const locName = structuredLocations.find((l) => l.id === editingBranchInLocation)?.name || '';
-                    const q = branchManagerSearch.toLowerCase();
-                    return employees
-                      .filter((e) => e.status === 'Active')
-                      .filter((e) => !locName || (e.location || '') === locName)
-                      .filter((e) => !q || (e.fullName || e.name || e.email || '').toLowerCase().includes(q) || (e.designation || '').toLowerCase().includes(q))
-                      .map((e) => <option key={e.id} value={e.id}>{e.fullName || e.name || e.email} — {e.designation || e.role || ''}</option>);
-                  })()}
-                </select>
-                {branchManagerSearch && <p className="text-[10px] text-gray-400 mt-0.5">Showing employees at {structuredLocations.find((l) => l.id === editingBranchInLocation)?.name || 'this location'}</p>}
+                {branchForm.managerId ? (
+                  <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 bg-white">
+                    <div className="w-6 h-6 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">{(branchForm.managerName || '?').charAt(0)}</div>
+                    <span className="text-sm text-gray-800 flex-1 truncate">{branchForm.managerName}</span>
+                    <button type="button" onClick={() => { setBranchForm((p) => ({ ...p, managerId: null, managerName: '' })); setBranchManagerSearch(''); }} className="text-gray-400 hover:text-red-500 text-xs min-h-[28px] min-w-[28px] flex items-center justify-center" aria-label="Clear">✕</button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input type="text" placeholder="🔍 Search by name or designation..." value={branchManagerSearch} onChange={(e) => setBranchManagerSearch(e.target.value)} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" />
+                    {branchManagerSearch && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-[60] max-h-48 overflow-y-auto">
+                        {(() => {
+                          const locName = structuredLocations.find((l) => l.id === editingBranchInLocation)?.name || '';
+                          const q = branchManagerSearch.toLowerCase();
+                          const results = employees.filter((e) => e.status === 'Active').filter((e) => !locName || (e.location || '') === locName).filter((e) => (e.fullName || e.name || e.email || '').toLowerCase().includes(q) || (e.designation || '').toLowerCase().includes(q));
+                          if (results.length === 0) return <p className="px-3 py-2 text-xs text-gray-400">No employees found</p>;
+                          return results.map((e) => (
+                            <button key={e.id} type="button" onClick={() => { setBranchForm((p) => ({ ...p, managerId: e.id, managerName: e.fullName || e.name || '' })); setBranchManagerSearch(''); }} className="w-full text-left px-3 py-2 hover:bg-[#E1F5EE] flex items-center gap-2 transition-colors min-h-[40px]">
+                              <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 flex-shrink-0">{(e.fullName || e.name || '?').charAt(0)}</div>
+                              <div className="min-w-0"><p className="text-xs font-medium text-gray-800 truncate">{e.fullName || e.name || e.email}</p><p className="text-[10px] text-gray-400 truncate">{e.designation || '—'}</p></div>
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <p className="text-[10px] text-gray-400 mt-1">Type to search — employees at {structuredLocations.find((l) => l.id === editingBranchInLocation)?.name || 'this location'}</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
