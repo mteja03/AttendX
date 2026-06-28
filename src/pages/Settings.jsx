@@ -1265,8 +1265,7 @@ export default function Settings() {
 
   const renderOrganizationTab = () => (
     <div className="space-y-4">
-      {renderSectionsGrid(['departments', 'categories'])}
-      {renderAssetTypesCard()}
+      {renderSectionsGrid(['departments', 'categories'], true)}
       {renderLocationsAndBranches()}
     </div>
   );
