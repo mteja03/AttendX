@@ -109,14 +109,17 @@ function CompanyIndexRedirect() {
 }
 
 function LoginRoute() {
-  const { currentUser, loading } = useAuth();
+  const { currentUser, loading, companyId } = useAuth();
 
   if (loading) {
     return <PageLoader fullScreen message="Loading..." />;
   }
 
+  if (currentUser && companyId) {
+    return <Navigate to={`/company/${companyId}/dashboard`} replace />;
+  }
   if (currentUser) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/companies" replace />;
   }
 
   return <Login />;

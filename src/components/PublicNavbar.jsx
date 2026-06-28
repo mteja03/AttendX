@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 
 const NAV_LINKS = [
-  { to: '/', label: 'Home' },
+  { to: '/home', label: 'Home' },
   { to: '/features', label: 'Features' },
   { to: '/about', label: 'About' },
 ];
@@ -13,7 +13,7 @@ export default function PublicNavbar() {
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-100">
       <div className="max-w-6xl mx-auto flex items-center justify-between px-4 sm:px-6 h-14">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 shrink-0">
+        <Link to="/home" className="flex items-center gap-2 shrink-0">
           <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-50 border border-gray-100 p-0.5">
             <img
               src="/logo/icon.png"
@@ -46,7 +46,7 @@ export default function PublicNavbar() {
               <Link
                 key={to}
                 to={to}
-                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-sm transition-colors min-h-[44px] flex items-center ${
                   isActive
                     ? 'bg-[#E1F5EE] text-[#0F6E56] font-medium'
                     : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
@@ -75,7 +75,7 @@ export default function PublicNavbar() {
             <Link
               key={to}
               to={to}
-              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-sm transition-colors min-h-[44px] flex items-center ${
                 isActive
                   ? 'bg-[#E1F5EE] text-[#0F6E56] font-medium'
                   : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'

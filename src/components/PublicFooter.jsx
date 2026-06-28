@@ -7,14 +7,14 @@ export default function PublicFooter() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
           {/* Brand */}
           <div className="col-span-2 sm:col-span-1">
-            <div className="flex items-center gap-2 mb-3">
+            <Link to="/home" className="flex items-center gap-2 mb-3">
               <div className="w-7 h-7 rounded-lg bg-[#1B6B6B] flex items-center justify-center text-white font-semibold text-xs">
                 A
               </div>
               <span className="font-semibold" style={{ color: '#1B6B6B' }}>
                 AttendX
               </span>
-            </div>
+            </Link>
             <p className="text-xs text-gray-400 leading-relaxed">
               The HR platform built for growing Indian companies.
             </p>
