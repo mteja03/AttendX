@@ -8,7 +8,6 @@ import {
   orderBy,
   where,
   limit,
-  startAfter,
   getCountFromServer,
   serverTimestamp,
   Timestamp,
@@ -448,7 +447,6 @@ export default function Employees() {
   const canEditEmployees = userRole === 'admin' || userRole === 'companyadmin' || userRole === 'hrmanager';
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const lastDocRef = useRef(null);
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
@@ -658,8 +656,6 @@ export default function Employees() {
           setEmployees([]);
           lastDocRef.current = null;
           setSearchAllMode(false);
-        } else {
-          setLoadingMore(true);
         }
 
         const constraints = [];
@@ -678,10 +674,7 @@ export default function Employees() {
           constraints.push(where('location', '==', filters.location.trim()));
         }
         constraints.push(orderBy('fullName', 'asc'));
-        constraints.push(limit(FETCH_PAGE_SIZE));
-        if (!reset && lastDocRef.current) {
-          constraints.push(startAfter(lastDocRef.current));
-        }
+        constraints.push(limit(500));
 
         const q = query(collRef, ...constraints);
         const snap = await getDocs(q);
@@ -715,7 +708,6 @@ export default function Employees() {
         }
       } finally {
         setLoading(false);
-        setLoadingMore(false);
       }
     },
     [companyId, collRef, tab, filters.department, filters.branch, filters.location, fetchAllEmployeesFallback, showError],
@@ -1364,7 +1356,6 @@ export default function Employees() {
 
       <p className="text-sm text-slate-500 mb-3">
         Showing {filtered.length} of {displayTotal} employees
-        {employees.length < displayTotal && !searchAllMode && hasMore ? ` · ${employees.length} loaded` : ''}
         {searchAllMode ? ' · search all results' : ''}
         {activeFilterCount > 0 ? ` · ${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} active (extra filters apply to loaded rows)` : ''}
       </p>
@@ -2085,25 +2076,6 @@ export default function Employees() {
             )}
           </div>
 
-          {hasMore && !searchAllMode && (
-            <div className="flex justify-center py-4">
-              <button
-                type="button"
-                onClick={() => fetchEmployees(false)}
-                disabled={loadingMore}
-                className="flex items-center justify-center gap-2 min-h-[44px] px-6 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50"
-              >
-                {loadingMore ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  `Load more (${Math.max(0, displayTotal - employees.length)} remaining)`
-                )}
-              </button>
-            </div>
-          )}
           </>
           ) : (
             <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
