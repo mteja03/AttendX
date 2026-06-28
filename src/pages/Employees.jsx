@@ -1823,7 +1823,7 @@ export default function Employees() {
             </tbody>
           </table>
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 sticky bottom-0 bg-white z-[5]">
               <p className="text-sm text-gray-500">
                 Showing {(currentPage - 1) * TABLE_PAGE_SIZE + (filtered.length === 0 ? 0 : 1)}–
                 {Math.min(currentPage * TABLE_PAGE_SIZE, filtered.length)} of {filtered.length} employees
