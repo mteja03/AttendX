@@ -1266,12 +1266,13 @@ export default function Settings() {
   const renderOrganizationTab = () => (
     <div className="space-y-4">
       {renderSectionsGrid(['departments', 'categories'])}
+      {renderAssetTypesCard()}
       {renderLocationsAndBranches()}
     </div>
   );
 
   const renderPeopleTab = () =>
-    renderSectionsGrid(['employmentTypes', 'qualifications', 'benefits'], true);
+    renderSectionsGrid(['employmentTypes', 'qualifications', 'benefits']);
 
   const renderLeaveTab = () => (
     <div className="space-y-4">
