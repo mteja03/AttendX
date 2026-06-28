@@ -4162,14 +4162,13 @@ export default function EmployeeProfile() {
                         <div><label className="block text-xs text-slate-600 mb-1">Emp ID</label><input value={form.empId} onChange={(e) => setForm((p) => ({ ...p, empId: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" /></div>
                         <div><label className="block text-xs text-slate-600 mb-1">Joining Date</label><input type="date" value={form.joiningDate} onChange={(e) => setForm((p) => ({ ...p, joiningDate: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
                         <div><label className="block text-xs text-slate-600 mb-1">Department</label><select value={form.department} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{departments.map((d) => <option key={d} value={d}>{d}</option>)}{!departments.includes('Other') && <option value="Other">Other</option>}</select></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Branch</label><select value={form.branch} onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{(() => { const loc = structuredLocations.find((l) => l.name === form.location); const list = loc ? (loc.branches || []).map((b) => b.name) : branches; return list.map((b) => <option key={b} value={b}>{b}</option>); })()}<option value="Other">Other</option></select></div>
                         <div><label className="block text-xs text-slate-600 mb-1">Employment Type</label><select value={form.employmentType} onChange={(e) => setForm((p) => ({ ...p, employmentType: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}{!employmentTypes.includes('Other') && <option value="Other">Other</option>}</select></div>
                         <div><label className="block text-xs text-slate-600 mb-1">Category</label><select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}{!categories.includes('Other') && <option value="Other">Other</option>}</select></div>
                       </div>
                     </div>
 
                     <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Location</p>
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Location & branch</p>
                       <div className="relative" ref={locationDropdownRef}>
                         <label className="block text-xs text-slate-600 mb-1">Location</label>
                         <div role="button" tabIndex={0} onClick={() => setShowLocationDropdown(true)} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') setShowLocationDropdown(true); }} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px] focus:outline-none focus:border-[#1B6B6B]">
@@ -4189,6 +4188,14 @@ export default function EmployeeProfile() {
                             </div>
                           </div>
                         )}
+                      </div>
+                      <div className="mt-3">
+                        <label className="block text-xs text-slate-600 mb-1">Branch</label>
+                        <select value={form.branch} onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]">
+                          <option value="">—</option>
+                          {(() => { const loc = structuredLocations.find((l) => l.name === form.location); const list = loc ? (loc.branches || []).map((b) => b.name) : branches; return list.map((b) => <option key={b} value={b}>{b}</option>); })()}
+                          <option value="Other">Other</option>
+                        </select>
                       </div>
                     </div>
 
