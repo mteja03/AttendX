@@ -2125,7 +2125,7 @@ export default function Employees() {
                     <span className="text-gray-700 font-medium">{locationDrill}</span>
                     <span className="ml-auto text-gray-400">{filtered.filter((e) => (e.location || '—') === locationDrill).length} employees</span>
                   </div>
-                  <div className="divide-y divide-gray-50">
+                  <div>
                     {(() => {
                       const locEmps = filtered.filter((e) => (e.location || '—') === locationDrill);
                       const branchMap = {};
@@ -2135,24 +2135,48 @@ export default function Employees() {
                         branchMap[br].push(e);
                       });
                       return Object.entries(branchMap).sort((a, b) => a[0].localeCompare(b[0])).map(([br, emps]) => (
-                        <div key={br} className="px-5 py-3">
-                          <div className="flex items-center gap-2 mb-2">
+                        <div key={br}>
+                          <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100">
                             <span className="text-xs">🏢</span>
                             <p className="text-xs font-semibold text-gray-600">{br}</p>
-                            <span className="text-[10px] text-gray-400 ml-auto">{emps.length} emp</span>
+                            <span className="text-[10px] text-gray-400 ml-auto">{emps.length} employee{emps.length !== 1 ? 's' : ''}</span>
                           </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                            {emps.map((emp) => (
-                              <div key={emp.id} onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-gray-100 hover:bg-[#E8F5F5]/30 cursor-pointer transition-colors">
-                                <div className="w-8 h-8 rounded-full bg-[#1B6B6B] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{(emp.fullName || emp.name || '?').charAt(0)}</div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-medium text-gray-800 truncate">{emp.fullName || emp.name || emp.email}</p>
-                                  <p className="text-[10px] text-gray-400 truncate">{emp.designation || emp.department || '—'}</p>
-                                </div>
-                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${emp.status === 'Active' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{emp.status || 'Active'}</span>
-                              </div>
-                            ))}
-                          </div>
+                          <table className="w-full text-sm">
+                            <thead className="bg-slate-50 text-slate-500">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium text-xs">Emp ID</th>
+                                <th className="px-3 py-2 text-left font-medium text-xs">Name + Email</th>
+                                <th className="px-3 py-2 text-left font-medium text-xs">Phone</th>
+                                <th className="px-3 py-2 text-left font-medium text-xs">Designation</th>
+                                <th className="px-3 py-2 text-left font-medium text-xs">Department</th>
+                                <th className="px-3 py-2 text-left font-medium text-xs">Status</th>
+                                <th className="px-3 py-2 text-right font-medium text-xs">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {emps.map((emp) => (
+                                <tr key={emp.id} className="border-t border-slate-100 cursor-pointer hover:bg-slate-50 transition-all" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}>
+                                  <td className="px-3 py-2.5 font-mono text-slate-700 text-xs">{emp.empId || '—'}</td>
+                                  <td className="px-3 py-2.5">
+                                    <div className="flex items-center gap-2.5">
+                                      <EmployeeAvatar employee={emp} size="sm" />
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-medium text-slate-800 truncate">{emp.fullName || '—'}</p>
+                                        <p className="text-[10px] text-slate-500 truncate">{emp.email || '—'}</p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-slate-700 text-xs">{emp.phone || '—'}</td>
+                                  <td className="px-3 py-2.5 text-slate-700 text-xs">{emp.designation || '—'}</td>
+                                  <td className="px-3 py-2.5 text-slate-700 text-xs">{emp.department || '—'}</td>
+                                  <td className="px-3 py-2.5"><StatusBadge status={emp.status || 'Active'} /></td>
+                                  <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                                    <button type="button" onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)} className="text-[#1B6B6B] text-xs font-medium hover:underline">View</button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
                       ));
                     })()}
