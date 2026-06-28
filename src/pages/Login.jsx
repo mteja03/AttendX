@@ -86,12 +86,13 @@ export default function Login() {
   }
 
   const handleSignIn = async () => {
+    if (isSigningIn) return;
+    setIsSigningIn(true);
     try {
-      setIsSigningIn(true);
       await signInWithGoogle();
+      // Don't set isSigningIn = false here — let auth state change handle the redirect.
     } catch (error) {
       if (import.meta.env.DEV) console.error('Sign in error:', error);
-    } finally {
       setIsSigningIn(false);
     }
   };
