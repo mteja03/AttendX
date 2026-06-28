@@ -1739,7 +1739,7 @@ export default function Assets() {
             placeholder="Search by asset, ID, serial, or employee..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 min-h-[44px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#1B6B6B]/20"
+            className="flex-1 min-h-[44px] rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
           />
           <div className="flex flex-shrink-0">
             <button
@@ -2685,7 +2685,7 @@ export default function Assets() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Asset name</label>
-                          <input name="name" value={form.name} onChange={handleFormChange} placeholder={`e.g. ${form.type} — Dell`} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                          <input name="name" value={form.name} onChange={handleFormChange} placeholder={`e.g. ${form.type} — Dell`} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                           {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
                         </div>
                         <div>
@@ -2700,11 +2700,11 @@ export default function Assets() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Brand</label>
-                          <input name="brand" value={form.brand} onChange={handleFormChange} placeholder="e.g. Dell, Apple" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                          <input name="brand" value={form.brand} onChange={handleFormChange} placeholder="e.g. Dell, Apple" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Model</label>
-                          <input name="model" value={form.model} onChange={handleFormChange} placeholder="e.g. XPS 15" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                          <input name="model" value={form.model} onChange={handleFormChange} placeholder="e.g. XPS 15" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                         </div>
                       </div>
                       <div>
@@ -2716,17 +2716,17 @@ export default function Assets() {
                     <div className="space-y-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-500 mb-1.5">Item name</label>
-                        <input name="name" value={form.name} onChange={handleFormChange} placeholder={`e.g. ${form.type}`} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                        <input name="name" value={form.name} onChange={handleFormChange} placeholder={`e.g. ${form.type}`} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Total quantity in stock</label>
-                          <input type="number" name="totalStock" value={form.totalStock} onChange={handleFormChange} placeholder="0" min={0} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                          <input type="number" name="totalStock" value={form.totalStock} onChange={handleFormChange} placeholder="0" min={0} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                           {formErrors.totalStock && <p className="text-red-500 text-xs mt-1">{formErrors.totalStock}</p>}
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Unit</label>
-                          <select name="unit" value={form.unit} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]">
+                          <select name="unit" value={form.unit} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]">
                             <option value="pieces">pieces</option>
                             <option value="sets">sets</option>
                             <option value="units">units</option>
@@ -2754,22 +2754,22 @@ export default function Assets() {
                       <>
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Purchase date</label>
-                          <input type="date" name="purchaseDate" value={form.purchaseDate} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                          <input type="date" name="purchaseDate" value={form.purchaseDate} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Price (₹)</label>
-                          <input type="number" name="purchasePrice" value={form.purchasePrice} onChange={handleFormChange} placeholder="0" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                          <input type="number" name="purchasePrice" value={form.purchasePrice} onChange={handleFormChange} placeholder="0" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Warranty expiry</label>
-                          <input type="date" name="warrantyExpiry" value={form.warrantyExpiry} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                          <input type="date" name="warrantyExpiry" value={form.warrantyExpiry} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                         </div>
                       </>
                     ) : (
                       <div className="col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1.5">Price per unit (₹)</label>
-                          <input type="number" name="purchasePrice" value={form.purchasePrice} onChange={handleFormChange} placeholder="0" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
+                          <input type="number" name="purchasePrice" value={form.purchasePrice} onChange={handleFormChange} placeholder="0" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                         </div>
                       </div>
                     )}
@@ -2779,7 +2779,7 @@ export default function Assets() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                       <div>
                         <label className="block text-xs font-medium text-gray-500 mb-1.5">Condition</label>
-                        <select name="condition" value={form.condition} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]">
+                        <select name="condition" value={form.condition} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]">
                           {CONDITION_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
@@ -2853,7 +2853,7 @@ export default function Assets() {
                   name="assetId"
                   value={assignForm.assetId}
                   onChange={handleAssignChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   disabled={!!selectedAsset}
                 >
                   {!selectedAsset && <option value="">Select asset</option>}
@@ -2877,7 +2877,7 @@ export default function Assets() {
                   name="employeeId"
                   value={assignForm.employeeId}
                   onChange={handleAssignChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">Select employee</option>
                   {employees
@@ -2897,7 +2897,7 @@ export default function Assets() {
                     name="issueDate"
                     value={assignForm.issueDate}
                     onChange={handleAssignChange}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   />
                 </div>
                 <div>
@@ -2907,7 +2907,7 @@ export default function Assets() {
                     name="expectedReturnDate"
                     value={assignForm.expectedReturnDate}
                     onChange={handleAssignChange}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   />
                 </div>
                 <div>
@@ -2916,7 +2916,7 @@ export default function Assets() {
                     name="condition"
                     value={assignForm.condition}
                     onChange={handleAssignChange}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   >
                     {CONDITION_OPTIONS.map((c) => (
                       <option key={c} value={c}>
@@ -2933,7 +2933,7 @@ export default function Assets() {
                   value={assignForm.notes}
                   onChange={handleAssignChange}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="Any special instructions or comments"
                 />
               </div>
@@ -2990,7 +2990,7 @@ export default function Assets() {
                     name="date"
                     value={returnForm.date}
                     onChange={handleReturnChange}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   />
                 </div>
                 <div>
@@ -2999,7 +2999,7 @@ export default function Assets() {
                     name="condition"
                     value={returnForm.condition}
                     onChange={handleReturnChange}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   >
                     {CONDITION_OPTIONS.map((c) => (
                       <option key={c} value={c}>
@@ -3016,7 +3016,7 @@ export default function Assets() {
                   value={returnForm.notes}
                   onChange={handleReturnChange}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="Any damage or notes on return"
                 />
               </div>
@@ -3065,7 +3065,7 @@ export default function Assets() {
                 <select
                   value={issueForm.employeeId}
                   onChange={(e) => setIssueForm((p) => ({ ...p, employeeId: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">Select employee</option>
                   {employees
@@ -3086,7 +3086,7 @@ export default function Assets() {
                   max={Number(issueAsset.availableStock) || 0}
                   value={issueForm.quantity}
                   onChange={(e) => setIssueForm((p) => ({ ...p, quantity: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 />
               </div>
 
@@ -3096,7 +3096,7 @@ export default function Assets() {
                   type="date"
                   value={issueForm.issueDate}
                   onChange={(e) => setIssueForm((p) => ({ ...p, issueDate: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 />
               </div>
 
@@ -3105,7 +3105,7 @@ export default function Assets() {
                 <select
                   value={issueForm.condition}
                   onChange={(e) => setIssueForm((p) => ({ ...p, condition: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="New">New</option>
                   <option value="Good">Good</option>
@@ -3118,7 +3118,7 @@ export default function Assets() {
                   value={issueForm.notes}
                   onChange={(e) => setIssueForm((p) => ({ ...p, notes: e.target.value }))}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="Optional notes"
                 />
               </div>
@@ -3232,7 +3232,7 @@ export default function Assets() {
                   max={Number(returnConsumableAssignment.quantity) || 0}
                   value={returnConsumableForm.quantity}
                   onChange={(e) => setReturnConsumableForm((p) => ({ ...p, quantity: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 />
               </div>
 
@@ -3242,7 +3242,7 @@ export default function Assets() {
                   type="date"
                   value={returnConsumableForm.date}
                   onChange={(e) => setReturnConsumableForm((p) => ({ ...p, date: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 />
               </div>
 
@@ -3251,7 +3251,7 @@ export default function Assets() {
                 <select
                   value={returnConsumableForm.condition}
                   onChange={(e) => setReturnConsumableForm((p) => ({ ...p, condition: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="New">New</option>
                   <option value="Good">Good</option>
@@ -3264,7 +3264,7 @@ export default function Assets() {
                   value={returnConsumableForm.notes}
                   onChange={(e) => setReturnConsumableForm((p) => ({ ...p, notes: e.target.value }))}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="Any damage or notes on return"
                 />
               </div>
@@ -3309,7 +3309,7 @@ export default function Assets() {
                 <select
                   value={editStockForm.adjustmentType}
                   onChange={(e) => setEditStockForm((p) => ({ ...p, adjustmentType: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="Add stock">Add stock</option>
                   <option value="Remove stock">Remove stock</option>
@@ -3324,7 +3324,7 @@ export default function Assets() {
                   min={0}
                   value={editStockForm.quantity}
                   onChange={(e) => setEditStockForm((p) => ({ ...p, quantity: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="e.g. 10"
                 />
               </div>
@@ -3334,7 +3334,7 @@ export default function Assets() {
                 <input
                   value={editStockForm.reason}
                   onChange={(e) => setEditStockForm((p) => ({ ...p, reason: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="e.g. New purchase"
                 />
               </div>
@@ -3447,7 +3447,7 @@ export default function Assets() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Type</label>
-                  <select value={maintenanceForm.type} onChange={(e) => setMaintenanceForm((p) => ({ ...p, type: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm">
+                  <select value={maintenanceForm.type} onChange={(e) => setMaintenanceForm((p) => ({ ...p, type: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]">
                     <option value="Repair">Repair</option>
                     <option value="Service">Service</option>
                     <option value="Inspection">Inspection</option>
@@ -3458,7 +3458,7 @@ export default function Assets() {
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Date</label>
-                  <input type="date" value={maintenanceForm.date} onChange={(e) => setMaintenanceForm((p) => ({ ...p, date: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+                  <input type="date" value={maintenanceForm.date} onChange={(e) => setMaintenanceForm((p) => ({ ...p, date: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                 </div>
                 <div className="sm:col-span-2">
                   <label className="block text-xs text-gray-500 mb-1">Description</label>
@@ -3466,15 +3466,15 @@ export default function Assets() {
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Cost (₹)</label>
-                  <input type="number" value={maintenanceForm.cost} onChange={(e) => setMaintenanceForm((p) => ({ ...p, cost: e.target.value }))} placeholder="0" className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+                  <input type="number" value={maintenanceForm.cost} onChange={(e) => setMaintenanceForm((p) => ({ ...p, cost: e.target.value }))} placeholder="0" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Vendor / Service centre</label>
-                  <input value={maintenanceForm.vendor} onChange={(e) => setMaintenanceForm((p) => ({ ...p, vendor: e.target.value }))} placeholder="e.g. Dell Care" className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+                  <input value={maintenanceForm.vendor} onChange={(e) => setMaintenanceForm((p) => ({ ...p, vendor: e.target.value }))} placeholder="e.g. Dell Care" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Next service due <span className="text-gray-400 font-normal">(optional)</span></label>
-                  <input type="date" value={maintenanceForm.nextDueDate} onChange={(e) => setMaintenanceForm((p) => ({ ...p, nextDueDate: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+                  <input type="date" value={maintenanceForm.nextDueDate} onChange={(e) => setMaintenanceForm((p) => ({ ...p, nextDueDate: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
                 </div>
               </div>
               {maintenanceForm.type === 'Repair' && (
@@ -3627,15 +3627,15 @@ export default function Assets() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <label className="block text-xs text-gray-500 mb-1">Asset name</label>
-            <input value={editAssetForm.name} onChange={(e) => setEditAssetForm((p) => ({ ...p, name: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" required />
+            <input value={editAssetForm.name} onChange={(e) => setEditAssetForm((p) => ({ ...p, name: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" required />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Brand</label>
-            <input value={editAssetForm.brand} onChange={(e) => setEditAssetForm((p) => ({ ...p, brand: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+            <input value={editAssetForm.brand} onChange={(e) => setEditAssetForm((p) => ({ ...p, brand: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Model</label>
-            <input value={editAssetForm.model} onChange={(e) => setEditAssetForm((p) => ({ ...p, model: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+            <input value={editAssetForm.model} onChange={(e) => setEditAssetForm((p) => ({ ...p, model: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Serial number</label>
@@ -3643,21 +3643,21 @@ export default function Assets() {
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Condition</label>
-            <select value={editAssetForm.condition} onChange={(e) => setEditAssetForm((p) => ({ ...p, condition: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm">
+            <select value={editAssetForm.condition} onChange={(e) => setEditAssetForm((p) => ({ ...p, condition: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]">
               {CONDITION_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Purchase date</label>
-            <input type="date" value={editAssetForm.purchaseDate} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchaseDate: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+            <input type="date" value={editAssetForm.purchaseDate} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchaseDate: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Purchase price (₹)</label>
-            <input type="number" value={editAssetForm.purchasePrice} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchasePrice: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+            <input type="number" value={editAssetForm.purchasePrice} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchasePrice: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Warranty expiry</label>
-            <input type="date" value={editAssetForm.warrantyExpiry} onChange={(e) => setEditAssetForm((p) => ({ ...p, warrantyExpiry: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" />
+            <input type="date" value={editAssetForm.warrantyExpiry} onChange={(e) => setEditAssetForm((p) => ({ ...p, warrantyExpiry: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
           </div>
           <div className="sm:col-span-2">
             <label className="block text-xs text-gray-500 mb-1">Notes</label>
@@ -3681,7 +3681,7 @@ export default function Assets() {
       <form onSubmit={handleSaveStatusChange} className="space-y-4">
         <div>
           <label className="block text-xs text-gray-500 mb-1">New status</label>
-          <select value={statusForm.newStatus} onChange={(e) => setStatusForm((p) => ({ ...p, newStatus: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm" required>
+          <select value={statusForm.newStatus} onChange={(e) => setStatusForm((p) => ({ ...p, newStatus: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" required>
             <option value="">Select status</option>
             {STATUS_OPTIONS.filter((s) => s !== 'All' && s !== (statusAsset.status || 'Available')).map((s) => (
               <option key={s} value={s}>{s}</option>
