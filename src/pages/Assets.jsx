@@ -178,6 +178,7 @@ export default function Assets() {
   });
   const [showAssetFilters, setShowAssetFilters] = useState(false);
   const [assetView, setAssetView] = useState('all'); // all | trackable | consumable
+  const [assetAssignFilter, setAssetAssignFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [addAssetMode, setAddAssetMode] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -232,6 +233,10 @@ export default function Assets() {
     unit: 'pieces',
     isReturnable: true,
     notes: '',
+    assignmentType: 'employee',
+    assignedLocation: '',
+    assignedBranch: '',
+    assignedArea: '',
   });
   const [assignForm, setAssignForm] = useState({
     assetId: '',
@@ -396,6 +401,16 @@ export default function Assets() {
       .filter((t) => t.name);
   }, [company]);
 
+  const structuredLocations = useMemo(() => {
+    const raw = company?.locations || [];
+    if (raw.length > 0 && typeof raw[0] === 'object' && raw[0].branches) return raw;
+    return raw.map((l, i) => ({
+      id: `loc_${i}`,
+      name: typeof l === 'string' ? l : (l.name || String(l)),
+      branches: [],
+    }));
+  }, [company?.locations]);
+
   const selectedAddAssetMode = addAssetMode || assetTypes.find((t) => t.name === form.type)?.mode || null;
 
   const stats = useMemo(() => {
@@ -495,8 +510,13 @@ export default function Assets() {
     });
   }, [assets, assetFilters, employees, search]);
 
+  const filteredByAssignment = useMemo(() => {
+    if (assetAssignFilter === 'all') return filteredAssets;
+    return filteredAssets.filter((a) => (a.assignmentType || 'employee') === assetAssignFilter);
+  }, [filteredAssets, assetAssignFilter]);
+
   const trackableAssets = useMemo(() => {
-    const list = filteredAssets.filter((a) => (a.mode || 'trackable') === 'trackable');
+    const list = filteredByAssignment.filter((a) => (a.mode || 'trackable') === 'trackable');
     const { key, dir } = sortConfig;
     return list.slice().sort((a, b) => {
       let av, bv;
@@ -510,10 +530,10 @@ export default function Assets() {
       if (av > bv) return dir === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [filteredAssets, sortConfig]);
+  }, [filteredByAssignment, sortConfig]);
   const consumableAssets = useMemo(
-    () => filteredAssets.filter((a) => (a.mode || 'trackable') === 'consumable'),
-    [filteredAssets],
+    () => filteredByAssignment.filter((a) => (a.mode || 'trackable') === 'consumable'),
+    [filteredByAssignment],
   );
 
   const resetAddForm = () => {
@@ -532,6 +552,10 @@ export default function Assets() {
       unit: 'pieces',
       isReturnable: true,
       notes: '',
+      assignmentType: 'employee',
+      assignedLocation: '',
+      assignedBranch: '',
+      assignedArea: '',
     });
     setFormErrors({});
     setAddAssetMode(null);
@@ -627,6 +651,14 @@ export default function Assets() {
           warrantyExpiry: form.warrantyExpiry ? Timestamp.fromDate(new Date(form.warrantyExpiry)) : null,
           notes: form.notes?.trim() || '',
           isReturnable: !!form.isReturnable,
+          assignmentType: form.assignmentType || 'employee',
+          assignedLocation: form.assignmentType === 'branch' ? form.assignedLocation || null : null,
+          assignedBranch: form.assignmentType === 'branch' ? form.assignedBranch || null : null,
+          assignedArea: form.assignmentType === 'branch' ? form.assignedArea?.trim() || null : null,
+          ...(form.assignmentType === 'branch' && form.assignedBranch ? {
+            status: 'In Use',
+            assignedToName: form.assignedBranch,
+          } : {}),
           history: [
             {
               action: 'created',
@@ -1902,7 +1934,7 @@ export default function Assets() {
 
       <div className="flex gap-1 border-b border-gray-100 mb-4 overflow-x-auto scrollbar-none">
         {[
-          { id: 'all', label: 'All assets', count: filteredAssets.length },
+          { id: 'all', label: 'All assets', count: filteredByAssignment.length },
           { id: 'trackable', label: 'Trackable', count: trackableAssets.length, dot: '#378ADD' },
           { id: 'consumable', label: 'Consumable', count: consumableAssets.length, dot: '#639922' },
         ].map((tab) => (
@@ -1924,6 +1956,15 @@ export default function Assets() {
           </button>
         ))}
       </div>
+
+              <div className="flex gap-1.5 px-4 pb-3">
+                {['all', 'employee', 'branch'].map((f) => (
+                  <button key={f} type="button" onClick={() => setAssetAssignFilter(f)}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-medium transition-colors ${assetAssignFilter === f ? 'bg-[#1B6B6B] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    {f === 'all' ? 'All' : f === 'employee' ? '👤 Employee' : '🏢 Branch'}
+                  </button>
+                ))}
+              </div>
 
       {loading ? (
         <SkeletonTable rows={8} />
@@ -1982,7 +2023,12 @@ export default function Assets() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      {a.assignedToId ? (
+                      {a.assignmentType === 'branch' ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E1F5EE] text-[#085041]">🏢 {a.assignedBranch || a.assignedToName}</span>
+                          {a.assignedArea && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">📍 {a.assignedArea}</span>}
+                        </div>
+                      ) : a.assignedToId ? (
                         <div className="flex items-center gap-2">
                           <EmployeeAvatar
                             employee={{ fullName: a.assignedToName, photoURL: employees.find((e) => e.id === a.assignedToId)?.photoURL }}
@@ -2292,7 +2338,12 @@ export default function Assets() {
                   </span>
                 </div>
 
-                {asset.assignedToName && (
+                {(asset.assignmentType === 'branch') ? (
+                  <div className="flex items-center gap-1 mb-2">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E1F5EE] text-[#085041]">🏢 {asset.assignedBranch || asset.assignedToName}</span>
+                    {asset.assignedArea && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">📍 {asset.assignedArea}</span>}
+                  </div>
+                ) : asset.assignedToName && (
                   <p className="text-xs text-gray-500 mb-2">
                     Assigned to: {asset.assignedToName}
                     {asset.assignedToEmpId ? ` (${asset.assignedToEmpId})` : ''}
@@ -2569,6 +2620,50 @@ export default function Assets() {
                     }
                   </select>
                   {formErrors.type && <p className="text-red-500 text-xs mt-1">{formErrors.type}</p>}
+                </>
+              )}
+
+              {/* Step 3 — Assign to (trackable only) */}
+              {selectedAddAssetMode === 'trackable' && form.type && (
+                <>
+                  <div className="h-px bg-gray-100 mb-5" />
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Step 3 — Assign to</p>
+                  <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-4">
+                    <button type="button" onClick={() => setForm((p) => ({ ...p, assignmentType: 'employee', assignedLocation: '', assignedBranch: '', assignedArea: '' }))}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-medium transition-colors ${form.assignmentType === 'employee' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
+                      👤 Employee
+                    </button>
+                    <button type="button" onClick={() => setForm((p) => ({ ...p, assignmentType: 'branch' }))}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-medium transition-colors border-l border-gray-200 ${form.assignmentType === 'branch' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
+                      🏢 Branch
+                    </button>
+                  </div>
+                  {form.assignmentType === 'branch' && (
+                    <div className="space-y-3 mb-4 p-3 bg-gray-50 rounded-xl">
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">Location</label>
+                        <select name="assignedLocation" value={form.assignedLocation} onChange={(e) => setForm((p) => ({ ...p, assignedLocation: e.target.value, assignedBranch: '' }))} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
+                          <option value="">Select location…</option>
+                          {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">Branch</label>
+                        <select name="assignedBranch" value={form.assignedBranch} onChange={(e) => setForm((p) => ({ ...p, assignedBranch: e.target.value }))} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
+                          <option value="">Select branch…</option>
+                          {(() => {
+                            const loc = structuredLocations.find((l) => l.name === form.assignedLocation);
+                            const list = loc?.branches?.length ? loc.branches.map((b) => b.name) : (company?.branches || []).map((b) => typeof b === 'object' ? b.name : b);
+                            return list.map((b) => <option key={b} value={b}>{b}</option>);
+                          })()}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">Area / floor</label>
+                        <input type="text" name="assignedArea" value={form.assignedArea} onChange={handleFormChange} placeholder="e.g. Reception, 2nd Floor Admin" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]" />
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 
