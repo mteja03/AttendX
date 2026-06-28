@@ -577,6 +577,7 @@ export default function Employees() {
   const [showDownload, setShowDownload] = useState(false);
   const [viewMode, setViewMode] = useState('list');
   const [locationDrill, setLocationDrill] = useState(null);
+  const [expandedBranches, setExpandedBranches] = useState(new Set());
 
   const collRef = useMemo(
     () => (companyId ? collection(db, 'companies', companyId, 'employees') : null),
@@ -2096,7 +2097,7 @@ export default function Employees() {
                       return Object.entries(locMap).sort((a, b) => a[0].localeCompare(b[0])).map(([loc, emps]) => {
                         const branchSet = new Set(emps.map((e) => e.branch).filter(Boolean));
                         return (
-                          <div key={loc} className="flex items-center gap-3 px-5 py-3 hover:bg-[#E8F5F5]/30 cursor-pointer transition-colors" onClick={() => setLocationDrill(loc)}>
+                          <div key={loc} className="flex items-center gap-3 px-5 py-3 hover:bg-[#E8F5F5]/30 cursor-pointer transition-colors" onClick={() => { setLocationDrill(loc); setExpandedBranches(new Set()); }}>
                             <div className="w-9 h-9 rounded-xl bg-[#E1F5EE] flex items-center justify-center flex-shrink-0">
                               <span className="text-sm">📍</span>
                             </div>
@@ -2120,7 +2121,7 @@ export default function Employees() {
               ) : (
                 <>
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 text-xs">
-                    <button type="button" onClick={() => setLocationDrill(null)} className="text-[#1B6B6B] font-medium hover:underline">All locations</button>
+                    <button type="button" onClick={() => { setLocationDrill(null); setExpandedBranches(new Set()); }} className="text-[#1B6B6B] font-medium hover:underline">All locations</button>
                     <span className="text-gray-300">›</span>
                     <span className="text-gray-700 font-medium">{locationDrill}</span>
                     <span className="ml-auto text-gray-400">{filtered.filter((e) => (e.location || '—') === locationDrill).length} employees</span>
@@ -2136,12 +2137,27 @@ export default function Employees() {
                       });
                       return Object.entries(branchMap).sort((a, b) => a[0].localeCompare(b[0])).map(([br, emps]) => (
                         <div key={br}>
-                          <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedBranches((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(br)) next.delete(br);
+                              else next.add(br);
+                              return next;
+                            })}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 w-full text-left hover:bg-gray-100 transition-colors min-h-[44px]"
+                          >
+                            <svg
+                              className={`w-3.5 h-3.5 text-gray-400 transition-transform ${expandedBranches.has(br) ? 'rotate-90' : ''}`}
+                              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
                             <span className="text-xs">🏢</span>
                             <p className="text-xs font-semibold text-gray-600">{br}</p>
                             <span className="text-[10px] text-gray-400 ml-auto">{emps.length} employee{emps.length !== 1 ? 's' : ''}</span>
-                          </div>
-                          <table className="w-full text-sm">
+                          </button>
+                          {expandedBranches.has(br) && <table className="w-full text-sm">
                             <thead className="bg-slate-50 text-slate-500">
                               <tr>
                                 <th className="px-3 py-2 text-left font-medium text-xs">Emp ID</th>
@@ -2176,7 +2192,7 @@ export default function Employees() {
                                 </tr>
                               ))}
                             </tbody>
-                          </table>
+                          </table>}
                         </div>
                       ));
                     })()}
