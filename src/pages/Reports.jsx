@@ -31,6 +31,9 @@ import { WhatsAppButton } from '../utils/whatsapp';
 
 const CHART_COLORS = ['#1B6B6B', '#4ECDC4', '#2BB8B0', '#155858', '#7EDDD8', '#0F4444', '#A8EDEA', '#264653', '#2A9D8F'];
 
+const REPORT_FILTER_SELECT =
+  'border border-gray-200 rounded-xl px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]';
+
 function getEmployeeOffboardingPhase(e) {
   const o = e?.offboarding;
   if (!o) return null;
@@ -333,9 +336,32 @@ export default function Reports() {
 
   const employeeMap = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
 
+  const locationFilteredEmployees = useMemo(() => {
+    if (!filterLocation) return employees;
+    return employees.filter((e) => (e.location || '') === filterLocation);
+  }, [employees, filterLocation]);
+
+  const locationFilteredLeaveList = useMemo(() => {
+    if (!filterLocation) return leaveList;
+    const ids = new Set(locationFilteredEmployees.map((e) => e.id));
+    return leaveList.filter((l) => ids.has(l.employeeId));
+  }, [leaveList, filterLocation, locationFilteredEmployees]);
+
+  const locationFilteredAssets = useMemo(() => {
+    if (!filterLocation) return assets;
+    return assets.filter((a) => {
+      if (a.assignmentType === 'branch') {
+        return (a.assignedLocation || '') === filterLocation;
+      }
+      const emp = employeeMap[a.assignedToId];
+      if (emp) return (emp.location || '') === filterLocation;
+      return false;
+    });
+  }, [assets, filterLocation, employeeMap]);
+
   const leaveBalanceByEmp = useMemo(() => {
     if (activeTab !== 'leave') return {};
-    const approved = leaveList.filter((l) => l.status === 'Approved');
+    const approved = locationFilteredLeaveList.filter((l) => l.status === 'Approved');
     const byEmployee = {};
     const ensureRow = (id, name) => {
       if (!byEmployee[id]) {
@@ -346,7 +372,7 @@ export default function Reports() {
         byEmployee[id] = row;
       }
     };
-    employees.forEach((e) => ensureRow(e.id, e.fullName));
+    locationFilteredEmployees.forEach((e) => ensureRow(e.id, e.fullName));
     approved.forEach((l) => {
       ensureRow(l.employeeId, l.employeeName);
       paidLeaveTypes.forEach((lt) => {
@@ -356,7 +382,7 @@ export default function Reports() {
       });
     });
     return byEmployee;
-  }, [activeTab, leaveList, employees, paidLeaveTypes]);
+  }, [activeTab, locationFilteredLeaveList, locationFilteredEmployees, paidLeaveTypes]);
 
   const todayStr = toDateString(new Date());
   const currentYear = new Date().getFullYear();
@@ -366,9 +392,11 @@ export default function Reports() {
     if (activeTab !== 'headcount') {
       return { total: 0, active: 0, onLeaveToday: 0, newJoiners: 0 };
     }
-    const total = employees.length;
-    const active = employees.filter((e) => (e.status || 'Active') === 'Active').length;
+    const total = locationFilteredEmployees.length;
+    const active = locationFilteredEmployees.filter((e) => (e.status || 'Active') === 'Active').length;
+    const locationEmpIds = new Set(locationFilteredEmployees.map((e) => e.id));
     const onLeaveToday = leaveList.filter((l) => {
+      if (filterLocation && !locationEmpIds.has(l.employeeId)) return false;
       if (l.status !== 'Approved') return false;
       const start = toDateString(l.startDate);
       const end = toDateString(l.endDate);
@@ -376,24 +404,24 @@ export default function Reports() {
       return todayStr >= start && todayStr <= end;
     }).length;
     const startOfMonth = new Date(currentYear, currentMonth, 1);
-    const newJoiners = employees.filter((e) => {
+    const newJoiners = locationFilteredEmployees.filter((e) => {
       const j = toJSDate(e.joiningDate);
       return j && !Number.isNaN(j.getTime()) && j >= startOfMonth;
     }).length;
     return { total, active, onLeaveToday, newJoiners };
-  }, [activeTab, employees, leaveList, todayStr, currentYear, currentMonth]);
+  }, [activeTab, locationFilteredEmployees, leaveList, todayStr, currentYear, currentMonth, filterLocation]);
 
   const deptData = useMemo(() => {
     if (activeTab !== 'headcount') return [];
     const acc = {};
-    employees.forEach((emp) => {
+    locationFilteredEmployees.forEach((emp) => {
       const dept = emp.department || 'Other';
       acc[dept] = (acc[dept] || 0) + 1;
     });
     return Object.entries(acc)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [activeTab, employees]);
+  }, [activeTab, locationFilteredEmployees]);
 
   const roleVacancyData = useMemo(
     () => {
@@ -401,7 +429,7 @@ export default function Reports() {
       return roles
         .filter((r) => r.isActive !== false)
         .map((role) => {
-          const filled = employees.filter(
+          const filled = locationFilteredEmployees.filter(
             (e) =>
               (e.designation || '').trim() === (role.title || '').trim() && (e.status || 'Active') === 'Active',
           ).length;
@@ -416,7 +444,7 @@ export default function Reports() {
         })
         .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
     },
-    [activeTab, roles, employees],
+    [activeTab, roles, locationFilteredEmployees],
   );
 
   const roleVacancySummary = useMemo(() => {
@@ -429,37 +457,37 @@ export default function Reports() {
   const typeData = useMemo(() => {
     if (activeTab !== 'headcount') return [];
     const acc = {};
-    employees.forEach((emp) => {
+    locationFilteredEmployees.forEach((emp) => {
       const t = emp.employmentType || 'Other';
       acc[t] = (acc[t] || 0) + 1;
     });
     return Object.entries(acc).map(([name, value]) => ({ name, value }));
-  }, [activeTab, employees]);
+  }, [activeTab, locationFilteredEmployees]);
 
   const categoryData = useMemo(() => {
     if (activeTab !== 'headcount') return [];
     const acc = {};
-    employees.forEach((emp) => {
+    locationFilteredEmployees.forEach((emp) => {
       const c = emp.category || 'Other';
       acc[c] = (acc[c] || 0) + 1;
     });
     return Object.entries(acc).map(([name, value]) => ({ name, value }));
-  }, [activeTab, employees]);
+  }, [activeTab, locationFilteredEmployees]);
 
   const genderData = useMemo(() => {
     if (activeTab !== 'headcount') return [];
     const acc = {};
-    employees.forEach((emp) => {
+    locationFilteredEmployees.forEach((emp) => {
       const g = emp.gender || 'Not specified';
       acc[g] = (acc[g] || 0) + 1;
     });
     return Object.entries(acc).map(([name, value]) => ({ name, value }));
-  }, [activeTab, employees]);
+  }, [activeTab, locationFilteredEmployees]);
 
   const tenureData = useMemo(() => {
     if (activeTab !== 'headcount') return [];
     const buckets = { '< 1 year': 0, '1-2 years': 0, '2-5 years': 0, '5+ years': 0 };
-    employees.forEach((emp) => {
+    locationFilteredEmployees.forEach((emp) => {
       const joined = toJSDate(emp.joiningDate);
       if (!joined || Number.isNaN(joined.getTime())) return;
       const years = (new Date() - joined) / (365.25 * 24 * 60 * 60 * 1000);
@@ -469,24 +497,24 @@ export default function Reports() {
       else buckets['5+ years'] += 1;
     });
     return Object.entries(buckets).map(([name, count]) => ({ name, count }));
-  }, [activeTab, employees]);
+  }, [activeTab, locationFilteredEmployees]);
 
   const branchData = useMemo(() => {
     if (activeTab !== 'headcount') return [];
     const acc = {};
-    employees.forEach((emp) => {
+    locationFilteredEmployees.forEach((emp) => {
       const b = emp.branch || 'Other';
       acc[b] = (acc[b] || 0) + 1;
     });
     return Object.entries(acc)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [activeTab, employees]);
+  }, [activeTab, locationFilteredEmployees]);
 
   const locationData = useMemo(() => {
     if (activeTab !== 'headcount') return [];
     const counts = {};
-    employees.forEach((emp) => {
+    locationFilteredEmployees.forEach((emp) => {
       if (emp.location) {
         counts[emp.location] = (counts[emp.location] || 0) + 1;
       }
@@ -494,7 +522,7 @@ export default function Reports() {
     return Object.entries(counts)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [activeTab, employees]);
+  }, [activeTab, locationFilteredEmployees]);
 
   const inNoticePeriodByStatus = useMemo(
     () => {
@@ -527,7 +555,8 @@ export default function Reports() {
 
   const filteredEmployeesForReport = useMemo(() => {
     if (activeTab !== 'employee') return [];
-    let list = employees;
+    let list = [...employees];
+    if (filterLocation) list = list.filter((e) => (e.location || '') === filterLocation);
     if (empFilterDept !== 'All') list = list.filter((e) => (e.department || '') === empFilterDept);
     if (empFilterBranch !== 'All') list = list.filter((e) => (e.branch || '') === empFilterBranch);
     if (empFilterStatus !== 'All') list = list.filter((e) => (e.status || 'Active') === empFilterStatus);
@@ -540,7 +569,7 @@ export default function Reports() {
       });
     }
     return list;
-  }, [activeTab, employees, empFilterDept, empFilterBranch, empFilterStatus, empFilterType, empFilterYear]);
+  }, [activeTab, employees, filterLocation, empFilterDept, empFilterBranch, empFilterStatus, empFilterType, empFilterYear]);
 
   const employeeSummary = useMemo(() => {
     if (activeTab !== 'employee') return { total: 0, active: 0, inactive: 0, offboarding: 0 };
@@ -560,12 +589,12 @@ export default function Reports() {
   const leaveYearList = useMemo(
     () => {
       if (activeTab !== 'leave') return [];
-      return leaveList.filter((l) => {
+      return locationFilteredLeaveList.filter((l) => {
       const d = toJSDate(l.appliedAt);
       return d && d.getFullYear() === currentYear;
     });
     },
-    [activeTab, leaveList, currentYear],
+    [activeTab, locationFilteredLeaveList, currentYear],
   );
 
   const leaveStats = useMemo(() => ({
@@ -593,14 +622,14 @@ export default function Reports() {
       return Array.from({ length: 12 }, (_, i) => {
         const month = new Date(currentYear, i, 1);
         const monthName = month.toLocaleDateString('en-GB', { month: 'short' });
-        const count = leaveList.filter((l) => {
+        const count = locationFilteredLeaveList.filter((l) => {
           const d = toJSDate(l.appliedAt);
           return d && d.getMonth() === i && d.getFullYear() === currentYear;
         }).length;
         return { month: monthName, count };
       });
     },
-    [activeTab, leaveList, currentYear],
+    [activeTab, locationFilteredLeaveList, currentYear],
   );
 
   const leaveByDept = useMemo(() => {
@@ -645,14 +674,14 @@ export default function Reports() {
     if (activeTab !== 'asset') {
       return { total: 0, trackable: 0, consumable: 0, assigned: 0, available: 0, totalStock: 0, issued: 0 };
     }
-    const trackable = assets.filter((a) => (a.mode || 'trackable') === 'trackable');
-    const consumable = assets.filter((a) => (a.mode || 'trackable') === 'consumable');
+    const trackable = locationFilteredAssets.filter((a) => (a.mode || 'trackable') === 'trackable');
+    const consumable = locationFilteredAssets.filter((a) => (a.mode || 'trackable') === 'consumable');
     const assigned = trackable.filter((a) => a.status === 'Assigned').length;
     const available = trackable.filter((a) => a.status === 'Available').length;
     const totalStock = consumable.reduce((s, a) => s + (Number(a.stockQuantity) || 0), 0);
     const issued = consumable.reduce((s, a) => s + (Number(a.issuedCount) || 0), 0);
     return {
-      total: assets.length,
+      total: locationFilteredAssets.length,
       trackable: trackable.length,
       consumable: consumable.length,
       assigned,
@@ -660,23 +689,23 @@ export default function Reports() {
       totalStock,
       issued,
     };
-  }, [activeTab, assets]);
+  }, [activeTab, locationFilteredAssets]);
 
   const assetByType = useMemo(() => {
     if (activeTab !== 'asset') return [];
     const acc = {};
-    assets.forEach((a) => {
+    locationFilteredAssets.forEach((a) => {
       const t = a.type || 'Other';
       acc[t] = (acc[t] || 0) + 1;
     });
     return Object.entries(acc)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [activeTab, assets]);
+  }, [activeTab, locationFilteredAssets]);
 
   const assetStatusData = useMemo(() => {
     if (activeTab !== 'asset') return [];
-    const trackable = assets.filter((a) => (a.mode || 'trackable') === 'trackable');
+    const trackable = locationFilteredAssets.filter((a) => (a.mode || 'trackable') === 'trackable');
     const acc = { Available: 0, Assigned: 0, Damaged: 0, 'In Repair': 0, Lost: 0, Other: 0 };
     trackable.forEach((a) => {
       const st = a.status || 'Other';
@@ -686,7 +715,7 @@ export default function Reports() {
     return Object.entries(acc)
       .filter(([, v]) => v > 0)
       .map(([name, value]) => ({ name, value }));
-  }, [activeTab, assets]);
+  }, [activeTab, locationFilteredAssets]);
 
   const branchAnalytics = useMemo(() => {
     if (activeTab !== 'branch') return [];
@@ -753,7 +782,7 @@ export default function Reports() {
   const assetsPerEmployeeRows = useMemo(() => {
     if (activeTab !== 'asset') return [];
     const rows = {};
-    assets
+    locationFilteredAssets
       .filter((a) => (a.mode || 'trackable') === 'trackable' && a.status === 'Assigned' && a.assignedTo)
       .forEach((a) => {
         const id = a.assignedTo;
@@ -769,12 +798,12 @@ export default function Reports() {
         namesStr: r.names.join(', '),
       }))
       .sort((a, b) => b.count - a.count);
-  }, [activeTab, assets, employeeMap]);
+  }, [activeTab, locationFilteredAssets, employeeMap]);
 
   const consumableRows = useMemo(
     () => {
       if (activeTab !== 'asset') return [];
-      return assets
+      return locationFilteredAssets
         .filter((a) => (a.mode || 'trackable') === 'consumable')
         .map((a) => {
           const stock = Number(a.stockQuantity) || 0;
@@ -788,7 +817,7 @@ export default function Reports() {
           };
         });
     },
-    [activeTab, assets],
+    [activeTab, locationFilteredAssets],
   );
 
   const docStats = useMemo(() => {
@@ -1052,7 +1081,7 @@ export default function Reports() {
         allEmps: [],
       };
     }
-    const activeEmps = employees.filter((e) => e.status !== 'Inactive' && e.ctcPerAnnum);
+    const activeEmps = locationFilteredEmployees.filter((e) => e.status !== 'Inactive' && e.ctcPerAnnum);
 
     const totalPayroll = activeEmps.reduce((sum, e) => sum + (Number(e.ctcPerAnnum) || 0), 0);
 
@@ -1122,7 +1151,7 @@ export default function Reports() {
       topPaid,
       allEmps: activeEmps,
     };
-  }, [activeTab, employees]);
+  }, [activeTab, locationFilteredEmployees]);
 
   const handleHeadcountExcel = async () => {
     const { default: XLSX } = await import('xlsx');
@@ -1771,6 +1800,12 @@ export default function Reports() {
           />
         ) : (
         <>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className={REPORT_FILTER_SELECT}>
+              <option value="">All locations</option>
+              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+            </select>
+          </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={headcountStats.total} label="Total Employees" />
             <StatCard value={headcountStats.active} label="Active Employees" />
@@ -1978,21 +2013,25 @@ export default function Reports() {
             <StatCard value={employeeSummary.offboarding} label="Offboarding" />
           </div>
           <div className="flex flex-wrap gap-2 mb-4">
-            <select value={empFilterDept} onChange={(e) => setEmpFilterDept(e.target.value)} className="border rounded-lg px-2 py-1.5 text-sm">
+            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className={REPORT_FILTER_SELECT}>
+              <option value="">All locations</option>
+              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+            </select>
+            <select value={empFilterDept} onChange={(e) => setEmpFilterDept(e.target.value)} className={REPORT_FILTER_SELECT}>
               {deptOptions.map((d) => (
                 <option key={d} value={d}>
                   Dept: {d}
                 </option>
               ))}
             </select>
-            <select value={empFilterBranch} onChange={(e) => setEmpFilterBranch(e.target.value)} className="border rounded-lg px-2 py-1.5 text-sm">
+            <select value={empFilterBranch} onChange={(e) => setEmpFilterBranch(e.target.value)} className={REPORT_FILTER_SELECT}>
               {branchOptions.map((b) => (
                 <option key={b} value={b}>
                   Branch: {b}
                 </option>
               ))}
             </select>
-            <select value={empFilterStatus} onChange={(e) => setEmpFilterStatus(e.target.value)} className="border rounded-lg px-2 py-1.5 text-sm">
+            <select value={empFilterStatus} onChange={(e) => setEmpFilterStatus(e.target.value)} className={REPORT_FILTER_SELECT}>
               <option value="All">Status: All</option>
               <option value="Active">Active</option>
               <option value="Notice Period">Notice Period</option>
@@ -2000,7 +2039,7 @@ export default function Reports() {
               <option value="On Leave">On Leave</option>
               <option value="Offboarding">Offboarding</option>
             </select>
-            <select value={empFilterType} onChange={(e) => setEmpFilterType(e.target.value)} className="border rounded-lg px-2 py-1.5 text-sm">
+            <select value={empFilterType} onChange={(e) => setEmpFilterType(e.target.value)} className={REPORT_FILTER_SELECT}>
               <option value="All">Employment: All</option>
               {[...new Set(employees.map((e) => e.employmentType).filter(Boolean))].map((t) => (
                 <option key={t} value={t}>
@@ -2008,7 +2047,7 @@ export default function Reports() {
                 </option>
               ))}
             </select>
-            <select value={empFilterYear} onChange={(e) => setEmpFilterYear(e.target.value)} className="border rounded-lg px-2 py-1.5 text-sm">
+            <select value={empFilterYear} onChange={(e) => setEmpFilterYear(e.target.value)} className={REPORT_FILTER_SELECT}>
               <option value="All">Join year: All</option>
               {[2020, 2021, 2022, 2023, 2024, 2025, 2026].map((y) => (
                 <option key={y} value={y}>
@@ -2076,7 +2115,7 @@ export default function Reports() {
 
       {/* COMPENSATION */}
       {activeTab === 'compensation' && (
-        employees.filter((e) => e.ctcPerAnnum || e.ctc).length === 0 ? (
+        locationFilteredEmployees.filter((e) => e.ctcPerAnnum || e.ctc).length === 0 ? (
           <EmptyState
             illustration={
               <div className="w-16 h-16 rounded-2xl bg-[#EEEDFE] flex items-center justify-center">
@@ -2098,6 +2137,12 @@ export default function Reports() {
           />
         ) : (
         <div className="space-y-6">
+          <div className="flex flex-wrap gap-2">
+            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className={REPORT_FILTER_SELECT}>
+              <option value="">All locations</option>
+              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+            </select>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               {
@@ -2301,6 +2346,12 @@ export default function Reports() {
           />
         ) : (
         <>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className={REPORT_FILTER_SELECT}>
+              <option value="">All locations</option>
+              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+            </select>
+          </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={leaveStats.total} label={`Leave requests (${currentYear})`} />
             <StatCard value={leaveStats.approved} label="Approved" />
@@ -2358,7 +2409,7 @@ export default function Reports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.map((emp) => {
+                  {locationFilteredEmployees.map((emp) => {
                     const row = leaveBalanceByEmp[emp.id];
                     if (!row) return null;
                     const joinStar = isMidYearJoinerThisYear(emp.joiningDate);
@@ -2461,6 +2512,12 @@ export default function Reports() {
           />
         ) : (
         <>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className={REPORT_FILTER_SELECT}>
+              <option value="">All locations</option>
+              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+            </select>
+          </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard value={assetStats.total} label="Total assets" />
             <StatCard value={assetStats.assigned} label="Assigned (trackable)" />
