@@ -1739,7 +1739,7 @@ export default function Assets() {
             placeholder="Search by asset, ID, serial, or employee..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 min-h-[44px] rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
+            className="flex-1 min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20"
           />
           <div className="flex flex-shrink-0">
             <button
@@ -2853,7 +2853,7 @@ export default function Assets() {
                   name="assetId"
                   value={assignForm.assetId}
                   onChange={handleAssignChange}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   disabled={!!selectedAsset}
                 >
                   {!selectedAsset && <option value="">Select asset</option>}
@@ -2877,7 +2877,7 @@ export default function Assets() {
                   name="employeeId"
                   value={assignForm.employeeId}
                   onChange={handleAssignChange}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">Select employee</option>
                   {employees
@@ -2897,7 +2897,7 @@ export default function Assets() {
                     name="issueDate"
                     value={assignForm.issueDate}
                     onChange={handleAssignChange}
-                    className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   />
                 </div>
                 <div>
@@ -2907,7 +2907,7 @@ export default function Assets() {
                     name="expectedReturnDate"
                     value={assignForm.expectedReturnDate}
                     onChange={handleAssignChange}
-                    className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   />
                 </div>
                 <div>
@@ -2916,7 +2916,7 @@ export default function Assets() {
                     name="condition"
                     value={assignForm.condition}
                     onChange={handleAssignChange}
-                    className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   >
                     {CONDITION_OPTIONS.map((c) => (
                       <option key={c} value={c}>
@@ -2933,7 +2933,7 @@ export default function Assets() {
                   value={assignForm.notes}
                   onChange={handleAssignChange}
                   rows={3}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="Any special instructions or comments"
                 />
               </div>
@@ -2990,7 +2990,7 @@ export default function Assets() {
                     name="date"
                     value={returnForm.date}
                     onChange={handleReturnChange}
-                    className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   />
                 </div>
                 <div>
@@ -2999,7 +2999,7 @@ export default function Assets() {
                     name="condition"
                     value={returnForm.condition}
                     onChange={handleReturnChange}
-                    className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   >
                     {CONDITION_OPTIONS.map((c) => (
                       <option key={c} value={c}>
@@ -3016,7 +3016,7 @@ export default function Assets() {
                   value={returnForm.notes}
                   onChange={handleReturnChange}
                   rows={3}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="Any damage or notes on return"
                 />
               </div>
@@ -3065,7 +3065,7 @@ export default function Assets() {
                 <select
                   value={issueForm.employeeId}
                   onChange={(e) => setIssueForm((p) => ({ ...p, employeeId: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="">Select employee</option>
                   {employees
@@ -3086,7 +3086,7 @@ export default function Assets() {
                   max={Number(issueAsset.availableStock) || 0}
                   value={issueForm.quantity}
                   onChange={(e) => setIssueForm((p) => ({ ...p, quantity: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 />
               </div>
 
@@ -3096,7 +3096,7 @@ export default function Assets() {
                   type="date"
                   value={issueForm.issueDate}
                   onChange={(e) => setIssueForm((p) => ({ ...p, issueDate: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 />
               </div>
 
@@ -3105,7 +3105,7 @@ export default function Assets() {
                 <select
                   value={issueForm.condition}
                   onChange={(e) => setIssueForm((p) => ({ ...p, condition: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="New">New</option>
                   <option value="Good">Good</option>
@@ -3118,7 +3118,7 @@ export default function Assets() {
                   value={issueForm.notes}
                   onChange={(e) => setIssueForm((p) => ({ ...p, notes: e.target.value }))}
                   rows={3}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="Optional notes"
                 />
               </div>
@@ -3232,7 +3232,7 @@ export default function Assets() {
                   max={Number(returnConsumableAssignment.quantity) || 0}
                   value={returnConsumableForm.quantity}
                   onChange={(e) => setReturnConsumableForm((p) => ({ ...p, quantity: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 />
               </div>
 
@@ -3242,7 +3242,7 @@ export default function Assets() {
                   type="date"
                   value={returnConsumableForm.date}
                   onChange={(e) => setReturnConsumableForm((p) => ({ ...p, date: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 />
               </div>
 
@@ -3251,7 +3251,7 @@ export default function Assets() {
                 <select
                   value={returnConsumableForm.condition}
                   onChange={(e) => setReturnConsumableForm((p) => ({ ...p, condition: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="New">New</option>
                   <option value="Good">Good</option>
@@ -3264,7 +3264,7 @@ export default function Assets() {
                   value={returnConsumableForm.notes}
                   onChange={(e) => setReturnConsumableForm((p) => ({ ...p, notes: e.target.value }))}
                   rows={3}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="Any damage or notes on return"
                 />
               </div>
@@ -3309,7 +3309,7 @@ export default function Assets() {
                 <select
                   value={editStockForm.adjustmentType}
                   onChange={(e) => setEditStockForm((p) => ({ ...p, adjustmentType: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                 >
                   <option value="Add stock">Add stock</option>
                   <option value="Remove stock">Remove stock</option>
@@ -3324,7 +3324,7 @@ export default function Assets() {
                   min={0}
                   value={editStockForm.quantity}
                   onChange={(e) => setEditStockForm((p) => ({ ...p, quantity: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="e.g. 10"
                 />
               </div>
@@ -3334,7 +3334,7 @@ export default function Assets() {
                 <input
                   value={editStockForm.reason}
                   onChange={(e) => setEditStockForm((p) => ({ ...p, reason: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
                   placeholder="e.g. New purchase"
                 />
               </div>
