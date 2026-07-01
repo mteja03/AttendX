@@ -910,6 +910,40 @@ export default function Reports() {
     [activeTab, locationFilteredAssets],
   );
 
+  const assetsByTypeAndAssignment = useMemo(() => {
+    if (activeTab !== 'asset') return [];
+    const filtered = filterLocation
+      ? assets.filter((a) => a.assignmentType === 'branch' ? (a.assignedLocation || '') === filterLocation : employees.some((e) => e.id === a.assignedToId && (e.location || '') === filterLocation))
+      : assets;
+    const typeMap = {};
+    filtered.forEach((a) => {
+      const type = a.type || 'Other';
+      if (!typeMap[type]) typeMap[type] = { type, employee: 0, branch: 0, value: 0 };
+      if (a.assignmentType === 'branch') typeMap[type].branch++;
+      else typeMap[type].employee++;
+      typeMap[type].value += (a.purchasePrice || 0);
+    });
+    return Object.values(typeMap).sort((a, b) => (b.employee + b.branch) - (a.employee + a.branch)).slice(0, 10);
+  }, [activeTab, assets, employees, filterLocation]);
+
+  const warrantyExpiring = useMemo(() => {
+    if (activeTab !== 'asset') return [];
+    const now = new Date();
+    const in90 = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    return assets
+      .filter((a) => {
+        if (!a.warrantyExpiry) return false;
+        const exp = a.warrantyExpiry?.toDate ? a.warrantyExpiry.toDate() : new Date(a.warrantyExpiry);
+        return exp >= now && exp <= in90;
+      })
+      .map((a) => {
+        const exp = a.warrantyExpiry?.toDate ? a.warrantyExpiry.toDate() : new Date(a.warrantyExpiry);
+        const daysLeft = Math.ceil((exp - now) / (24 * 60 * 60 * 1000));
+        return { id: a.id, name: a.name || a.assetId, type: a.type || '—', assignedTo: a.assignmentType === 'branch' ? `🏢 ${a.assignedBranch || '—'}` : (a.assignedToName || 'Unassigned'), expiryDate: exp.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }), daysLeft };
+      })
+      .sort((a, b) => a.daysLeft - b.daysLeft);
+  }, [activeTab, assets]);
+
   const docStats = useMemo(() => {
     if (activeTab !== 'document') {
       return { full: 0, missing: 0, totalDocs: 0, mostMissing: '—', enriched: [] };
@@ -2766,6 +2800,58 @@ export default function Reports() {
               {consumableRows.length === 0 && <p className="text-gray-400 text-sm">No consumable assets</p>}
             </div>
           </ChartCard>
+
+              {/* Employee vs Branch assets */}
+              {assetsByTypeAndAssignment.length > 0 && (
+                <div className="bg-white border border-gray-100 rounded-2xl p-4">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-1">Assets by type — employee vs branch</h3>
+                  <p className="text-xs text-gray-400 mb-3">How assets are distributed across employees and branches</p>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={assetsByTypeAndAssignment} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                      <XAxis dataKey="type" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                      <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="employee" stackId="a" fill="#1B6B6B" name="Employee" radius={[0, 0, 0, 0]} />
+                      <Bar dataKey="branch" stackId="a" fill="#4ECDC4" name="Branch" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Warranty expiry tracker */}
+              <div className="bg-white border border-gray-100 rounded-2xl p-4">
+                <h3 className="text-sm font-semibold text-gray-800 mb-1">Warranty expiring soon</h3>
+                <p className="text-xs text-gray-400 mb-3">Assets with warranty expiring in the next 90 days</p>
+                {warrantyExpiring.length === 0 ? (
+                  <p className="text-sm text-gray-300 text-center py-6">No warranties expiring in the next 90 days</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-100">
+                          {['Asset', 'Type', 'Assigned to', 'Expiry', 'Days left'].map((h) => (
+                            <th key={h} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {warrantyExpiring.map((a) => (
+                          <tr key={a.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-medium text-gray-800">{a.name}</td>
+                            <td className="px-3 py-2 text-gray-500">{a.type}</td>
+                            <td className="px-3 py-2 text-gray-600">{a.assignedTo}</td>
+                            <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{a.expiryDate}</td>
+                            <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${a.daysLeft <= 30 ? 'bg-red-50 text-red-600' : a.daysLeft <= 60 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-700'}`}>{a.daysLeft} days</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
           <div className="mt-4 flex flex-wrap gap-2 items-center">
             <button
               type="button"
