@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
-export default function GlobalHeader({ onOpenMenu } = {}) {
+function GlobalHeader({ onOpenMenu } = {}) {
   const navigate = useNavigate();
   const { currentUser, role, signOut, companyId: authCompanyId } = useAuth();
   const { companyId, company } = useCompany();
@@ -335,3 +335,5 @@ export default function GlobalHeader({ onOpenMenu } = {}) {
     </header>
   );
 }
+
+export default memo(GlobalHeader);

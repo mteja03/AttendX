@@ -11,7 +11,6 @@ export function useIsMobile() {
   useEffect(() => {
     const mql = window.matchMedia(MQ);
     const handler = () => setIsMobile(mql.matches);
-    handler();
     mql.addEventListener('change', handler);
     return () => mql.removeEventListener('change', handler);
   }, []);

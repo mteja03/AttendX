@@ -28,6 +28,10 @@ export const compressImage = (file) => {
 
       canvas.width = w;
       canvas.height = h;
+      if (!ctx) {
+        reject(new Error('Canvas 2D context unavailable'));
+        return;
+      }
       ctx.drawImage(img, 0, 0, w, h);
 
       canvas.toBlob(

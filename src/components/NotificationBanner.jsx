@@ -1,7 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+
+const ICONS = {
+  leave: '🏖️',
+  birthday: '🎂',
+  anniversary: '🎉',
+  onboarding: '🎯',
+  offboarding: '🚪',
+  document: '📄',
+  asset: '📦',
+  default: '🔔',
+};
 
 export default function NotificationBanner({ notification, onClose, onClick }) {
   const [visible, setVisible] = useState(false);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     if (!notification) return undefined;
@@ -12,27 +25,16 @@ export default function NotificationBanner({ notification, onClose, onClick }) {
 
     const hideId = setTimeout(() => {
       setVisible(false);
-      setTimeout(onClose, 300);
+      setTimeout(() => onCloseRef.current?.(), 300);
     }, 3000);
 
     return () => {
       clearTimeout(showId);
       clearTimeout(hideId);
     };
-  }, [notification, onClose]);
+  }, [notification]);
 
   if (!notification) return null;
-
-  const ICONS = {
-    leave: '🏖️',
-    birthday: '🎂',
-    anniversary: '🎉',
-    onboarding: '🎯',
-    offboarding: '🚪',
-    document: '📄',
-    asset: '📦',
-    default: '🔔',
-  };
 
   const icon = ICONS[notification.data?.type] || ICONS.default;
 
@@ -62,7 +64,7 @@ export default function NotificationBanner({ notification, onClose, onClick }) {
             onClick={(e) => {
               e.stopPropagation();
               setVisible(false);
-              setTimeout(onClose, 300);
+              setTimeout(() => onCloseRef.current?.(), 300);
             }}
             className="text-gray-300 hover:text-gray-500 flex-shrink-0 text-lg leading-none"
             aria-label="Dismiss"

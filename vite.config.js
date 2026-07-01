@@ -47,6 +47,12 @@ function firebaseSwInitPlugin() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), firebaseSwInitPlugin()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
+  },
   build: {
     chunkSizeWarningLimit: 600,
     rollupOptions: {

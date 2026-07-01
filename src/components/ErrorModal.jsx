@@ -1,4 +1,3 @@
-import React from 'react';
 import { ERROR_MESSAGES } from '../utils/errorHandler';
 
 export default function ErrorModal({
@@ -46,6 +45,7 @@ export default function ErrorModal({
 
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onDismiss}
             className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
           >

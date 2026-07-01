@@ -129,9 +129,9 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader fullScreen message="Loading..." />}>
       <Routes>
-        <Route path="/home" element={<PublicRoute><Suspense fallback={<PageLoader fullScreen />}><LandingPage /></Suspense></PublicRoute>} />
-        <Route path="/features" element={<PublicRoute><Suspense fallback={<PageLoader fullScreen />}><FeaturesPage /></Suspense></PublicRoute>} />
-        <Route path="/about" element={<PublicRoute><Suspense fallback={<PageLoader fullScreen />}><AboutPage /></Suspense></PublicRoute>} />
+        <Route path="/home" element={<PublicRoute><LandingPage /></PublicRoute>} />
+        <Route path="/features" element={<PublicRoute><FeaturesPage /></PublicRoute>} />
+        <Route path="/about" element={<PublicRoute><AboutPage /></PublicRoute>} />
         <Route path="/login" element={<LoginRoute />} />
         <Route
           path="/"
