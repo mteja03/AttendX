@@ -1354,7 +1354,7 @@ export default function Leave() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') setShowEmpDropdown(true);
                         }}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[38px]"
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[38px]"
                       >
                         <span className="text-gray-400">Select employee...</span>
                         <span className="text-gray-400 text-xs shrink-0">▾</span>
@@ -1412,7 +1412,7 @@ export default function Leave() {
                   name="leaveType"
                   value={form.leaveType}
                   onChange={(e) => setForm((p) => ({ ...p, leaveType: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#1B6B6B]/20"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-1 focus:ring-[#1B6B6B]/20"
                 >
                   <option value="">Select leave type</option>
                   {leaveTypes.map((lt) => (
@@ -1431,7 +1431,7 @@ export default function Leave() {
                     name="startDate"
                     value={form.startDate}
                     onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#1B6B6B]/20"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-1 focus:ring-[#1B6B6B]/20"
                     required
                   />
                 </div>
@@ -1442,7 +1442,7 @@ export default function Leave() {
                     name="endDate"
                     value={form.endDate}
                     onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#1B6B6B]/20"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-1 focus:ring-[#1B6B6B]/20"
                     required
                   />
                 </div>
@@ -1455,7 +1455,7 @@ export default function Leave() {
                   value={form.reason}
                   onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-[#1B6B6B]/20"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-1 focus:ring-[#1B6B6B]/20"
                 />
               </div>
               <div className="flex justify-end gap-3 pt-2">

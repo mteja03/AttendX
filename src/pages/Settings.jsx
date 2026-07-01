@@ -1782,7 +1782,7 @@ export default function Settings() {
                             <input
                               value={t.title || ''}
                               onChange={(e) => updateTask(t.id, 'title', e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                               placeholder="Task title"
                             />
                           </div>
@@ -1807,7 +1807,7 @@ export default function Settings() {
                             value={t.description || ''}
                             onChange={(e) => updateTask(t.id, 'description', e.target.value)}
                             rows={2}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                             placeholder="Optional description"
                           />
                         </div>
@@ -1822,7 +1822,7 @@ export default function Settings() {
                             <select
                               value={t.linkedPolicyId || ''}
                               onChange={(e) => updateTask(t.id, 'linkedPolicyId', e.target.value)}
-                              className="w-full text-xs border border-slate-300 rounded-lg px-2 py-1.5 text-gray-600 bg-white"
+                              className="w-full text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-gray-600 bg-white"
                             >
                               <option value="">No linked policy</option>
                               {policiesForOnboarding.map((p) => (
@@ -1840,7 +1840,7 @@ export default function Settings() {
                             <select
                               value={t.category || 'Day 1'}
                               onChange={(e) => updateTask(t.id, 'category', e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                             >
                               {categories.map((c) => (
                                 <option key={c} value={c}>{c}</option>
@@ -1852,7 +1852,7 @@ export default function Settings() {
                             <select
                               value={t.assignedTo || 'hr'}
                               onChange={(e) => updateTask(t.id, 'assignedTo', e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                             >
                               {assignedToOptions.map((o) => (
                                 <option key={o} value={o}>{o.toUpperCase()}</option>
@@ -1865,7 +1865,7 @@ export default function Settings() {
                               type="number"
                               value={t.daysFromJoining ?? 0}
                               onChange={(e) => updateTask(t.id, 'daysFromJoining', e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                             />
                           </div>
                           <div className="flex items-center gap-2 mt-6">
@@ -1874,7 +1874,7 @@ export default function Settings() {
                               type="checkbox"
                               checked={!!t.isRequired}
                               onChange={(e) => updateTask(t.id, 'isRequired', e.target.checked)}
-                              className="rounded border-slate-300 text-[#1B6B6B] focus:ring-[#1B6B6B]/20"
+                              className="rounded border-gray-200 text-[#1B6B6B] focus:ring-[#1B6B6B]/20"
                             />
                             <label htmlFor={`req_${t.id}`} className="text-xs text-slate-700">
                               Required
@@ -2065,7 +2065,7 @@ export default function Settings() {
                             <input
                               value={t.title || ''}
                               onChange={(e) => updateTask(t.id, 'title', e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                               placeholder="Task title"
                             />
                           </div>
@@ -2090,7 +2090,7 @@ export default function Settings() {
                             value={t.description || ''}
                             onChange={(e) => updateTask(t.id, 'description', e.target.value)}
                             rows={2}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                             placeholder="Optional description"
                           />
                         </div>
@@ -2101,7 +2101,7 @@ export default function Settings() {
                             <select
                               value={t.category || 'Resignation'}
                               onChange={(e) => updateTask(t.id, 'category', e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                             >
                               {categories.map((c) => (
                                 <option key={c} value={c}>{c}</option>
@@ -2113,7 +2113,7 @@ export default function Settings() {
                             <select
                               value={t.assignedTo || 'hr'}
                               onChange={(e) => updateTask(t.id, 'assignedTo', e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                             >
                               {assignedToOptions.map((o) => (
                                 <option key={o} value={o}>{o.toUpperCase()}</option>
@@ -2126,7 +2126,7 @@ export default function Settings() {
                               type="number"
                               value={t.daysBefore ?? 0}
                               onChange={(e) => updateTask(t.id, 'daysBefore', e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                             />
                             <p className="text-[11px] text-slate-400 mt-1">
                               Use negative numbers for tasks after exit (e.g. -7 = 7 days after)
@@ -2138,7 +2138,7 @@ export default function Settings() {
                               type="checkbox"
                               checked={!!t.isRequired}
                               onChange={(e) => updateTask(t.id, 'isRequired', e.target.checked)}
-                              className="rounded border-slate-300 text-[#1B6B6B] focus:ring-[#1B6B6B]/20"
+                              className="rounded border-gray-200 text-[#1B6B6B] focus:ring-[#1B6B6B]/20"
                             />
                             <label htmlFor={`off_req_${t.id}`} className="text-xs text-slate-700">
                               Required

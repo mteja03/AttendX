@@ -1593,7 +1593,7 @@ export default function Assets() {
                 <button
                   type="button"
                   onClick={() => setShowDownload((o) => !o)}
-                  className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
+                  className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 border border-gray-200 rounded-xl text-sm hover:bg-slate-50 active:bg-slate-100 bg-white"
                 >
                   Download ▾
                 </button>

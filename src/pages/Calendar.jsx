@@ -860,7 +860,7 @@ export default function Calendar() {
                 <input
                   value={eventForm.title}
                   onChange={(e) => setEventForm((f) => ({ ...f, title: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   required
                 />
               </div>
@@ -869,7 +869,7 @@ export default function Calendar() {
                 <select
                   value={eventForm.type}
                   onChange={(e) => setEventForm((f) => ({ ...f, type: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                 >
                   <option value="company_event">Company Event</option>
                   <option value="holiday">Holiday</option>
@@ -882,7 +882,7 @@ export default function Calendar() {
                     type="date"
                     value={eventForm.date}
                     onChange={(e) => setEventForm((f) => ({ ...f, date: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   />
                 </div>
                 <div>
@@ -891,7 +891,7 @@ export default function Calendar() {
                     type="date"
                     value={eventForm.endDate}
                     onChange={(e) => setEventForm((f) => ({ ...f, endDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   />
                 </div>
               </div>
@@ -901,7 +901,7 @@ export default function Calendar() {
                   value={eventForm.description}
                   onChange={(e) => setEventForm((f) => ({ ...f, description: e.target.value }))}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                 />
               </div>
               <div>

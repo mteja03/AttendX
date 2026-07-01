@@ -1848,7 +1848,7 @@ export default function Library() {
                 <input
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   required
                 />
               </div>
@@ -1857,7 +1857,7 @@ export default function Library() {
                 <select
                   value={form.category}
                   onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                 >
                   {CATEGORIES.map((c) => (
                     <option key={c} value={c}>
@@ -1871,7 +1871,7 @@ export default function Library() {
                 <input
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   placeholder="Short summary"
                 />
               </div>
@@ -1881,7 +1881,7 @@ export default function Library() {
                   value={form.content}
                   onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
                   rows={8}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1890,7 +1890,7 @@ export default function Library() {
                   <input
                     value={form.version}
                     onChange={(e) => setForm((f) => ({ ...f, version: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   />
                 </div>
                 <div>
@@ -1899,7 +1899,7 @@ export default function Library() {
                     type="date"
                     value={form.effectiveDate}
                     onChange={(e) => setForm((f) => ({ ...f, effectiveDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   />
                 </div>
               </div>
@@ -1908,7 +1908,7 @@ export default function Library() {
                   type="checkbox"
                   checked={form.isActive}
                   onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
-                  className="rounded border-slate-300"
+                  className="rounded border-gray-200"
                 />
                 Active
               </label>

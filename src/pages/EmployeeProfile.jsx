@@ -4741,7 +4741,7 @@ export default function EmployeeProfile() {
                   name="assetId"
                   value={assignAssetForm.assetId}
                   onChange={handleAssignAssetChange}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                 >
                   <option value="">Select asset</option>
                   {assetList
@@ -4761,7 +4761,7 @@ export default function EmployeeProfile() {
                     name="issueDate"
                     value={assignAssetForm.issueDate}
                     onChange={handleAssignAssetChange}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   />
                 </div>
                 <div>
@@ -4770,7 +4770,7 @@ export default function EmployeeProfile() {
                     name="condition"
                     value={assignAssetForm.condition}
                     onChange={handleAssignAssetChange}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   >
                     <option value="New">New</option>
                     <option value="Good">Good</option>
@@ -4787,7 +4787,7 @@ export default function EmployeeProfile() {
                   value={assignAssetForm.notes}
                   onChange={handleAssignAssetChange}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   placeholder="Any special instructions or comments"
                 />
               </div>
@@ -5074,7 +5074,7 @@ export default function EmployeeProfile() {
                     name="date"
                     value={returnAssetForm.date}
                     onChange={handleReturnAssetChange}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   />
                 </div>
                 <div>
@@ -5083,7 +5083,7 @@ export default function EmployeeProfile() {
                     name="condition"
                     value={returnAssetForm.condition}
                     onChange={handleReturnAssetChange}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   >
                     <option value="New">New</option>
                     <option value="Good">Good</option>
@@ -5100,7 +5100,7 @@ export default function EmployeeProfile() {
                   value={returnAssetForm.notes}
                   onChange={handleReturnAssetChange}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   placeholder="Any damage or notes on return"
                 />
               </div>
