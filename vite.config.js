@@ -58,14 +58,23 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined;
-          if (id.includes('node_modules/firebase')) return 'firebase';
-          if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-') || id.includes('node_modules/victory')) return 'charts';
-          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router')) return 'vendor';
-          if (id.includes('node_modules/xlsx') || id.includes('node_modules/exceljs') || id.includes('node_modules/file-saver')) return 'file-export';
-          if (id.includes('node_modules/jszip')) return 'zip';
-          if (id.includes('node_modules/html2canvas')) return 'html2canvas';
-          return undefined;
+          // node_modules — keep existing vendor splits
+          if (id.includes('node_modules')) {
+            if (id.includes('node_modules/firebase') || id.includes('node_modules/@firebase')) return 'firebase';
+            if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-') || id.includes('node_modules/victory')) return 'charts';
+            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router')) return 'vendor';
+            if (id.includes('node_modules/xlsx') || id.includes('node_modules/exceljs') || id.includes('node_modules/file-saver')) return 'file-export';
+            if (id.includes('node_modules/jszip')) return 'zip';
+            if (id.includes('node_modules/html2canvas')) return 'html2canvas';
+            return undefined;
+          }
+          // src — split shared chunks by domain so the monolithic "src" chunk doesn't balloon
+          if (id.includes('/src/components/reports/') || id.includes('/src/utils/reportExcel')) return 'domain-reports';
+          if (id.includes('/src/components/employees/') || id.includes('/src/utils/employeeListHelpers')) return 'domain-employees';
+          if (id.includes('/src/components/assets/') || id.includes('/src/utils/assetHelpers')) return 'domain-assets';
+          if (id.includes('/src/components/profile/') || id.includes('/src/utils/employeeProfileHelpers')) return 'domain-profile';
+          if (id.includes('/src/services/')) return 'services';
+          if (id.includes('/src/contexts/')) return 'contexts';
         },
       },
     },
