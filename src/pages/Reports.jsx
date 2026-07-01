@@ -524,6 +524,57 @@ export default function Reports() {
       .sort((a, b) => b.count - a.count);
   }, [activeTab, locationFilteredEmployees]);
 
+  const attritionTrend = useMemo(() => {
+    if (activeTab !== 'headcount') return [];
+    const now = new Date();
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+      months.push({ key, label, exits: 0, joins: 0 });
+    }
+    const filtered = filterLocation ? employees.filter((e) => (e.location || '') === filterLocation) : employees;
+    filtered.forEach((e) => {
+      const jd = e.joiningDate || e.dateOfJoining;
+      if (jd) {
+        const jKey = typeof jd === 'string' ? jd.slice(0, 7) : '';
+        const m = months.find((mo) => mo.key === jKey);
+        if (m) m.joins++;
+      }
+      const exitDate = e.offboarding?.expectedLastDay || e.offboarding?.lastWorkingDay;
+      if (exitDate && (e.status === 'Notice Period' || e.status === 'Offboarding' || e.status === 'Inactive')) {
+        const eKey = typeof exitDate === 'string' ? exitDate.slice(0, 7) : '';
+        const m = months.find((mo) => mo.key === eKey);
+        if (m) m.exits++;
+      }
+    });
+    return months;
+  }, [activeTab, employees, filterLocation]);
+
+  const tenureDistribution = useMemo(() => {
+    if (activeTab !== 'headcount') return [];
+    const filtered = filterLocation ? employees.filter((e) => (e.location || '') === filterLocation) : employees;
+    const buckets = [
+      { label: '<1 year', min: 0, max: 1, count: 0 },
+      { label: '1-2 years', min: 1, max: 2, count: 0 },
+      { label: '2-3 years', min: 2, max: 3, count: 0 },
+      { label: '3-5 years', min: 3, max: 5, count: 0 },
+      { label: '5+ years', min: 5, max: 100, count: 0 },
+    ];
+    const now = new Date();
+    filtered.forEach((e) => {
+      if (e.status !== 'Active') return;
+      const jd = e.joiningDate || e.dateOfJoining;
+      if (!jd) return;
+      const joinDate = new Date(jd);
+      const years = (now - joinDate) / (365.25 * 24 * 60 * 60 * 1000);
+      const bucket = buckets.find((b) => years >= b.min && years < b.max);
+      if (bucket) bucket.count++;
+    });
+    return buckets;
+  }, [activeTab, employees, filterLocation]);
+
   const inNoticePeriodByStatus = useMemo(
     () => {
       if (activeTab !== 'offboarding') return [];
@@ -669,6 +720,45 @@ export default function Reports() {
       .sort((a, b) => b.totalDays - a.totalDays)
       .slice(0, 10);
   }, [activeTab, leaveYearList, employeeMap]);
+
+  const topLeaveTakers = useMemo(() => {
+    if (activeTab !== 'leave') return [];
+    const filtered = filterLocation ? employees.filter((e) => (e.location || '') === filterLocation) : employees;
+    const leaveMap = {};
+    leaveList.forEach((l) => {
+      if (l.status !== 'Approved') return;
+      const id = l.employeeId;
+      if (!leaveMap[id]) leaveMap[id] = { days: 0 };
+      leaveMap[id].days += (l.totalDays || l.numberOfDays || 1);
+    });
+    return filtered
+      .filter((e) => e.status === 'Active' && leaveMap[e.id])
+      .map((e) => ({ id: e.id, name: e.fullName || e.name || e.email, department: e.department || '—', branch: e.branch || '—', days: leaveMap[e.id]?.days || 0 }))
+      .sort((a, b) => b.days - a.days)
+      .slice(0, 10);
+  }, [activeTab, employees, leaveList, filterLocation]);
+
+  const absenceByBranch = useMemo(() => {
+    if (activeTab !== 'leave') return [];
+    const filtered = filterLocation ? employees.filter((e) => (e.location || '') === filterLocation) : employees;
+    const branchMap = {};
+    filtered.forEach((e) => {
+      const br = e.branch || e.location || '—';
+      if (!branchMap[br]) branchMap[br] = { name: br, employees: 0, leaveDays: 0 };
+      branchMap[br].employees++;
+    });
+    leaveList.forEach((l) => {
+      if (l.status !== 'Approved') return;
+      const emp = filtered.find((e) => e.id === l.employeeId);
+      if (!emp) return;
+      const br = emp.branch || emp.location || '—';
+      if (branchMap[br]) branchMap[br].leaveDays += (l.totalDays || l.numberOfDays || 1);
+    });
+    return Object.values(branchMap)
+      .map((b) => ({ ...b, rate: b.employees > 0 ? parseFloat(((b.leaveDays / (b.employees * 260)) * 100).toFixed(1)) : 0 }))
+      .sort((a, b) => b.rate - a.rate)
+      .slice(0, 15);
+  }, [activeTab, employees, leaveList, filterLocation]);
 
   const assetStats = useMemo(() => {
     if (activeTab !== 'asset') {
@@ -1922,6 +2012,42 @@ export default function Reports() {
             </ChartCard>
           </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+              {/* Joins vs Exits trend */}
+              <div className="bg-white border border-gray-100 rounded-2xl p-4">
+                <h3 className="text-sm font-semibold text-gray-800 mb-1">Joins vs exits — last 12 months</h3>
+                <p className="text-xs text-gray-400 mb-3">Monthly new hires and departures</p>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={attritionTrend} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="joins" fill="#1B6B6B" name="Joins" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="exits" fill="#E24B4A" name="Exits" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Tenure distribution */}
+              <div className="bg-white border border-gray-100 rounded-2xl p-4">
+                <h3 className="text-sm font-semibold text-gray-800 mb-1">Tenure distribution</h3>
+                <p className="text-xs text-gray-400 mb-3">Active employees by years of service</p>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={tenureDistribution} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }} />
+                    <Bar dataKey="count" fill="#2BB8B0" name="Employees" radius={[4, 4, 0, 0]}>
+                      {tenureDistribution.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+          </div>
+
           <div className="bg-white border border-gray-100 rounded-2xl p-5 mt-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-700">Designation Vacancy Analysis</h3>
@@ -2467,6 +2593,46 @@ export default function Reports() {
               )}
             </div>
           </div>
+
+              {/* Top leave takers */}
+              <div className="bg-white border border-gray-100 rounded-2xl p-4">
+                <h3 className="text-sm font-semibold text-gray-800 mb-1">Top leave takers</h3>
+                <p className="text-xs text-gray-400 mb-3">Most leave days taken (approved) this year</p>
+                {topLeaveTakers.length === 0 ? (
+                  <p className="text-sm text-gray-300 text-center py-6">No leave data</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {topLeaveTakers.map((t, i) => (
+                      <div key={t.id} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50">
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${i < 3 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-800 truncate">{t.name}</p>
+                          <p className="text-[10px] text-gray-400">{t.department} · {t.branch}</p>
+                        </div>
+                        <span className="text-sm font-semibold text-gray-800">{t.days}<span className="text-[10px] text-gray-400 ml-0.5">days</span></span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Absence rate by branch */}
+              {absenceByBranch.length > 0 && (
+                <div className="bg-white border border-gray-100 rounded-2xl p-4">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-1">Absence rate by branch</h3>
+                  <p className="text-xs text-gray-400 mb-3">Leave days as % of total working days</p>
+                  <ResponsiveContainer width="100%" height={Math.max(200, absenceByBranch.length * 28)}>
+                    <BarChart data={absenceByBranch} layout="vertical" margin={{ left: 100, right: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                      <XAxis type="number" tick={{ fontSize: 10 }} unit="%" />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={100} />
+                      <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }} formatter={(v) => `${v}%`} />
+                      <Bar dataKey="rate" fill="#EF9F27" name="Absence %" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
           <div className="mt-4 flex flex-wrap gap-2 items-center">
             <button
               type="button"
