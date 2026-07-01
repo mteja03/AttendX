@@ -10,6 +10,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { fetchAssets, updateAsset, addAsset, deleteAsset } from '../services/assetService';
+import { assetSchema } from '../utils/validationSchemas';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { SkeletonTable } from '../components/SkeletonRow';
@@ -488,6 +489,16 @@ export default function Assets() {
   const handleSaveAsset = async (e) => {
     e.preventDefault();
     if (!handleValidateAdd()) return;
+    const _assetMode = assetTypes.find((t) => t.name === form.type)?.mode || 'trackable';
+    const _assetValidation = assetSchema.safeParse({
+      name: form.name?.trim() || '',
+      type: form.type || '',
+      assetId: _assetMode === 'trackable' ? (form.assetId?.trim() || '') : 'generated',
+    });
+    if (!_assetValidation.success) {
+      showError(_assetValidation.error.errors[0].message);
+      return;
+    }
     if (!companyId || !currentUser) return;
     setSaving(true);
     try {

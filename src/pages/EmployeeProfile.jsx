@@ -39,6 +39,7 @@ import EditEmployeeModal from '../components/profile/EditEmployeeModal';
 import AssetModals from '../components/profile/AssetModals';
 import OffboardingModals from '../components/profile/OffboardingModals';
 import { withRetry } from '../utils/firestoreWithRetry';
+import { subscribeToEmployee, updateEmployee, deleteEmployee } from '../services/employeeService';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 import {
   trackEmployeeDeleted,
@@ -713,10 +714,9 @@ export default function EmployeeProfile() {
   };
 
   const persistEmployeeDocuments = async (nextDocuments) => {
-    if (!empRef) return;
-    await updateDoc(empRef, {
+    if (!companyId || !empId) return;
+    await updateEmployee(companyId, empId, {
       documents: nextDocuments,
-      updatedAt: serverTimestamp(),
     });
     setEmployee((prev) => (prev ? { ...prev, documents: nextDocuments } : prev));
   };
@@ -940,7 +940,6 @@ export default function EmployeeProfile() {
           relationship: form.emergencyRelationship || '',
           phone: form.emergencyPhone?.trim() || '',
         },
-        updatedAt: serverTimestamp(),
       };
       const savePayload = { ...payload };
       if (changes.length > 0) {
@@ -950,10 +949,7 @@ export default function EmployeeProfile() {
           changes,
         });
       }
-      await withRetry(
-        () => updateDoc(doc(db, 'companies', companyId, 'employees', empId), savePayload),
-        { companyId, action: 'updateEmployee' },
-      );
+      await updateEmployee(companyId, empId, savePayload);
       setEmployee((prev) => (prev ? { ...prev, ...savePayload } : null));
       setShowEditModal(false);
       setShowManagerDropdown(false);
@@ -973,12 +969,12 @@ export default function EmployeeProfile() {
 
   const handleDeleteEmployee = async () => {
     if (deleteConfirmName !== employee?.fullName) return;
-    if (!companyId || !empId || !employee || !empRef) return;
+    if (!companyId || !empId || !employee) return;
 
     try {
       setDeleting(true);
 
-      await withRetry(() => deleteDoc(empRef), { companyId, action: 'deleteEmployee' });
+      await deleteEmployee(companyId, empId);
 
       try {
         const leavesRef = collection(db, 'companies', companyId, 'leave');
@@ -1534,11 +1530,10 @@ export default function EmployeeProfile() {
           },
         ],
       };
-      await withRetry(() => updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+      await updateEmployee(companyId, empId, {
         status: 'Notice Period',
         offboarding: sanitizeForFirestore(offboardingData),
-        updatedAt: serverTimestamp(),
-      }), { companyId, action: 'recordResignation' });
+      });
       await refreshEmployee();
       trackResignationRecorded();
       success(`Resignation recorded. Last day: ${toDisplayDate(expectedTs)}`);
@@ -1564,7 +1559,7 @@ export default function EmployeeProfile() {
           notes: withdrawNotes.trim() || 'Resignation withdrawn',
         },
       ];
-      await withRetry(() => updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+      await updateEmployee(companyId, empId, {
         status: 'Active',
         offboarding: sanitizeForFirestore({
           ...employee.offboarding,
@@ -1574,8 +1569,7 @@ export default function EmployeeProfile() {
           withdrawNotes: withdrawNotes.trim() || null,
           history: updatedHistory,
         }),
-        updatedAt: serverTimestamp(),
-      }), { companyId, action: 'withdrawResignation' });
+      });
       await refreshEmployee();
       try {
         await updateCompanyCounts(companyId);
@@ -1625,7 +1619,7 @@ export default function EmployeeProfile() {
         },
       ];
       const exitReason = employee.offboarding?.reason || employee.offboarding?.exitReason || 'Resignation';
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+      await updateEmployee(companyId, empId, {
         status: 'Offboarding',
         offboarding: sanitizeForFirestore({
           ...employee.offboarding,
@@ -1643,7 +1637,6 @@ export default function EmployeeProfile() {
           tasks: allTasks,
           history: updatedHistory,
         }),
-        updatedAt: serverTimestamp(),
       });
       await refreshEmployee();
       success(`Buyout confirmed. Last day: ${toDisplayDate(buyoutForm.actualLastDay)}`);
@@ -1680,7 +1673,7 @@ export default function EmployeeProfile() {
           notes: `Exit date: ${toDisplayDate(exitDateTs)}`,
         },
       ];
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
+      await updateEmployee(companyId, empId, {
         status: 'Offboarding',
         offboarding: sanitizeForFirestore({
           ...employee.offboarding,
@@ -1696,7 +1689,6 @@ export default function EmployeeProfile() {
           tasks: allTasks,
           history: updatedHistory,
         }),
-        updatedAt: serverTimestamp(),
       });
       await refreshEmployee();
       success(`Exit tasks started for ${employee.fullName}. Last day: ${toDisplayDate(exitDateTs)}`);
@@ -1809,13 +1801,9 @@ export default function EmployeeProfile() {
       const payload = {
         offboarding: sanitizeForFirestore(offboardingPayload),
         status: employee.status || 'Offboarding',
-        updatedAt: serverTimestamp(),
       };
 
-      await withRetry(
-        () => updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload),
-        { companyId, action: 'markOffboardingTaskComplete' },
-      );
+      await updateEmployee(companyId, empId, payload);
 
       const assetAutoReturned = await returnAssetForCompletedOffTask(taskMeta);
       setEmployee((prev) =>
@@ -1853,9 +1841,8 @@ export default function EmployeeProfile() {
         completedBy: offboarding.completedBy || null,
       }),
       status: 'Offboarding',
-      updatedAt: serverTimestamp(),
     };
-    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
+    await updateEmployee(companyId, empId, payload);
     setEmployee((prev) =>
       prev
         ? {
@@ -1880,8 +1867,9 @@ export default function EmployeeProfile() {
         by: currentUser.email || '',
         notes: notesText,
       };
-      await withRetry(() => updateDoc(
-        doc(db, 'companies', companyId, 'employees', empId),
+      await updateEmployee(
+        companyId,
+        empId,
         sanitizeForFirestore({
           status: 'Inactive',
           offboarding: {
@@ -1897,9 +1885,8 @@ export default function EmployeeProfile() {
           deactivatedAt: now,
           deactivatedBy: currentUser.email || '',
           deactivationReason: 'Offboarding completed',
-          updatedAt: serverTimestamp(),
         }),
-      ), { companyId, action: 'completeOffboarding' });
+      );
       setShowCompleteOffboardingModal(false);
       setCompletionNotes('');
       await refreshEmployee();
@@ -1922,7 +1909,7 @@ export default function EmployeeProfile() {
       showError('Please enter new joining date');
       return;
     }
-    if (!companyId || !empId || !employee || !currentUser || !empRef) return;
+    if (!companyId || !empId || !employee || !currentUser) return;
 
     try {
       setSaving(true);
@@ -1950,7 +1937,7 @@ export default function EmployeeProfile() {
           `Rehired. New joining: ${toDisplayDate(newJoinTs)}`,
       });
 
-      await withRetry(() => updateDoc(empRef, {
+      await updateEmployee(companyId, empId, {
         status: 'Active',
         joiningDate: newJoinTs,
         employmentHistory: [...(employee.employmentHistory || []), previousEmployment],
@@ -1963,8 +1950,7 @@ export default function EmployeeProfile() {
         rehireCount: (employee.rehireCount || 0) + 1,
         rehiredAt: Timestamp.now(),
         rehiredBy: currentUser.email || '',
-        updatedAt: serverTimestamp(),
-      }), { companyId, action: 'rehireEmployee' });
+      });
 
       success(`✅ ${employee.fullName} rehired! Please update their profile details.`);
       setShowRehireModal(false);
@@ -2097,10 +2083,9 @@ export default function EmployeeProfile() {
           completionPct: 0,
           tasks: sanitizedTasks,
         }),
-        updatedAt: serverTimestamp(),
       };
 
-      await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
+      await updateEmployee(companyId, empId, payload);
       setEmployee((prev) => (prev ? { ...prev, ...payload } : prev));
       trackOnboardingStarted();
       success('Onboarding started');
@@ -2139,13 +2124,9 @@ export default function EmployeeProfile() {
           tasks: nextTasks,
           completedAt: status === 'completed' ? now : onboarding.completedAt || null,
         }),
-        updatedAt: serverTimestamp(),
       };
 
-      await withRetry(
-        () => updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload),
-        { companyId, action: 'markOnboardingTaskComplete' },
-      );
+      await updateEmployee(companyId, empId, payload);
       setEmployee((prev) => (prev ? { ...prev, onboarding: payload.onboarding } : prev));
       if (status === 'completed') {
         trackOnboardingCompleted();
@@ -2175,10 +2156,9 @@ export default function EmployeeProfile() {
         completedAt: null,
         tasks: nextTasks,
       }),
-      updatedAt: serverTimestamp(),
     };
 
-    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), payload);
+    await updateEmployee(companyId, empId, payload);
     setEmployee((prev) => (prev ? { ...prev, onboarding: payload.onboarding } : prev));
     success('Task updated');
   };

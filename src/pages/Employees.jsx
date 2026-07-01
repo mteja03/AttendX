@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { fetchEmployeePage, fetchAllEmployees, addEmployee } from '../services/employeeService';
+import { employeeSchema } from '../utils/validationSchemas';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
@@ -654,6 +655,18 @@ export default function Employees() {
   const handleAddEmployee = async (e) => {
     e.preventDefault();
     if (!validate()) return;
+    const _empValidation = employeeSchema.safeParse({
+      fullName: form.fullName?.trim() || '',
+      email: form.email?.trim() || '',
+      department: form.department || '',
+      designation: form.designation || '',
+      employmentType: form.employmentType || '',
+      joiningDate: form.joiningDate || '',
+    });
+    if (!_empValidation.success) {
+      showError(_empValidation.error.errors[0].message);
+      return;
+    }
     setSaving(true);
     try {
       const exists = await checkEmpIdExists(form.empId);

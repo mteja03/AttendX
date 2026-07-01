@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { fetchLeaveRequests, updateLeaveStatus, addLeaveRequest } from '../services/leaveService';
+import { leaveRequestSchema } from '../utils/validationSchemas';
 import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
 import { useToast } from '../contexts/ToastContext';
@@ -511,6 +512,17 @@ export default function Leave() {
 
   const handleAddLeave = async (e) => {
     e.preventDefault();
+    const _leaveValidation = leaveRequestSchema.safeParse({
+      employeeId: form.employeeId || '',
+      leaveType: form.leaveType || '',
+      startDate: form.startDate || '',
+      endDate: form.endDate || '',
+      reason: form.reason || '',
+    });
+    if (!_leaveValidation.success) {
+      showError(_leaveValidation.error.errors[0].message);
+      return;
+    }
     const emp = employeeMap[form.employeeId];
     if (!emp || !form.leaveType) return;
     setSaving(true);
