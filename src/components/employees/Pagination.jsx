@@ -17,6 +17,7 @@ export default function Pagination({ currentPage, totalPages, filteredLength, se
       <div className={`flex items-center gap-1 flex-wrap ${!isTable ? 'justify-center' : 'justify-end'}`}>
         <button
           type="button"
+          aria-label="First page"
           onClick={() => setCurrentPage(1)}
           disabled={currentPage === 1}
           className="px-2 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50"
@@ -67,6 +68,7 @@ export default function Pagination({ currentPage, totalPages, filteredLength, se
         </button>
         <button
           type="button"
+          aria-label="Last page"
           onClick={() => setCurrentPage(totalPages)}
           disabled={currentPage === totalPages}
           className="px-2 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50"

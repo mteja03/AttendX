@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 export default function AssetModals({
   employee,
   saving,
@@ -40,12 +42,38 @@ export default function AssetModals({
   setReturnNotes,
   handleReturnConsumableFromProfile,
 }) {
+  const anyModalOpen = !!(showAssignAssetModal || showProfileAssignModal || returnAsset || returnConsumableModal);
+
+  useEffect(() => {
+    if (!anyModalOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (showAssignAssetModal) setShowAssignAssetModal(false);
+      else if (showProfileAssignModal) {
+        setShowProfileAssignModal(null);
+        setShowProfileAssetDropdown(false);
+        setProfileAssetSearch('');
+        setIssueConsumableAsset(null);
+        setProfileAssignMode('trackable');
+      }
+      else if (returnAsset) setReturnAsset(null);
+      else if (returnConsumableModal) setReturnConsumableModal(null);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [
+    anyModalOpen, showAssignAssetModal, showProfileAssignModal, returnAsset, returnConsumableModal,
+    setShowAssignAssetModal, setShowProfileAssignModal, setShowProfileAssetDropdown,
+    setProfileAssetSearch, setIssueConsumableAsset, setProfileAssignMode,
+    setReturnAsset, setReturnConsumableModal,
+  ]);
+
   return (
     <>
       {showAssignAssetModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Assign Asset</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="assign-asset-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <h2 id="assign-asset-modal-title" className="text-lg font-semibold text-slate-800 mb-4">Assign Asset</h2>
             <form onSubmit={handleSaveAssignFromProfile} className="space-y-4">
               <div>
                 <p className="text-xs text-slate-500 mb-1">Employee</p>
@@ -132,18 +160,18 @@ export default function AssetModals({
       )}
 
       {showProfileAssignModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 max-h-[92vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="profile-assign-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 max-h-[92vh] flex flex-col overflow-hidden">
 
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
               <div>
-                <h2 className="text-base font-semibold text-gray-800">Assign asset</h2>
+                <h2 id="profile-assign-modal-title" className="text-base font-semibold text-gray-800">Assign asset</h2>
                 <p className="text-xs text-gray-400 mt-0.5">
                   {profileAssignMode === 'trackable' ? 'Assign a unique tracked item' : 'Issue from consumable stock'}
                 </p>
               </div>
-              <button type="button" onClick={() => { setShowProfileAssignModal(null); setShowProfileAssetDropdown(false); setProfileAssetSearch(''); setIssueConsumableAsset(null); setProfileAssignMode('trackable'); }} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-sm">✕</button>
+              <button type="button" aria-label="Close" onClick={() => { setShowProfileAssignModal(null); setShowProfileAssetDropdown(false); setProfileAssetSearch(''); setIssueConsumableAsset(null); setProfileAssignMode('trackable'); }} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-sm">✕</button>
             </div>
 
             <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
@@ -366,9 +394,9 @@ export default function AssetModals({
       )}
 
       {returnAsset && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Return Asset</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="return-asset-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
+            <h2 id="return-asset-modal-title" className="text-lg font-semibold text-slate-800 mb-4">Return Asset</h2>
             <form onSubmit={handleSaveReturnFromProfile} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -445,9 +473,9 @@ export default function AssetModals({
       )}
 
       {returnConsumableModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
-            <h3 className="font-semibold text-gray-900 mb-1">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="return-consumable-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
+            <h3 id="return-consumable-modal-title" className="font-semibold text-gray-900 mb-1">
               Return {returnConsumableModal.asset?.name}
             </h3>
             <p className="text-sm text-gray-500 mb-4">

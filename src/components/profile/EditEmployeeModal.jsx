@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { formatLakhs } from '../../utils';
 import { INDIAN_STATES } from '../../utils/employeeProfileHelpers';
 
@@ -43,11 +44,28 @@ export default function EditEmployeeModal({
   qualifications,
   benefitTemplates,
 }) {
+  useEffect(() => {
+    if (!showEditModal) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowEditModal(false);
+        setActiveEditTab('personal');
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showEditModal, setShowEditModal, setActiveEditTab]);
+
   if (!showEditModal || !form) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl sm:my-8 flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-employee-modal-title"
+        className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl sm:my-8 flex flex-col max-h-[90vh] overflow-hidden"
+      >
 
         {/* ── Modal header ── */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
@@ -56,7 +74,7 @@ export default function EditEmployeeModal({
               {(employee?.fullName || '?').charAt(0)}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-800 leading-tight truncate">
+              <p id="edit-employee-modal-title" className="text-sm font-semibold text-gray-800 leading-tight truncate">
                 {employee?.fullName || 'Edit Employee'}
               </p>
               <p className="text-xs text-gray-400 mt-0.5">
@@ -201,7 +219,7 @@ export default function EditEmployeeModal({
                       <div role="button" tabIndex={0} onClick={() => setShowEditRoleDropdown(true)} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') setShowEditRoleDropdown(true); }} className={`w-full border rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px] ${showEditRoleDropdown ? 'border-[#1B6B6B]' : 'border-gray-200'}`}>
                         {selectedEditRole ? (<div className="flex items-center gap-2 min-w-0 flex-1"><div className="min-w-0 text-left"><p className="text-sm font-medium text-gray-900">{selectedEditRole.title}</p><p className="text-xs text-gray-400 mt-0.5">{selectedEditRole.reportsTo ? `Reports to ${selectedEditRole.reportsTo}` : 'Top level'}{selectedEditRole.salaryBand?.min != null && selectedEditRole.salaryBand?.min !== '' && ` · ₹${formatLakhs(selectedEditRole.salaryBand.min)}–${formatLakhs(selectedEditRole.salaryBand.max)}/mo`}</p></div></div>) : form.designation ? (<span className="text-gray-800">{form.designation}</span>) : (<span className="text-gray-400">Search or select designation…</span>)}
                         <div className="flex items-center gap-1 flex-shrink-0">
-                          {(selectedEditRole || form.designation) && (<button type="button" onClick={(e) => { e.stopPropagation(); setForm((prev) => ({ ...prev, designation: '', designationRoleId: '' })); }} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>)}
+                          {(selectedEditRole || form.designation) && (<button type="button" aria-label="Clear designation" onClick={(e) => { e.stopPropagation(); setForm((prev) => ({ ...prev, designation: '', designationRoleId: '' })); }} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>)}
                           <span className="text-gray-400 text-xs">▾</span>
                         </div>
                       </div>
@@ -237,7 +255,7 @@ export default function EditEmployeeModal({
                         <div role="button" tabIndex={0} onClick={() => setShowManagerDropdown(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowManagerDropdown(true); } }} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px]">
                           {form.reportingManagerId ? (<div className="flex items-center gap-2 min-w-0"><div className="w-6 h-6 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B]">{form.reportingManagerName?.charAt(0)}</div><span className="text-slate-800 truncate">{form.reportingManagerName}</span><span className="text-xs text-slate-400 whitespace-nowrap">{form.reportingManagerEmpId}</span></div>) : (<span className="text-slate-400">Select reporting manager</span>)}
                           <div className="flex items-center gap-1">
-                            {form.reportingManagerId && (<button type="button" onClick={(e) => { e.stopPropagation(); setForm((prev) => ({ ...prev, reportingManagerId: '', reportingManagerName: '', reportingManagerEmpId: '' })); }} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>)}
+                            {form.reportingManagerId && (<button type="button" aria-label="Clear reporting manager" onClick={(e) => { e.stopPropagation(); setForm((prev) => ({ ...prev, reportingManagerId: '', reportingManagerName: '', reportingManagerEmpId: '' })); }} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>)}
                             <span className="text-slate-400 text-xs">▾</span>
                           </div>
                         </div>

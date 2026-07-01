@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CONDITION_OPTIONS, buildAssetIdPrefix } from '../../utils/assetHelpers';
 
@@ -19,16 +20,30 @@ export default function AddAssetModal({
   const { companyId } = useParams();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (!showAddModal) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setShowAddModal(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showAddModal, setShowAddModal]);
+
   if (!showAddModal) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-xl sm:my-8 max-h-[92vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-asset-modal-title"
+        className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-xl sm:my-8 max-h-[92vh] flex flex-col overflow-hidden"
+      >
 
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-gray-800">Add asset</h2>
+            <h2 id="add-asset-modal-title" className="text-base font-semibold text-gray-800">Add asset</h2>
             <p className="text-xs text-gray-400 mt-0.5">
               {selectedAddAssetMode === 'trackable'
                 ? 'Trackable — individual item with unique ID'
@@ -37,7 +52,7 @@ export default function AddAssetModal({
                 : 'Choose a type to get started'}
             </p>
           </div>
-          <button type="button" onClick={() => setShowAddModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 flex-shrink-0 text-sm">✕</button>
+          <button type="button" aria-label="Close" onClick={() => setShowAddModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 flex-shrink-0 text-sm">✕</button>
         </div>
 
         {/* Scrollable body */}

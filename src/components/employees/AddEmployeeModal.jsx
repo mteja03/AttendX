@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { formatLakhs } from '../../utils';
 import { ADD_STEPS, INDIAN_STATES } from '../../utils/employeeListHelpers.jsx';
 
@@ -52,9 +52,22 @@ export default function AddEmployeeModal({
   setNewEmpCropOpen,
   showError,
 }) {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') handleCloseAddModal();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleCloseAddModal]);
+
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] min-h-0 flex flex-col overflow-hidden sm:my-8">
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-employee-modal-title"
+        className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] min-h-0 flex flex-col overflow-hidden sm:my-8"
+      >
         {(() => {
           try {
             return (
@@ -64,7 +77,7 @@ export default function AddEmployeeModal({
                 </div>
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
                   <div>
-                    <h2 className="text-base font-semibold text-gray-800">Add Employee</h2>
+                    <h2 id="add-employee-modal-title" className="text-base font-semibold text-gray-800">Add Employee</h2>
                     <p className="text-xs text-gray-400 mt-0.5">
                       Step {addStep + 1} of {ADD_STEPS.length} — {ADD_STEPS[addStep].sub}
                     </p>
@@ -143,6 +156,7 @@ export default function AddEmployeeModal({
                             {newEmpPhotoSrc && (
                               <button
                                 type="button"
+                                aria-label="Remove photo"
                                 onClick={() => {
                                   setNewEmpPhoto(null);
                                   setNewEmpPhotoSrc(null);
@@ -612,6 +626,7 @@ export default function AddEmployeeModal({
                                   {selectedRole && (
                                     <button
                                       type="button"
+                                      aria-label="Clear designation"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setSelectedRole(null);
@@ -852,6 +867,7 @@ export default function AddEmployeeModal({
                                     {form.reportingManagerId && (
                                       <button
                                         type="button"
+                                        aria-label="Clear reporting manager"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setForm((prev) => ({

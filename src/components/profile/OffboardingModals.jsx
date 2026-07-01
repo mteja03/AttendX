@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import Cropper from 'react-easy-crop';
 import { getCroppedBlob } from '../../utils/employeeProfileHelpers';
 import { doc, updateDoc, deleteField } from 'firebase/firestore';
@@ -98,16 +99,52 @@ export default function OffboardingModals({
   showRemovePhotoConfirm,
   setShowRemovePhotoConfirm,
 }) {
+  const anyModalOpen = !!(
+    showDeleteModal || showCompleteOffboardingModal || showRehireModal ||
+    completingTask || completingOffTask || showOnboardingWarningModal ||
+    showResignationModal || showWithdrawModal || showBuyoutModal ||
+    cropModalOpen || showExitTasksModal || showRemovePhotoConfirm
+  );
+
+  useEffect(() => {
+    if (!anyModalOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (showDeleteModal) { setShowDeleteModal(false); setDeleteConfirmName(''); }
+      else if (showCompleteOffboardingModal) { setShowCompleteOffboardingModal(false); setCompletionNotes(''); }
+      else if (showRehireModal) setShowRehireModal(false);
+      else if (completingTask) setCompletingTask(null);
+      else if (completingOffTask) setCompletingOffTask(null);
+      else if (showOnboardingWarningModal) setShowOnboardingWarningModal(false);
+      else if (showResignationModal) setShowResignationModal(false);
+      else if (showWithdrawModal) { setShowWithdrawModal(false); setWithdrawNotes(''); }
+      else if (showBuyoutModal) setShowBuyoutModal(false);
+      else if (cropModalOpen) { setCropModalOpen(false); setRawImageSrc(null); }
+      else if (showExitTasksModal) setShowExitTasksModal(false);
+      else if (showRemovePhotoConfirm) setShowRemovePhotoConfirm(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [
+    anyModalOpen, showDeleteModal, showCompleteOffboardingModal, showRehireModal,
+    completingTask, completingOffTask, showOnboardingWarningModal, showResignationModal,
+    showWithdrawModal, showBuyoutModal, cropModalOpen, showExitTasksModal, showRemovePhotoConfirm,
+    setShowDeleteModal, setDeleteConfirmName, setShowCompleteOffboardingModal, setCompletionNotes,
+    setShowRehireModal, setCompletingTask, setCompletingOffTask, setShowOnboardingWarningModal,
+    setShowResignationModal, setShowWithdrawModal, setWithdrawNotes, setShowBuyoutModal,
+    setCropModalOpen, setRawImageSrc, setShowExitTasksModal, setShowRemovePhotoConfirm,
+  ]);
+
   return (
     <>
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 sm:p-4" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-employee-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
             <div className="text-center mb-5">
               <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
                 <span className="text-2xl">🗑️</span>
               </div>
-              <h3 className="text-base font-semibold text-gray-800 mb-1">Delete Employee Permanently?</h3>
+              <h3 id="delete-employee-modal-title" className="text-base font-semibold text-gray-800 mb-1">Delete Employee Permanently?</h3>
               <p className="text-sm text-gray-500">
                 This will permanently delete <strong>{employee.fullName}</strong> and ALL their data including documents,
                 leave history, assets, and onboarding records.
@@ -157,11 +194,11 @@ export default function OffboardingModals({
       )}
 
       {showCompleteOffboardingModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="complete-offboarding-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="text-center mb-5">
               <div className="text-4xl mb-3">🏁</div>
-              <h3 className="text-base font-semibold text-gray-800 mb-1">Complete Offboarding?</h3>
+              <h3 id="complete-offboarding-modal-title" className="text-base font-semibold text-gray-800 mb-1">Complete Offboarding?</h3>
               <p className="text-sm text-gray-500">
                 {employee.fullName} will be marked as Inactive. This cannot be undone.
               </p>
@@ -201,11 +238,11 @@ export default function OffboardingModals({
       )}
 
       {showRehireModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="rehire-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-xl">
             <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
               <div>
-                <h2 className="text-lg font-semibold text-gray-800">Rehire Employee</h2>
+                <h2 id="rehire-modal-title" className="text-lg font-semibold text-gray-800">Rehire Employee</h2>
                 <p className="text-sm text-gray-400 mt-0.5">{employee.fullName} will be reactivated</p>
               </div>
               <button
@@ -277,9 +314,9 @@ export default function OffboardingModals({
       )}
 
       {completingTask && !isInactive && canEditEmployees && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
-            <h3 className="font-medium mb-3">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="complete-task-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
+            <h3 id="complete-task-modal-title" className="font-medium mb-3">
               Complete: {completingTask.title}
             </h3>
             <textarea
@@ -318,9 +355,9 @@ export default function OffboardingModals({
       )}
 
       {completingOffTask && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
-            <h3 className="font-medium mb-3">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="complete-off-task-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
+            <h3 id="complete-off-task-modal-title" className="font-medium mb-3">
               Complete: {completingOffTask.title}
             </h3>
             <textarea
@@ -359,10 +396,10 @@ export default function OffboardingModals({
       )}
 
       {showOnboardingWarningModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-[60] sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm text-center shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-[60] sm:p-4" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="onboarding-warning-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm text-center shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="text-5xl mb-4">⚠️</div>
-            <h3 className="text-base font-semibold text-gray-800 mb-2">Onboarding Not Complete</h3>
+            <h3 id="onboarding-warning-modal-title" className="text-base font-semibold text-gray-800 mb-2">Onboarding Not Complete</h3>
             <p className="text-sm text-gray-500 mb-2">
               {!onboardingStartedForOff
                 ? 'Onboarding has not been started for this employee.'
@@ -396,9 +433,9 @@ export default function OffboardingModals({
       )}
 
       {showResignationModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Record Resignation</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="resignation-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h2 id="resignation-modal-title" className="text-lg font-semibold text-gray-900 mb-4">Record Resignation</h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Resignation Date</label>
@@ -480,9 +517,9 @@ export default function OffboardingModals({
       )}
 
       {showWithdrawModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Withdraw Resignation</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="withdraw-resignation-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h2 id="withdraw-resignation-modal-title" className="text-lg font-semibold text-gray-900 mb-2">Withdraw Resignation</h2>
             <div className="text-center py-4">
               <div className="text-5xl mb-4">🔄</div>
               <h3 className="text-base font-semibold text-gray-800 mb-2">
@@ -526,9 +563,9 @@ export default function OffboardingModals({
       )}
 
       {showBuyoutModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Notice Period Buyout</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="buyout-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h2 id="buyout-modal-title" className="text-lg font-semibold text-gray-900 mb-2">Notice Period Buyout</h2>
             <p className="text-sm text-gray-500 mb-4">
               Company is buying out the remaining Notice Period. Employee will exit earlier than planned.
             </p>
@@ -581,15 +618,16 @@ export default function OffboardingModals({
       )}
 
       {cropModalOpen && rawImageSrc && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="crop-photo-modal-title" className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div>
-                <h3 className="text-base font-semibold text-gray-800">Adjust Photo</h3>
+                <h3 id="crop-photo-modal-title" className="text-base font-semibold text-gray-800">Adjust Photo</h3>
                 <p className="text-xs text-gray-400 mt-0.5">Pinch or scroll to zoom · Drag to reposition</p>
               </div>
               <button
                 type="button"
+                aria-label="Close"
                 onClick={() => {
                   setCropModalOpen(false);
                   setRawImageSrc(null);
@@ -631,6 +669,7 @@ export default function OffboardingModals({
                   step={0.05}
                   value={zoom}
                   onChange={(ev) => setZoom(Number(ev.target.value))}
+                  aria-label="Zoom"
                   className="flex-1 accent-[#1B6B6B]"
                 />
                 <span className="text-xs text-gray-400 w-4">🔎</span>
@@ -698,9 +737,9 @@ export default function OffboardingModals({
       )}
 
       {showExitTasksModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Start Exit Tasks</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="exit-tasks-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h2 id="exit-tasks-modal-title" className="text-lg font-semibold text-gray-900 mb-4">Start Exit Tasks</h2>
             <p className="text-sm text-gray-500 mb-4">
               Confirm last working day and exit reason. Exit Tasks will be generated, including asset returns.
             </p>
@@ -753,10 +792,10 @@ export default function OffboardingModals({
       )}
 
       {showRemovePhotoConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-[70] sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-xs text-center shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-[70] sm:p-4" aria-hidden="true">
+          <div role="dialog" aria-modal="true" aria-labelledby="remove-photo-modal-title" className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-xs text-center shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="text-3xl mb-3">🗑️</div>
-            <h3 className="text-sm font-semibold text-gray-800 mb-1">Remove Photo?</h3>
+            <h3 id="remove-photo-modal-title" className="text-sm font-semibold text-gray-800 mb-1">Remove Photo?</h3>
             <p className="text-xs text-gray-400 mb-4">
               The employee&apos;s photo will be removed and replaced with initials.
             </p>

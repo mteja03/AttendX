@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "e2e": "playwright test --config=playwright.config.js",
+    "e2e:ui": "playwright test --config=playwright.config.js --ui"
   },
   "dependencies": {
     "@sentry/react": "^10.46.0",
