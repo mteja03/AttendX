@@ -12,10 +12,8 @@ import {
   Timestamp,
   serverTimestamp,
   arrayUnion,
-  deleteField,
 } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, uploadBytesResumable, getBlob, deleteObject } from 'firebase/storage';
-import Cropper from 'react-easy-crop';
+import { ref as storageRef, uploadBytesResumable, getBlob, deleteObject } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { PLATFORM_CONFIG } from '../config/constants';
@@ -37,6 +35,9 @@ import OnboardingTab from '../components/profile/tabs/OnboardingTab';
 import OffboardingTab from '../components/profile/tabs/OffboardingTab';
 import TimelineTab from '../components/profile/tabs/TimelineTab';
 import ErrorModal from '../components/ErrorModal';
+import EditEmployeeModal from '../components/profile/EditEmployeeModal';
+import AssetModals from '../components/profile/AssetModals';
+import OffboardingModals from '../components/profile/OffboardingModals';
 import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 import {
@@ -44,12 +45,10 @@ import {
   trackOffboardingCompleted,
   trackOnboardingCompleted,
   trackOnboardingStarted,
-  trackPhotoUploaded,
   trackResignationRecorded,
   trackResignationWithdrawn,
 } from '../utils/analytics';
 import {
-  getCroppedBlob,
   sanitizeForFirestore,
   sanitizeCustomBenefitsForSave,
   DEFAULT_DEPARTMENTS,
@@ -3474,396 +3473,83 @@ export default function EmployeeProfile() {
         <TimelineTab timelineEvents={timelineEvents} toDisplayDate={toDisplayDate} />
       )}
 
-{showEditModal && form && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl sm:my-8 flex flex-col max-h-[90vh] overflow-hidden">
+      <EditEmployeeModal
+        employee={employee}
+        form={form}
+        setForm={setForm}
+        saving={saving}
+        activeEditTab={activeEditTab}
+        setActiveEditTab={setActiveEditTab}
+        showEditModal={showEditModal}
+        setShowEditModal={setShowEditModal}
+        handleSaveEdit={handleSaveEdit}
+        locationDropdownRef={locationDropdownRef}
+        showLocationDropdown={showLocationDropdown}
+        setShowLocationDropdown={setShowLocationDropdown}
+        locationSearch={locationSearch}
+        setLocationSearch={setLocationSearch}
+        structuredLocations={structuredLocations}
+        branches={branches}
+        editRoleDropdownRef={editRoleDropdownRef}
+        showEditRoleDropdown={showEditRoleDropdown}
+        setShowEditRoleDropdown={setShowEditRoleDropdown}
+        editRoleSearch={editRoleSearch}
+        setEditRoleSearch={setEditRoleSearch}
+        roles={roles}
+        editModalActiveRoles={editModalActiveRoles}
+        editModalFilteredRoles={editModalFilteredRoles}
+        selectedEditRole={selectedEditRole}
+        editRoleSalaryBand={editRoleSalaryBand}
+        showManagerDropdown={showManagerDropdown}
+        setShowManagerDropdown={setShowManagerDropdown}
+        managerSearch={managerSearch}
+        setManagerSearch={setManagerSearch}
+        managerOptions={managerOptions}
+        departments={departments}
+        employmentTypes={employmentTypes}
+        categories={categories}
+        qualifications={qualifications}
+        benefitTemplates={benefitTemplates}
+      />
 
-            {/* ── Modal header ── */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-[#E1F5EE] flex items-center justify-center text-xs font-semibold text-[#0F6E56] flex-shrink-0">
-                  {(employee?.fullName || '?').charAt(0)}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 leading-tight truncate">
-                    {employee?.fullName || 'Edit Employee'}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {[employee?.empId, employee?.designation, employee?.branch].filter(Boolean).join(' · ')}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => { setShowEditModal(false); setActiveEditTab('personal'); }}
-                className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors flex-shrink-0"
-                aria-label="Close"
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </button>
-            </div>
-
-            {/* ── Tab bar ── */}
-            <div className="flex border-b border-gray-100 flex-shrink-0 overflow-x-auto scrollbar-none">
-              {[
-                { key: 'personal',      label: 'Personal',      icon: '👤' },
-                { key: 'employment',    label: 'Employment',    icon: '💼' },
-                { key: 'compensation',  label: 'Compensation',  icon: '₹' },
-                { key: 'documents',     label: 'Documents',     icon: '🪪' },
-                { key: 'emergency',     label: 'Emergency',     icon: '🆘' },
-              ].map((t) => (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => setActiveEditTab(t.key)}
-                  className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors ${
-                    activeEditTab === t.key
-                      ? 'border-[#1B6B6B] text-[#1B6B6B]'
-                      : 'border-transparent text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  <span style={{ fontSize: '12px' }}>{t.icon}</span>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            {/* ── Scrollable body ── */}
-            <form onSubmit={handleSaveEdit} className="flex flex-col flex-1 min-h-0">
-              <div className="flex-1 overflow-y-auto px-5 py-5">
-
-                {/* ══════════════ PERSONAL TAB ══════════════ */}
-                {activeEditTab === 'personal' && (
-                  <div className="space-y-5">
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Identity</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div><label className="block text-xs text-slate-600 mb-1">Full Name</label><input value={form.fullName} onChange={(e) => setForm((p) => ({ ...p, fullName: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" required /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Father&apos;s Name</label><input value={form.fatherName} onChange={(e) => setForm((p) => ({ ...p, fatherName: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" placeholder="Father's full name" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Date of Birth</label><input type="date" value={form.dateOfBirth} onChange={(e) => setForm((p) => ({ ...p, dateOfBirth: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Gender</label><select value={form.gender} onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Blood Group</label><select value={form.bloodGroup} onChange={(e) => setForm((p) => ({ ...p, bloodGroup: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">Select</option>{['A+','A-','B+','B-','O+','O-','AB+','AB-'].map((bg) => <option key={bg} value={bg}>{bg}</option>)}</select></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Marital Status</label><select value={form.maritalStatus} onChange={(e) => setForm((p) => ({ ...p, maritalStatus: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option><option value="Single">Single</option><option value="Married">Married</option><option value="Divorced">Divorced</option><option value="Widowed">Widowed</option></select></div>
-                        {form.maritalStatus === 'Married' && (
-                          <div><label className="block text-xs text-gray-500 mb-1">Marriage / Wedding Date</label><input type="date" value={form.marriageDate} onChange={(e) => setForm((p) => ({ ...p, marriageDate: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                        )}
-                        <div><label className="block text-xs text-gray-500 mb-1">Disability</label><select value={form.disability} onChange={(e) => setForm((p) => ({ ...p, disability: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">None</option><option value="Visual Impairment">Visual Impairment</option><option value="Hearing Impairment">Hearing Impairment</option><option value="Physical Disability">Physical Disability</option><option value="Intellectual Disability">Intellectual Disability</option><option value="Other">Other</option></select></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Highest Qualification</label><select value={form.qualification} onChange={(e) => setForm((p) => ({ ...p, qualification: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{qualifications.map((q) => <option key={q} value={q}>{q}</option>)}{!qualifications.includes('Other') && <option value="Other">Other</option>}</select></div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Contact</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div><label className="block text-xs text-slate-600 mb-1">Email</label><input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" required /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Phone</label><input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Alternative Mobile</label><input type="tel" maxLength={10} placeholder="Alternative 10-digit number" value={form.alternativeMobile} onChange={(e) => setForm((p) => ({ ...p, alternativeMobile: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" /></div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Address</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="col-span-2"><label className="block text-xs text-slate-600 mb-1">Street Address</label><input value={form.streetAddress} onChange={(e) => setForm((p) => ({ ...p, streetAddress: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" placeholder="House/Flat no, Street name" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">City</label><input value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" placeholder="City" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">State</label><select value={form.state} onChange={(e) => setForm((p) => ({ ...p, state: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">Select state</option>{INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Pincode</label><input value={form.pincode} onChange={(e) => setForm((p) => ({ ...p, pincode: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" maxLength={6} placeholder="6-digit pincode" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Country</label><input value={form.country} onChange={(e) => setForm((p) => ({ ...p, country: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" placeholder="Country" /></div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ══════════════ EMPLOYMENT TAB ══════════════ */}
-                {activeEditTab === 'employment' && (
-                  <div className="space-y-5">
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Role & placement</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div><label className="block text-xs text-slate-600 mb-1">Emp ID</label><input value={form.empId} onChange={(e) => setForm((p) => ({ ...p, empId: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-[#1B6B6B] focus:ring-1 focus:ring-[#1B6B6B]/20" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Joining Date</label><input type="date" value={form.joiningDate} onChange={(e) => setForm((p) => ({ ...p, joiningDate: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Department</label><select value={form.department} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{departments.map((d) => <option key={d} value={d}>{d}</option>)}{!departments.includes('Other') && <option value="Other">Other</option>}</select></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Employment Type</label><select value={form.employmentType} onChange={(e) => setForm((p) => ({ ...p, employmentType: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{employmentTypes.map((t) => <option key={t} value={t}>{t}</option>)}{!employmentTypes.includes('Other') && <option value="Other">Other</option>}</select></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Category</label><select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}{!categories.includes('Other') && <option value="Other">Other</option>}</select></div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Location & branch</p>
-                      <div className="relative" ref={locationDropdownRef}>
-                        <label className="block text-xs text-slate-600 mb-1">Location</label>
-                        <div role="button" tabIndex={0} onClick={() => setShowLocationDropdown(true)} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') setShowLocationDropdown(true); }} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px] focus:outline-none focus:border-[#1B6B6B]">
-                          {form.location ? <span>{form.location}</span> : <span className="text-gray-400">Select location...</span>}
-                          <span className="text-gray-400 text-xs">▾</span>
-                        </div>
-                        {showLocationDropdown && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-[60] max-h-52 overflow-hidden">
-                            <div className="p-2 border-b border-gray-100">
-                              <input autoFocus placeholder="Search location..." value={locationSearch} onChange={(e) => setLocationSearch(e.target.value)} className="w-full text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#1B6B6B]" onClick={(e) => e.stopPropagation()} />
-                            </div>
-                            <div className="overflow-y-auto max-h-40">
-                              {structuredLocations.map((l) => l.name).filter((l) => !locationSearch || l.toLowerCase().includes(locationSearch.toLowerCase())).map((loc) => (
-                                <div key={loc} role="button" tabIndex={0} onClick={() => { setForm((prev) => ({ ...prev, location: loc, branch: '' })); setShowLocationDropdown(false); setLocationSearch(''); }} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { setForm((prev) => ({ ...prev, location: loc, branch: '' })); setShowLocationDropdown(false); setLocationSearch(''); } }} className="px-3 py-2.5 hover:bg-[#E8F5F5] cursor-pointer text-sm border-b last:border-0">{loc}</div>
-                              ))}
-                              {structuredLocations.length === 0 && <div className="px-3 py-4 text-center text-sm text-gray-400">No locations configured.<br />Add in Settings → Manage Lists</div>}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-3">
-                        <label className="block text-xs text-slate-600 mb-1">Branch</label>
-                        <select value={form.branch} onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]">
-                          <option value="">—</option>
-                          {(() => { const loc = structuredLocations.find((l) => l.name === form.location); const list = loc ? (loc.branches || []).map((b) => b.name) : branches; return list.map((b) => <option key={b} value={b}>{b}</option>); })()}
-                          <option value="Other">Other</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Designation & reporting</p>
-                      <div className="space-y-3">
-                        <div className="relative" ref={editRoleDropdownRef}>
-                          <label className="block text-xs text-slate-600 mb-1">Designation</label>
-                          <div role="button" tabIndex={0} onClick={() => setShowEditRoleDropdown(true)} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') setShowEditRoleDropdown(true); }} className={`w-full border rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px] ${showEditRoleDropdown ? 'border-[#1B6B6B]' : 'border-gray-200'}`}>
-                            {selectedEditRole ? (<div className="flex items-center gap-2 min-w-0 flex-1"><div className="min-w-0 text-left"><p className="text-sm font-medium text-gray-900">{selectedEditRole.title}</p><p className="text-xs text-gray-400 mt-0.5">{selectedEditRole.reportsTo ? `Reports to ${selectedEditRole.reportsTo}` : 'Top level'}{selectedEditRole.salaryBand?.min != null && selectedEditRole.salaryBand?.min !== '' && ` · ₹${formatLakhs(selectedEditRole.salaryBand.min)}–${formatLakhs(selectedEditRole.salaryBand.max)}/mo`}</p></div></div>) : form.designation ? (<span className="text-gray-800">{form.designation}</span>) : (<span className="text-gray-400">Search or select designation…</span>)}
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              {(selectedEditRole || form.designation) && (<button type="button" onClick={(e) => { e.stopPropagation(); setForm((prev) => ({ ...prev, designation: '', designationRoleId: '' })); }} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>)}
-                              <span className="text-gray-400 text-xs">▾</span>
-                            </div>
-                          </div>
-                          {showEditRoleDropdown && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-[60] max-h-64 overflow-hidden">
-                              <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
-                                <input autoFocus type="text" placeholder="Search by designation or reports-to…" value={editRoleSearch} onChange={(e) => setEditRoleSearch(e.target.value)} onClick={(e) => e.stopPropagation()} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#1B6B6B]" />
-                              </div>
-                              <div className="overflow-y-auto max-h-52">
-                                {roles.length === 0 && <div className="px-3 py-4 text-center"><p className="text-sm text-slate-400 mb-2">No designations defined yet</p><p className="text-xs text-slate-400">Go to Library → Designations to add</p></div>}
-                                {roles.length > 0 && editModalActiveRoles.length === 0 && <div className="px-3 py-4 text-center text-sm text-gray-400">No active designations.</div>}
-                                {roles.length > 0 && editModalActiveRoles.length > 0 && (<>
-                                  <div onMouseDown={(e) => { e.preventDefault(); setForm((prev) => ({ ...prev, designation: '', designationRoleId: '' })); setShowEditRoleDropdown(false); setEditRoleSearch(''); }} className="px-3 py-2 text-xs text-gray-400 hover:bg-gray-50 cursor-pointer border-b border-gray-50">— Clear selection</div>
-                                  {editModalFilteredRoles.map((role) => (
-                                    <div key={role.id} role="button" tabIndex={0} onMouseDown={(e) => { e.preventDefault(); setForm((prev) => ({ ...prev, designation: role.title || '', designationRoleId: role.id })); setShowEditRoleDropdown(false); setEditRoleSearch(''); }} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { setForm((prev) => ({ ...prev, designation: role.title || '', designationRoleId: role.id })); setShowEditRoleDropdown(false); setEditRoleSearch(''); } }} className={`px-3 py-3 hover:bg-[#E8F5F5] cursor-pointer border-b border-slate-50 last:border-0 transition-colors ${selectedEditRole?.id === role.id ? 'bg-[#E8F5F5]' : ''}`}>
-                                      <div className="flex items-center justify-between gap-2">
-                                        <div className="flex-1 min-w-0 text-left"><p className="text-sm font-medium text-gray-900">{role.title}</p><p className="text-xs text-gray-400 mt-0.5">{role.reportsTo ? `Reports to ${role.reportsTo}` : 'Top level'}{role.salaryBand?.min != null && role.salaryBand?.min !== '' && ` · ₹${formatLakhs(role.salaryBand.min)}–${formatLakhs(role.salaryBand.max)}/mo`}</p></div>
-                                        {selectedEditRole?.id === role.id && <span className="text-[#1B6B6B] flex-shrink-0">✓</span>}
-                                      </div>
-                                    </div>
-                                  ))}
-                                  {editModalFilteredRoles.length === 0 && <div className="px-3 py-4 text-center text-sm text-gray-400">No designations found.{editRoleSearch.trim() && (<button type="button" onMouseDown={(e) => { e.preventDefault(); setForm((prev) => ({ ...prev, designation: editRoleSearch.trim(), designationRoleId: '' })); setShowEditRoleDropdown(false); setEditRoleSearch(''); }} className="block mx-auto mt-2 text-xs text-[#1B6B6B] underline">Use &quot;{editRoleSearch.trim()}&quot; as designation</button>)}</div>}
-                                </>)}
-                              </div>
-                            </div>
-                          )}
-                          {selectedEditRole?.salaryBand?.min != null && selectedEditRole.salaryBand.min !== '' && (<p className="text-xs text-gray-400 mt-1">Band: ₹{formatLakhs(Number(selectedEditRole.salaryBand.min))}/mo — ₹{formatLakhs(Number(selectedEditRole.salaryBand.max))}/mo</p>)}
-                        </div>
-
-                        <div>
-                          <label className="block text-xs text-slate-600 mb-1">Reporting Manager</label>
-                          <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
-                            <div role="button" tabIndex={0} onClick={() => setShowManagerDropdown(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowManagerDropdown(true); } }} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-[#1B6B6B] min-h-[42px]">
-                              {form.reportingManagerId ? (<div className="flex items-center gap-2 min-w-0"><div className="w-6 h-6 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B]">{form.reportingManagerName?.charAt(0)}</div><span className="text-slate-800 truncate">{form.reportingManagerName}</span><span className="text-xs text-slate-400 whitespace-nowrap">{form.reportingManagerEmpId}</span></div>) : (<span className="text-slate-400">Select reporting manager</span>)}
-                              <div className="flex items-center gap-1">
-                                {form.reportingManagerId && (<button type="button" onClick={(e) => { e.stopPropagation(); setForm((prev) => ({ ...prev, reportingManagerId: '', reportingManagerName: '', reportingManagerEmpId: '' })); }} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>)}
-                                <span className="text-slate-400 text-xs">▾</span>
-                              </div>
-                            </div>
-                            {showManagerDropdown && (
-                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 max-h-48 overflow-hidden">
-                                <div className="p-2 border-b border-slate-100"><input autoFocus type="text" placeholder="Search by name or ID..." value={managerSearch} onChange={(e) => setManagerSearch(e.target.value)} className="w-full text-sm px-2 py-1.5 border rounded-lg focus:outline-none focus:border-[#1B6B6B]" onClick={(e) => e.stopPropagation()} /></div>
-                                <div className="overflow-y-auto max-h-36">
-                                  <div onClick={() => { setForm((prev) => ({ ...prev, reportingManagerId: '', reportingManagerName: '', reportingManagerEmpId: '' })); setShowManagerDropdown(false); setManagerSearch(''); }} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><span className="text-sm text-slate-400">— None</span></div>
-                                  {managerOptions.filter((emp) => { if (!managerSearch) return true; const term = managerSearch.toLowerCase(); return emp.fullName?.toLowerCase().includes(term) || emp.empId?.toLowerCase().includes(term) || emp.designation?.toLowerCase().includes(term); }).map((emp) => (
-                                    <div key={emp.id} onClick={() => { setForm((prev) => ({ ...prev, reportingManagerId: emp.id, reportingManagerName: emp.fullName || '', reportingManagerEmpId: emp.empId || '' })); setShowManagerDropdown(false); setManagerSearch(''); }} className={`flex items-center gap-3 px-3 py-2 hover:bg-[#E8F5F5] cursor-pointer ${form.reportingManagerId === emp.id ? 'bg-[#E8F5F5]' : ''}`}>
-                                      <div className="w-7 h-7 rounded-full bg-[#C5E8E8] flex items-center justify-center text-xs font-medium text-[#1B6B6B] flex-shrink-0">{emp.fullName?.charAt(0)}</div>
-                                      <div className="flex-1 min-w-0"><p className="text-sm font-medium text-slate-800 truncate">{emp.fullName}</p><p className="text-xs text-slate-400">{emp.empId} · {emp.designation || '—'}</p></div>
-                                      {form.reportingManagerId === emp.id && <span className="text-[#1B6B6B] text-xs">✓</span>}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Previous experience</p>
-                      <div className="space-y-3">
-                        <div><label className="block text-xs text-slate-600 mb-1">Previous Company Name</label><input placeholder="e.g. Infosys Pvt Ltd" value={form.prevCompany} onChange={(e) => setForm((p) => ({ ...p, prevCompany: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Previous Designation</label><input placeholder="e.g. Software Engineer" value={form.prevDesignation} onChange={(e) => setForm((p) => ({ ...p, prevDesignation: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div><label className="block text-xs text-gray-500 mb-1">From Date</label><input type="date" value={form.prevFromDate || ''} onChange={(e) => setForm((p) => ({ ...p, prevFromDate: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                          <div><label className="block text-xs text-gray-500 mb-1">To Date</label><input type="date" value={form.prevToDate || ''} onChange={(e) => setForm((p) => ({ ...p, prevToDate: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                        </div>
-                        {form.prevFromDate && form.prevToDate && (
-                          <div className="px-3 py-1.5 bg-[#E8F5F5] rounded-lg">
-                            <p className="text-xs text-[#1B6B6B]">📅 Duration: {(() => { const from = new Date(form.prevFromDate); const to = new Date(form.prevToDate); const months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()); const years = Math.floor(months / 12); const remainingMonths = months % 12; if (years === 0) return `${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}`; if (remainingMonths === 0) return `${years} year${years !== 1 ? 's' : ''}`; return `${years} year${years !== 1 ? 's' : ''} ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}`; })()}</p>
-                          </div>
-                        )}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div><label className="block text-xs text-slate-600 mb-1">Previous Manager Name</label><input placeholder="Manager's full name" value={form.prevManagerName} onChange={(e) => setForm((p) => ({ ...p, prevManagerName: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                          <div><label className="block text-xs text-slate-600 mb-1">Previous Manager Phone</label><input type="tel" placeholder="Manager's phone number" value={form.prevManagerPhone} onChange={(e) => setForm((p) => ({ ...p, prevManagerPhone: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                        </div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Previous Manager Email</label><input type="email" placeholder="Manager's email address" value={form.prevManagerEmail} onChange={(e) => setForm((p) => ({ ...p, prevManagerEmail: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ══════════════ COMPENSATION TAB ══════════════ */}
-                {activeEditTab === 'compensation' && (
-                  <div className="space-y-5">
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Salary</p>
-                      {form.designation && editRoleSalaryBand && (
-                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl mb-4">
-                          <p className="text-xs text-blue-700 font-medium">💼 Salary band for <strong>{form.designation}</strong>: ₹{formatLakhs(editRoleSalaryBand.min)}/mo — ₹{formatLakhs(editRoleSalaryBand.max)}/mo (₹{formatLakhs(editRoleSalaryBand.min * 12)}—₹{formatLakhs(editRoleSalaryBand.max * 12)} p.a.)</p>
-                        </div>
-                      )}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs text-gray-500 block mb-1.5">Basic Salary (per month) ₹</label>
-                          <input type="number" placeholder="0" value={form.basicSalary || ''} onChange={(e) => { const basic = Number(e.target.value); const hra = Number(form.hra) || 0; const incentive = Number(form.incentive) || 0; const annual = (basic + hra + incentive) * 12; setForm((prev) => ({ ...prev, basicSalary: e.target.value, ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum })); }} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" />
-                          {form.basicSalary ? <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.basicSalary) * 12)} per annum</p> : null}
-                        </div>
-                        <div>
-                          <label className="text-xs text-gray-500 block mb-1.5">HRA (per month) ₹</label>
-                          <input type="number" placeholder="0" value={form.hra || ''} onChange={(e) => { const hra = Number(e.target.value); const basic = Number(form.basicSalary) || 0; const incentive = Number(form.incentive) || 0; const annual = (basic + hra + incentive) * 12; setForm((prev) => ({ ...prev, hra: e.target.value, ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum })); }} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" />
-                          {form.hra ? <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.hra) * 12)} per annum</p> : null}
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Incentive (per month)</label>
-                          <input type="number" min="0" placeholder="0" value={form.incentive} onChange={(e) => { const incentive = Number(e.target.value); const basic = Number(form.basicSalary) || 0; const hra = Number(form.hra) || 0; const annual = (basic + hra + incentive) * 12; setForm((prev) => ({ ...prev, incentive: e.target.value, ctcPerAnnum: annual > 0 ? String(annual) : prev.ctcPerAnnum })); }} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" />
-                          {form.incentive !== '' && form.incentive != null && !Number.isNaN(Number(form.incentive)) && Number(form.incentive) !== 0 && <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.incentive) * 12)} per annum</p>}
-                        </div>
-                        <div>
-                          <label className="text-xs text-gray-500 block mb-1.5">Annual Gross ₹ <span className="text-gray-300 font-normal">(auto-calc · editable)</span></label>
-                          <input type="number" placeholder="Auto-calculated" value={form.ctcPerAnnum || ''} onChange={(e) => setForm((prev) => ({ ...prev, ctcPerAnnum: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" />
-                          {form.ctcPerAnnum ? <p className="text-xs text-gray-400 mt-1">= ₹{formatLakhs(Number(form.ctcPerAnnum) / 12)} per month</p> : null}
-                          {form.ctcPerAnnum && editRoleSalaryBand && (<p className={`text-xs mt-1 font-medium ${Number(form.ctcPerAnnum) >= editRoleSalaryBand.min * 12 && Number(form.ctcPerAnnum) <= editRoleSalaryBand.max * 12 ? 'text-green-600' : 'text-amber-600'}`}>{Number(form.ctcPerAnnum) >= editRoleSalaryBand.min * 12 && Number(form.ctcPerAnnum) <= editRoleSalaryBand.max * 12 ? '✓ Within salary band' : '⚠ Outside salary band'}</p>)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Statutory benefits</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                          <div className="flex items-center justify-between mb-2 gap-2">
-                            <div><p className="text-sm font-medium text-gray-700">Provident Fund (PF)</p><p className="text-xs text-gray-400">Statutory benefit</p></div>
-                            <button type="button" onClick={() => setForm((prev) => ({ ...prev, pfApplicable: !prev.pfApplicable, pfNumber: prev.pfApplicable ? '' : prev.pfNumber }))} className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${form.pfApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}><div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.pfApplicable ? 'translate-x-5' : 'translate-x-0.5'}`} /></button>
-                          </div>
-                          {form.pfApplicable && <input placeholder="PF Account Number" value={form.pfNumber} onChange={(e) => setForm((p) => ({ ...p, pfNumber: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" />}
-                        </div>
-                        <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                          <div className="flex items-center justify-between mb-2 gap-2">
-                            <div><p className="text-sm font-medium text-gray-700">ESIC</p><p className="text-xs text-gray-400">Statutory benefit</p></div>
-                            <button type="button" onClick={() => setForm((prev) => ({ ...prev, esicApplicable: !prev.esicApplicable, esicNumber: prev.esicApplicable ? '' : prev.esicNumber }))} className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${form.esicApplicable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}><div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.esicApplicable ? 'translate-x-5' : 'translate-x-0.5'}`} /></button>
-                          </div>
-                          {form.esicApplicable && <input placeholder="ESIC Number" value={form.esicNumber} onChange={(e) => setForm((p) => ({ ...p, esicNumber: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" />}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100">
-                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Additional benefits</p>
-                        <button type="button" onClick={() => { const newBenefit = { id: `benefit_${Date.now()}`, name: '', value: '', notes: '' }; setForm((prev) => ({ ...prev, customBenefits: [...(prev.customBenefits || []), newBenefit] })); }} className="text-xs text-[#1B6B6B] hover:underline">+ Add benefit</button>
-                      </div>
-                      {(form.customBenefits || []).length === 0 && (
-                        <button type="button" onClick={() => { setForm((prev) => ({ ...prev, customBenefits: [{ id: `benefit_${Date.now()}`, name: '', value: '', notes: '' }] })); }} className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-[#1B6B6B] hover:text-[#1B6B6B] transition-colors">+ Add benefit (Medical Insurance, Food Allowance, etc.)</button>
-                      )}
-                      <div className="space-y-2">
-                        {(form.customBenefits || []).map((benefit, index) => (
-                          <div key={benefit.id} className="p-3 border border-gray-100 rounded-xl bg-gray-50">
-                            <div className="flex gap-2 mb-2">
-                              <select value={!benefit.name ? '' : benefitTemplates.some((t) => t.name === benefit.name) ? benefit.name : '__custom__'} onChange={(e) => { const v = e.target.value; setForm((prev) => { const updated = [...(prev.customBenefits || [])]; const cur = updated[index]; updated[index] = { ...cur, name: v === '__custom__' ? '__custom__' : v, customName: v === '__custom__' ? cur.customName || '' : '' }; return { ...prev, customBenefits: updated }; }); }} className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white"><option value="">Select benefit...</option>{benefitTemplates.map((bt) => <option key={bt.id} value={bt.name}>{bt.name}</option>)}<option value="__custom__">Other (type below)</option></select>
-                              <button type="button" onClick={() => { setForm((prev) => ({ ...prev, customBenefits: (prev.customBenefits || []).filter((_, i) => i !== index) })); }} className="text-red-400 hover:text-red-600 px-2">✕</button>
-                            </div>
-                            {(benefit.name === '__custom__' || (benefit.name && !benefitTemplates.some((t) => t.name === benefit.name))) && (<input placeholder="Enter benefit name" value={benefit.name === '__custom__' ? benefit.customName || '' : benefit.name || ''} onChange={(e) => { setForm((prev) => { const updated = [...(prev.customBenefits || [])]; updated[index] = { ...updated[index], name: '__custom__', customName: e.target.value }; return { ...prev, customBenefits: updated }; }); }} className="w-full border rounded-lg px-3 py-2 text-sm mt-2 bg-white" />)}
-                            <div className="grid grid-cols-2 gap-2 mt-2">
-                              <input placeholder="Value (e.g. ₹5,00,000)" value={benefit.value} onChange={(e) => { setForm((prev) => { const updated = [...(prev.customBenefits || [])]; updated[index] = { ...updated[index], value: e.target.value }; return { ...prev, customBenefits: updated }; }); }} className="border rounded-lg px-3 py-2 text-sm bg-white" />
-                              <input placeholder="Notes (e.g. Family floater)" value={benefit.notes} onChange={(e) => { setForm((prev) => { const updated = [...(prev.customBenefits || [])]; updated[index] = { ...updated[index], notes: e.target.value }; return { ...prev, customBenefits: updated }; }); }} className="border rounded-lg px-3 py-2 text-sm bg-white" />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ══════════════ DOCUMENTS TAB ══════════════ */}
-                {activeEditTab === 'documents' && (
-                  <div className="space-y-5">
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Government IDs</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div><label className="block text-xs text-slate-600 mb-1">PAN</label><input value={form.panNumber} onChange={(e) => setForm((p) => ({ ...p, panNumber: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Aadhaar</label><input value={form.aadhaarNumber} onChange={(e) => setForm((p) => ({ ...p, aadhaarNumber: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" placeholder="12-digit number" /></div>
-                        <div className="col-span-2"><label className="block text-xs text-slate-600 mb-1">Driving Licence No.</label><input value={form.drivingLicenceNumber} onChange={(e) => setForm((p) => ({ ...p, drivingLicenceNumber: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" placeholder="e.g. MH0120210012345" /></div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Bank details</p>
-                      <div className="space-y-3">
-                        <div><label className="text-xs text-gray-500 block mb-1.5">Bank Name</label><input value={form.bankName} onChange={(e) => setForm((p) => ({ ...p, bankName: e.target.value }))} placeholder="e.g. State Bank of India" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                        <div><label className="text-xs text-gray-500 block mb-1.5">Account Holder Name</label><input value={form.accountHolderName} onChange={(e) => setForm((p) => ({ ...p, accountHolderName: e.target.value }))} placeholder="As per bank records" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" /></div>
-                        <div><label className="text-xs text-gray-500 block mb-1.5">IFSC Code</label><input value={form.ifscCode} onChange={(e) => setForm((p) => ({ ...p, ifscCode: e.target.value.toUpperCase().trim() }))} placeholder="e.g. SBIN0001234" maxLength={11} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono uppercase focus:outline-none focus:border-[#1B6B6B]" /></div>
-                        <div><label className="text-xs text-gray-500 block mb-1.5">Account Type</label><select value={form.accountType} onChange={(e) => setForm((p) => ({ ...p, accountType: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">Select account type...</option><option value="Savings">Savings</option><option value="Current">Current</option><option value="Salary">Salary</option></select></div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ══════════════ EMERGENCY TAB ══════════════ */}
-                {activeEditTab === 'emergency' && (
-                  <div className="space-y-5">
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Emergency contact</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div><label className="block text-xs text-slate-600 mb-1">Contact Name</label><input value={form.emergencyContactName} onChange={(e) => setForm((p) => ({ ...p, emergencyContactName: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" placeholder="Full name" /></div>
-                        <div><label className="block text-xs text-slate-600 mb-1">Relationship</label><select value={form.emergencyRelationship} onChange={(e) => setForm((p) => ({ ...p, emergencyRelationship: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"><option value="">—</option><option value="Father">Father</option><option value="Mother">Mother</option><option value="Spouse">Spouse</option><option value="Sibling">Sibling</option><option value="Friend">Friend</option><option value="Other">Other</option></select></div>
-                        <div className="col-span-2"><label className="block text-xs text-slate-600 mb-1">Contact Phone</label><input value={form.emergencyPhone} onChange={(e) => setForm((p) => ({ ...p, emergencyPhone: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]" maxLength={10} placeholder="10-digit mobile number" /></div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ── Modal footer ── */}
-              <div className="flex gap-3 px-5 py-4 border-t border-gray-100 flex-shrink-0 bg-white">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setActiveEditTab('personal');
-                    setShowLocationDropdown(false);
-                    setLocationSearch('');
-                    setEditRoleSearch('');
-                    setShowEditRoleDropdown(false);
-                  }}
-                  className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  {saving ? 'Saving…' : 'Save changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
+      <AssetModals
+        employee={employee}
+        saving={saving}
+        showAssignAssetModal={showAssignAssetModal}
+        setShowAssignAssetModal={setShowAssignAssetModal}
+        assignAssetForm={assignAssetForm}
+        handleAssignAssetChange={handleAssignAssetChange}
+        handleSaveAssignFromProfile={handleSaveAssignFromProfile}
+        assetList={assetList}
+        showProfileAssignModal={showProfileAssignModal}
+        setShowProfileAssignModal={setShowProfileAssignModal}
+        profileAssignMode={profileAssignMode}
+        setProfileAssignMode={setProfileAssignMode}
+        showProfileAssetDropdown={showProfileAssetDropdown}
+        setShowProfileAssetDropdown={setShowProfileAssetDropdown}
+        profileAssetSearch={profileAssetSearch}
+        setProfileAssetSearch={setProfileAssetSearch}
+        setAssignAssetForm={setAssignAssetForm}
+        issueConsumableAsset={issueConsumableAsset}
+        setIssueConsumableAsset={setIssueConsumableAsset}
+        issueConsumableForm={issueConsumableForm}
+        setIssueConsumableForm={setIssueConsumableForm}
+        handleIssueConsumableFromProfile={handleIssueConsumableFromProfile}
+        returnAsset={returnAsset}
+        setReturnAsset={setReturnAsset}
+        returnAssetForm={returnAssetForm}
+        handleReturnAssetChange={handleReturnAssetChange}
+        handleSaveReturnFromProfile={handleSaveReturnFromProfile}
+        returnConsumableModal={returnConsumableModal}
+        setReturnConsumableModal={setReturnConsumableModal}
+        returnQty={returnQty}
+        setReturnQty={setReturnQty}
+        returnCondition={returnCondition}
+        setReturnCondition={setReturnCondition}
+        returnNotes={returnNotes}
+        setReturnNotes={setReturnNotes}
+        handleReturnConsumableFromProfile={handleReturnConsumableFromProfile}
+      />
 
       {tab === 'assets' && (
         <AssetsTab
@@ -3971,1177 +3657,86 @@ export default function EmployeeProfile() {
         </div>
       )}
 
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
-            <div className="text-center mb-5">
-              <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
-                <span className="text-2xl">🗑️</span>
-              </div>
-              <h3 className="text-base font-semibold text-gray-800 mb-1">Delete Employee Permanently?</h3>
-              <p className="text-sm text-gray-500">
-                This will permanently delete <strong>{employee.fullName}</strong> and ALL their data including documents,
-                leave history, assets, and onboarding records.
-              </p>
-            </div>
-
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl mb-4">
-              <p className="text-xs text-red-600 font-medium">
-                ⚠️ This action cannot be undone. Only delete incorrect or duplicate records. This action is permanent.
-              </p>
-            </div>
-
-            <div className="mb-4">
-              <label className="text-xs text-gray-500 block mb-1.5">
-                Type <strong>{employee.fullName}</strong> to confirm
-              </label>
-              <input
-                placeholder={employee.fullName}
-                value={deleteConfirmName}
-                onChange={(e) => setDeleteConfirmName(e.target.value)}
-                className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-400 border-red-200"
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setDeleteConfirmName('');
-                }}
-                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={deleteConfirmName !== employee.fullName || deleting}
-                onClick={handleDeleteEmployee}
-                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {deleting ? 'Deleting...' : 'Delete Permanently'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showCompleteOffboardingModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="text-center mb-5">
-              <div className="text-4xl mb-3">🏁</div>
-              <h3 className="text-base font-semibold text-gray-800 mb-1">Complete Offboarding?</h3>
-              <p className="text-sm text-gray-500">
-                {employee.fullName} will be marked as Inactive. This cannot be undone.
-              </p>
-            </div>
-            <div className="mb-4">
-              <label className="text-xs text-gray-500 block mb-1.5">Final Notes (optional)</label>
-              <textarea
-                placeholder="e.g. All clearances done, F&F paid on 30/03/2026..."
-                value={completionNotes}
-                onChange={(e) => setCompletionNotes(e.target.value)}
-                rows={3}
-                className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]"
-              />
-            </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCompleteOffboardingModal(false);
-                  setCompletionNotes('');
-                }}
-                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCompleteOffboarding}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : 'Confirm & Close'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showRehireModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-xl">
-            <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-800">Rehire Employee</h2>
-                <p className="text-sm text-gray-400 mt-0.5">{employee.fullName} will be reactivated</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowRehireModal(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-                <p className="text-sm font-semibold text-green-800 mb-1">Previous employment preserved</p>
-                <p className="text-xs text-green-600">
-                  All documents, leave history, and records from previous employment will be kept. A new tenure will begin.
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">New Joining Date *</label>
-                <input
-                  type="date"
-                  value={rehireForm.newJoiningDate}
-                  onChange={(e) => setRehireForm((prev) => ({ ...prev, newJoiningDate: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                <p className="text-xs text-blue-700">
-                  💡 All other details (designation, department, salary etc.) can be updated by editing the employee
-                  profile after rehiring.
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Notes (optional)</label>
-                <textarea
-                  placeholder="e.g. Rehired as Senior Developer after 6 months gap"
-                  value={rehireForm.notes}
-                  onChange={(e) => setRehireForm((prev) => ({ ...prev, notes: e.target.value }))}
-                  rows={2}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-            </div>
-
-            <div className="p-6 border-t flex-shrink-0 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setShowRehireModal(false)}
-                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleRehireEmployee}
-                disabled={!rehireForm.newJoiningDate || saving}
-                className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
-              >
-                {saving ? 'Rehiring…' : '✓ Confirm Rehire'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showAssignAssetModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Assign Asset</h2>
-            <form onSubmit={handleSaveAssignFromProfile} className="space-y-4">
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Employee</p>
-                <p className="text-sm font-medium text-slate-800">
-                  {employee.fullName} ({employee.empId})
-                </p>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-600 mb-1">Asset</label>
-                <select
-                  name="assetId"
-                  value={assignAssetForm.assetId}
-                  onChange={handleAssignAssetChange}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                >
-                  <option value="">Select asset</option>
-                  {assetList
-                    .filter((a) => (a.status || 'Available') === 'Available')
-                    .map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.assetId} · {a.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-slate-600 mb-1">Issue Date</label>
-                  <input
-                    type="date"
-                    name="issueDate"
-                    value={assignAssetForm.issueDate}
-                    onChange={handleAssignAssetChange}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-600 mb-1">Condition at Issue</label>
-                  <select
-                    name="condition"
-                    value={assignAssetForm.condition}
-                    onChange={handleAssignAssetChange}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                  >
-                    <option value="New">New</option>
-                    <option value="Good">Good</option>
-                    <option value="Fair">Fair</option>
-                    <option value="Poor">Poor</option>
-                    <option value="Damaged">Damaged</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-600 mb-1">Notes</label>
-                <textarea
-                  name="notes"
-                  value={assignAssetForm.notes}
-                  onChange={handleAssignAssetChange}
-                  rows={3}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                  placeholder="Any special instructions or comments"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAssignAssetModal(false)}
-                  className="text-sm text-slate-500 hover:text-slate-700"
-                  disabled={saving}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
-                  disabled={saving}
-                >
-                  {saving ? 'Assigning…' : 'Assign Asset'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showProfileAssignModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 max-h-[92vh] flex flex-col overflow-hidden">
-
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
-              <div>
-                <h2 className="text-base font-semibold text-gray-800">Assign asset</h2>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {profileAssignMode === 'trackable' ? 'Assign a unique tracked item' : 'Issue from consumable stock'}
-                </p>
-              </div>
-              <button type="button" onClick={() => { setShowProfileAssignModal(null); setShowProfileAssetDropdown(false); setProfileAssetSearch(''); setIssueConsumableAsset(null); setProfileAssignMode('trackable'); }} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 text-sm">✕</button>
-            </div>
-
-            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
-
-              {/* Employee context */}
-              <div className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-100">
-                <div className="w-8 h-8 rounded-full bg-[#E1F5EE] flex items-center justify-center text-[#0F6E56] text-xs font-semibold flex-shrink-0">
-                  {employee.fullName?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{employee.fullName}</p>
-                  <p className="text-xs text-gray-400">{employee.empId} · {employee.designation || employee.department || ''}</p>
-                </div>
-              </div>
-
-              {/* Mode picker */}
-              <div>
-                <p className="text-xs font-medium text-gray-500 mb-2">Asset mode</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { mode: 'trackable', label: 'Trackable', desc: 'One item, one person', icon: '💻', activeBg: '#E1F5EE', activeBorder: '#1B6B6B', activeText: '#0F6E56' },
-                    { mode: 'consumable', label: 'Consumable', desc: 'Issue from stock', icon: '📦', activeBg: '#EAF3DE', activeBorder: '#639922', activeText: '#27500A' },
-                  ].map(({ mode, label, desc, icon, activeBg, activeBorder, activeText }) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => { setProfileAssignMode(mode); setAssignAssetForm((p) => ({ ...p, assetId: '' })); setIssueConsumableAsset(null); setShowProfileAssetDropdown(false); setProfileAssetSearch(''); }}
-                      className="text-left p-3 rounded-xl border-2 transition-all"
-                      style={{ borderColor: profileAssignMode === mode ? activeBorder : '#E5E7EB', background: profileAssignMode === mode ? activeBg : '#FAFAFA' }}
-                    >
-                      <span className="text-lg block mb-1">{icon}</span>
-                      <p className="text-xs font-semibold" style={{ color: profileAssignMode === mode ? activeText : '#374151' }}>{label}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">{desc}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* TRACKABLE FLOW */}
-              {profileAssignMode === 'trackable' && (
-                <form onSubmit={handleSaveAssignFromProfile} id="profile-assign-form" className="space-y-3">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-2">Select asset</p>
-                    <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setShowProfileAssetDropdown(true)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowProfileAssetDropdown(true); }}
-                        className="w-full border-2 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between min-h-[42px] transition-colors"
-                        style={{ borderColor: assignAssetForm.assetId ? '#1B6B6B' : '#E5E7EB', background: assignAssetForm.assetId ? '#E1F5EE' : 'white' }}
-                      >
-                        {assignAssetForm.assetId ? (
-                          (() => {
-                            const sel = assetList.find((x) => x.id === assignAssetForm.assetId);
-                            return sel ? (
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <span className="font-mono text-xs bg-white px-1.5 py-0.5 rounded border border-[#9FE1CB] text-[#1B6B6B] shrink-0">{sel.assetId}</span>
-                                <span className="truncate text-[#0F6E56] font-medium">{sel.name}</span>
-                                {sel.condition && <span className="text-[10px] text-[#1B6B6B] bg-white px-1.5 py-0.5 rounded-full border border-[#9FE1CB] shrink-0">{sel.condition}</span>}
-                              </div>
-                            ) : <span className="text-gray-400">Select asset…</span>;
-                          })()
-                        ) : (
-                          <span className="text-gray-400 text-sm">Search or select an asset…</span>
-                        )}
-                        <span className="text-gray-400 text-xs shrink-0 ml-2">▾</span>
-                      </div>
-                      {showProfileAssetDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-[60] overflow-hidden">
-                          <div className="p-2 border-b border-gray-100">
-                            <input
-                              autoFocus
-                              placeholder="Search by name or asset ID…"
-                              value={profileAssetSearch}
-                              onChange={(e) => setProfileAssetSearch(e.target.value)}
-                              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#1B6B6B]"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                          <div className="overflow-y-auto max-h-44">
-                            {assetList
-                              .filter((a) => (a.mode || 'trackable') === 'trackable' && ((a.status || 'Available') === 'Available' || !a.status))
-                              .filter((a) => !profileAssetSearch || (a.name || '').toLowerCase().includes(profileAssetSearch.toLowerCase()) || (a.assetId || '').toLowerCase().includes(profileAssetSearch.toLowerCase()))
-                              .map((asset) => (
-                                <div
-                                  key={asset.id}
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={() => { setAssignAssetForm((prev) => ({ ...prev, assetId: asset.id })); setShowProfileAssetDropdown(false); setProfileAssetSearch(''); }}
-                                  onKeyDown={(e) => { if (e.key === 'Enter') { setAssignAssetForm((prev) => ({ ...prev, assetId: asset.id })); setShowProfileAssetDropdown(false); setProfileAssetSearch(''); }}}
-                                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 hover:bg-[#E8F5F5] transition-colors ${assignAssetForm.assetId === asset.id ? 'bg-[#E1F5EE]' : ''}`}
-                                >
-                                  <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 shrink-0">{asset.assetId}</span>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium truncate text-gray-800">{asset.name}</p>
-                                    <p className="text-xs text-gray-400 truncate">{asset.type}{asset.brand ? ` · ${asset.brand}` : ''}{asset.condition ? ` · ${asset.condition}` : ''}</p>
-                                  </div>
-                                  {assignAssetForm.assetId === asset.id && <span className="text-[#1B6B6B] text-sm shrink-0">✓</span>}
-                                </div>
-                              ))}
-                            {assetList.filter((a) => (a.mode || 'trackable') === 'trackable' && ((a.status || 'Available') === 'Available' || !a.status)).length === 0 && (
-                              <p className="text-center py-4 text-sm text-gray-400">No available trackable assets</p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Issue date</label>
-                      <input type="date" name="issueDate" value={assignAssetForm.issueDate} onChange={handleAssignAssetChange} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Expected return <span className="text-gray-300 font-normal">optional</span></label>
-                      <input type="date" name="expectedReturnDate" value={assignAssetForm.expectedReturnDate || ''} onChange={handleAssignAssetChange} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Condition at issue</label>
-                    <div className="flex gap-2 flex-wrap">
-                      {['New', 'Good', 'Fair', 'Poor', 'Damaged'].map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setAssignAssetForm((p) => ({ ...p, condition: c }))}
-                          className="text-xs px-3 py-1.5 rounded-full border transition-colors"
-                          style={{
-                            borderColor: assignAssetForm.condition === c ? '#1B6B6B' : '#E5E7EB',
-                            background: assignAssetForm.condition === c ? '#1B6B6B' : 'transparent',
-                            color: assignAssetForm.condition === c ? 'white' : '#6B7280',
-                          }}
-                        >
-                          {c}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Notes <span className="text-gray-300 font-normal">optional</span></label>
-                    <textarea name="notes" value={assignAssetForm.notes} onChange={handleAssignAssetChange} rows={2} placeholder="Any special instructions…" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]" />
-                  </div>
-                </form>
-              )}
-
-              {/* CONSUMABLE FLOW */}
-              {profileAssignMode === 'consumable' && (
-                <div className="space-y-3">
-                  <p className="text-xs font-medium text-gray-500">Available consumables</p>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {assetList.filter((a) => (a.mode || 'trackable') === 'consumable' && Number(a.availableStock) > 0).length === 0 && (
-                      <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                        <p className="text-sm text-gray-400">No consumables available in stock</p>
-                      </div>
-                    )}
-                    {assetList
-                      .filter((a) => (a.mode || 'trackable') === 'consumable' && Number(a.availableStock) > 0)
-                      .map((a) => (
-                        <div
-                          key={a.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => { setIssueConsumableAsset(a); setIssueConsumableForm((p) => ({ ...p, quantity: 1, issueDate: p.issueDate || new Date().toISOString().slice(0, 10), condition: 'Good', notes: '' })); }}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { setIssueConsumableAsset(a); } }}
-                          className="flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all"
-                          style={{ borderColor: issueConsumableAsset?.id === a.id ? '#639922' : '#E5E7EB', background: issueConsumableAsset?.id === a.id ? '#EAF3DE' : 'white' }}
-                        >
-                          <div className="w-9 h-9 rounded-lg bg-green-50 flex items-center justify-center text-lg flex-shrink-0">📦</div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">{a.name}</p>
-                            <p className="text-xs text-gray-400">{a.type} · {a.availableStock} available</p>
-                          </div>
-                          {issueConsumableAsset?.id === a.id && <span className="text-green-700 text-sm shrink-0">✓</span>}
-                        </div>
-                      ))}
-                  </div>
-
-                  {issueConsumableAsset && (
-                    <form onSubmit={handleIssueConsumableFromProfile} id="profile-assign-form" className="space-y-3 pt-2 border-t border-gray-100">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Quantity</label>
-                          <input type="number" min={1} max={Number(issueConsumableAsset.availableStock) || 0} value={issueConsumableForm.quantity} onChange={(e) => setIssueConsumableForm((p) => ({ ...p, quantity: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
-                          <p className="text-[10px] text-gray-400 mt-1">Max: {issueConsumableAsset.availableStock}</p>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Issue date</label>
-                          <input type="date" value={issueConsumableForm.issueDate} onChange={(e) => setIssueConsumableForm((p) => ({ ...p, issueDate: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B6B6B]" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1.5">Notes <span className="text-gray-300 font-normal">optional</span></label>
-                        <textarea value={issueConsumableForm.notes} onChange={(e) => setIssueConsumableForm((p) => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Any instructions…" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]" />
-                      </div>
-                    </form>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex gap-3 px-5 py-4 border-t border-gray-100 flex-shrink-0 bg-white">
-              <button type="button" onClick={() => { setShowProfileAssignModal(null); setShowProfileAssetDropdown(false); setProfileAssetSearch(''); setIssueConsumableAsset(null); setProfileAssignMode('trackable'); }} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button
-                type="submit"
-                form="profile-assign-form"
-                disabled={saving || (profileAssignMode === 'trackable' ? !assignAssetForm.assetId : !issueConsumableAsset)}
-                className="flex-2 flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {saving ? 'Saving…' : profileAssignMode === 'trackable' ? 'Assign asset' : 'Issue consumable'}
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {returnAsset && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Return Asset</h2>
-            <form onSubmit={handleSaveReturnFromProfile} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-slate-500">Asset</p>
-                  <p className="text-sm font-medium text-slate-800">
-                    {returnAsset.assetId} · {returnAsset.name}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Employee</p>
-                  <p className="text-sm text-slate-800">
-                    {employee.fullName} ({employee.empId})
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-slate-600 mb-1">Return Date</label>
-                  <input
-                    type="date"
-                    name="date"
-                    value={returnAssetForm.date}
-                    onChange={handleReturnAssetChange}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-600 mb-1">Condition on Return</label>
-                  <select
-                    name="condition"
-                    value={returnAssetForm.condition}
-                    onChange={handleReturnAssetChange}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                  >
-                    <option value="New">New</option>
-                    <option value="Good">Good</option>
-                    <option value="Fair">Fair</option>
-                    <option value="Poor">Poor</option>
-                    <option value="Damaged">Damaged</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-600 mb-1">Notes</label>
-                <textarea
-                  name="notes"
-                  value={returnAssetForm.notes}
-                  onChange={handleReturnAssetChange}
-                  rows={3}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                  placeholder="Any damage or notes on return"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setReturnAsset(null)}
-                  className="text-sm text-slate-500 hover:text-slate-700"
-                  disabled={saving}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
-                  disabled={saving}
-                >
-                  {saving ? 'Saving…' : 'Save Return'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {returnConsumableModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
-            <h3 className="font-semibold text-gray-900 mb-1">
-              Return {returnConsumableModal.asset?.name}
-            </h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Issued to {employee.fullName} · Qty: {returnConsumableModal.assignment?.quantity}
-            </p>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Quantity to Return</label>
-                <input
-                  type="number"
-                  min="1"
-                  max={returnConsumableModal.assignment?.quantity}
-                  value={returnQty}
-                  onChange={(e) => setReturnQty(Number(e.target.value))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  Max: {returnConsumableModal.assignment?.quantity}
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Condition on Return</label>
-                <select
-                  value={returnCondition}
-                  onChange={(e) => setReturnCondition(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                >
-                  <option>Good</option>
-                  <option>Fair</option>
-                  <option>Poor</option>
-                  <option>Damaged</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Notes (optional)</label>
-                <textarea
-                  value={returnNotes}
-                  onChange={(e) => setReturnNotes(e.target.value)}
-                  placeholder="Any damage or notes..."
-                  rows={2}
-                  className="w-full border rounded-lg px-3 py-2 text-sm resize-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-4">
-              <button
-                onClick={() => {
-                  setReturnConsumableModal(null);
-                  setReturnQty(1);
-                  setReturnCondition('Good');
-                  setReturnNotes('');
-                }}
-                className="flex-1 py-2 border rounded-xl text-sm text-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReturnConsumableFromProfile}
-                className="flex-1 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
-              >
-                Confirm Return
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {completingTask && !isInactive && canEditEmployees && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
-            <h3 className="font-medium mb-3">
-              Complete: {completingTask.title}
-            </h3>
-            <textarea
-              placeholder="Add notes (optional)..."
-              value={taskNotes}
-              onChange={(e) => setTaskNotes(e.target.value)}
-              rows={3}
-              className="w-full border rounded-xl px-3 py-2 text-sm resize-none mb-3"
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setCompletingTask(null)}
-                className="flex-1 py-2 border rounded-xl text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await markTaskComplete(completingTask.id, taskNotes);
-                    setCompletingTask(null);
-                    setTaskNotes('');
-                  } catch {
-                    showError('Failed to update task');
-                  }
-                }}
-                className="flex-1 py-2 bg-green-600 text-white rounded-xl text-sm font-medium"
-              >
-                Mark Complete ✓
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {completingOffTask && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
-            <h3 className="font-medium mb-3">
-              Complete: {completingOffTask.title}
-            </h3>
-            <textarea
-              placeholder="Add notes (optional)..."
-              value={offTaskNotes}
-              onChange={(e) => setOffTaskNotes(e.target.value)}
-              rows={3}
-              className="w-full border rounded-xl px-3 py-2 text-sm resize-none mb-3"
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setCompletingOffTask(null)}
-                className="flex-1 py-2 border rounded-xl text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await markOffboardingTaskComplete(completingOffTask.id, offTaskNotes);
-                    setCompletingOffTask(null);
-                    setOffTaskNotes('');
-                  } catch {
-                    showError('Failed to update task');
-                  }
-                }}
-                className="flex-1 py-2 bg-green-600 text-white rounded-xl text-sm font-medium"
-              >
-                Mark Complete ✓
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showOnboardingWarningModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-[60] sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 w-full sm:max-w-sm text-center shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="text-5xl mb-4">⚠️</div>
-            <h3 className="text-base font-semibold text-gray-800 mb-2">Onboarding Not Complete</h3>
-            <p className="text-sm text-gray-500 mb-2">
-              {!onboardingStartedForOff
-                ? 'Onboarding has not been started for this employee.'
-                : `Onboarding is only ${onboardingPctForOff}% complete.`}
-            </p>
-            <p className="text-sm text-gray-500 mb-6">Are you sure you want to start the offboarding process?</p>
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowOnboardingWarningModal(false);
-                  setShowResignationModal(true);
-                }}
-                className="w-full py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600"
-              >
-                Yes, Continue with Offboarding
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowOnboardingWarningModal(false);
-                  setTab('onboarding');
-                }}
-                className="w-full py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50"
-              >
-                Go to Onboarding First
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showResignationModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Record Resignation</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Resignation Date</label>
-                <input
-                  type="date"
-                  value={resignForm.resignationDate}
-                  onChange={(e) => setResignForm((f) => ({ ...f, resignationDate: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Notice Period</label>
-                <select
-                  value={resignForm.noticePeriodDays}
-                  onChange={(e) => setResignForm((f) => ({ ...f, noticePeriodDays: Number(e.target.value) }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
-                >
-                  <option value={15}>15 days</option>
-                  <option value={30}>30 days</option>
-                  <option value={45}>45 days</option>
-                  <option value={60}>60 days</option>
-                  <option value={90}>90 days</option>
-                </select>
-              </div>
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                <p className="text-xs text-amber-500">Expected Last Day (auto-calculated)</p>
-                <p className="text-base font-bold text-amber-800 mt-1">
-                  {expectedResignationLastDay ? toDisplayDate(expectedResignationLastDay) : '— select dates above'}
-                </p>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Reason</label>
-                <select
-                  value={resignForm.reason}
-                  onChange={(e) => setResignForm((f) => ({ ...f, reason: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
-                >
-                  <option value="">Select reason</option>
-                  <option value="Better Opportunity">Better Opportunity</option>
-                  <option value="Higher Studies">Higher Studies</option>
-                  <option value="Personal Reasons">Personal Reasons</option>
-                  <option value="Relocation">Relocation</option>
-                  <option value="Health Reasons">Health Reasons</option>
-                  <option value="Entrepreneurship">Entrepreneurship</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Notes (optional)</label>
-                <textarea
-                  value={resignForm.notes}
-                  onChange={(e) => setResignForm((f) => ({ ...f, notes: e.target.value }))}
-                  rows={3}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button
-                type="button"
-                onClick={() => setShowResignationModal(false)}
-                className="flex-1 py-2.5 border rounded-xl text-sm text-gray-600"
-                disabled={saving}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleRecordResignation}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : 'Record Resignation'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showWithdrawModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Withdraw Resignation</h2>
-            <div className="text-center py-4">
-              <div className="text-5xl mb-4">🔄</div>
-              <h3 className="text-base font-semibold text-gray-800 mb-2">
-                Withdraw {employee.fullName}&apos;s Resignation?
-              </h3>
-              <p className="text-sm text-gray-500 mb-4">
-                Employee will return to Active status. All offboarding data will be preserved in history for audit
-                trail.
-              </p>
-              <textarea
-                placeholder="Notes (e.g. Employee retained with salary revision)"
-                value={withdrawNotes}
-                onChange={(e) => setWithdrawNotes(e.target.value)}
-                rows={3}
-                className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none text-left"
-              />
-            </div>
-            <div className="flex gap-2 mt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowWithdrawModal(false);
-                  setWithdrawNotes('');
-                }}
-                className="flex-1 py-2.5 border rounded-xl text-sm text-gray-600"
-                disabled={saving}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleWithdrawResignation}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : 'Yes, Withdraw Resignation'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showBuyoutModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Notice Period Buyout</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Company is buying out the remaining Notice Period. Employee will exit earlier than planned.
-            </p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Actual Last Day</label>
-                <input
-                  type="date"
-                  value={buyoutForm.actualLastDay}
-                  onChange={(e) => setBuyoutForm((f) => ({ ...f, actualLastDay: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
-                />
-              </div>
-              {buyoutDaysPreview != null && (
-                <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
-                  <p className="text-xs text-blue-500">Days being bought out</p>
-                  <p className="text-lg font-bold text-blue-700 mt-1">{buyoutDaysPreview} days</p>
-                </div>
-              )}
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Notes (optional)</label>
-                <textarea
-                  value={buyoutForm.notes}
-                  onChange={(e) => setBuyoutForm((f) => ({ ...f, notes: e.target.value }))}
-                  rows={3}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button
-                type="button"
-                onClick={() => setShowBuyoutModal(false)}
-                className="flex-1 py-2.5 border rounded-xl text-sm text-gray-600"
-                disabled={saving}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleNoticeBuyout}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : 'Confirm Buyout'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {cropModalOpen && rawImageSrc && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <div>
-                <h3 className="text-base font-semibold text-gray-800">Adjust Photo</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Pinch or scroll to zoom · Drag to reposition</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setCropModalOpen(false);
-                  setRawImageSrc(null);
-                }}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="relative bg-gray-900" style={{ height: '320px' }}>
-              <Cropper
-                image={rawImageSrc}
-                crop={crop}
-                zoom={zoom}
-                aspect={1}
-                cropShape="round"
-                showGrid={false}
-                onCropChange={setCrop}
-                onZoomChange={setZoom}
-                onCropComplete={(_, pixels) => setCroppedAreaPixels(pixels)}
-                style={{
-                  containerStyle: { borderRadius: '0' },
-                  cropAreaStyle: {
-                    border: '3px solid #1B6B6B',
-                    boxShadow: '0 0 0 9999px rgba(0,0,0,0.6)',
-                  },
-                }}
-              />
-            </div>
-
-            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-400 w-4">🔍</span>
-                <input
-                  type="range"
-                  min={1}
-                  max={3}
-                  step={0.05}
-                  value={zoom}
-                  onChange={(ev) => setZoom(Number(ev.target.value))}
-                  className="flex-1 accent-[#1B6B6B]"
-                />
-                <span className="text-xs text-gray-400 w-4">🔎</span>
-              </div>
-            </div>
-
-            <div className="flex gap-3 p-4 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setCropModalOpen(false);
-                  setRawImageSrc(null);
-                }}
-                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={uploadingPhoto}
-                onClick={async () => {
-                  if (!croppedAreaPixels) {
-                    showError('Please adjust the crop area');
-                    return;
-                  }
-                  try {
-                    setUploadingPhoto(true);
-                    setCropModalOpen(false);
-
-                    const blob = await getCroppedBlob(rawImageSrc, croppedAreaPixels);
-
-                    const photoRef = storageRef(storage, `companies/${companyId}/employees/${empId}/profile.jpg`);
-
-                    const snapshot = await uploadBytes(photoRef, blob, {
-                      contentType: 'image/jpeg',
-                      customMetadata: {
-                        empId: String(empId),
-                        companyId: String(companyId),
-                        uploadedAt: new Date().toISOString(),
-                      },
-                    });
-
-                    const { getDownloadURL } = await import('firebase/storage');
-                    const url = await getDownloadURL(snapshot.ref);
-
-                    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), { photoURL: url });
-
-                    setRawImageSrc(null);
-                    trackPhotoUploaded();
-                    success('✓ Photo updated!');
-                    await fetchEmployee();
-                  } catch (err) {
-                    showError(`Upload failed: ${err?.message || 'Unknown error'}`);
-                  } finally {
-                    setUploadingPhoto(false);
-                  }
-                }}
-                className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50"
-              >
-                {uploadingPhoto ? 'Uploading...' : '✓ Save Photo'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showExitTasksModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Start Exit Tasks</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Confirm last working day and exit reason. Exit Tasks will be generated, including asset returns.
-            </p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Last Working Day</label>
-                <input
-                  type="date"
-                  value={offboardingExitDate}
-                  onChange={(e) => setOffboardingExitDate(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Exit Reason</label>
-                <select
-                  value={offboardingExitReason}
-                  onChange={(e) => setOffboardingExitReason(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
-                >
-                  <option value="">Select reason</option>
-                  <option value="Resignation">Resignation</option>
-                  <option value="Termination">Termination</option>
-                  <option value="Retirement">Retirement</option>
-                  <option value="Contract End">Contract End</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button
-                type="button"
-                onClick={() => setShowExitTasksModal(false)}
-                className="flex-1 py-2.5 border rounded-xl text-sm text-gray-600"
-                disabled={saving}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleStartExitTasks}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-medium hover:bg-orange-600 disabled:opacity-50"
-              >
-                {saving ? 'Starting…' : 'Start Exit Tasks'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showRemovePhotoConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-[70] sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-xs text-center shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="text-3xl mb-3">🗑️</div>
-            <h3 className="text-sm font-semibold text-gray-800 mb-1">Remove Photo?</h3>
-            <p className="text-xs text-gray-400 mb-4">
-              The employee&apos;s photo will be removed and replaced with initials.
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setShowRemovePhotoConfirm(false)}
-                className="flex-1 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setShowRemovePhotoConfirm(false);
-                  try {
-                    setUploadingPhoto(true);
-                    await deleteEmployeePhoto(companyId, empId);
-                    await updateDoc(doc(db, 'companies', companyId, 'employees', empId), {
-                      photoURL: deleteField(),
-                    });
-                    success('Photo removed');
-                    await fetchEmployee();
-                  } catch {
-                    showError('Failed to remove photo');
-                  } finally {
-                    setUploadingPhoto(false);
-                  }
-                }}
-                className="flex-1 py-2 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600"
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <OffboardingModals
+        employee={employee}
+        companyId={companyId}
+        empId={empId}
+        saving={saving}
+        completingTask={completingTask}
+        setCompletingTask={setCompletingTask}
+        taskNotes={taskNotes}
+        setTaskNotes={setTaskNotes}
+        markTaskComplete={markTaskComplete}
+        isInactive={isInactive}
+        canEditEmployees={canEditEmployees}
+        showError={showError}
+        completingOffTask={completingOffTask}
+        setCompletingOffTask={setCompletingOffTask}
+        offTaskNotes={offTaskNotes}
+        setOffTaskNotes={setOffTaskNotes}
+        markOffboardingTaskComplete={markOffboardingTaskComplete}
+        showOnboardingWarningModal={showOnboardingWarningModal}
+        setShowOnboardingWarningModal={setShowOnboardingWarningModal}
+        setShowResignationModal={setShowResignationModal}
+        setTab={setTab}
+        onboardingStartedForOff={onboardingStartedForOff}
+        onboardingPctForOff={onboardingPctForOff}
+        showResignationModal={showResignationModal}
+        resignForm={resignForm}
+        setResignForm={setResignForm}
+        expectedResignationLastDay={expectedResignationLastDay}
+        handleRecordResignation={handleRecordResignation}
+        showWithdrawModal={showWithdrawModal}
+        setShowWithdrawModal={setShowWithdrawModal}
+        withdrawNotes={withdrawNotes}
+        setWithdrawNotes={setWithdrawNotes}
+        handleWithdrawResignation={handleWithdrawResignation}
+        showBuyoutModal={showBuyoutModal}
+        setShowBuyoutModal={setShowBuyoutModal}
+        buyoutForm={buyoutForm}
+        setBuyoutForm={setBuyoutForm}
+        buyoutDaysPreview={buyoutDaysPreview}
+        handleNoticeBuyout={handleNoticeBuyout}
+        showExitTasksModal={showExitTasksModal}
+        setShowExitTasksModal={setShowExitTasksModal}
+        offboardingExitDate={offboardingExitDate}
+        setOffboardingExitDate={setOffboardingExitDate}
+        offboardingExitReason={offboardingExitReason}
+        setOffboardingExitReason={setOffboardingExitReason}
+        handleStartExitTasks={handleStartExitTasks}
+        showCompleteOffboardingModal={showCompleteOffboardingModal}
+        setShowCompleteOffboardingModal={setShowCompleteOffboardingModal}
+        completionNotes={completionNotes}
+        setCompletionNotes={setCompletionNotes}
+        handleCompleteOffboarding={handleCompleteOffboarding}
+        showRehireModal={showRehireModal}
+        setShowRehireModal={setShowRehireModal}
+        rehireForm={rehireForm}
+        setRehireForm={setRehireForm}
+        handleRehireEmployee={handleRehireEmployee}
+        showDeleteModal={showDeleteModal}
+        setShowDeleteModal={setShowDeleteModal}
+        deleteConfirmName={deleteConfirmName}
+        setDeleteConfirmName={setDeleteConfirmName}
+        deleting={deleting}
+        handleDeleteEmployee={handleDeleteEmployee}
+        cropModalOpen={cropModalOpen}
+        setCropModalOpen={setCropModalOpen}
+        rawImageSrc={rawImageSrc}
+        setRawImageSrc={setRawImageSrc}
+        crop={crop}
+        setCrop={setCrop}
+        zoom={zoom}
+        setZoom={setZoom}
+        croppedAreaPixels={croppedAreaPixels}
+        setCroppedAreaPixels={setCroppedAreaPixels}
+        uploadingPhoto={uploadingPhoto}
+        setUploadingPhoto={setUploadingPhoto}
+        fetchEmployee={fetchEmployee}
+        success={success}
+        showRemovePhotoConfirm={showRemovePhotoConfirm}
+        setShowRemovePhotoConfirm={setShowRemovePhotoConfirm}
+      />
       {errorModal && (
         <ErrorModal
           errorType={errorModal}

@@ -1,240 +1,49 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  ResponsiveContainer,
-} from 'recharts';
 import { SkeletonTable } from '../components/SkeletonRow';
-import EmployeeAvatar from '../components/EmployeeAvatar';
-import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
-import { formatLakhs, toDateString, toDisplayDate, toJSDate } from '../utils';
-import { calculateProRatedAllowance, isMidYearJoinerThisYear } from '../utils/leaveProration';
-import { DOCUMENT_CHECKLIST, getDocById, getMandatoryDocCount } from '../utils/documentTypes';
-import { createPrintDocument, escapeHtml, openPrintWindow } from '../utils/printTemplate';
+import { toDateString, toDisplayDate, toJSDate } from '../utils';
+import { DOCUMENT_CHECKLIST, getMandatoryDocCount } from '../utils/documentTypes';
 import { trackPageView, trackReportViewed } from '../utils/analytics';
-import { WhatsAppButton } from '../utils/whatsapp';
-import AuditReports from './audit/AuditReports';
+import {
+  REPORT_TABS,
+  getEmployeeOffboardingPhase,
+  normalizeLeaveTypesFromCompany,
+  buildAllowancesMapFromCompany,
+  getOverallPct,
+  getMissingMandatoryNames,
+  tenureLabel,
+  getDaysRemainingLastDay,
+  leaveRecordMatchesType,
+} from '../utils/reportHelpers';
+import { handlePrintReport as buildPrintReport } from '../utils/reportPrint';
+import {
+  handleHeadcountExcel as _handleHeadcountExcel,
+  handleOffboardingExcel as _handleOffboardingExcel,
+  handleCompensationExcel as _handleCompensationExcel,
+  downloadEmployeeCSV as _downloadEmployeeCSV,
+  downloadEmployeeExcel as _downloadEmployeeExcel,
+} from '../utils/reportExcel';
 
-const CHART_COLORS = ['#1B6B6B', '#4ECDC4', '#2BB8B0', '#155858', '#7EDDD8', '#0F4444', '#A8EDEA', '#264653', '#2A9D8F'];
-
-const REPORT_FILTER_SELECT =
-  'border border-gray-200 rounded-xl px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]';
-
-function getEmployeeOffboardingPhase(e) {
-  const o = e?.offboarding;
-  if (!o) return null;
-  if (o.status === 'completed' || o.phase === 'completed') return 'completed';
-  if (o.phase === 'notice_period') return 'notice_period';
-  if (o.phase === 'exit_tasks') return 'exit_tasks';
-  if (o.phase === 'withdrawn') return 'withdrawn';
-  if (o.status === 'in_progress' && Array.isArray(o.tasks) && o.tasks.length > 0) return 'exit_tasks';
-  return null;
-}
-
-const REPORT_TABS = [
-  { id: 'headcount', label: 'Headcount', icon: '👥' },
-  { id: 'employee', label: 'Employees', icon: '👤' },
-  { id: 'compensation', label: 'Compensation', icon: '💰' },
-  { id: 'leave', label: 'Leave', icon: '📅' },
-  { id: 'asset', label: 'Assets', icon: '📦' },
-  { id: 'document', label: 'Documents', icon: '📄' },
-  { id: 'onboarding', label: 'Onboarding', icon: '🎯' },
-  { id: 'offboarding', label: 'Offboarding', icon: '👋' },
-  { id: 'branch', label: 'Branch', icon: '🏢' },
-  { id: 'audit', label: 'Audit', icon: '🔍' },
-];
+import HeadcountTab from '../components/reports/HeadcountTab';
+import EmployeeTab from '../components/reports/EmployeeTab';
+import CompensationTab from '../components/reports/CompensationTab';
+import LeaveTab from '../components/reports/LeaveTab';
+import AssetTab from '../components/reports/AssetTab';
+import DocumentTab from '../components/reports/DocumentTab';
+import OnboardingTab from '../components/reports/OnboardingTab';
+import OffboardingTab from '../components/reports/OffboardingTab';
+import BranchTab from '../components/reports/BranchTab';
+import AuditTab from '../components/reports/AuditTab';
 
 const defaultTotalMandatory = getMandatoryDocCount();
 
-const DEFAULT_LEAVE_TYPE_OBJECTS = [
-  { name: 'Casual Leave', shortCode: 'CL', isPaid: true },
-  { name: 'Sick Leave', shortCode: 'SL', isPaid: true },
-  { name: 'Earned Leave', shortCode: 'EL', isPaid: true },
-  { name: 'Maternity Leave', shortCode: 'ML', isPaid: true },
-  { name: 'Unpaid Leave', shortCode: 'UL', isPaid: false },
-];
-
-function abbrevLeaveTypeName(name) {
-  return (name || '')
-    .trim()
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 4);
-}
-
-function normalizeLeaveTypesFromCompany(raw) {
-  if (!Array.isArray(raw) || raw.length === 0) {
-    return DEFAULT_LEAVE_TYPE_OBJECTS.map((t) => ({ ...t }));
-  }
-  return raw.map((t) => {
-    if (typeof t === 'string') {
-      const name = t.trim();
-      return { name, shortCode: abbrevLeaveTypeName(name), isPaid: true };
-    }
-    const name = (t.name || '').trim() || 'Leave';
-    const shortCode = (t.shortCode || abbrevLeaveTypeName(name)).toUpperCase().slice(0, 8);
-    return { name, shortCode, isPaid: t.isPaid !== false };
-  });
-}
-
-function leaveRecordMatchesType(l, lt) {
-  const t = (l.leaveType || '').trim();
-  if (t === lt.name || t === lt.shortCode) return true;
-  return false;
-}
-
-function buildAllowancesMapFromCompany(data, normalizedTypes) {
-  const lp = data?.leavePolicy || {};
-  const out = {};
-  normalizedTypes.filter((lt) => lt.isPaid).forEach((lt) => {
-    let n =
-      lp[lt.shortCode] ??
-      lp[lt.name] ??
-      (lt.shortCode === 'CL' ? lp.cl : lt.shortCode === 'SL' ? lp.sl : lt.shortCode === 'EL' ? lp.el : undefined);
-    if (n === undefined || Number.isNaN(Number(n))) n = lt.shortCode === 'EL' ? 15 : 12;
-    out[lt.shortCode] = Number(n);
-  });
-  return out;
-}
-
-function getAllowanceForType(lt, leavePolicyMap) {
-  const lp = leavePolicyMap || {};
-  let n = lp[lt.shortCode] ?? lp[lt.name];
-  if (n === undefined) {
-    if (lt.shortCode === 'CL') n = lp.cl;
-    else if (lt.shortCode === 'SL') n = lp.sl;
-    else if (lt.shortCode === 'EL') n = lp.el;
-  }
-  if (n === undefined || Number.isNaN(Number(n))) n = 0;
-  return Number(n);
-}
-
-function getDocByTypeMap(emp) {
-  const map = {};
-  (emp.documents || []).forEach((d) => {
-    if (d.id && getDocById(d.id)) map[d.id] = d;
-  });
-  return map;
-}
-
-function getOverallPct(emp, activeChecklist, totalMandatory) {
-  const docByType = getDocByTypeMap(emp);
-  let mandatoryUploaded = 0;
-  activeChecklist.forEach((cat) => {
-    cat.documents.filter((d) => d.mandatory).forEach((d) => {
-      if (docByType[d.id]) mandatoryUploaded++;
-    });
-  });
-  return totalMandatory ? Math.round((mandatoryUploaded / totalMandatory) * 100) : 100;
-}
-
-function getMissingMandatoryNames(emp, activeChecklist) {
-  const docByType = getDocByTypeMap(emp);
-  const missing = [];
-  activeChecklist.forEach((cat) => {
-    cat.documents.filter((d) => d.mandatory).forEach((d) => {
-      if (!docByType[d.id]) missing.push(d.name || d.id);
-    });
-  });
-  return missing;
-}
-
-function tenureLabel(joiningDate) {
-  const joined = toJSDate(joiningDate);
-  if (!joined || Number.isNaN(joined.getTime())) return '—';
-  const years = (Date.now() - joined.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-  if (years < 1) return `${Math.max(0, Math.floor(years * 12))} mo`;
-  return `${years.toFixed(1)} yr`;
-}
-
-function getDaysRemainingLastDay(lastDay) {
-  const end = toJSDate(lastDay);
-  if (!end || Number.isNaN(end.getTime())) return 0;
-  const diff = Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  return Math.max(0, diff);
-}
-
-async function downloadReport(companyName, reportName, data, columns) {
-  const xlsxMod = await import('xlsx');
-  const XLSX = xlsxMod.default ?? xlsxMod;
-  const rows = data.map((item) => {
-    const row = {};
-    columns.forEach((col) => {
-      row[col.header] = col.accessor(item);
-    });
-    return row;
-  });
-  const ws = XLSX.utils.json_to_sheet(rows);
-  if (rows.length > 0) {
-    ws['!cols'] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 15) }));
-    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    for (let R = range.s.r + 1; R <= range.e.r; R++) {
-      for (let C = range.s.c; C <= range.e.c; C++) {
-        const addr = XLSX.utils.encode_cell({ r: R, c: C });
-        const cell = ws[addr];
-        if (cell && cell.t === 's' && cell.v !== '' && !Number.isNaN(Number(cell.v))) {
-          cell.t = 'n'; cell.v = Number(cell.v);
-        }
-      }
-    }
-  }
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, reportName.slice(0, 31));
-  const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
-  const safeCo = (companyName || 'Company').replace(/\s+/g, '_');
-  XLSX.writeFile(wb, `${safeCo}_${reportName}_${today}.xlsx`);
-}
-
-function StatCard({ value, label }) {
-  return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs text-gray-500 mt-1">{label}</p>
-    </div>
-  );
-}
-
-function ChartCard({ title, children }) {
-  return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-5 mb-4 shadow-sm">
-      <h3 className="text-sm font-semibold text-gray-700 mb-4">{title}</h3>
-      {children}
-    </div>
-  );
-}
-
-function DownloadExcelButton({ onClick, label = 'Download Excel' }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium"
-    >
-      {label}
-    </button>
-  );
-}
-
 export default function Reports() {
   const { companyId } = useParams();
-  const navigate = useNavigate();
+
   const { currentUser } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [leaveList, setLeaveList] = useState([]);
@@ -1323,567 +1132,66 @@ export default function Reports() {
     };
   }, [activeTab, locationFilteredEmployees]);
 
-  const handleHeadcountExcel = async () => {
-    const { default: XLSX } = await import('xlsx');
-    const rows = employees.map((emp) => ({
-      'Emp ID': emp.empId || '',
-      Name: emp.fullName || '',
-      Department: emp.department || '',
-      Branch: emp.branch || '',
-      Location: emp.location || '',
-      Designation: emp.designation || '',
-      'Employment Type': emp.employmentType || '',
-      Category: emp.category || '',
-      Gender: emp.gender || '',
-      'Joining Date': toDisplayDate(emp.joiningDate),
-      Tenure: tenureLabel(emp.joiningDate),
-      Status: emp.status || '',
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    if (rows.length > 0) {
-      ws['!cols'] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 15) }));
-      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-      for (let R = range.s.r + 1; R <= range.e.r; R++) {
-        for (let C = range.s.c; C <= range.e.c; C++) {
-          const addr = XLSX.utils.encode_cell({ r: R, c: C });
-          const cell = ws[addr];
-          if (cell && cell.t === 's' && cell.v !== '' && !Number.isNaN(Number(cell.v))) {
-            cell.t = 'n'; cell.v = Number(cell.v);
-          }
-        }
-      }
-    }
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Headcount');
-    const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
-    XLSX.writeFile(wb, `${safeCompanyFile}_Headcount-Report_${today}.xlsx`);
-  };
+  const handleHeadcountExcel = () => _handleHeadcountExcel({ employees, safeCompanyFile });
 
-  const handleOffboardingExcel = async () => {
-    const { default: XLSX } = await import('xlsx');
-    const wb = XLSX.utils.book_new();
-    const fmtWs = (ws, rows) => {
-      if (!rows.length) return ws;
-      ws['!cols'] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(k.length + 2, 15) }));
-      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-      for (let R = range.s.r + 1; R <= range.e.r; R++) {
-        for (let C = range.s.c; C <= range.e.c; C++) {
-          const addr = XLSX.utils.encode_cell({ r: R, c: C });
-          const cell = ws[addr];
-          if (cell && cell.t === 's' && cell.v !== '' && !Number.isNaN(Number(cell.v))) { cell.t = 'n'; cell.v = Number(cell.v); }
-        }
-      }
-      return ws;
-    };
+  const handleOffboardingExcel = () => _handleOffboardingExcel({
+    noticePeriodReportRows,
+    activeOffboardingRows,
+    withdrawnOffboardingRows,
+    completedOffboardingRows,
+    safeCompanyFile,
+  });
 
-    if (noticePeriodReportRows.length > 0) {
-      const noticeData = noticePeriodReportRows.map(({ e }) => ({
-        Name: e.fullName,
-        'Emp ID': e.empId,
-        Department: e.department || '',
-        'Resignation Date': toDisplayDate(e.offboarding?.resignationDate),
-        'Expected Last Day': toDisplayDate(e.offboarding?.expectedLastDay),
-        'Days Remaining': getDaysRemainingLastDay(e.offboarding?.expectedLastDay),
-        Reason: e.offboarding?.reason || e.offboarding?.exitReason || '',
-      }));
-      XLSX.utils.book_append_sheet(wb, fmtWs(XLSX.utils.json_to_sheet(noticeData), noticeData), 'Notice Period');
-    }
+  const handleCompensationExcel = () => _handleCompensationExcel({ compensationData, safeCompanyFile });
 
-    if (activeOffboardingRows.length > 0) {
-      const exitData = activeOffboardingRows.map(({ e, pct }) => ({
-        Name: e.fullName,
-        'Emp ID': e.empId,
-        Department: e.department || '',
-        'Exit Date': toDisplayDate(
-          e.offboarding?.actualLastDay || e.offboarding?.exitDate || e.offboarding?.expectedLastDay,
-        ),
-        'Completion %': pct,
-        Reason: e.offboarding?.reason || e.offboarding?.exitReason || '',
-      }));
-      XLSX.utils.book_append_sheet(wb, fmtWs(XLSX.utils.json_to_sheet(exitData), exitData), 'Exit In Progress');
-    }
+  const downloadEmployeeCSV = () => _downloadEmployeeCSV({
+    filteredEmployeesForReport,
+    activeChecklist,
+    totalMandatory,
+    defaultTotalMandatory,
+    safeCompanyFile,
+  });
 
-    if (withdrawnOffboardingRows.length > 0) {
-      const withdrawnData = withdrawnOffboardingRows.map(({ e }) => ({
-        Name: e.fullName,
-        'Emp ID': e.empId,
-        Department: e.department || '',
-        'Withdrawn On': toDisplayDate(e.offboarding?.withdrawnOn),
-        Notes: e.offboarding?.withdrawNotes || '',
-      }));
-      XLSX.utils.book_append_sheet(wb, fmtWs(XLSX.utils.json_to_sheet(withdrawnData), withdrawnData), 'Withdrawn');
-    }
-
-    if (completedOffboardingRows.length > 0) {
-      const completedData = completedOffboardingRows.map(({ e }) => ({
-        Name: e.fullName,
-        'Emp ID': e.empId,
-        Department: e.department || '',
-        'Exit Date': toDisplayDate(e.offboarding?.actualLastDay || e.offboarding?.completedAt),
-        Reason: e.offboarding?.reason || e.offboarding?.exitReason || '',
-        Tenure: tenureLabel(e.joiningDate),
-      }));
-      XLSX.utils.book_append_sheet(wb, fmtWs(XLSX.utils.json_to_sheet(completedData), completedData), 'Completed Exits');
-    }
-
-    if (wb.SheetNames.length === 0) {
-      XLSX.utils.book_append_sheet(
-        wb,
-        XLSX.utils.json_to_sheet([{ Message: 'No offboarding rows in this report.' }]),
-        'Summary',
-      );
-    }
-
-    XLSX.writeFile(wb, `${safeCompanyFile}_Offboarding-Report_${new Date().toLocaleDateString('en-GB').split('/').join('-')}.xlsx`);
-  };
-
-  const handleCompensationExcel = async () => {
-    const { default: XLSX } = await import('xlsx');
-    const rows = compensationData.allEmps.map((emp) => ({
-      'Emp ID': emp.empId || '',
-      Name: emp.fullName || '',
-      Department: emp.department || '',
-      Designation: emp.designation || '',
-      'Annual Gross Salary': emp.ctcPerAnnum || '',
-      'Monthly Salary': emp.ctcPerAnnum ? Math.round(Number(emp.ctcPerAnnum) / 12) : '',
-      'Incentive (Monthly)': emp.incentive || '',
-      'PF Applicable': emp.pfApplicable ? 'Yes' : 'No',
-      'PF Number': emp.pfNumber || '',
-      'ESIC Applicable': emp.esicApplicable ? 'Yes' : 'No',
-      'ESIC Number': emp.esicNumber || '',
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Compensation');
-    const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
-    XLSX.writeFile(wb, `${safeCompanyFile}_Compensation-Report_${today}.xlsx`);
-  };
-
-  const downloadEmployeeCSV = async () => {
-    const [{ default: XLSX }, { saveAs }] = await Promise.all([
-      import('xlsx'),
-      import('file-saver'),
-    ]);
-    const rows = filteredEmployeesForReport.map((emp) => ({
-      'Emp ID': emp.empId || '',
-      'Full Name': emp.fullName || '',
-      Department: emp.department || '',
-      Designation: emp.designation || '',
-      Branch: emp.branch || '',
-      Location: emp.location || '',
-      'Employment Type': emp.employmentType || '',
-      Category: emp.category || '',
-      'Joining Date': toDisplayDate(emp.joiningDate),
-      Tenure: tenureLabel(emp.joiningDate),
-      Status: emp.status || '',
-      'Onboarding Status': emp.onboarding?.status || 'not_started',
-      'Documents %': `${getOverallPct(emp, activeChecklist, totalMandatory || defaultTotalMandatory)}%`,
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const csv = XLSX.utils.sheet_to_csv(ws);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
-    saveAs(blob, `${safeCompanyFile}_Employees_Report_${today}.csv`);
-  };
-
-  const downloadEmployeeExcel = async () => {
-    const { default: XLSX } = await import('xlsx');
-    const rows = filteredEmployeesForReport.map((emp) => ({
-      'Emp ID': emp.empId || '',
-      'Full Name': emp.fullName || '',
-      Department: emp.department || '',
-      Designation: emp.designation || '',
-      Branch: emp.branch || '',
-      Location: emp.location || '',
-      'Employment Type': emp.employmentType || '',
-      Category: emp.category || '',
-      'Joining Date': toDisplayDate(emp.joiningDate),
-      Tenure: tenureLabel(emp.joiningDate),
-      Status: emp.status || '',
-      'Onboarding Status': emp.onboarding?.status || 'not_started',
-      'Documents %': `${getOverallPct(emp, activeChecklist, totalMandatory || defaultTotalMandatory)}%`,
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Employees');
-    const today = new Date().toLocaleDateString('en-GB').split('/').join('-');
-    XLSX.writeFile(wb, `${safeCompanyFile}_Employees_Report_${today}.xlsx`);
-  };
-
-  const progressBarClass = useCallback((pct) => {
-    if (pct <= 25) return 'bg-red-500';
-    if (pct <= 75) return 'bg-amber-500';
-    if (pct < 100) return 'bg-blue-500';
-    return 'bg-green-500';
-  }, []);
+  const downloadEmployeeExcel = () => _downloadEmployeeExcel({
+    filteredEmployeesForReport,
+    activeChecklist,
+    totalMandatory,
+    defaultTotalMandatory,
+    safeCompanyFile,
+  });
 
   const handlePrintReport = (tabId) => {
-    const tabMeta = REPORT_TABS.find((t) => t.id === tabId);
-    const esc = escapeHtml;
-    const total = employees.length || 1;
-    const tm = totalMandatory || defaultTotalMandatory;
-
-    let content = '';
-    switch (tabId) {
-      case 'headcount':
-        content = `
-          <div class="print-section">
-            <div class="print-section-title">Summary</div>
-            <div class="print-grid-2">
-              <div><div class="print-field-label">Total employees</div><div class="print-field-value">${headcountStats.total}</div></div>
-              <div><div class="print-field-label">Active</div><div class="print-field-value">${headcountStats.active}</div></div>
-              <div><div class="print-field-label">On leave today</div><div class="print-field-value">${headcountStats.onLeaveToday}</div></div>
-              <div><div class="print-field-label">New joiners (MTD)</div><div class="print-field-value">${headcountStats.newJoiners}</div></div>
-            </div>
-          </div>
-          <div class="print-section">
-            <div class="print-section-title">Department summary</div>
-            <table class="print-table">
-              <thead><tr><th>Department</th><th>Employees</th><th>% of total</th></tr></thead>
-              <tbody>
-              ${deptData
-                .map(
-                  (d) =>
-                    `<tr><td>${esc(d.name)}</td><td>${d.count}</td><td>${((d.count / total) * 100).toFixed(0)}%</td></tr>`,
-                )
-                .join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="print-section">
-            <div class="print-section-title">Location summary</div>
-            <table class="print-table">
-              <thead><tr><th>Location</th><th>Employees</th><th>% of total</th></tr></thead>
-              <tbody>
-              ${locationData
-                .map(
-                  (d) =>
-                    `<tr><td>${esc(d.name)}</td><td>${d.count}</td><td>${((d.count / total) * 100).toFixed(0)}%</td></tr>`,
-                )
-                .join('')}
-              ${locationData.length === 0 ? '<tr><td colspan="3">No location data</td></tr>' : ''}
-              </tbody>
-            </table>
-          </div>`;
-        break;
-      case 'employee':
-        content = `
-          <div class="print-section">
-            <div class="print-section-title">Employees (${filteredEmployeesForReport.length} shown)</div>
-            <table class="print-table">
-              <thead><tr>
-                <th>Emp ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Branch</th><th>Location</th>
-                <th>Employment type</th><th>Category</th><th>Joining</th><th>Tenure</th><th>Status</th><th>Onboarding</th><th>Docs %</th>
-              </tr></thead>
-              <tbody>
-                ${filteredEmployeesForReport
-                  .map(
-                    (emp) =>
-                      `<tr>
-                        <td>${esc(emp.empId || '—')}</td>
-                        <td>${esc(emp.fullName || '—')}</td>
-                        <td>${esc(emp.department || '—')}</td>
-                        <td>${esc(emp.designation || '—')}</td>
-                        <td>${esc(emp.branch || '—')}</td>
-                        <td>${esc(emp.location || '—')}</td>
-                        <td>${esc(emp.employmentType || '—')}</td>
-                        <td>${esc(emp.category || '—')}</td>
-                        <td>${esc(toDisplayDate(emp.joiningDate) || '—')}</td>
-                        <td>${esc(tenureLabel(emp.joiningDate))}</td>
-                        <td>${esc(emp.status || 'Active')}</td>
-                        <td>${esc(emp.onboarding?.status || 'not_started')}</td>
-                        <td>${getOverallPct(emp, activeChecklist, tm)}%</td>
-                      </tr>`,
-                  )
-                  .join('')}
-              </tbody>
-            </table>
-          </div>`;
-        break;
-      case 'compensation':
-        content = `
-          <div class="print-section">
-            <div class="print-section-title">Summary</div>
-            <div class="print-grid-2">
-              <div><div class="print-field-label">Total annual payroll</div><div class="print-field-value">₹${formatLakhs(compensationData.totalPayroll)}</div></div>
-              <div><div class="print-field-label">Average annual salary</div><div class="print-field-value">₹${formatLakhs(compensationData.avgSalary)}</div></div>
-              <div><div class="print-field-label">PF enrolled</div><div class="print-field-value">${compensationData.pfCount}</div></div>
-              <div><div class="print-field-label">ESIC enrolled</div><div class="print-field-value">${compensationData.esicCount}</div></div>
-            </div>
-          </div>
-          <div class="print-section">
-            <div class="print-section-title">Compensation by department</div>
-            <table class="print-table">
-              <thead><tr><th>Department</th><th>Employees</th><th>Min</th><th>Max</th><th>Average</th><th>Total cost</th></tr></thead>
-              <tbody>
-              ${compensationData.deptSalaryData
-                .map(
-                  (r) =>
-                    `<tr><td>${esc(r.dept)}</td><td>${r.count}</td><td>₹${formatLakhs(r.min)}</td><td>₹${formatLakhs(r.max)}</td><td>₹${formatLakhs(r.avg)}</td><td>₹${formatLakhs(r.total)}</td></tr>`,
-                )
-                .join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="print-section">
-            <div class="print-section-title">Employee compensation</div>
-            <table class="print-table">
-              <thead><tr><th>Emp ID</th><th>Name</th><th>Department</th><th>Annual Gross Salary</th><th>Monthly</th><th>PF</th><th>ESIC</th></tr></thead>
-              <tbody>
-              ${[...compensationData.allEmps]
-                .sort((a, b) => (Number(b.ctcPerAnnum) || 0) - (Number(a.ctcPerAnnum) || 0))
-                .map(
-                  (e) =>
-                    `<tr>
-                      <td>${esc(e.empId || '')}</td>
-                      <td>${esc(e.fullName || '')}</td>
-                      <td>${esc(e.department || '')}</td>
-                      <td>${e.ctcPerAnnum ? `₹${formatLakhs(Number(e.ctcPerAnnum))}` : '—'}</td>
-                      <td>${e.ctcPerAnnum ? `₹${formatLakhs(Number(e.ctcPerAnnum) / 12)}` : '—'}</td>
-                      <td>${e.pfApplicable ? 'Yes' : 'No'}</td>
-                      <td>${e.esicApplicable ? 'Yes' : 'No'}</td>
-                    </tr>`,
-                )
-                .join('')}
-              </tbody>
-            </table>
-          </div>`;
-        break;
-      case 'leave':
-        content = `
-          <div class="print-section">
-            <div class="print-section-title">Leave by type (${currentYear})</div>
-            <table class="print-table">
-              <thead><tr><th>Type</th><th>Total requests</th><th>Approved</th></tr></thead>
-              <tbody>
-              ${leaveByType
-                .map((row) => `<tr><td>${esc(row.name)}</td><td>${row.total}</td><td>${row.approved}</td></tr>`)
-                .join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="print-section">
-            <div class="print-section-title">Monthly trend (${currentYear})</div>
-            <table class="print-table">
-              <thead><tr><th>Month</th><th>Requests</th></tr></thead>
-              <tbody>
-              ${monthlyLeave
-                .map((m) => `<tr><td>${esc(m.month)}</td><td>${m.count}</td></tr>`)
-                .join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="print-section">
-            <div class="print-section-title">Leave balance (approved days used / policy)</div>
-            <table class="print-table">
-              <thead><tr><th>Employee</th>${paidLeaveTypes.map((lt) => `<th>${esc(lt.shortCode)}</th>`).join('')}</tr></thead>
-              <tbody>
-                ${employees
-                  .map((emp) => {
-                    const row = leaveBalanceByEmp[emp.id];
-                    if (!row) return '';
-                    return `<tr><td>${esc(emp.fullName || '—')}</td>${paidLeaveTypes
-                      .map((lt) => {
-                        const used = row[lt.shortCode] || 0;
-                        const base = getAllowanceForType(lt, leavePolicyMap);
-                        const allowed = calculateProRatedAllowance(base, emp.joiningDate);
-                        return `<td>${used} / ${allowed}</td>`;
-                      })
-                      .join('')}</tr>`;
-                  })
-                  .join('')}
-              </tbody>
-            </table>
-          </div>`;
-        break;
-      case 'asset':
-        content = `
-          <div class="print-section">
-            <div class="print-section-title">Asset register</div>
-            <table class="print-table">
-              <thead><tr><th>Type</th><th>Name</th><th>Mode</th><th>Status</th><th>Asset ID</th></tr></thead>
-              <tbody>
-              ${assets
-                .map(
-                  (a) =>
-                    `<tr><td>${esc(a.type || '—')}</td><td>${esc(a.name || '—')}</td><td>${esc(a.mode || 'trackable')}</td><td>${esc(
-                      a.status || '—',
-                    )}</td><td>${esc(a.assetId || '—')}</td></tr>`,
-                )
-                .join('')}
-              </tbody>
-            </table>
-          </div>`;
-        break;
-      case 'document':
-        content = `
-          <div class="print-section">
-            <div class="print-section-title">Missing mandatory documents</div>
-            <table class="print-table">
-              <thead><tr><th>Name</th><th>Emp ID</th><th>Department</th><th>Completion %</th><th>Missing</th></tr></thead>
-              <tbody>
-              ${missingDocTableRows
-                .map(
-                  ({ emp, pct, missing }) =>
-                    `<tr>
-                      <td>${esc(emp.fullName || '—')}</td>
-                      <td>${esc(emp.empId || '—')}</td>
-                      <td>${esc(emp.department || '—')}</td>
-                      <td>${pct}%</td>
-                      <td>${esc(missing.join(', '))}</td>
-                    </tr>`,
-                )
-                .join('')}
-              </tbody>
-            </table>
-          </div>`;
-        break;
-      case 'onboarding':
-        content = `
-          <div class="print-section">
-            <div class="print-section-title">New joiners (last 90 days)</div>
-            <table class="print-table">
-              <thead><tr><th>Name</th><th>Joining Date</th><th>Tenure</th><th>Onboarding %</th><th>Status</th><th>Tasks left</th></tr></thead>
-              <tbody>
-              ${newJoinersTable
-                .map(
-                  ({ e, pct, left, status }) =>
-                    `<tr>
-                      <td>${esc(e.fullName || '—')}</td>
-                      <td>${esc(toDisplayDate(e.joiningDate) || '—')}</td>
-                      <td>${esc(tenureLabel(e.joiningDate))}</td>
-                      <td>${pct}%</td>
-                      <td>${esc(status)}</td>
-                      <td>${left}</td>
-                    </tr>`,
-                )
-                .join('')}
-              </tbody>
-            </table>
-          </div>`;
-        break;
-      case 'offboarding':
-        content = `
-          <div class="print-section">
-            <div class="print-section-title">Notice Period (status: Notice Period)</div>
-            <table class="print-table">
-              <thead><tr><th>Employee</th><th>Resignation date</th><th>Last day</th><th>Days remaining</th><th>Reason</th></tr></thead>
-              <tbody>
-              ${inNoticePeriodByStatus
-                .map(
-                  ({ e, daysRemaining }) =>
-                    `<tr>
-                      <td>${esc(e.fullName || '—')}</td>
-                      <td>${esc(toDisplayDate(e.offboarding?.recordedAt) || toDisplayDate(e.offboarding?.resignationDate) || '—')}</td>
-                      <td>${esc(toDisplayDate(e.offboarding?.expectedLastDay) || '—')}</td>
-                      <td>${daysRemaining}</td>
-                      <td>${esc(e.offboarding?.reason || e.offboarding?.exitReason || '—')}</td>
-                    </tr>`,
-                )
-                .join('')}
-              ${inNoticePeriodByStatus.length === 0 ? '<tr><td colspan="5">No employees in Notice Period</td></tr>' : ''}
-              </tbody>
-            </table>
-          </div>
-          <div class="print-section">
-            <div class="print-section-title">Notice Period (offboarding phase)</div>
-            <table class="print-table">
-              <thead><tr><th>Name</th><th>Department</th><th>Resigned</th><th>Expected last day</th><th>Reason</th></tr></thead>
-              <tbody>
-              ${noticePeriodReportRows
-                .map(
-                  ({ e }) =>
-                    `<tr>
-                      <td>${esc(e.fullName || '—')}</td>
-                      <td>${esc(e.department || '—')}</td>
-                      <td>${esc(toDisplayDate(e.offboarding?.resignationDate) || '—')}</td>
-                      <td>${esc(toDisplayDate(e.offboarding?.expectedLastDay) || '—')}</td>
-                      <td>${esc(e.offboarding?.reason || e.offboarding?.exitReason || '—')}</td>
-                    </tr>`,
-                )
-                .join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="print-section">
-            <div class="print-section-title">Exit tasks in progress</div>
-            <table class="print-table">
-              <thead><tr><th>Name</th><th>Department</th><th>Exit date</th><th>Days left</th><th>Reason</th><th>Completion</th><th>Pending tasks</th></tr></thead>
-              <tbody>
-              ${activeOffboardingRows
-                .map(({ e, daysLeft, pct, pending }) => {
-                  const dl = daysLeft == null ? '—' : daysLeft < 0 ? 'Past' : String(daysLeft);
-                  const exitDisp =
-                    toDisplayDate(e.offboarding?.exitDate) ||
-                    toDisplayDate(e.offboarding?.actualLastDay) ||
-                    toDisplayDate(e.offboarding?.expectedLastDay) ||
-                    '—';
-                  return `<tr>
-                    <td>${esc(e.fullName || '—')}</td>
-                    <td>${esc(e.department || '—')}</td>
-                    <td>${esc(exitDisp)}</td>
-                    <td>${esc(dl)}</td>
-                    <td>${esc(e.offboarding?.exitReason || e.offboarding?.reason || '—')}</td>
-                    <td>${pct}%</td>
-                    <td>${pending}</td>
-                  </tr>`;
-                })
-                .join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="print-section">
-            <div class="print-section-title">Withdrawn</div>
-            <table class="print-table">
-              <thead><tr><th>Name</th><th>Department</th><th>Withdrawn on</th></tr></thead>
-              <tbody>
-              ${withdrawnOffboardingRows
-                .map(
-                  ({ e }) =>
-                    `<tr>
-                      <td>${esc(e.fullName || '—')}</td>
-                      <td>${esc(e.department || '—')}</td>
-                      <td>${esc(toDisplayDate(e.offboarding?.withdrawnOn) || '—')}</td>
-                    </tr>`,
-                )
-                .join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="print-section">
-            <div class="print-section-title">Completed offboarding</div>
-            <table class="print-table">
-              <thead><tr><th>Name</th><th>Department</th><th>Exit date</th><th>Reason</th><th>Status</th></tr></thead>
-              <tbody>
-              ${completedOffboardingRows
-                .map(
-                  ({ e }) =>
-                    `<tr>
-                      <td>${esc(e.fullName || '—')}</td>
-                      <td>${esc(e.department || '—')}</td>
-                      <td>${esc(toDisplayDate(e.offboarding?.exitDate) || '—')}</td>
-                      <td>${esc(e.offboarding?.exitReason || '—')}</td>
-                      <td>${esc(e.status || 'Inactive')}</td>
-                    </tr>`,
-                )
-                .join('')}
-              </tbody>
-            </table>
-          </div>`;
-        break;
-      default:
-        content = '<p class="print-body-text">No printable content.</p>';
-    }
-
-    const html = createPrintDocument({
-      title: `${tabMeta?.label || 'Report'} report`,
-      subtitle: 'HR Analytics Report',
-      companyName: companyDisplayName,
-      generatedBy: currentUser?.email || '',
-      content,
+    buildPrintReport(tabId, {
+      employees,
+      totalMandatory,
+      defaultTotalMandatory,
+      activeChecklist,
+      headcountStats,
+      deptData,
+      locationData,
+      filteredEmployeesForReport,
+      compensationData,
+      leaveByType,
+      monthlyLeave,
+      leaveBalanceByEmp,
+      paidLeaveTypes,
+      leavePolicyMap,
+      currentYear,
+      assets,
+      missingDocTableRows,
+      newJoinersTable,
+      inNoticePeriodByStatus,
+      noticePeriodReportRows,
+      activeOffboardingRows,
+      withdrawnOffboardingRows,
+      completedOffboardingRows,
+      companyDisplayName,
+      currentUserEmail: currentUser?.email || '',
     });
-    openPrintWindow(html);
   };
+
+  // (print logic extracted to src/utils/reportPrint.js)
+
 
   if (!companyId) return null;
 
@@ -1951,1632 +1259,179 @@ export default function Reports() {
         </div>
       ) : (
         <>
-      {/* HEADCOUNT */}
-      {activeTab === 'headcount' && (
-        employees.length === 0 ? (
-          <EmptyState
-            illustration={
-              <div className="w-16 h-16 rounded-2xl bg-[#E1F5EE] flex items-center justify-center">
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <rect x="4" y="20" width="6" height="12" rx="2" fill="#9FE1CB" />
-                  <rect x="13" y="12" width="6" height="20" rx="2" fill="#5DCAA5" />
-                  <rect x="22" y="6" width="6" height="26" rx="2" fill="#1B6B6B" />
-                </svg>
-              </div>
-            }
-            title="No headcount data yet"
-            description="Add employees to see department breakdown, location distribution and headcount trends."
-            actionColor="#1B6B6B"
-          />
-        ) : (
-        <>
-          <div className="flex flex-wrap gap-2 mb-4">
-            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className={REPORT_FILTER_SELECT}>
-              <option value="">All locations</option>
-              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <StatCard value={headcountStats.total} label="Total Employees" />
-            <StatCard value={headcountStats.active} label="Active Employees" />
-            <StatCard value={headcountStats.onLeaveToday} label="On Leave Today" />
-            <StatCard value={headcountStats.newJoiners} label="New Joiners This Month" />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <ChartCard title="Department-wise headcount">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={deptData} margin={{ top: 24, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-25} textAnchor="end" height={60} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#1B6B6B" radius={[4, 4, 0, 0]} label={{ position: 'top', fontSize: 11 }} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Employment type">
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={typeData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {typeData.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Category breakdown">
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    innerRadius={48}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {categoryData.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Gender breakdown">
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={genderData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    innerRadius={55}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {genderData.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Tenure distribution">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={tenureData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#4ECDC4" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Branch-wise headcount">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart layout="vertical" data={branchData} margin={{ left: 8, right: 16 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#1B6B6B" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Employees by Location">
-              {locationData.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-10">No employees have a location set.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={locationData} margin={{ top: 24, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-25} textAnchor="end" height={60} />
-                    <YAxis tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#2BB8B0" radius={[4, 4, 0, 0]} label={{ position: 'top', fontSize: 11 }} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </ChartCard>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-              {/* Joins vs Exits trend */}
-              <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                <h3 className="text-sm font-semibold text-gray-800 mb-1">Joins vs exits — last 12 months</h3>
-                <p className="text-xs text-gray-400 mb-3">Monthly new hires and departures</p>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={attritionTrend} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                    <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="joins" fill="#1B6B6B" name="Joins" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="exits" fill="#E24B4A" name="Exits" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Tenure distribution */}
-              <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                <h3 className="text-sm font-semibold text-gray-800 mb-1">Tenure distribution</h3>
-                <p className="text-xs text-gray-400 mb-3">Active employees by years of service</p>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={tenureDistribution} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                    <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }} />
-                    <Bar dataKey="count" fill="#2BB8B0" name="Employees" radius={[4, 4, 0, 0]}>
-                      {tenureDistribution.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-          </div>
-
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 mt-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-700">Designation Vacancy Analysis</h3>
-              <div className="flex gap-3 text-xs">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-                  {roleVacancySummary.totalFilled} filled
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
-                  {roleVacancySummary.totalVacant} vacant
-                </span>
-              </div>
-            </div>
-            {roleVacancyData.length === 0 ? (
-              <div className="text-center py-6">
-                <p className="text-sm text-gray-400">No designations defined yet.</p>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/company/${companyId}/policies?tab=roles`)}
-                  className="text-sm text-[#1B6B6B] hover:underline mt-1"
-                >
-                  Go to Library → Designations to add
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {roleVacancyData.map((role) => (
-                  <div
-                    key={role.id || role.title}
-                    className="flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{role.title}</p>
-                      {role.reportsTo && <p className="text-xs text-gray-400">Reports to {role.reportsTo}</p>}
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      {role.salaryBand?.min != null && role.salaryBand?.min !== '' && (
-                        <span className="text-[10px] sm:text-xs text-[#1B6B6B] bg-[#E8F5F5] px-2 py-0.5 rounded-full whitespace-normal text-right leading-tight max-w-[11rem] sm:max-w-none inline-block">
-                          ₹{formatLakhs(role.salaryBand.min)}/mo (₹{formatLakhs(Number(role.salaryBand.min) * 12)}pa) – ₹
-                          {formatLakhs(role.salaryBand.max)}/mo (₹{formatLakhs(Number(role.salaryBand.max) * 12)}pa)
-                        </span>
-                      )}
-                      <div className="text-right">
-                        <span
-                          className={`text-sm font-semibold ${role.filled > 0 ? 'text-green-600' : 'text-amber-500'}`}
-                        >
-                          {role.filled}
-                        </span>
-                        <span className="text-xs text-gray-400 ml-1">
-                          {role.filled === 1 ? 'employee' : 'employees'}
-                        </span>
-                      </div>
-                      <span
-                        className={`text-xs px-2.5 py-1 rounded-full font-medium w-16 text-center ${
-                          role.filled > 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                        }`}
-                      >
-                        {role.filled > 0 ? 'Filled' : 'Vacant'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2 items-center">
-            <button
-              type="button"
-              onClick={() => handlePrintReport('headcount')}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
-            >
-              🖨️ Print Report
-            </button>
-            <DownloadExcelButton onClick={handleHeadcountExcel} />
-          </div>
-        </>
-        )
-      )}
-
-      {/* EMPLOYEES */}
-      {activeTab === 'employee' && (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <StatCard value={employeeSummary.total} label="Total" />
-            <StatCard value={employeeSummary.active} label="Active" />
-            <StatCard value={employeeSummary.inactive} label="Inactive" />
-            <StatCard value={employeeSummary.offboarding} label="Offboarding" />
-          </div>
-          <div className="flex flex-wrap gap-2 mb-4">
-            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className={REPORT_FILTER_SELECT}>
-              <option value="">All locations</option>
-              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
-            </select>
-            <select value={empFilterDept} onChange={(e) => setEmpFilterDept(e.target.value)} className={REPORT_FILTER_SELECT}>
-              {deptOptions.map((d) => (
-                <option key={d} value={d}>
-                  Dept: {d}
-                </option>
-              ))}
-            </select>
-            <select value={empFilterBranch} onChange={(e) => setEmpFilterBranch(e.target.value)} className={REPORT_FILTER_SELECT}>
-              {branchOptions.map((b) => (
-                <option key={b} value={b}>
-                  Branch: {b}
-                </option>
-              ))}
-            </select>
-            <select value={empFilterStatus} onChange={(e) => setEmpFilterStatus(e.target.value)} className={REPORT_FILTER_SELECT}>
-              <option value="All">Status: All</option>
-              <option value="Active">Active</option>
-              <option value="Notice Period">Notice Period</option>
-              <option value="Inactive">Inactive</option>
-              <option value="On Leave">On Leave</option>
-              <option value="Offboarding">Offboarding</option>
-            </select>
-            <select value={empFilterType} onChange={(e) => setEmpFilterType(e.target.value)} className={REPORT_FILTER_SELECT}>
-              <option value="All">Employment: All</option>
-              {[...new Set(employees.map((e) => e.employmentType).filter(Boolean))].map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-            <select value={empFilterYear} onChange={(e) => setEmpFilterYear(e.target.value)} className={REPORT_FILTER_SELECT}>
-              <option value="All">Join year: All</option>
-              {[2020, 2021, 2022, 2023, 2024, 2025, 2026].map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-x-auto shadow-sm mb-4">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600">
-                <tr>
-                  {['Emp ID', 'Name', 'Department', 'Designation', 'Branch', 'Location', 'Employment Type', 'Category', 'Joining', 'Tenure', 'Status', 'Onboarding', 'Docs %'].map((h) => (
-                    <th key={h} className="text-left px-3 py-2 font-medium whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEmployeesForReport.map((emp) => (
-                  <tr
-                    key={emp.id}
-                    className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
-                    onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
-                  >
-                    <td className="px-3 py-2">{emp.empId || '—'}</td>
-                    <td className="px-3 py-2 font-medium text-[#1B6B6B]">{emp.fullName || '—'}</td>
-                    <td className="px-3 py-2">{emp.department || '—'}</td>
-                    <td className="px-3 py-2">{emp.designation || '—'}</td>
-                    <td className="px-3 py-2">{emp.branch || '—'}</td>
-                    <td className="px-3 py-2">{emp.location || '—'}</td>
-                    <td className="px-3 py-2">{emp.employmentType || '—'}</td>
-                    <td className="px-3 py-2">{emp.category || '—'}</td>
-                    <td className="px-3 py-2">{toDisplayDate(emp.joiningDate)}</td>
-                    <td className="px-3 py-2">{tenureLabel(emp.joiningDate)}</td>
-                    <td className="px-3 py-2">{emp.status || 'Active'}</td>
-                    <td className="px-3 py-2">{emp.onboarding?.status || 'not_started'}</td>
-                    <td className="px-3 py-2">{getOverallPct(emp, activeChecklist, totalMandatory || defaultTotalMandatory)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-sm text-gray-500 mb-4">
-            Total showing: {filteredEmployeesForReport.length} of {employees.length} employees
-          </p>
-          <div className="flex flex-wrap gap-2 mt-4">
-            <button
-              type="button"
-              onClick={() => handlePrintReport('employee')}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
-            >
-              🖨️ Print Report
-            </button>
-            <button type="button" onClick={downloadEmployeeCSV} className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">
-              Download CSV
-            </button>
-            <button type="button" onClick={downloadEmployeeExcel} className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">
-              Download Excel
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* COMPENSATION */}
-      {activeTab === 'compensation' && (
-        locationFilteredEmployees.filter((e) => e.ctcPerAnnum || e.ctc).length === 0 ? (
-          <EmptyState
-            illustration={
-              <div className="w-16 h-16 rounded-2xl bg-[#EEEDFE] flex items-center justify-center">
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <circle cx="18" cy="18" r="12" fill="#CECBF6" />
-                  <path d="M18 11v2M18 23v2" stroke="#534AB7" strokeWidth="1.8" strokeLinecap="round" />
-                  <path
-                    d="M14 15c0-1.1.9-2 2-2h4a2 2 0 010 4H16a2 2 0 000 4h4a2 2 0 002-2"
-                    stroke="#534AB7"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </div>
-            }
-            title="No salary data yet"
-            description="Add CTC per annum to employee profiles to see compensation breakdowns."
-            actionColor="#534AB7"
-          />
-        ) : (
-        <div className="space-y-6">
-          <div className="flex flex-wrap gap-2">
-            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className={REPORT_FILTER_SELECT}>
-              <option value="">All locations</option>
-              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              {
-                label: 'Total Monthly Payroll',
-                value: `₹${formatLakhs(compensationData.totalPayroll / 12)}`,
-                sub: `₹${formatLakhs(compensationData.totalPayroll)} per annum`,
-                icon: '💰',
-              },
-              {
-                label: 'Average Salary',
-                value: `₹${formatLakhs(compensationData.avgSalary)}`,
-                sub: 'Annual gross per employee',
-                icon: '📊',
-              },
-              {
-                label: 'PF Enrolled',
-                value: compensationData.pfCount,
-                sub: `of ${compensationData.activeCount} employees`,
-                icon: '🏦',
-              },
-              {
-                label: 'ESIC Enrolled',
-                value: compensationData.esicCount,
-                sub: `of ${compensationData.activeCount} employees`,
-                icon: '🏥',
-              },
-            ].map((card) => (
-              <div key={card.label} className="bg-white border border-gray-100 rounded-2xl p-5">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-500">{card.label}</p>
-                  <span className="text-xl">{card.icon}</span>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-                <p className="text-xs text-gray-400 mt-1">{card.sub}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white border border-gray-100 rounded-2xl p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Salary Distribution</h3>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={compensationData.salaryDistribution}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#1B6B6B" radius={[4, 4, 0, 0]} name="Employees" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="bg-white border border-gray-100 rounded-2xl p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Average Salary by Department</h3>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={compensationData.deptSalaryData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                  <XAxis type="number" tickFormatter={(v) => `₹${formatLakhs(v)}`} tick={{ fontSize: 10 }} />
-                  <YAxis type="category" dataKey="dept" tick={{ fontSize: 10 }} width={80} />
-                  <Tooltip formatter={(v) => `₹${formatLakhs(v)}`} />
-                  <Bar dataKey="avg" fill="#4ECDC4" radius={[0, 4, 4, 0]} name="Avg Salary" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="bg-white border border-gray-100 rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Compensation by Department</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    {['Department', 'Employees', 'Min Salary', 'Max Salary', 'Avg Salary', 'Total Cost (Annual)'].map((h) => (
-                      <th key={h} className="text-left text-xs font-semibold text-gray-400 pb-3 pr-4">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {compensationData.deptSalaryData.map((row) => (
-                    <tr key={row.dept} className="border-b border-gray-50">
-                      <td className="py-3 pr-4 font-medium text-gray-800">{row.dept}</td>
-                      <td className="py-3 pr-4 text-gray-500">{row.count}</td>
-                      <td className="py-3 pr-4 text-gray-500">₹{formatLakhs(row.min)}</td>
-                      <td className="py-3 pr-4 text-gray-500">₹{formatLakhs(row.max)}</td>
-                      <td className="py-3 pr-4 font-medium text-gray-700">₹{formatLakhs(row.avg)}</td>
-                      <td className="py-3 pr-4 text-[#1B6B6B] font-medium">₹{formatLakhs(row.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-gray-200">
-                    <td className="py-3 font-bold text-gray-800">Total</td>
-                    <td className="py-3 font-bold">{compensationData.activeCount}</td>
-                    <td colSpan={3} />
-                    <td className="py-3 font-bold text-[#1B6B6B]">₹{formatLakhs(compensationData.totalPayroll)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-
-          <div className="bg-white border border-gray-100 rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Employee Compensation Details</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    {['Employee', 'Department', 'Designation', 'Annual Gross Salary', 'Monthly', 'Incentive/mo', 'PF', 'ESIC'].map((h) => (
-                      <th key={h} className="text-left text-xs font-semibold text-gray-400 pb-3 pr-4">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...compensationData.allEmps]
-                    .sort((a, b) => (Number(b.ctcPerAnnum) || 0) - (Number(a.ctcPerAnnum) || 0))
-                    .map((emp) => (
-                      <tr
-                        key={emp.id}
-                        className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
-                        onClick={() => navigate(`/company/${companyId}/employees/${emp.id}`)}
-                      >
-                        <td className="py-3 pr-4">
-                          <div className="flex items-center gap-2">
-                            <EmployeeAvatar employee={emp} size="xs" />
-                            <span className="font-medium text-gray-800">{emp.fullName}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 pr-4 text-gray-500">{emp.department || '—'}</td>
-                        <td className="py-3 pr-4 text-gray-500">{emp.designation || '—'}</td>
-                        <td className="py-3 pr-4 font-medium text-gray-800">
-                          {emp.ctcPerAnnum ? `₹${formatLakhs(Number(emp.ctcPerAnnum))}` : '—'}
-                        </td>
-                        <td className="py-3 pr-4 text-gray-500">
-                          {emp.ctcPerAnnum ? `₹${formatLakhs(Number(emp.ctcPerAnnum) / 12)}` : '—'}
-                        </td>
-                        <td className="py-3 pr-4 text-gray-500">
-                          {emp.incentive ? `₹${formatLakhs(Number(emp.incentive))}` : '—'}
-                        </td>
-                        <td className="py-3 pr-4">
-                          {emp.pfApplicable ? (
-                            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Yes</span>
-                          ) : (
-                            <span className="text-xs text-gray-300">No</span>
-                          )}
-                        </td>
-                        <td className="py-3 pr-4">
-                          {emp.esicApplicable ? (
-                            <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">Yes</span>
-                          ) : (
-                            <span className="text-xs text-gray-300">No</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => handlePrintReport('compensation')}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
-            >
-              🖨️ Print Report
-            </button>
-            <button
-              type="button"
-              onClick={handleCompensationExcel}
-              className="flex items-center gap-2 px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]"
-            >
-              ⬇️ Download Excel
-            </button>
-          </div>
-        </div>
-        )
-      )}
-
-      {/* LEAVE */}
-      {activeTab === 'leave' && (
-        leaveList.length === 0 ? (
-          <EmptyState
-            illustration={
-              <div className="w-16 h-16 rounded-2xl bg-[#FAEEDA] flex items-center justify-center">
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <rect x="4" y="6" width="28" height="24" rx="4" fill="#FAC775" />
-                  <path d="M4 14h28" stroke="#854F0B" strokeWidth="1.5" />
-                  <path d="M11 6V4M25 6V4" stroke="#854F0B" strokeWidth="2" strokeLinecap="round" />
-                  <path d="M10 22h16M10 26h10" stroke="#EF9F27" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </div>
-            }
-            title="No leave data yet"
-            description="Leave requests will appear here once your team starts submitting them."
-            actionColor="#854F0B"
-          />
-        ) : (
-        <>
-          <div className="flex flex-wrap gap-2 mb-4">
-            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className={REPORT_FILTER_SELECT}>
-              <option value="">All locations</option>
-              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <StatCard value={leaveStats.total} label={`Leave requests (${currentYear})`} />
-            <StatCard value={leaveStats.approved} label="Approved" />
-            <StatCard value={leaveStats.pending} label="Pending" />
-            <StatCard value={leaveStats.rejected} label="Rejected" />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <ChartCard title="Leave by type (total vs approved)">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={leaveByType}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="total" fill="#1B6B6B" name="Total" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="approved" fill="#4ECDC4" name="Approved" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Leave trend by month">
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={monthlyLeave}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="count" stroke="#1B6B6B" strokeWidth={2} dot={{ fill: '#1B6B6B', r: 4 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Leave requests by department">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={leaveByDept}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={56} />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#2BB8B0" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </div>
-          <ChartCard title="Leave balance (approved days used vs policy)">
-            <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
-              <table className="min-w-full text-xs">
-                <thead className="sticky top-0 bg-gray-50">
-                  <tr>
-                    <th className="text-left px-2 py-2">Employee</th>
-                    {paidLeaveTypes.map((lt) => (
-                      <th key={lt.shortCode} className="text-left px-2 py-2 whitespace-nowrap">
-                        {lt.shortCode} used / total
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {locationFilteredEmployees.map((emp) => {
-                    const row = leaveBalanceByEmp[emp.id];
-                    if (!row) return null;
-                    const joinStar = isMidYearJoinerThisYear(emp.joiningDate);
-                    return (
-                      <tr key={emp.id} className="border-t border-gray-100">
-                        <td className="px-2 py-1.5">
-                          {emp.fullName}
-                          {joinStar && (
-                            <span className="text-xs text-amber-500 ml-1" title="Pro-rated for joining date">
-                              *
-                            </span>
-                          )}
-                        </td>
-                        {paidLeaveTypes.map((lt) => {
-                          const used = row[lt.shortCode] || 0;
-                          const base = getAllowanceForType(lt, leavePolicyMap);
-                          const allowed = calculateProRatedAllowance(base, emp.joiningDate);
-                          const bad = allowed > 0 && used > allowed;
-                          return (
-                            <td key={lt.shortCode} className={`px-2 py-1.5 whitespace-nowrap ${bad ? 'text-red-600 font-semibold' : ''}`}>
-                              {used} / {allowed}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <p className="text-xs text-gray-400 mt-2 px-2">* Pro-rated based on joining date (calendar year).</p>
-            </div>
-          </ChartCard>
-          <div className="bg-white border border-gray-100 rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Top 10 Leave Takers (This Year)</h3>
-            <div className="space-y-2">
-              {topLeaveEmployees.map((emp, i) => (
-                <div
-                  key={emp.employeeId || emp.empId || i}
-                  className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0"
-                >
-                  <span className="text-sm font-bold text-gray-300 w-6 text-center">{i + 1}</span>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-800">{emp.name}</p>
-                    <p className="text-xs text-gray-400">
-                      {emp.department} · {emp.count} request{emp.count !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-sm font-bold text-[#1B6B6B]">{emp.totalDays} days</span>
-                  </div>
-                </div>
-              ))}
-              {topLeaveEmployees.length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-4">No approved leaves this year</p>
-              )}
-            </div>
-          </div>
-
-              {/* Top leave takers */}
-              <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                <h3 className="text-sm font-semibold text-gray-800 mb-1">Top leave takers</h3>
-                <p className="text-xs text-gray-400 mb-3">Most leave days taken (approved) this year</p>
-                {topLeaveTakers.length === 0 ? (
-                  <p className="text-sm text-gray-300 text-center py-6">No leave data</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {topLeaveTakers.map((t, i) => (
-                      <div key={t.id} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50">
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${i < 3 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>{i + 1}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-gray-800 truncate">{t.name}</p>
-                          <p className="text-[10px] text-gray-400">{t.department} · {t.branch}</p>
-                        </div>
-                        <span className="text-sm font-semibold text-gray-800">{t.days}<span className="text-[10px] text-gray-400 ml-0.5">days</span></span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Absence rate by branch */}
-              {absenceByBranch.length > 0 && (
-                <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-1">Absence rate by branch</h3>
-                  <p className="text-xs text-gray-400 mb-3">Leave days as % of total working days</p>
-                  <ResponsiveContainer width="100%" height={Math.max(200, absenceByBranch.length * 28)}>
-                    <BarChart data={absenceByBranch} layout="vertical" margin={{ left: 100, right: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                      <XAxis type="number" tick={{ fontSize: 10 }} unit="%" />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={100} />
-                      <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }} formatter={(v) => `${v}%`} />
-                      <Bar dataKey="rate" fill="#EF9F27" name="Absence %" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-
-          <div className="mt-4 flex flex-wrap gap-2 items-center">
-            <button
-              type="button"
-              onClick={() => handlePrintReport('leave')}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
-            >
-              🖨️ Print Report
-            </button>
-            <DownloadExcelButton
-              onClick={() =>
-                downloadReport(safeCompanyFile, 'Leave', leaveYearList, [
-                  { header: 'Employee', accessor: (l) => l.employeeName || '' },
-                  { header: 'Type', accessor: (l) => l.leaveType || '' },
-                  { header: 'Start', accessor: (l) => toDisplayDate(l.startDate) },
-                  { header: 'End', accessor: (l) => toDisplayDate(l.endDate) },
-                  { header: 'Days', accessor: (l) => l.days ?? '' },
-                  { header: 'Status', accessor: (l) => l.status || '' },
-                ])
-              }
-              label="Download leave report (Excel)"
+          {activeTab === 'headcount' && (
+            <HeadcountTab
+              companyId={companyId}
+              employees={employees}
+              headcountStats={headcountStats}
+              deptData={deptData}
+              typeData={typeData}
+              categoryData={categoryData}
+              genderData={genderData}
+              tenureData={tenureData}
+              branchData={branchData}
+              locationData={locationData}
+              attritionTrend={attritionTrend}
+              tenureDistribution={tenureDistribution}
+              roleVacancyData={roleVacancyData}
+              roleVacancySummary={roleVacancySummary}
+              filterLocation={filterLocation}
+              setFilterLocation={setFilterLocation}
+              structuredLocations={structuredLocations}
+              handlePrintReport={handlePrintReport}
+              handleHeadcountExcel={handleHeadcountExcel}
             />
-          </div>
-        </>
-        )
-      )}
+          )}
 
-      {/* ASSETS */}
-      {activeTab === 'asset' && (
-        assets.length === 0 ? (
-          <EmptyState
-            illustration={
-              <div className="w-16 h-16 rounded-2xl bg-[#E6F1FB] flex items-center justify-center">
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <rect x="6" y="10" width="14" height="18" rx="3" fill="#B5D4F4" />
-                  <rect x="16" y="6" width="14" height="18" rx="3" fill="#85B7EB" />
-                  <path d="M8 18h10M8 23h6" stroke="#185FA5" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </div>
-            }
-            title="No assets tracked yet"
-            description="Add assets on the Assets page to see assignment stats and utilisation here."
-            actionColor="#185FA5"
-          />
-        ) : (
-        <>
-          <div className="flex flex-wrap gap-2 mb-4">
-            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className={REPORT_FILTER_SELECT}>
-              <option value="">All locations</option>
-              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <StatCard value={assetStats.total} label="Total assets" />
-            <StatCard value={assetStats.assigned} label="Assigned (trackable)" />
-            <StatCard value={assetStats.available} label="Available (trackable)" />
-            <StatCard value={`${assetStats.issued} / ${assetStats.totalStock}`} label="Consumable issued / stock" />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <ChartCard title="Assets by type">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={assetByType}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-25} textAnchor="end" height={70} />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#1B6B6B" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Trackable status breakdown">
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={assetStatusData} cx="50%" cy="50%" outerRadius={100} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                    {assetStatusData.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </div>
-          <ChartCard title="Assets per employee">
-            <div className="overflow-x-auto -mx-2 px-2">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-600 border-b">
-                  <th className="py-2">Employee</th>
-                  <th className="py-2">Emp ID</th>
-                  <th className="py-2">Count</th>
-                  <th className="py-2">Assets</th>
-                </tr>
-              </thead>
-              <tbody>
-                {assetsPerEmployeeRows.map((r) => (
-                  <tr key={r.employeeId} className="border-t border-gray-100">
-                    <td className="py-2">
-                      <Link to={`/company/${companyId}/employees/${r.employeeId}`} className="text-[#1B6B6B] hover:underline">
-                        {r.empName}
-                      </Link>
-                    </td>
-                    <td className="py-2">{r.empId}</td>
-                    <td className="py-2">{r.count}</td>
-                    <td className="py-2 text-gray-600 text-xs max-w-md truncate" title={r.namesStr}>
-                      {r.namesStr}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </ChartCard>
-          <ChartCard title="Consumable stock levels">
-            <div className="space-y-3">
-              {consumableRows.map((c) => {
-                const pct = c.stock > 0 ? Math.round((c.available / c.stock) * 100) : 0;
-                return (
-                  <div key={c.id}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="font-medium">{c.name}</span>
-                      <span className="text-gray-500">
-                        Stock {c.stock} · Issued {c.issued} · Avail {c.available}
-                      </span>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#1B6B6B] rounded-full transition-all" style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-              {consumableRows.length === 0 && <p className="text-gray-400 text-sm">No consumable assets</p>}
-            </div>
-          </ChartCard>
-
-              {/* Employee vs Branch assets */}
-              {assetsByTypeAndAssignment.length > 0 && (
-                <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-1">Assets by type — employee vs branch</h3>
-                  <p className="text-xs text-gray-400 mb-3">How assets are distributed across employees and branches</p>
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={assetsByTypeAndAssignment} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                      <XAxis dataKey="type" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                      <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="employee" stackId="a" fill="#1B6B6B" name="Employee" radius={[0, 0, 0, 0]} />
-                      <Bar dataKey="branch" stackId="a" fill="#4ECDC4" name="Branch" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-
-              {/* Warranty expiry tracker */}
-              <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                <h3 className="text-sm font-semibold text-gray-800 mb-1">Warranty expiring soon</h3>
-                <p className="text-xs text-gray-400 mb-3">Assets with warranty expiring in the next 90 days</p>
-                {warrantyExpiring.length === 0 ? (
-                  <p className="text-sm text-gray-300 text-center py-6">No warranties expiring in the next 90 days</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-100">
-                          {['Asset', 'Type', 'Assigned to', 'Expiry', 'Days left'].map((h) => (
-                            <th key={h} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {warrantyExpiring.map((a) => (
-                          <tr key={a.id} className="hover:bg-gray-50">
-                            <td className="px-3 py-2 font-medium text-gray-800">{a.name}</td>
-                            <td className="px-3 py-2 text-gray-500">{a.type}</td>
-                            <td className="px-3 py-2 text-gray-600">{a.assignedTo}</td>
-                            <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{a.expiryDate}</td>
-                            <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${a.daysLeft <= 30 ? 'bg-red-50 text-red-600' : a.daysLeft <= 60 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-700'}`}>{a.daysLeft} days</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-          <div className="mt-4 flex flex-wrap gap-2 items-center">
-            <button
-              type="button"
-              onClick={() => handlePrintReport('asset')}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
-            >
-              🖨️ Print Report
-            </button>
-            <DownloadExcelButton
-              onClick={() =>
-                downloadReport(safeCompanyFile, 'Assets', assets, [
-                  { header: 'Type', accessor: (a) => a.type || '' },
-                  { header: 'Name', accessor: (a) => a.name || '' },
-                  { header: 'Mode', accessor: (a) => a.mode || 'trackable' },
-                  { header: 'Status', accessor: (a) => a.status || '' },
-                  { header: 'Asset ID', accessor: (a) => a.assetId || '' },
-                ])
-              }
+          {activeTab === 'employee' && (
+            <EmployeeTab
+              companyId={companyId}
+              employees={employees}
+              filteredEmployeesForReport={filteredEmployeesForReport}
+              employeeSummary={employeeSummary}
+              filterLocation={filterLocation}
+              setFilterLocation={setFilterLocation}
+              structuredLocations={structuredLocations}
+              empFilterDept={empFilterDept}
+              setEmpFilterDept={setEmpFilterDept}
+              empFilterBranch={empFilterBranch}
+              setEmpFilterBranch={setEmpFilterBranch}
+              empFilterStatus={empFilterStatus}
+              setEmpFilterStatus={setEmpFilterStatus}
+              empFilterType={empFilterType}
+              setEmpFilterType={setEmpFilterType}
+              empFilterYear={empFilterYear}
+              setEmpFilterYear={setEmpFilterYear}
+              deptOptions={deptOptions}
+              branchOptions={branchOptions}
+              activeChecklist={activeChecklist}
+              totalMandatory={totalMandatory}
+              defaultTotalMandatory={defaultTotalMandatory}
+              handlePrintReport={handlePrintReport}
+              downloadEmployeeCSV={downloadEmployeeCSV}
+              downloadEmployeeExcel={downloadEmployeeExcel}
             />
-          </div>
-        </>
-        )
-      )}
+          )}
 
-      {/* DOCUMENTS */}
-      {activeTab === 'document' && (
-        employees.length === 0 ? (
-          <EmptyState
-            illustration={
-              <div className="w-16 h-16 rounded-2xl bg-[#F1EFE8] flex items-center justify-center">
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <rect x="8" y="4" width="20" height="28" rx="3" fill="#D3D1C7" />
-                  <path d="M13 12h10M13 17h10M13 22h7" stroke="#5F5E5A" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </div>
-            }
-            title="No document data yet"
-            description="Document completion stats will appear once employees and document types are set up."
-            actionColor="#5F5E5A"
-          />
-        ) : (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <StatCard value={docStats.full} label="100% mandatory docs" />
-            <StatCard value={docStats.missing} label="With missing mandatory" />
-            <StatCard value={docStats.totalDocs} label="Total documents uploaded" />
-            <StatCard value={docStats.mostMissing} label="Most missing doc type" />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <ChartCard title="Document completion distribution">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={completionBuckets}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#1B6B6B" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </div>
-          <ChartCard title="Employees with missing mandatory documents">
-            <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-              <table className="min-w-full text-sm">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="text-left text-gray-600 border-b">
-                    <th className="py-2 px-2">Name</th>
-                    <th className="py-2 px-2">Emp ID</th>
-                    <th className="py-2 px-2">Department</th>
-                    <th className="py-2 px-2">Completion</th>
-                    <th className="py-2 px-2">Missing</th>
-                    <th className="py-2 px-2 w-24">Remind</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {missingDocTableRows.map(({ emp, pct, missing }) => (
-                    <tr
-                      key={emp.id}
-                      className="border-t border-gray-100 cursor-pointer hover:bg-gray-50"
-                      onClick={() => navigate(`/company/${companyId}/employees/${emp.id}?tab=documents`)}
-                    >
-                      <td className="py-2 px-2 font-medium text-[#1B6B6B]">{emp.fullName}</td>
-                      <td className="py-2 px-2">{emp.empId}</td>
-                      <td className="py-2 px-2">{emp.department}</td>
-                      <td className="py-2 px-2 w-40">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div className={`h-full ${progressBarClass(pct)}`} style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="text-xs w-8">{pct}%</span>
-                        </div>
-                      </td>
-                      <td className="py-2 px-2 text-xs text-gray-600 max-w-xs">{missing.slice(0, 5).join(', ')}{missing.length > 5 ? '…' : ''}</td>
-                      <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
-                        {(emp.mobile || emp.phone || emp.mobileNumber) && missing.length > 0 ? (
-                          <WhatsAppButton
-                            phone={emp.mobile || emp.phone || emp.mobileNumber}
-                            message={
-                              `Dear ${emp.fullName} Garu,\n\n` +
-                              `This is a reminder from HR Department.\n\n` +
-                              `The following mandatory document is pending submission:\n\n` +
-                              `📄 *${missing.join(', ')}*\n\n` +
-                              `Please submit it at the earliest convenience.\n\n` +
-                              `Thank you,\nHR Team`
-                            }
-                            size="xs"
-                            label="Remind"
-                          />
-                        ) : (
-                          <span className="text-xs text-gray-300">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </ChartCard>
-          <div className="mt-4 flex flex-wrap gap-2 items-center">
-            <button
-              type="button"
-              onClick={() => handlePrintReport('document')}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
-            >
-              🖨️ Print Report
-            </button>
-            <DownloadExcelButton
-              onClick={() =>
-                downloadReport(
-                  safeCompanyFile,
-                  'Documents',
-                  employees.map((e) => ({ e, pct: getOverallPct(e, activeChecklist, totalMandatory || defaultTotalMandatory), missing: getMissingMandatoryNames(e, activeChecklist) })),
-                  [
-                    { header: 'Emp ID', accessor: (r) => r.e.empId || '' },
-                    { header: 'Name', accessor: (r) => r.e.fullName || '' },
-                    { header: 'Department', accessor: (r) => r.e.department || '' },
-                    { header: 'Completion %', accessor: (r) => r.pct },
-                    { header: 'Missing mandatory', accessor: (r) => r.missing.join('; ') },
-                  ],
-                )
-              }
+          {activeTab === 'compensation' && (
+            <CompensationTab
+              companyId={companyId}
+              locationFilteredEmployees={locationFilteredEmployees}
+              compensationData={compensationData}
+              filterLocation={filterLocation}
+              setFilterLocation={setFilterLocation}
+              structuredLocations={structuredLocations}
+              handlePrintReport={handlePrintReport}
+              handleCompensationExcel={handleCompensationExcel}
             />
-          </div>
-        </>
-        )
-      )}
+          )}
 
-      {/* ONBOARDING */}
-      {activeTab === 'onboarding' && (
-        employees.length === 0 ? (
-          <EmptyState
-            illustration={
-              <div className="w-16 h-16 rounded-2xl bg-[#EAF3DE] flex items-center justify-center">
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <circle cx="18" cy="13" r="6" fill="#C0DD97" />
-                  <path
-                    d="M8 32c0-5.523 4.477-10 10-10s10 4.477 10 10"
-                    stroke="#3B6D11"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <circle cx="27" cy="24" r="5" fill="#639922" />
-                  <path
-                    d="M25 24l1.5 1.5 3-3"
-                    stroke="#fff"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-            }
-            title="No onboarding data yet"
-            description="Start employee onboarding from the employee profile to see progress here."
-            actionColor="#3B6D11"
-          />
-        ) : (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <StatCard value={onboardingStats.started} label="Onboardings started" />
-            <StatCard value={onboardingStats.completed} label="Completed" />
-            <StatCard value={onboardingStats.inProgress} label="In progress" />
-            <StatCard value={onboardingStats.notStarted} label="Not started" />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <ChartCard title="Onboarding status">
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={onboardingDonutData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={70}
-                    outerRadius={100}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {onboardingDonutData.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Average onboarding completion % by department">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={deptOnboardingAvg}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={56} />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip />
-                  <Bar dataKey="avg" fill="#4ECDC4" name="Avg %" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </div>
-          <ChartCard title="New joiners (last 90 days)">
-            <div className="overflow-x-auto -mx-2 px-2">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-600 border-b">
-                  <th className="py-2">Name</th>
-                  <th className="py-2">Joining Date</th>
-                  <th className="py-2">Tenure</th>
-                  <th className="py-2">Onboarding %</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2">Tasks left</th>
-                </tr>
-              </thead>
-              <tbody>
-                {newJoinersTable.map(({ e, pct, left, status }) => (
-                  <tr key={e.id} className="border-t border-gray-100">
-                    <td className="py-2">
-                      <Link className="text-[#1B6B6B] hover:underline" to={`/company/${companyId}/employees/${e.id}?tab=onboarding`}>
-                        {e.fullName}
-                      </Link>
-                    </td>
-                    <td className="py-2">{toDisplayDate(e.joiningDate)}</td>
-                    <td className="py-2">{tenureLabel(e.joiningDate)}</td>
-                    <td className="py-2">
-                      <div className="flex items-center gap-2 w-32">
-                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className={`h-full ${status === 'Completed' ? 'bg-green-500' : status === 'In Progress' ? 'bg-blue-500' : 'bg-red-500'}`} style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className="text-xs">{pct}%</span>
-                      </div>
-                    </td>
-                    <td className="py-2">
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded-full ${
-                          status === 'Completed' ? 'bg-green-100 text-green-800' : status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {status}
-                      </span>
-                    </td>
-                    <td className="py-2">{left}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </ChartCard>
-          <div className="mt-4 flex flex-wrap gap-2 items-center">
-            <button
-              type="button"
-              onClick={() => handlePrintReport('onboarding')}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
-            >
-              🖨️ Print Report
-            </button>
-            <DownloadExcelButton
-              onClick={() =>
-                downloadReport(safeCompanyFile, 'Onboarding', newJoinersTable, [
-                  { header: 'Name', accessor: (r) => r.e.fullName || '' },
-                  { header: 'Joining Date', accessor: (r) => toDisplayDate(r.e.joiningDate) },
-                  { header: 'Tenure', accessor: (r) => tenureLabel(r.e.joiningDate) },
-                  { header: 'Onboarding %', accessor: (r) => r.pct },
-                  { header: 'Status', accessor: (r) => r.status },
-                  { header: 'Tasks left', accessor: (r) => r.left },
-                ])
-              }
+          {activeTab === 'leave' && (
+            <LeaveTab
+              leaveList={leaveList}
+              leaveStats={leaveStats}
+              leaveByType={leaveByType}
+              monthlyLeave={monthlyLeave}
+              leaveByDept={leaveByDept}
+              leaveBalanceByEmp={leaveBalanceByEmp}
+              locationFilteredEmployees={locationFilteredEmployees}
+              topLeaveEmployees={topLeaveEmployees}
+              topLeaveTakers={topLeaveTakers}
+              absenceByBranch={absenceByBranch}
+              paidLeaveTypes={paidLeaveTypes}
+              leavePolicyMap={leavePolicyMap}
+              currentYear={currentYear}
+              filterLocation={filterLocation}
+              setFilterLocation={setFilterLocation}
+              structuredLocations={structuredLocations}
+              handlePrintReport={handlePrintReport}
+              safeCompanyFile={safeCompanyFile}
+              leaveYearList={leaveYearList}
             />
-          </div>
-        </>
-        )
-      )}
+          )}
 
-      {/* OFFBOARDING */}
-      {activeTab === 'offboarding' && (
-        employees.length === 0 ? (
-          <EmptyState
-            illustration={
-              <div className="w-16 h-16 rounded-2xl bg-[#EAF3DE] flex items-center justify-center">
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <circle cx="18" cy="13" r="6" fill="#C0DD97" />
-                  <path
-                    d="M8 32c0-5.523 4.477-10 10-10s10 4.477 10 10"
-                    stroke="#3B6D11"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <circle cx="27" cy="24" r="5" fill="#639922" />
-                  <path
-                    d="M25 24l1.5 1.5 3-3"
-                    stroke="#fff"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-            }
-            title="No offboarding data yet"
-            description="Employees in notice period or with exit tasks will show up here."
-            actionColor="#3B6D11"
-          />
-        ) : (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <StatCard value={offboardingReportStats.inNotice} label="Currently in Notice Period" />
-            <StatCard value={offboardingReportStats.exitTasks} label="Exit tasks in progress" />
-            <StatCard value={offboardingReportStats.exitsThisMonth} label="Exits this month" />
-            <StatCard value={offboardingReportStats.withdrawnThisMonth} label="Withdrawn this month" />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <ChartCard title="Exit reasons">
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={exitReasons} cx="50%" cy="50%" outerRadius={100} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                    {exitReasons.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Exits by month (completed, current year)">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={monthlyExits}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#1B6B6B" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </div>
-          <ChartCard title="Notice Period (employee status)">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-600 border-b">
-                    <th className="py-2">Employee</th>
-                    <th className="py-2">Resignation date</th>
-                    <th className="py-2">Last day</th>
-                    <th className="py-2">Days remaining</th>
-                    <th className="py-2">Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inNoticePeriodByStatus.map(({ e, daysRemaining }) => (
-                    <tr key={e.id} className="border-t border-gray-100">
-                      <td className="py-2">
-                        <Link to={`/company/${companyId}/employees/${e.id}?tab=offboarding`} className="text-[#1B6B6B] hover:underline">
-                          {e.fullName}
-                        </Link>
-                      </td>
-                      <td className="py-2">
-                        {toDisplayDate(e.offboarding?.recordedAt) || toDisplayDate(e.offboarding?.resignationDate) || '—'}
-                      </td>
-                      <td className="py-2">{toDisplayDate(e.offboarding?.expectedLastDay)}</td>
-                      <td className="py-2">{daysRemaining}</td>
-                      <td className="py-2">{e.offboarding?.reason || e.offboarding?.exitReason || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {inNoticePeriodByStatus.length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-6">No employees with status &quot;Notice Period&quot;.</p>
-              )}
-            </div>
-          </ChartCard>
-          <ChartCard title="Notice Period (offboarding phase)">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-600 border-b">
-                    <th className="py-2">Name</th>
-                    <th className="py-2">Department</th>
-                    <th className="py-2">Resigned</th>
-                    <th className="py-2">Expected last day</th>
-                    <th className="py-2">Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {noticePeriodReportRows.map(({ e }) => (
-                    <tr key={e.id} className="border-t border-gray-100">
-                      <td className="py-2">
-                        <Link to={`/company/${companyId}/employees/${e.id}?tab=offboarding`} className="text-[#1B6B6B] hover:underline">
-                          {e.fullName}
-                        </Link>
-                      </td>
-                      <td className="py-2">{e.department}</td>
-                      <td className="py-2">{toDisplayDate(e.offboarding?.resignationDate)}</td>
-                      <td className="py-2">{toDisplayDate(e.offboarding?.expectedLastDay)}</td>
-                      <td className="py-2">{e.offboarding?.reason || e.offboarding?.exitReason || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </ChartCard>
-          <ChartCard title="Exit tasks in progress">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-600 border-b">
-                    <th className="py-2">Name</th>
-                    <th className="py-2">Department</th>
-                    <th className="py-2">Exit date</th>
-                    <th className="py-2">Days left</th>
-                    <th className="py-2">Reason</th>
-                    <th className="py-2">Completion</th>
-                    <th className="py-2">Pending tasks</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeOffboardingRows.map(({ e, daysLeft, pct, pending }) => (
-                    <tr key={e.id} className="border-t border-gray-100">
-                      <td className="py-2">
-                        <Link to={`/company/${companyId}/employees/${e.id}?tab=offboarding`} className="text-[#1B6B6B] hover:underline">
-                          {e.fullName}
-                        </Link>
-                      </td>
-                      <td className="py-2">{e.department}</td>
-                      <td className="py-2">
-                        {toDisplayDate(e.offboarding?.exitDate || e.offboarding?.actualLastDay || e.offboarding?.expectedLastDay)}
-                      </td>
-                      <td className="py-2">{daysLeft == null ? '—' : daysLeft < 0 ? 'Past' : daysLeft}</td>
-                      <td className="py-2">{e.offboarding?.exitReason || e.offboarding?.reason || '—'}</td>
-                      <td className="py-2">{pct}%</td>
-                      <td className="py-2">{pending}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </ChartCard>
-          <ChartCard title="Withdrawn">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-600 border-b">
-                    <th className="py-2">Name</th>
-                    <th className="py-2">Department</th>
-                    <th className="py-2">Withdrawn on</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {withdrawnOffboardingRows.map(({ e }) => (
-                    <tr key={e.id} className="border-t border-gray-100">
-                      <td className="py-2">
-                        <Link to={`/company/${companyId}/employees/${e.id}?tab=offboarding`} className="text-[#1B6B6B] hover:underline">
-                          {e.fullName}
-                        </Link>
-                      </td>
-                      <td className="py-2">{e.department}</td>
-                      <td className="py-2">{toDisplayDate(e.offboarding?.withdrawnOn)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </ChartCard>
-          <ChartCard title="Completed exits">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-600 border-b">
-                    <th className="py-2">Name</th>
-                    <th className="py-2">Department</th>
-                    <th className="py-2">Exit date</th>
-                    <th className="py-2">Reason</th>
-                    <th className="py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {completedOffboardingRows.map(({ e }) => (
-                    <tr key={e.id} className="border-t border-gray-100">
-                      <td className="py-2">{e.fullName}</td>
-                      <td className="py-2">{e.department}</td>
-                      <td className="py-2">{toDisplayDate(e.offboarding?.exitDate)}</td>
-                      <td className="py-2">{e.offboarding?.exitReason || '—'}</td>
-                      <td className="py-2">{e.status || 'Inactive'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </ChartCard>
-          <div className="mt-4 flex flex-wrap gap-2 items-center">
-            <button
-              type="button"
-              onClick={() => handlePrintReport('offboarding')}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
-            >
-              🖨️ Print Report
-            </button>
-            <DownloadExcelButton onClick={handleOffboardingExcel} label="Download offboarding report (Excel)" />
-          </div>
-        </>
-        )
-      )}
+          {activeTab === 'asset' && (
+            <AssetTab
+              companyId={companyId}
+              assets={assets}
+              assetStats={assetStats}
+              assetByType={assetByType}
+              assetStatusData={assetStatusData}
+              assetsPerEmployeeRows={assetsPerEmployeeRows}
+              consumableRows={consumableRows}
+              assetsByTypeAndAssignment={assetsByTypeAndAssignment}
+              warrantyExpiring={warrantyExpiring}
+              filterLocation={filterLocation}
+              setFilterLocation={setFilterLocation}
+              structuredLocations={structuredLocations}
+              handlePrintReport={handlePrintReport}
+              safeCompanyFile={safeCompanyFile}
+            />
+          )}
 
-      {/* BRANCH */}
-      {activeTab === 'branch' && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-[#1B6B6B]">
-              <option value="">All locations</option>
-              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
-            </select>
-            <span className="text-xs text-gray-400">{branchAnalytics.length} branch{branchAnalytics.length !== 1 ? 'es' : ''}</span>
-          </div>
+          {activeTab === 'document' && (
+            <DocumentTab
+              companyId={companyId}
+              employees={employees}
+              docStats={docStats}
+              completionBuckets={completionBuckets}
+              missingDocTableRows={missingDocTableRows}
+              activeChecklist={activeChecklist}
+              totalMandatory={totalMandatory}
+              defaultTotalMandatory={defaultTotalMandatory}
+              handlePrintReport={handlePrintReport}
+              safeCompanyFile={safeCompanyFile}
+            />
+          )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: 'Total branches', value: branchAnalytics.length, color: 'bg-[#E1F5EE] text-[#0F6E56]' },
-              { label: 'Total employees', value: branchAnalytics.reduce((s, b) => s + b.employees, 0), color: 'bg-blue-50 text-blue-700' },
-              { label: 'Total asset value', value: `₹${(branchAnalytics.reduce((s, b) => s + b.assetValue, 0) / 100000).toFixed(1)}L`, color: 'bg-amber-50 text-amber-700' },
-              { label: 'Avg per branch', value: branchAnalytics.length ? Math.round(branchAnalytics.reduce((s, b) => s + b.employees, 0) / branchAnalytics.length) : 0, color: 'bg-purple-50 text-purple-700' },
-            ].map((kpi) => (
-              <div key={kpi.label} className={`rounded-xl p-3 ${kpi.color}`}>
-                <p className="text-[10px] font-medium uppercase tracking-wide opacity-70">{kpi.label}</p>
-                <p className="text-lg font-semibold mt-1">{kpi.value}</p>
-              </div>
-            ))}
-          </div>
+          {activeTab === 'onboarding' && (
+            <OnboardingTab
+              companyId={companyId}
+              employees={employees}
+              onboardingStats={onboardingStats}
+              onboardingDonutData={onboardingDonutData}
+              deptOnboardingAvg={deptOnboardingAvg}
+              newJoinersTable={newJoinersTable}
+              handlePrintReport={handlePrintReport}
+              safeCompanyFile={safeCompanyFile}
+            />
+          )}
 
-          <div className="bg-white border border-gray-100 rounded-2xl p-4">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3">Employees by branch</h3>
-            <ResponsiveContainer width="100%" height={Math.max(250, branchAnalytics.length * 32)}>
-              <BarChart data={branchAnalytics.slice(0, 20)} layout="vertical" margin={{ left: 100, right: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis type="number" tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={100} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }} />
-                <Bar dataKey="employees" fill="#1B6B6B" radius={[0, 4, 4, 0]} name="Employees" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {activeTab === 'offboarding' && (
+            <OffboardingTab
+              companyId={companyId}
+              employees={employees}
+              offboardingReportStats={offboardingReportStats}
+              exitReasons={exitReasons}
+              monthlyExits={monthlyExits}
+              inNoticePeriodByStatus={inNoticePeriodByStatus}
+              noticePeriodReportRows={noticePeriodReportRows}
+              activeOffboardingRows={activeOffboardingRows}
+              withdrawnOffboardingRows={withdrawnOffboardingRows}
+              completedOffboardingRows={completedOffboardingRows}
+              handlePrintReport={handlePrintReport}
+              handleOffboardingExcel={handleOffboardingExcel}
+            />
+          )}
 
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-800">Branch scorecard</h3>
-              <span className="text-xs text-gray-400">{branchAnalytics.length} branches</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    {['Branch', 'Location', 'Employees', 'Active', 'Depts', 'Avg salary', 'Assets', 'Branch assets', 'Asset value', 'Leaves'].map((h) => (
-                      <th key={h} className="px-3 py-2.5 text-left font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {branchAnalytics.map((b) => (
-                    <tr key={b.name} className="hover:bg-[#E8F5F5]/20">
-                      <td className="px-3 py-2.5 font-medium text-gray-800 whitespace-nowrap">{b.name}</td>
-                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{b.location}</td>
-                      <td className="px-3 py-2.5 font-semibold text-gray-800">{b.employees}</td>
-                      <td className="px-3 py-2.5"><span className="px-1.5 py-0.5 rounded bg-green-50 text-green-700 text-[10px] font-medium">{b.active}</span></td>
-                      <td className="px-3 py-2.5 text-gray-500">{b.departments.size}</td>
-                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{b.salaryCount > 0 ? `₹${Math.round(b.totalSalary / b.salaryCount).toLocaleString('en-IN')}` : '—'}</td>
-                      <td className="px-3 py-2.5 text-gray-600">{b.assetCount}</td>
-                      <td className="px-3 py-2.5"><span className="px-1.5 py-0.5 rounded bg-[#E1F5EE] text-[#0F6E56] text-[10px] font-medium">{b.branchAssetCount}</span></td>
-                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{b.assetValue > 0 ? `₹${(b.assetValue / 1000).toFixed(0)}K` : '—'}</td>
-                      <td className="px-3 py-2.5 text-gray-600">{b.leaveCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+          {activeTab === 'branch' && (
+            <BranchTab
+              branchAnalytics={branchAnalytics}
+              filterLocation={filterLocation}
+              setFilterLocation={setFilterLocation}
+              structuredLocations={structuredLocations}
+            />
+          )}
 
-      {/* AUDIT */}
-      {activeTab === 'audit' && (
-        audits.length === 0 ? (
-          <EmptyState
-            illustration={
-              <div className="w-16 h-16 rounded-2xl bg-[#E1F5EE] flex items-center justify-center">
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <circle cx="16" cy="16" r="10" stroke="#1B6B6B" strokeWidth="2" />
-                  <path d="M22 22l8 8" stroke="#1B6B6B" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </div>
-            }
-            title="No audits yet"
-            description="Audit reports appear when audits are created and assigned."
-            actionColor="#1B6B6B"
-          />
-        ) : (
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-2 mb-4">
-            <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className={REPORT_FILTER_SELECT}>
-              <option value="">All locations</option>
-              {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
-            </select>
-          </div>
-          <AuditReports audits={filterLocation ? audits.filter((a) => (a.location || '') === filterLocation) : audits} />
-
-              {/* Audit completion by branch */}
-              {auditByBranch.length > 0 && (
-                <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-1">Audit completion by branch</h3>
-                  <p className="text-xs text-gray-400 mb-3">Completion rate and average score per branch</p>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-100">
-                          {['Branch', 'Total', 'Closed', 'Completion', 'Avg score', 'Verified', 'Mismatch'].map((h) => (
-                            <th key={h} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {auditByBranch.map((b) => (
-                          <tr key={b.name} className="hover:bg-[#E8F5F5]/20">
-                            <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{b.name}</td>
-                            <td className="px-3 py-2 text-gray-600">{b.total}</td>
-                            <td className="px-3 py-2 text-gray-600">{b.closed}</td>
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
-                                <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${b.completionRate >= 80 ? 'bg-green-500' : b.completionRate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${b.completionRate}%` }} /></div>
-                                <span className="text-[10px] font-medium text-gray-600">{b.completionRate}%</span>
-                              </div>
-                            </td>
-                            <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${b.avgScore >= 80 ? 'bg-green-50 text-green-700' : b.avgScore >= 60 ? 'bg-amber-50 text-amber-700' : b.avgScore > 0 ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-400'}`}>{b.avgScore > 0 ? `${b.avgScore}%` : '—'}</span></td>
-                            <td className="px-3 py-2"><span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700">{b.verified}</span></td>
-                            <td className="px-3 py-2">{b.mismatch > 0 ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-600">{b.mismatch}</span> : <span className="text-gray-300">0</span>}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Verification rate chart */}
-              {auditByBranch.filter((b) => b.verificationRate !== null).length > 0 && (
-                <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-1">Location verification rate</h3>
-                  <p className="text-xs text-gray-400 mb-3">% of audits where auditor was on-site verified</p>
-                  <ResponsiveContainer width="100%" height={Math.max(200, auditByBranch.filter((b) => b.verificationRate !== null).length * 28)}>
-                    <BarChart data={auditByBranch.filter((b) => b.verificationRate !== null)} layout="vertical" margin={{ left: 100, right: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                      <XAxis type="number" tick={{ fontSize: 10 }} domain={[0, 100]} unit="%" />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={100} />
-                      <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }} formatter={(v) => `${v}%`} />
-                      <Bar dataKey="verificationRate" name="Verified %" radius={[0, 4, 4, 0]}>
-                        {auditByBranch.filter((b) => b.verificationRate !== null).map((b, i) => (
-                          <Cell key={i} fill={b.verificationRate >= 80 ? '#639922' : b.verificationRate >= 50 ? '#EF9F27' : '#E24B4A'} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-        </div>
-        )
-      )}
-
+          {activeTab === 'audit' && (
+            <AuditTab
+              audits={audits}
+              auditByBranch={auditByBranch}
+              filterLocation={filterLocation}
+              setFilterLocation={setFilterLocation}
+              structuredLocations={structuredLocations}
+            />
+          )}
         </>
       )}
     </div>

@@ -27,136 +27,33 @@ import ErrorModal from '../components/ErrorModal';
 import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 import { trackAssetAdded, trackAssetAssigned, trackPageView } from '../utils/analytics';
-
-const DEFAULT_ASSET_TYPES = [
-  { name: 'Laptop', mode: 'trackable' },
-  { name: 'Desktop', mode: 'trackable' },
-  { name: 'Mobile Phone', mode: 'trackable' },
-  { name: 'SIM Card', mode: 'consumable' },
-  { name: 'Tablet', mode: 'trackable' },
-  { name: 'ID Card', mode: 'consumable' },
-  { name: 'Access Card', mode: 'consumable' },
-  { name: 'Uniform', mode: 'consumable' },
-  { name: 'Headset', mode: 'consumable' },
-  { name: 'Charger', mode: 'consumable' },
-  { name: 'Vehicle', mode: 'trackable' },
-  { name: 'Tools', mode: 'trackable' },
-  { name: 'Furniture', mode: 'trackable' },
-  { name: 'Other', mode: 'trackable' },
-];
-
-const STATUS_OPTIONS = ['All', 'Available', 'Assigned', 'Damaged', 'Lost', 'In Repair', 'Retired'];
-
-const CONDITION_OPTIONS = ['New', 'Good', 'Fair', 'Poor', 'Damaged'];
-
-const getStatusBadgeClass = (status) => {
-  switch (status) {
-    case 'Available':
-      return 'bg-[#C5E8E8] text-[#1B6B6B]';
-    case 'Assigned':
-      return 'bg-green-100 text-green-700';
-    case 'Damaged':
-      return 'bg-red-100 text-red-700';
-    case 'Lost':
-      return 'bg-red-200 text-red-800';
-    case 'In Repair':
-      return 'bg-amber-100 text-amber-800';
-    case 'Retired':
-    default:
-      return 'bg-slate-100 text-slate-600';
-  }
-};
-
-const getAssetIcon = (type) => {
-  const icons = {
-    Laptop: '💻',
-    'Mobile Phone': '📱',
-    'SIM Card': '📶',
-    Tablet: '📟',
-    'ID Card': '🪪',
-    'Access Card': '🪪',
-    Uniform: '👔',
-    Headset: '🎧',
-    Charger: '🔌',
-    Vehicle: '🚗',
-    Tools: '🛠️',
-    Furniture: '🪑',
-  };
-  return icons[type] || '📦';
-};
-
-const getConditionBadgeClass = (condition) => {
-  switch (condition) {
-    case 'New': return 'bg-[#EAF3DE] text-[#27500A]';
-    case 'Good': return 'bg-[#E1F5EE] text-[#0F6E56]';
-    case 'Fair': return 'bg-[#FAEEDA] text-[#633806]';
-    case 'Poor': return 'bg-[#FCEBEB] text-[#791F1F]';
-    case 'Damaged': return 'bg-[#FCEBEB] text-[#791F1F]';
-    default: return 'bg-gray-100 text-gray-600';
-  }
-};
-
-const getStatusBarColor = (status) => {
-  switch (status) {
-    case 'Assigned': return '#9FE1CB';
-    case 'In Repair': return '#F09595';
-    case 'Damaged': return '#F09595';
-    case 'Lost': return '#F7C1C1';
-    case 'Retired': return '#D3D1C7';
-    default: return '#D3D1C7';
-  }
-};
-
-const getAssetIdBadgeClass = (status) => {
-  switch (status) {
-    case 'Assigned': return 'bg-[#E1F5EE] text-[#0F6E56]';
-    case 'In Repair': return 'bg-[#FCEBEB] text-[#791F1F]';
-    case 'Damaged': return 'bg-[#FCEBEB] text-[#791F1F]';
-    case 'Lost': return 'bg-[#FCEBEB] text-[#A32D2D]';
-    default: return 'bg-gray-100 text-gray-600';
-  }
-};
-
-const getAssetTypeColors = (type) => {
-  const map = {
-    Laptop: { bg: '#E6F1FB' }, Desktop: { bg: '#EEEDFE' },
-    'Mobile Phone': { bg: '#E1F5EE' }, 'SIM Card': { bg: '#EEEDFE' },
-    Tablet: { bg: '#E6F1FB' }, 'ID Card': { bg: '#E1F5EE' },
-    'Access Card': { bg: '#E1F5EE' }, Uniform: { bg: '#FAEEDA' },
-    Headset: { bg: '#FAEEDA' }, Charger: { bg: '#FAEEDA' },
-    Vehicle: { bg: '#FCEBEB' }, Tools: { bg: '#F1EFE8' },
-    Furniture: { bg: '#F1EFE8' }, Printer: { bg: '#FAEEDA' },
-    Scanner: { bg: '#FAEEDA' },
-  };
-  return map[type] || { bg: '#F1EFE8' };
-};
-
-const buildAssetIdPrefix = (type) => {
-  if (!type) return 'AST';
-  const map = {
-    Laptop: 'LAP',
-    Desktop: 'DES',
-    'Mobile Phone': 'MOB',
-    'SIM Card': 'SIM',
-    Tablet: 'TAB',
-    'ID Card': 'IDC',
-    'Access Card': 'ACC',
-    Uniform: 'UNI',
-    Headset: 'HED',
-    Charger: 'CHR',
-    Vehicle: 'VEH',
-    Tools: 'TLS',
-    Furniture: 'FUR',
-  };
-  return map[type] || 'AST';
-};
-
-function SortIcon({ colKey, sortConfig }) {
-  if (sortConfig.key !== colKey) return <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3 4l2-2 2 2M3 6l2 2 2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>;
-  return sortConfig.dir === 'asc'
-    ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3 6l2-2 2 2" stroke="#1B6B6B" strokeWidth="1.5" strokeLinecap="round"/></svg>
-    : <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3 4l2 2 2-2" stroke="#1B6B6B" strokeWidth="1.5" strokeLinecap="round"/></svg>;
-}
+import {
+  DEFAULT_ASSET_TYPES,
+  STATUS_OPTIONS,
+  CONDITION_OPTIONS,
+  getStatusBadgeClass,
+  getAssetIcon,
+  getConditionBadgeClass,
+  getStatusBarColor,
+  getAssetIdBadgeClass,
+  getAssetTypeColors,
+  buildAssetIdPrefix,
+} from '../utils/assetHelpers';
+import SortIcon from '../components/assets/SortIcon';
+import AddAssetModal from '../components/assets/AddAssetModal';
+import AssignAssetModal from '../components/assets/AssignAssetModal';
+import ReturnAssetModal from '../components/assets/ReturnAssetModal';
+import IssueConsumableModal from '../components/assets/IssueConsumableModal';
+import ViewIssuedModal from '../components/assets/ViewIssuedModal';
+import ReturnConsumableModal from '../components/assets/ReturnConsumableModal';
+import EditStockModal from '../components/assets/EditStockModal';
+import AssetHistoryModal from '../components/assets/AssetHistoryModal';
+import MaintenanceModal from '../components/assets/MaintenanceModal';
+import QRModal from '../components/assets/QRModal';
+import AssetDetailPanel from '../components/assets/AssetDetailPanel';
+import EditAssetModal from '../components/assets/EditAssetModal';
+import StatusChangeModal from '../components/assets/StatusChangeModal';
+import DeleteAssetModal from '../components/assets/DeleteAssetModal';
 
 export default function Assets() {
   const { companyId } = useParams();
@@ -2495,1245 +2392,148 @@ export default function Assets() {
         </>
       )}
 
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-xl sm:my-8 max-h-[92vh] flex flex-col overflow-hidden">
+      <AddAssetModal
+        showAddModal={showAddModal}
+        setShowAddModal={setShowAddModal}
+        selectedAddAssetMode={addAssetMode}
+        setAddAssetMode={setAddAssetMode}
+        assetTypes={assetTypes}
+        form={form}
+        setForm={setForm}
+        formErrors={formErrors}
+        handleFormChange={handleFormChange}
+        handleSaveAsset={handleSaveAsset}
+        saving={saving}
+        structuredLocations={structuredLocations}
+        company={company}
+      />
 
-            {/* Header */}
-            <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
-              <div>
-                <h2 className="text-base font-semibold text-gray-800">Add asset</h2>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {selectedAddAssetMode === 'trackable'
-                    ? 'Trackable — individual item with unique ID'
-                    : selectedAddAssetMode === 'consumable'
-                    ? 'Consumable — quantity pool, issued to employees'
-                    : 'Choose a type to get started'}
-                </p>
-              </div>
-              <button type="button" onClick={() => setShowAddModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 flex-shrink-0 text-sm">✕</button>
-            </div>
+      <AssignAssetModal
+        showAssignModal={showAssignModal}
+        setShowAssignModal={setShowAssignModal}
+        selectedAsset={selectedAsset}
+        assets={assets}
+        employees={employees}
+        assignForm={assignForm}
+        handleAssignChange={handleAssignChange}
+        handleSaveAssignment={handleSaveAssignment}
+        saving={saving}
+      />
 
-            {/* Scrollable body */}
-            <div className="overflow-y-auto flex-1 px-6 py-5">
+      <ReturnAssetModal
+        showReturnModal={showReturnModal}
+        setShowReturnModal={setShowReturnModal}
+        selectedAsset={selectedAsset}
+        returnForm={returnForm}
+        handleReturnChange={handleReturnChange}
+        handleSaveReturn={handleSaveReturn}
+        saving={saving}
+      />
 
-              {/* Step 1 — Mode picker */}
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Step 1 — Asset mode</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-                {[
-                  {
-                    mode: 'trackable',
-                    label: 'Trackable',
-                    desc: 'One item, one person at a time.',
-                    examples: 'Laptop · Phone · Vehicle · ID card',
-                    icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#185FA5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                    ),
-                    bg: '#E6F1FB',
-                    activeBorder: '#378ADD',
-                    activeBg: '#EBF4FD',
-                    textColor: '#185FA5',
-                  },
-                  {
-                    mode: 'consumable',
-                    label: 'Consumable',
-                    desc: 'Stock pool issued to many employees.',
-                    examples: 'Uniform · SIM card · Stationery',
-                    icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
-                    ),
-                    bg: '#EAF3DE',
-                    activeBorder: '#639922',
-                    activeBg: '#F0F8E8',
-                    textColor: '#27500A',
-                  },
-                ].map(({ mode, label, desc, examples, icon, bg, activeBorder, activeBg, textColor }) => {
-                  const isActive = selectedAddAssetMode === mode;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => { setAddAssetMode(mode); handleFormChange({ target: { name: 'type', value: '' } }); }}
-                      className="text-left rounded-xl border-2 p-3.5 transition-all"
-                      style={{
-                        borderColor: isActive ? activeBorder : '#E5E7EB',
-                        background: isActive ? activeBg : '#FAFAFA',
-                      }}
-                    >
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-2.5" style={{ background: bg }}>
-                        {icon}
-                      </div>
-                      <p className="text-sm font-semibold" style={{ color: isActive ? textColor : '#374151' }}>{label}</p>
-                      <p className="text-xs text-gray-500 mt-0.5 leading-snug">{desc}</p>
-                      <p className="text-[10px] mt-1.5 font-medium" style={{ color: isActive ? textColor : '#9CA3AF' }}>{examples}</p>
-                    </button>
-                  );
-                })}
-              </div>
+      <IssueConsumableModal
+        showIssueModal={showIssueModal}
+        setShowIssueModal={setShowIssueModal}
+        issueAsset={issueAsset}
+        issueForm={issueForm}
+        setIssueForm={setIssueForm}
+        handleSaveIssueConsumable={handleSaveIssueConsumable}
+        employees={employees}
+        saving={saving}
+      />
 
-              {/* Step 2 — Asset type chips */}
-              {assetTypes.length > 0 && (
-                <>
-                  <div className="h-px bg-gray-100 mb-5" />
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Step 2 — Asset type</p>
-                  {(() => {
-                    const relevantTypes = selectedAddAssetMode
-                      ? assetTypes.filter((t) => (t.mode || 'trackable') === selectedAddAssetMode)
-                      : assetTypes;
-                    const shown = relevantTypes.slice(0, 8);
-                    const typeIcons = { Laptop: '💻', Desktop: '🖥️', 'Mobile Phone': '📱', 'SIM Card': '📶', Tablet: '📟', 'ID Card': '🪪', 'Access Card': '💳', Uniform: '👔', Headset: '🎧', Charger: '🔌', Vehicle: '🚗', Tools: '🔧', Furniture: '🪑' };
-                    return (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-                        {shown.map((t) => (
-                          <button
-                            key={t.name}
-                            type="button"
-                            onClick={() => handleFormChange({ target: { name: 'type', value: t.name } })}
-                            className="flex flex-col items-center gap-1.5 p-2.5 rounded-xl border-2 transition-all"
-                            style={{
-                              borderColor: form.type === t.name ? (selectedAddAssetMode === 'consumable' ? '#639922' : '#378ADD') : '#E5E7EB',
-                              background: form.type === t.name ? (selectedAddAssetMode === 'consumable' ? '#F0F8E8' : '#EBF4FD') : '#FAFAFA',
-                            }}
-                          >
-                            <span className="text-xl leading-none">{typeIcons[t.name] || '📦'}</span>
-                            <span className="text-[10px] text-center leading-tight" style={{ color: form.type === t.name ? (selectedAddAssetMode === 'consumable' ? '#27500A' : '#185FA5') : '#6B7280', fontWeight: form.type === t.name ? '500' : '400' }}>{t.name}</span>
-                          </button>
-                        ))}
-                        {relevantTypes.length > 8 && (
-                          <div className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-dashed border-gray-200 bg-gray-50">
-                            <span className="text-xs text-gray-400">+{relevantTypes.length - 8} more</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  <select
-                    name="type"
-                    value={form.type}
-                    onChange={handleFormChange}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-600 bg-gray-50 mb-1"
-                  >
-                    <option value="">Or select from full list…</option>
-                    {selectedAddAssetMode
-                      ? assetTypes.filter((t) => (t.mode || 'trackable') === selectedAddAssetMode).map((t) => <option key={t.name} value={t.name}>{t.name}</option>)
-                      : assetTypes.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)
-                    }
-                  </select>
-                  {formErrors.type && <p className="text-red-500 text-xs mt-1">{formErrors.type}</p>}
-                </>
-              )}
+      <ViewIssuedModal
+        showViewIssuedModal={showViewIssuedModal}
+        setShowViewIssuedModal={setShowViewIssuedModal}
+        issuedAsset={issuedAsset}
+        employees={employees}
+        openReturnConsumableModal={openReturnConsumableModal}
+      />
 
-              {/* Step 3 — Assign to (trackable only) */}
-              {selectedAddAssetMode === 'trackable' && form.type && (
-                <>
-                  <div className="h-px bg-gray-100 mb-5" />
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Step 3 — Assign to</p>
-                  <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-4">
-                    <button type="button" onClick={() => setForm((p) => ({ ...p, assignmentType: 'employee', assignedLocation: '', assignedBranch: '', assignedArea: '' }))}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-medium transition-colors ${form.assignmentType === 'employee' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
-                      👤 Employee
-                    </button>
-                    <button type="button" onClick={() => setForm((p) => ({ ...p, assignmentType: 'branch' }))}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-medium transition-colors border-l border-gray-200 ${form.assignmentType === 'branch' ? 'bg-[#1B6B6B] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
-                      🏢 Branch
-                    </button>
-                  </div>
-                  {form.assignmentType === 'branch' && (
-                    <div className="space-y-3 mb-4 p-3 bg-gray-50 rounded-xl">
-                      <div>
-                        <label className="text-xs text-gray-500 block mb-1">Location</label>
-                        <select name="assignedLocation" value={form.assignedLocation} onChange={(e) => setForm((p) => ({ ...p, assignedLocation: e.target.value, assignedBranch: '' }))} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
-                          <option value="">Select location…</option>
-                          {structuredLocations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 block mb-1">Branch</label>
-                        <select name="assignedBranch" value={form.assignedBranch} onChange={(e) => setForm((p) => ({ ...p, assignedBranch: e.target.value }))} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]">
-                          <option value="">Select branch…</option>
-                          {(() => {
-                            const loc = structuredLocations.find((l) => l.name === form.assignedLocation);
-                            const list = loc?.branches?.length ? loc.branches.map((b) => b.name) : (company?.branches || []).map((b) => typeof b === 'object' ? b.name : b);
-                            return list.map((b) => <option key={b} value={b}>{b}</option>);
-                          })()}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 block mb-1">Area / floor</label>
-                        <input type="text" name="assignedArea" value={form.assignedArea} onChange={handleFormChange} placeholder="e.g. Reception, 2nd Floor Admin" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
+      <ReturnConsumableModal
+        showReturnConsumableModal={showReturnConsumableModal}
+        setShowReturnConsumableModal={setShowReturnConsumableModal}
+        returnConsumableAsset={returnConsumableAsset}
+        returnConsumableAssignment={returnConsumableAssignment}
+        returnConsumableForm={returnConsumableForm}
+        setReturnConsumableForm={setReturnConsumableForm}
+        handleSaveReturnConsumable={handleSaveReturnConsumable}
+        saving={saving}
+      />
 
-              {assetTypes.length === 0 && (
-                <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200 mb-4">
-                  <p className="text-sm text-gray-500 mb-2">No asset types configured yet.</p>
-                  <button type="button" onClick={() => navigate(`/company/${companyId}/settings`)} className="text-sm text-[#1B6B6B] hover:underline">Go to Settings → Manage Lists to add asset types</button>
-                </div>
-              )}
+      <EditStockModal
+        showEditStockModal={showEditStockModal}
+        setShowEditStockModal={setShowEditStockModal}
+        editStockAsset={editStockAsset}
+        editStockForm={editStockForm}
+        setEditStockForm={setEditStockForm}
+        handleSaveEditStock={handleSaveEditStock}
+        saving={saving}
+      />
 
-              {form.type && selectedAddAssetMode && (
-                <form onSubmit={handleSaveAsset} id="add-asset-form">
+      <AssetHistoryModal
+        showHistoryModal={showHistoryModal}
+        setShowHistoryModal={setShowHistoryModal}
+        selectedAsset={selectedAsset}
+      />
 
-                  <div className="h-px bg-gray-100 my-5" />
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-4">Step 3 — Details</p>
+      <MaintenanceModal
+        showMaintenanceModal={showMaintenanceModal}
+        setShowMaintenanceModal={setShowMaintenanceModal}
+        maintenanceAsset={maintenanceAsset}
+        maintenanceForm={maintenanceForm}
+        setMaintenanceForm={setMaintenanceForm}
+        handleSaveMaintenance={handleSaveMaintenance}
+        saving={saving}
+      />
 
-                  {selectedAddAssetMode === 'trackable' ? (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Asset name</label>
-                          <input name="name" value={form.name} onChange={handleFormChange} placeholder={`e.g. ${form.type} — Dell`} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                          {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                            Asset ID
-                            <span className="ml-1.5 text-[10px] font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{buildAssetIdPrefix(form.type)}- prefix</span>
-                          </label>
-                          <input name="assetId" value={form.assetId} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#1B6B6B]" />
-                          {formErrors.assetId && <p className="text-red-500 text-xs mt-1">{formErrors.assetId}</p>}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Brand</label>
-                          <input name="brand" value={form.brand} onChange={handleFormChange} placeholder="e.g. Dell, Apple" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Model</label>
-                          <input name="model" value={form.model} onChange={handleFormChange} placeholder="e.g. XPS 15" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1.5">Serial number</label>
-                        <input name="serialNumber" value={form.serialNumber} onChange={handleFormChange} placeholder="From the device label" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#1B6B6B]" />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1.5">Item name</label>
-                        <input name="name" value={form.name} onChange={handleFormChange} placeholder={`e.g. ${form.type}`} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Total quantity in stock</label>
-                          <input type="number" name="totalStock" value={form.totalStock} onChange={handleFormChange} placeholder="0" min={0} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                          {formErrors.totalStock && <p className="text-red-500 text-xs mt-1">{formErrors.totalStock}</p>}
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Unit</label>
-                          <select name="unit" value={form.unit} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]">
-                            <option value="pieces">pieces</option>
-                            <option value="sets">sets</option>
-                            <option value="units">units</option>
-                            <option value="pairs">pairs</option>
-                          </select>
-                        </div>
-                      </div>
-                      {Number(form.totalStock) > 0 && (
-                        <div className="flex items-center gap-3 px-3 py-2.5 bg-[#EAF3DE] rounded-xl">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
-                          <p className="text-xs text-[#27500A] font-medium">{form.totalStock} {form.unit} will be available to issue</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
+      <QRModal
+        showQRModal={showQRModal}
+        setShowQRModal={setShowQRModal}
+        qrAsset={qrAsset}
+      />
 
-                  <div className="h-px bg-gray-100 my-5" />
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-4">
-                    Step 4 — Purchase &amp; condition
-                    <span className="ml-2 text-gray-300 font-normal normal-case tracking-normal">optional</span>
-                  </p>
+      <AssetDetailPanel
+        detailAsset={detailAsset}
+        setDetailAsset={setDetailAsset}
+        getWarrantyState={getWarrantyState}
+        getAssignmentDuration={getAssignmentDuration}
+        openEditAssetModal={openEditAssetModal}
+        openStatusModal={openStatusModal}
+        openAssignModal={openAssignModal}
+        openReturnModal={openReturnModal}
+        employees={employees}
+      />
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                    {selectedAddAssetMode === 'trackable' ? (
-                      <>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Purchase date</label>
-                          <input type="date" name="purchaseDate" value={form.purchaseDate} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Price (₹)</label>
-                          <input type="number" name="purchasePrice" value={form.purchasePrice} onChange={handleFormChange} placeholder="0" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Warranty expiry</label>
-                          <input type="date" name="warrantyExpiry" value={form.warrantyExpiry} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                        </div>
-                      </>
-                    ) : (
-                      <div className="col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Price per unit (₹)</label>
-                          <input type="number" name="purchasePrice" value={form.purchasePrice} onChange={handleFormChange} placeholder="0" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
+      <EditAssetModal
+        showEditAssetModal={showEditAssetModal}
+        setShowEditAssetModal={setShowEditAssetModal}
+        editingAsset={editingAsset}
+        editAssetForm={editAssetForm}
+        setEditAssetForm={setEditAssetForm}
+        handleSaveEditAsset={handleSaveEditAsset}
+        saving={saving}
+      />
 
-                  {selectedAddAssetMode === 'trackable' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1.5">Condition</label>
-                        <select name="condition" value={form.condition} onChange={handleFormChange} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]">
-                          {CONDITION_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  )}
+      <StatusChangeModal
+        showStatusModal={showStatusModal}
+        setShowStatusModal={setShowStatusModal}
+        statusAsset={statusAsset}
+        statusForm={statusForm}
+        setStatusForm={setStatusForm}
+        handleSaveStatusChange={handleSaveStatusChange}
+        saving={saving}
+      />
 
-                  <div className="flex items-center justify-between px-3 py-3 bg-gray-50 rounded-xl border border-gray-100">
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Employee must return this asset</p>
-                      <p className="text-xs text-gray-400 mt-0.5">Uncheck for one-way issued items (e.g. welcome kit)</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleFormChange({ target: { name: 'isReturnable', type: 'checkbox', checked: !form.isReturnable } })}
-                      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${form.isReturnable ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`}
-                    >
-                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isReturnable ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                    </button>
-                  </div>
+      <DeleteAssetModal
+        showDeleteAssetModal={showDeleteAssetModal}
+        setShowDeleteAssetModal={setShowDeleteAssetModal}
+        deletingAsset={deletingAsset}
+        deleteConfirmText={deleteConfirmText}
+        setDeleteConfirmText={setDeleteConfirmText}
+        handleDeleteAsset={handleDeleteAsset}
+        saving={saving}
+      />
 
-                  <div className="mt-3">
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Notes <span className="text-gray-300 font-normal">optional</span></label>
-                    <textarea name="notes" value={form.notes} onChange={handleFormChange} rows={2} placeholder="Any additional information" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-[#1B6B6B]" />
-                  </div>
-                </form>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-white">
-              <div className="flex items-center gap-1.5">
-                {[1,2,3,4].map((n) => {
-                  const active = n === 1 ? true : n === 2 ? !!selectedAddAssetMode : n === 3 ? !!form.type : !!(form.type && form.name);
-                  return (
-                    <div key={n} className={`h-1.5 rounded-full transition-all ${active ? 'bg-[#1B6B6B]' : 'bg-gray-200'}`} style={{ width: active ? '16px' : '6px' }} />
-                  );
-                })}
-                <span className="text-xs text-gray-400 ml-1">
-                  {!selectedAddAssetMode ? 'Choose mode' : !form.type ? 'Choose type' : !form.name ? 'Add details' : 'Ready to save'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
-                <button
-                  type="submit"
-                  form="add-asset-form"
-                  disabled={saving || !form.type}
-                  className="px-5 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  {saving ? 'Saving…' : 'Save asset'}
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* Assign Asset Modal */}
-      {showAssignModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-center mb-4 sm:hidden">
-              <div className="w-10 h-1 bg-gray-200 rounded-full" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Assign Asset</h2>
-            <form onSubmit={handleSaveAssignment} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Asset</label>
-                <select
-                  name="assetId"
-                  value={assignForm.assetId}
-                  onChange={handleAssignChange}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  disabled={!!selectedAsset}
-                >
-                  {!selectedAsset && <option value="">Select asset</option>}
-                  {assets
-                    .filter((a) => !selectedAsset && (a.status === 'Available' || !a.status))
-                    .map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.assetId} · {a.name}
-                      </option>
-                    ))}
-                  {selectedAsset && (
-                    <option value={selectedAsset.id}>
-                      {selectedAsset.assetId} · {selectedAsset.name}
-                    </option>
-                  )}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Employee</label>
-                <select
-                  name="employeeId"
-                  value={assignForm.employeeId}
-                  onChange={handleAssignChange}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                >
-                  <option value="">Select employee</option>
-                  {employees
-                    .filter((e) => (e.status || 'Active') === 'Active')
-                    .map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.empId || ''} · {e.fullName || e.email}
-                      </option>
-                    ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Issue Date</label>
-                  <input
-                    type="date"
-                    name="issueDate"
-                    value={assignForm.issueDate}
-                    onChange={handleAssignChange}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Expected Return Date <span className="text-gray-400 font-normal">(optional)</span></label>
-                  <input
-                    type="date"
-                    name="expectedReturnDate"
-                    value={assignForm.expectedReturnDate}
-                    onChange={handleAssignChange}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Condition at Issue</label>
-                  <select
-                    name="condition"
-                    value={assignForm.condition}
-                    onChange={handleAssignChange}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  >
-                    {CONDITION_OPTIONS.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
-                <textarea
-                  name="notes"
-                  value={assignForm.notes}
-                  onChange={handleAssignChange}
-                  rows={3}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  placeholder="Any special instructions or comments"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAssignModal(false)}
-                  className="text-sm text-slate-500 hover:text-slate-700"
-                  disabled={saving}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
-                  disabled={saving}
-                >
-                  {saving ? 'Assigning…' : 'Assign Asset'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Return Asset Modal */}
-      {showReturnModal && selectedAsset && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-center mb-4 sm:hidden">
-              <div className="w-10 h-1 bg-gray-200 rounded-full" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Return Asset</h2>
-            <form onSubmit={handleSaveReturn} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-slate-500">Asset</p>
-                  <p className="text-sm font-medium text-slate-800">
-                    {selectedAsset.assetId} · {selectedAsset.name}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Employee</p>
-                  <p className="text-sm text-slate-800">
-                    {selectedAsset.assignedToName || '—'}
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Return Date</label>
-                  <input
-                    type="date"
-                    name="date"
-                    value={returnForm.date}
-                    onChange={handleReturnChange}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Condition on Return</label>
-                  <select
-                    name="condition"
-                    value={returnForm.condition}
-                    onChange={handleReturnChange}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  >
-                    {CONDITION_OPTIONS.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
-                <textarea
-                  name="notes"
-                  value={returnForm.notes}
-                  onChange={handleReturnChange}
-                  rows={3}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  placeholder="Any damage or notes on return"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowReturnModal(false)}
-                  className="text-sm text-slate-500 hover:text-slate-700"
-                  disabled={saving}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
-                  disabled={saving}
-                >
-                  {saving ? 'Saving…' : 'Save Return'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Consumable: Issue Modal */}
-      {showIssueModal && issueAsset && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-center mb-4 sm:hidden">
-              <div className="w-10 h-1 bg-gray-200 rounded-full" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Issue Consumable</h2>
-            <form onSubmit={handleSaveIssueConsumable} className="space-y-4">
-              <div>
-                <p className="text-sm text-slate-700">
-                  <span className="font-medium">{issueAsset.name || issueAsset.assetId}</span> · {issueAsset.type}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Available: {Number(issueAsset.availableStock) || 0}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Employee</label>
-                <select
-                  value={issueForm.employeeId}
-                  onChange={(e) => setIssueForm((p) => ({ ...p, employeeId: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                >
-                  <option value="">Select employee</option>
-                  {employees
-                    .filter((e) => (e.status || 'Active') === 'Active')
-                    .map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.fullName} ({e.empId})
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Quantity</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={Number(issueAsset.availableStock) || 0}
-                  value={issueForm.quantity}
-                  onChange={(e) => setIssueForm((p) => ({ ...p, quantity: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Issue Date</label>
-                <input
-                  type="date"
-                  value={issueForm.issueDate}
-                  onChange={(e) => setIssueForm((p) => ({ ...p, issueDate: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Condition</label>
-                <select
-                  value={issueForm.condition}
-                  onChange={(e) => setIssueForm((p) => ({ ...p, condition: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                >
-                  <option value="New">New</option>
-                  <option value="Good">Good</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
-                <textarea
-                  value={issueForm.notes}
-                  onChange={(e) => setIssueForm((p) => ({ ...p, notes: e.target.value }))}
-                  rows={3}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  placeholder="Optional notes"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowIssueModal(false)}
-                  className="text-sm text-slate-500 hover:text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[#1B6B6B] hover:bg-[#155858] text-white text-sm font-medium px-4 py-2"
-                >
-                  {saving ? 'Saving…' : 'Issue'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Consumable: View Issued Modal */}
-      {showViewIssuedModal && issuedAsset && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-center mb-4 sm:hidden">
-              <div className="w-10 h-1 bg-gray-200 rounded-full" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Issued Consumables</h2>
-            <p className="text-xs text-slate-500 mb-4">
-              {issuedAsset.name || issuedAsset.assetId} · {issuedAsset.type}
-            </p>
-
-            <div className="border border-slate-200 rounded-xl divide-y divide-slate-100">
-              {(issuedAsset.assignments || []).filter((a) => !a.returned).length === 0 ? (
-                <p className="text-sm text-slate-500 p-4">No active issued items.</p>
-              ) : (
-                (issuedAsset.assignments || [])
-                  .map((assignment, idx) => ({ assignment, idx }))
-                  .filter(({ assignment }) => !assignment.returned)
-                  .map(({ assignment, idx }) => (
-                    <div key={idx} className="flex items-center gap-3 py-3 px-4">
-                      <EmployeeAvatar
-                        employee={{
-                          fullName: assignment.employeeName,
-                          photoURL: employees.find((e) => e.id === assignment.employeeId)?.photoURL,
-                        }}
-                        size="xs"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">
-                          {assignment.employeeName}
-                        </p>
-                        <p className="text-xs text-slate-500 truncate">
-                          {assignment.empId} · Qty: {assignment.quantity} ·{' '}
-                          {assignment.issueDate ? toDisplayDate(assignment.issueDate) : '—'}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => openReturnConsumableModal(issuedAsset, assignment, idx)}
-                        className="text-xs px-2.5 py-1 rounded-lg border text-gray-600 hover:bg-gray-50"
-                      >
-                        Return
-                      </button>
-                    </div>
-                  ))
-              )}
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4">
-              <button
-                type="button"
-                onClick={() => setShowViewIssuedModal(false)}
-                className="text-sm text-slate-500 hover:text-slate-700"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Consumable: Return Modal */}
-      {showReturnConsumableModal && returnConsumableAsset && returnConsumableAssignment && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-center mb-4 sm:hidden">
-              <div className="w-10 h-1 bg-gray-200 rounded-full" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Return Consumable</h2>
-            <form onSubmit={handleSaveReturnConsumable} className="space-y-4">
-              <div>
-                <p className="text-sm text-slate-700">
-                  <span className="font-medium">{returnConsumableAsset.name || returnConsumableAsset.assetId}</span> ·{' '}
-                  {returnConsumableAsset.type}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Assigned to {returnConsumableAssignment.employeeName} · Available for return: {Number(returnConsumableAssignment.quantity) || 0}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Quantity to return</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={Number(returnConsumableAssignment.quantity) || 0}
-                  value={returnConsumableForm.quantity}
-                  onChange={(e) => setReturnConsumableForm((p) => ({ ...p, quantity: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Return Date</label>
-                <input
-                  type="date"
-                  value={returnConsumableForm.date}
-                  onChange={(e) => setReturnConsumableForm((p) => ({ ...p, date: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Condition on return</label>
-                <select
-                  value={returnConsumableForm.condition}
-                  onChange={(e) => setReturnConsumableForm((p) => ({ ...p, condition: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                >
-                  <option value="New">New</option>
-                  <option value="Good">Good</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
-                <textarea
-                  value={returnConsumableForm.notes}
-                  onChange={(e) => setReturnConsumableForm((p) => ({ ...p, notes: e.target.value }))}
-                  rows={3}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  placeholder="Any damage or notes on return"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowReturnConsumableModal(false)}
-                  className="text-sm text-slate-500 hover:text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2">
-                  {saving ? 'Saving…' : 'Return'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Consumable: Edit Stock Modal */}
-      {showEditStockModal && editStockAsset && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-center mb-4 sm:hidden">
-              <div className="w-10 h-1 bg-gray-200 rounded-full" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Edit Stock</h2>
-            <form onSubmit={handleSaveEditStock} className="space-y-4">
-              <div>
-                <p className="text-sm text-slate-700">
-                  <span className="font-medium">{editStockAsset.name || editStockAsset.assetId}</span> · {editStockAsset.type}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Current: {Number(editStockAsset.availableStock) || 0} / {Number(editStockAsset.totalStock) || 0} available
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Adjustment</label>
-                <select
-                  value={editStockForm.adjustmentType}
-                  onChange={(e) => setEditStockForm((p) => ({ ...p, adjustmentType: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                >
-                  <option value="Add stock">Add stock</option>
-                  <option value="Remove stock">Remove stock</option>
-                  <option value="Set total">Set total</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Quantity</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={editStockForm.quantity}
-                  onChange={(e) => setEditStockForm((p) => ({ ...p, quantity: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  placeholder="e.g. 10"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Reason</label>
-                <input
-                  value={editStockForm.reason}
-                  onChange={(e) => setEditStockForm((p) => ({ ...p, reason: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]"
-                  placeholder="e.g. New purchase"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowEditStockModal(false)} className="text-sm text-slate-500 hover:text-slate-700">
-                  Cancel
-                </button>
-                <button type="submit" className="rounded-lg bg-[#1B6B6B] text-white text-sm font-medium px-4 py-2">
-                  {saving ? 'Saving…' : 'Save Stock'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* History Modal */}
-      {showHistoryModal && selectedAsset && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-xl sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-center mb-4 sm:hidden">
-              <div className="w-10 h-1 bg-gray-200 rounded-full" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-800 mb-2">Asset History</h2>
-            <p className="text-xs text-slate-500 mb-4">
-              {selectedAsset.assetId} · {selectedAsset.name}
-            </p>
-            <div className="space-y-3">
-              {(selectedAsset.history || [])
-                .slice()
-                .sort((a, b) => (a.date?.seconds || 0) - (b.date?.seconds || 0))
-                .map((h, idx) => {
-                  const dateStr = h.date ? toDisplayDate(h.date) : '—';
-                  let badgeClass = 'bg-slate-100 text-slate-700';
-                  let label = h.action;
-                  if (h.action === 'issued') {
-                    badgeClass = 'bg-green-100 text-green-700';
-                    label = 'Issued';
-                  } else
-                  if (h.action === 'assigned') {
-                    badgeClass = 'bg-green-100 text-green-700';
-                    label = 'Assigned';
-                  } else if (h.action === 'returned') {
-                    badgeClass = 'bg-[#C5E8E8] text-[#1B6B6B]';
-                    label = 'Returned';
-                  } else if (h.action === 'damaged') {
-                    badgeClass = 'bg-red-100 text-red-700';
-                    label = 'Damaged';
-                  } else if (h.action === 'repaired') {
-                    badgeClass = 'bg-amber-100 text-amber-800';
-                    label = 'Repaired';
-                  } else if (h.action === 'stock_adjusted') {
-                    badgeClass = 'bg-amber-100 text-amber-800';
-                    label = 'Stock Adjusted';
-                  } else if (h.action === 'created') {
-                    badgeClass = 'bg-slate-100 text-slate-700';
-                    label = 'Created';
-                  }
-                  return (
-                    <div key={idx} className="border border-slate-200 rounded-lg p-3 text-sm flex gap-3">
-                      <div className="pt-0.5">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${badgeClass}`}>
-                          {label}
-                        </span>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between items-center mb-1">
-                          <p className="text-slate-800">
-                            {h.employeeName ? h.employeeName : 'System'}
-                          </p>
-                          <p className="text-xs text-slate-400">{dateStr}</p>
-                        </div>
-                        <p className="text-xs text-slate-500">
-                          Condition: {h.condition || '—'}
-                          {typeof h.quantity === 'number' ? ` · Qty: ${h.quantity}` : ''}
-                        </p>
-                        {h.notes && <p className="text-xs text-slate-500 mt-1">Notes: {h.notes}</p>}
-                        {h.performedBy && (
-                          <p className="text-[11px] text-slate-400 mt-1">
-                            Performed by: {h.performedBy}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              {(selectedAsset.history || []).length === 0 && (
-                <p className="text-sm text-slate-500">No history yet.</p>
-              )}
-            </div>
-            <div className="flex justify-end mt-4">
-              <button
-                type="button"
-                onClick={() => setShowHistoryModal(false)}
-                className="text-sm text-slate-500 hover:text-slate-700"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {showMaintenanceModal && maintenanceAsset && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">Log Maintenance</h2>
-            <p className="text-xs text-gray-400 mb-4">{maintenanceAsset.assetId} · {maintenanceAsset.name}</p>
-            <form onSubmit={handleSaveMaintenance} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Type</label>
-                  <select value={maintenanceForm.type} onChange={(e) => setMaintenanceForm((p) => ({ ...p, type: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]">
-                    <option value="Repair">Repair</option>
-                    <option value="Service">Service</option>
-                    <option value="Inspection">Inspection</option>
-                    <option value="Insurance Renewal">Insurance Renewal</option>
-                    <option value="Upgrade">Upgrade</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Date</label>
-                  <input type="date" value={maintenanceForm.date} onChange={(e) => setMaintenanceForm((p) => ({ ...p, date: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs text-gray-500 mb-1">Description</label>
-                  <textarea value={maintenanceForm.description} onChange={(e) => setMaintenanceForm((p) => ({ ...p, description: e.target.value }))} rows={2} placeholder="e.g. Replaced RAM, cleaned thermal paste" className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none" required />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Cost (₹)</label>
-                  <input type="number" value={maintenanceForm.cost} onChange={(e) => setMaintenanceForm((p) => ({ ...p, cost: e.target.value }))} placeholder="0" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Vendor / Service centre</label>
-                  <input value={maintenanceForm.vendor} onChange={(e) => setMaintenanceForm((p) => ({ ...p, vendor: e.target.value }))} placeholder="e.g. Dell Care" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Next service due <span className="text-gray-400 font-normal">(optional)</span></label>
-                  <input type="date" value={maintenanceForm.nextDueDate} onChange={(e) => setMaintenanceForm((p) => ({ ...p, nextDueDate: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-                </div>
-              </div>
-              {maintenanceForm.type === 'Repair' && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                  <p className="text-xs text-amber-700">Asset status will be set to <strong>In Repair</strong> automatically.</p>
-                </div>
-              )}
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowMaintenanceModal(false)} className="text-sm text-gray-500" disabled={saving}>Cancel</button>
-                <button type="submit" disabled={saving} className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50">{saving ? 'Saving…' : 'Log maintenance'}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showQRModal && qrAsset && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-sm p-6 max-h-[90vh] overflow-y-auto">
-            <div className="text-center">
-              <h2 className="text-base font-semibold text-gray-800 mb-1">{qrAsset.name || qrAsset.assetId}</h2>
-              <p className="text-xs text-gray-400 mb-4">{qrAsset.assetId} · {qrAsset.type}</p>
-              <div className="flex justify-center mb-4">
-                <div id="qr-canvas-container" className="p-4 bg-gray-50 rounded-2xl border border-gray-200 inline-block">
-                  <div id="qr-canvas" style={{ width: 180, height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
-                </div>
-              </div>
-              <div className="text-xs text-gray-400 mb-4 space-y-0.5">
-                {qrAsset.serialNumber && <p>SN: {qrAsset.serialNumber}</p>}
-                {qrAsset.assignedToName && <p>Assigned: {qrAsset.assignedToName}</p>}
-              </div>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setShowQRModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
-                <button type="button"
-                  onClick={() => {
-                    const container = document.getElementById('qr-canvas');
-                    if (!container) return;
-                    const innerCanvas = container.querySelector('canvas');
-                    const innerImg = container.querySelector('img');
-                    const href = innerCanvas ? innerCanvas.toDataURL('image/png') : innerImg?.src;
-                    if (!href) return;
-                    const link = document.createElement('a');
-                    link.download = `${qrAsset.assetId}-qr.png`;
-                    link.href = href;
-                    link.click();
-                  }}
-                  className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858]">
-                  Download PNG
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {detailAsset && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-end justify-end z-50" onClick={() => setDetailAsset(null)}>
-          <div
-            className="bg-white w-full sm:w-[420px] h-full overflow-y-auto shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ background: getAssetTypeColors(detailAsset.type).bg }}>
-                  {getAssetIcon(detailAsset.type)}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{detailAsset.name || '—'}</p>
-                  <p className="text-xs text-gray-400">{detailAsset.assetId} · {detailAsset.type}</p>
-                </div>
-              </div>
-              <button type="button" onClick={() => setDetailAsset(null)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 flex-shrink-0" aria-label="Close">✕</button>
-            </div>
-
-            <div className="p-5 space-y-5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getStatusBadgeClass(detailAsset.status || 'Available')}`}>{detailAsset.status || 'Available'}</span>
-                {detailAsset.condition && <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getConditionBadgeClass(detailAsset.condition)}`}>{detailAsset.condition}</span>}
-                {(() => { const ws = getWarrantyState(detailAsset.warrantyExpiry); return ws ? <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${ws.color}`}>{ws.label}</span> : null; })()}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {[
-                  { label: 'Brand', value: detailAsset.brand },
-                  { label: 'Model', value: detailAsset.model },
-                  { label: 'Serial number', value: detailAsset.serialNumber },
-                  { label: 'Purchase date', value: detailAsset.purchaseDate ? toDisplayDate(detailAsset.purchaseDate) : null },
-                  { label: 'Purchase price', value: detailAsset.purchasePrice ? `₹${Number(detailAsset.purchasePrice).toLocaleString('en-IN')}` : null },
-                  { label: 'Warranty expiry', value: detailAsset.warrantyExpiry ? toDisplayDate(detailAsset.warrantyExpiry) : null },
-                  { label: 'Assigned to', value: detailAsset.assignedToName },
-                  { label: 'Issue date', value: detailAsset.issueDate ? toDisplayDate(detailAsset.issueDate) : null },
-                  { label: 'Expected return', value: detailAsset.expectedReturnDate ? toDisplayDate(detailAsset.expectedReturnDate) : null },
-                  { label: 'Duration held', value: detailAsset.issueDate && detailAsset.status === 'Assigned' ? getAssignmentDuration(detailAsset.issueDate) : null },
-                ].filter((f) => f.value).map((f) => (
-                  <div key={f.label} className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-xs text-gray-400 mb-0.5">{f.label}</p>
-                    <p className="text-sm font-medium text-gray-800">{f.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              {detailAsset.notes && (
-                <div className="bg-gray-50 rounded-xl p-3">
-                  <p className="text-xs text-gray-400 mb-1">Notes</p>
-                  <p className="text-sm text-gray-700">{detailAsset.notes}</p>
-                </div>
-              )}
-
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">History</p>
-                <div className="space-y-2">
-                  {(detailAsset.history || []).length === 0 && <p className="text-sm text-gray-400">No history yet.</p>}
-                  {(detailAsset.history || []).slice().sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)).map((h, i) => (
-                    <div key={i} className="flex gap-3 p-2.5 bg-gray-50 rounded-xl">
-                      <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${h.action === 'assigned' || h.action === 'issued' ? 'bg-green-500' : h.action === 'returned' ? 'bg-[#1B6B6B]' : h.action === 'created' ? 'bg-gray-400' : 'bg-amber-500'}`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium text-gray-700 capitalize">{h.action?.replace(/_/g, ' ')}</p>
-                          <p className="text-[10px] text-gray-400 flex-shrink-0">{h.date ? toDisplayDate(h.date) : '—'}</p>
-                        </div>
-                        {h.employeeName && <p className="text-xs text-gray-500">{h.employeeName}</p>}
-                        {h.notes && <p className="text-xs text-gray-400 italic mt-0.5">"{h.notes}"</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2 border-t border-gray-100">
-                <button type="button" onClick={() => { setDetailAsset(null); openEditAssetModal(detailAsset); }} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50">Edit asset</button>
-                <button type="button" onClick={() => { setDetailAsset(null); openStatusModal(detailAsset); }} className="flex-1 py-2.5 border border-amber-200 rounded-xl text-xs font-medium text-amber-700 hover:bg-amber-50">Change status</button>
-                {(detailAsset.status === 'Available' || !detailAsset.status) && (
-                  <button type="button" onClick={() => { setDetailAsset(null); openAssignModal(detailAsset); }} className="flex-1 py-2.5 bg-[#1B6B6B] text-white rounded-xl text-xs font-medium hover:bg-[#155858]">Assign</button>
-                )}
-                {detailAsset.status === 'Assigned' && (
-                  <button type="button" onClick={() => { setDetailAsset(null); openReturnModal(detailAsset); }} className="flex-1 py-2.5 bg-amber-500 text-white rounded-xl text-xs font-medium hover:bg-amber-600">Return</button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showEditAssetModal && editingAsset && (
-  <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-    <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-xl sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-      <h2 className="text-lg font-semibold text-gray-800 mb-1">Edit Asset</h2>
-      <p className="text-xs text-gray-400 mb-4">{editingAsset.assetId} · {editingAsset.type}</p>
-      <form onSubmit={handleSaveEditAsset} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="sm:col-span-2">
-            <label className="block text-xs text-gray-500 mb-1">Asset name</label>
-            <input value={editAssetForm.name} onChange={(e) => setEditAssetForm((p) => ({ ...p, name: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" required />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Brand</label>
-            <input value={editAssetForm.brand} onChange={(e) => setEditAssetForm((p) => ({ ...p, brand: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Model</label>
-            <input value={editAssetForm.model} onChange={(e) => setEditAssetForm((p) => ({ ...p, model: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Serial number</label>
-            <input value={editAssetForm.serialNumber} onChange={(e) => setEditAssetForm((p) => ({ ...p, serialNumber: e.target.value }))} className="w-full border rounded-xl px-3 py-2.5 text-sm font-mono" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Condition</label>
-            <select value={editAssetForm.condition} onChange={(e) => setEditAssetForm((p) => ({ ...p, condition: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]">
-              {CONDITION_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Purchase date</label>
-            <input type="date" value={editAssetForm.purchaseDate} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchaseDate: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Purchase price (₹)</label>
-            <input type="number" value={editAssetForm.purchasePrice} onChange={(e) => setEditAssetForm((p) => ({ ...p, purchasePrice: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Warranty expiry</label>
-            <input type="date" value={editAssetForm.warrantyExpiry} onChange={(e) => setEditAssetForm((p) => ({ ...p, warrantyExpiry: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="block text-xs text-gray-500 mb-1">Notes</label>
-            <textarea value={editAssetForm.notes} onChange={(e) => setEditAssetForm((p) => ({ ...p, notes: e.target.value }))} rows={2} className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none" />
-          </div>
-        </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={() => setShowEditAssetModal(false)} className="text-sm text-gray-500" disabled={saving}>Cancel</button>
-          <button type="submit" disabled={saving} className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50">{saving ? 'Saving…' : 'Save changes'}</button>
-        </div>
-      </form>
-    </div>
-  </div>
-)}
-
-{showStatusModal && statusAsset && (
-  <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4 overflow-y-auto">
-    <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md sm:my-8 p-6 max-h-[90vh] overflow-y-auto">
-      <h2 className="text-lg font-semibold text-gray-800 mb-1">Change status</h2>
-      <p className="text-xs text-gray-400 mb-4">{statusAsset.assetId} · {statusAsset.name} · Currently: <span className="font-medium text-gray-600">{statusAsset.status || 'Available'}</span></p>
-      <form onSubmit={handleSaveStatusChange} className="space-y-4">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">New status</label>
-          <select value={statusForm.newStatus} onChange={(e) => setStatusForm((p) => ({ ...p, newStatus: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#1B6B6B]" required>
-            <option value="">Select status</option>
-            {STATUS_OPTIONS.filter((s) => s !== 'All' && s !== (statusAsset.status || 'Available')).map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Reason (optional)</label>
-          <textarea value={statusForm.reason} onChange={(e) => setStatusForm((p) => ({ ...p, reason: e.target.value }))} rows={2} placeholder="e.g. Sent for motherboard repair" className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none" />
-        </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={() => setShowStatusModal(false)} className="text-sm text-gray-500" disabled={saving}>Cancel</button>
-          <button type="submit" disabled={saving || !statusForm.newStatus} className="px-4 py-2 bg-[#1B6B6B] text-white rounded-xl text-sm font-medium hover:bg-[#155858] disabled:opacity-50">{saving ? 'Saving…' : 'Update status'}</button>
-        </div>
-      </form>
-    </div>
-  </div>
-)}
-
-{showDeleteAssetModal && deletingAsset && (
-  <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4">
-    <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-sm p-6 max-h-[90vh] overflow-y-auto">
-      <div className="text-center mb-5">
-        <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
-        </div>
-        <h3 className="text-base font-semibold text-gray-800 mb-1">Delete asset?</h3>
-        <p className="text-sm text-gray-500">This permanently deletes <strong>{deletingAsset.name || deletingAsset.assetId}</strong> and all its history. Cannot be undone.</p>
-      </div>
-      {deletingAsset.status === 'Assigned' && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-xl mb-4">
-          <p className="text-xs text-red-700 font-medium">⚠️ This asset is currently assigned to {deletingAsset.assignedToName}. Return it first before deleting.</p>
-        </div>
-      )}
-      {deletingAsset.status !== 'Assigned' && (
-        <>
-          <div className="mb-4">
-            <label className="text-xs text-gray-500 block mb-1.5">Type <strong>{deletingAsset.assetId}</strong> to confirm</label>
-            <input placeholder={deletingAsset.assetId} value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} className="w-full border border-red-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-400" />
-          </div>
-          <div className="flex gap-3">
-            <button type="button" onClick={() => setShowDeleteAssetModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancel</button>
-            <button type="button" disabled={deleteConfirmText !== deletingAsset.assetId || saving} onClick={handleDeleteAsset} className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed">{saving ? 'Deleting…' : 'Delete permanently'}</button>
-          </div>
-        </>
-      )}
-      {deletingAsset.status === 'Assigned' && (
-        <button type="button" onClick={() => setShowDeleteAssetModal(false)} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Close</button>
-      )}
-    </div>
-  </div>
-)}
       {errorModal && (
         <ErrorModal
           errorType={errorModal}
