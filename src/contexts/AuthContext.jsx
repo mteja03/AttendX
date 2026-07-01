@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 // Context files intentionally export multiple values — fast refresh limitation accepted for provider files.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
 import {
   doc,
   getDoc,
@@ -85,6 +85,29 @@ export function AuthProvider({ children }) {
         unsubUserDoc = null;
       }
     };
+
+    getRedirectResult(auth).then(async (result) => {
+      if (!result?.user) return;
+      const user = result.user;
+      const adminEmail = PLATFORM_CONFIG.ADMIN_EMAIL.toLowerCase();
+      if (user?.email?.toLowerCase() === adminEmail) {
+        const email = PLATFORM_CONFIG.ADMIN_EMAIL;
+        const userRef = doc(db, 'users', email);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+          await setDoc(userRef, {
+            email,
+            name: user.displayName || 'Krishna Teja',
+            photoURL: user.photoURL || '',
+            role: 'admin',
+            companyId: null,
+            isActive: true,
+            createdAt: serverTimestamp(),
+          });
+        }
+      }
+      trackLogin();
+    }).catch(() => {});
 
     const resetAuthState = () => {
       setSentryUser(null);
@@ -323,29 +346,7 @@ export function AuthProvider({ children }) {
 
   const signInWithGoogle = useCallback(async () => {
     setAuthError('');
-    const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
-
-    const adminEmail = PLATFORM_CONFIG.ADMIN_EMAIL.toLowerCase();
-    if (user?.email?.toLowerCase() === adminEmail) {
-      const email = PLATFORM_CONFIG.ADMIN_EMAIL;
-      const userRef = doc(db, 'users', email);
-      const userSnap = await getDoc(userRef);
-
-      if (!userSnap.exists()) {
-        await setDoc(userRef, {
-          email,
-          name: user.displayName || 'Krishna Teja',
-          photoURL: user.photoURL || '',
-          role: 'admin',
-          companyId: null,
-          isActive: true,
-          createdAt: serverTimestamp(),
-        });
-      }
-    }
-
-    trackLogin();
+    await signInWithRedirect(auth, googleProvider);
   }, []);
 
   const signOutUser = useCallback(async () => {
