@@ -3,16 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   collection,
   getDocs,
-  addDoc,
   query,
-  orderBy,
   where,
-  limit,
   getCountFromServer,
-  serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { fetchEmployeePage, fetchAllEmployees, addEmployee } from '../services/employeeService';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
@@ -30,7 +27,6 @@ import Pagination from '../components/employees/Pagination';
 import LocationView from '../components/employees/LocationView';
 import { toDisplayDate } from '../utils';
 import { updateCompanyCounts } from '../utils/updateCompanyCounts';
-import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 import { trackEmployeeAdded, trackPageView } from '../utils/analytics';
 import {
@@ -204,19 +200,18 @@ export default function Employees() {
   );
 
   const fetchAllEmployeesFallback = useCallback(async () => {
-    if (!collRef) return;
+    if (!companyId) return;
     try {
-      const snap = await getDocs(collRef);
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const list = await fetchAllEmployees(companyId);
       setEmployees(list);
       setHasMore(false);
       lastDocRef.current = null;
-      setTotalCount(snap.size);
+      setTotalCount(list.length);
       setStatsCounts(countStatsFromEmployees(list));
     } catch {
       showError('Failed to load employees');
     }
-  }, [collRef, showError]);
+  }, [companyId, showError]);
 
   const fetchTotalCount = useCallback(async () => {
     if (!collRef) return;
@@ -278,29 +273,31 @@ export default function Employees() {
           setSearchAllMode(false);
         }
 
-        const constraints = [];
-        if (tab === 'active') constraints.push(where('status', '==', 'Active'));
-        else if (tab === 'noticeperiod') constraints.push(where('status', '==', 'Notice Period'));
-        else if (tab === 'onleave') constraints.push(where('status', '==', 'On Leave'));
-        else if (tab === 'offboarding') constraints.push(where('status', '==', 'Offboarding'));
-        else if (tab === 'inactive') constraints.push(where('status', '==', 'Inactive'));
-        if (filters.department) {
-          constraints.push(where('department', '==', filters.department.trim()));
-        }
-        if (filters.branch) {
-          constraints.push(where('branch', '==', filters.branch.trim()));
-        }
-        if (filters.location) {
-          constraints.push(where('location', '==', filters.location.trim()));
-        }
-        constraints.push(orderBy('fullName', 'asc'));
-        constraints.push(limit(500));
+        const tabStatusMap = {
+          active: 'Active',
+          noticeperiod: 'Notice Period',
+          onleave: 'On Leave',
+          offboarding: 'Offboarding',
+          inactive: 'Inactive',
+        };
+        const pageFilters = {
+          status: tabStatusMap[tab] || null,
+          department: filters.department || null,
+          branch: filters.branch || null,
+          location: filters.location || null,
+        };
+        // Remove null keys so the service only applies truthy filters
+        Object.keys(pageFilters).forEach((k) => {
+          if (!pageFilters[k]) delete pageFilters[k];
+        });
 
-        const q = query(collRef, ...constraints);
-        const snap = await getDocs(q);
-        const newEmployees = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const last = snap.docs[snap.docs.length - 1] || null;
-        lastDocRef.current = last;
+        const cursor = reset ? null : lastDocRef.current;
+        const { employees: newEmployees, lastDoc } = await fetchEmployeePage(companyId, {
+          pageSize: 500,
+          cursor,
+          filters: pageFilters,
+        });
+        lastDocRef.current = lastDoc;
 
         if (reset) {
           setEmployees(newEmployees);
@@ -314,12 +311,12 @@ export default function Employees() {
             employees: newEmployees,
             totalCount: newEmployees.length,
             statsCounts: countStatsFromEmployees(newEmployees),
-            hasMore: snap.docs.length === FETCH_PAGE_SIZE,
+            hasMore: newEmployees.length === FETCH_PAGE_SIZE,
           });
         } else {
           setEmployees((prev) => [...prev, ...newEmployees]);
         }
-        setHasMore(snap.docs.length === FETCH_PAGE_SIZE);
+        setHasMore(newEmployees.length === FETCH_PAGE_SIZE);
       } catch (error) {
         if (error?.code === 'failed-precondition') {
           await fetchAllEmployeesFallback();
@@ -330,16 +327,15 @@ export default function Employees() {
         setLoading(false);
       }
     },
-    [companyId, collRef, tab, filters.department, filters.branch, filters.location, fetchAllEmployeesFallback, showError],
+    [companyId, tab, filters.department, filters.branch, filters.location, fetchAllEmployeesFallback, showError],
   );
 
   const searchAllEmployees = useCallback(
     async (term) => {
-      if (!term || term.length < 2 || !collRef) return;
+      if (!term || term.length < 2 || !companyId) return;
       setLoading(true);
       try {
-        const snap = await getDocs(query(collRef, orderBy('fullName', 'asc'), limit(500)));
-        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const all = await fetchAllEmployees(companyId);
         const t = term.toLowerCase();
         const filtered = all.filter(
           (e) =>
@@ -359,7 +355,7 @@ export default function Employees() {
         setLoading(false);
       }
     },
-    [collRef, showError],
+    [companyId, showError],
   );
 
   const handleSearchChange = (term) => {
@@ -732,12 +728,8 @@ export default function Employees() {
           phone: form.emergencyPhone?.trim() || '',
         },
         status: 'Active',
-        createdAt: serverTimestamp(),
       };
-      const newEmpRef = await withRetry(
-        () => addDoc(collection(db, 'companies', companyId, 'employees'), employeeData),
-        { companyId, action: 'addEmployee' },
-      );
+      const newEmpRef = await addEmployee(companyId, employeeData);
       const newEmpId = newEmpRef.id;
 
       if (newEmpPhoto) {

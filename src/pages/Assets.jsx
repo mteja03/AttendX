@@ -5,16 +5,11 @@ import {
   doc,
   getDoc,
   getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  serverTimestamp,
   Timestamp,
   query,
   where,
-  orderBy,
-  limit,
 } from 'firebase/firestore';
+import { fetchAssets, updateAsset, addAsset, deleteAsset } from '../services/assetService';
 import { db } from '../firebase/config';
 import { useToast } from '../contexts/ToastContext';
 import { SkeletonTable } from '../components/SkeletonRow';
@@ -24,7 +19,6 @@ import EmployeeAvatar from '../components/EmployeeAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { toDisplayDate } from '../utils';
 import ErrorModal from '../components/ErrorModal';
-import { withRetry } from '../utils/firestoreWithRetry';
 import { ERROR_MESSAGES, getErrorMessage, logError } from '../utils/errorHandler';
 import { trackAssetAdded, trackAssetAssigned, trackPageView } from '../utils/analytics';
 import {
@@ -243,17 +237,11 @@ export default function Assets() {
       }
 
       try {
-        let assetSnap;
-        try {
-          assetSnap = await getDocs(query(collection(db, 'companies', companyId, 'assets'), orderBy('createdAt', 'desc'), limit(500)));
-        } catch {
-          assetSnap = await getDocs(query(collection(db, 'companies', companyId, 'assets'), limit(500)));
-        }
+        const assetDocs = await fetchAssets(companyId);
         setAssets(
-          assetSnap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-            mode: d.data().mode || 'trackable',
+          assetDocs.map((d) => ({
+            ...d,
+            mode: d.mode || 'trackable',
           })),
         );
       } catch (error) {
@@ -567,7 +555,6 @@ export default function Assets() {
               performedBy: currentUser.email || '',
             },
           ],
-          createdAt: serverTimestamp(),
           createdBy: currentUser.email || '',
         };
       } else {
@@ -587,15 +574,11 @@ export default function Assets() {
           isReturnable: !!form.isReturnable,
           assignments: [],
           history: [],
-          createdAt: serverTimestamp(),
           createdBy: currentUser.email || '',
         };
       }
 
-      const ref = await withRetry(
-        () => addDoc(collection(db, 'companies', companyId, 'assets'), payload),
-        { companyId, action: 'addAsset' },
-      );
+      const ref = await addAsset(companyId, payload);
       setAssets((prev) => [{ id: ref.id, ...payload }, ...prev]);
       setShowAddModal(false);
       trackAssetAdded(form.type || payload.type || '');
@@ -662,7 +645,7 @@ export default function Assets() {
 
       const existingHistory = Array.isArray(asset.history) ? asset.history : [];
 
-      await withRetry(() => updateDoc(assetRef, {
+      await updateAsset(companyId, assignForm.assetId, {
         status: 'Assigned',
         assignedToId: emp.id,
         assignedToName: emp.fullName || '',
@@ -671,7 +654,7 @@ export default function Assets() {
         expectedReturnDate: expectedReturnTs,
         condition: assignForm.condition || asset.condition || 'Good',
         history: [...existingHistory, historyEntry],
-      }), { companyId, action: 'assignAsset' });
+      });
 
       setAssets((prev) =>
         prev.map((a) =>
@@ -744,7 +727,7 @@ export default function Assets() {
       };
       const existingHistory = Array.isArray(asset.history) ? asset.history : [];
 
-      await withRetry(() => updateDoc(assetRef, {
+      await updateAsset(companyId, selectedAsset.id, {
         status: newStatus,
         assignedToId: null,
         assignedToName: null,
@@ -752,7 +735,7 @@ export default function Assets() {
         returnDate: returnTs,
         condition: returnForm.condition || asset.condition || 'Good',
         history: [...existingHistory, historyEntry],
-      }), { companyId, action: 'returnAsset' });
+      });
 
       setAssets((prev) =>
         prev.map((a) =>
@@ -922,7 +905,7 @@ export default function Assets() {
       const existingAssignments = Array.isArray(asset.assignments) ? asset.assignments : [];
       const existingHistory = Array.isArray(asset.history) ? asset.history : [];
 
-      await updateDoc(assetRef, {
+      await updateAsset(companyId, issueAsset.id, {
         assignments: [...existingAssignments, assignment],
         availableStock: available - qty,
         issuedCount: (Number(asset.issuedCount) || 0) + qty,
@@ -1016,7 +999,7 @@ export default function Assets() {
         };
       });
 
-      await updateDoc(assetRef, {
+      await updateAsset(companyId, returnConsumableAsset.id, {
         assignments: nextAssignments,
         availableStock: available + qty,
         issuedCount: issuedCount - qty,
@@ -1098,7 +1081,7 @@ export default function Assets() {
         nextAvailable = qty - issuedCount;
       }
 
-      await updateDoc(assetRef, {
+      await updateAsset(companyId, editStockAsset.id, {
         totalStock: nextTotal,
         availableStock: nextAvailable,
         issuedCount: nextTotal - nextAvailable,
@@ -1140,7 +1123,6 @@ export default function Assets() {
     if (!companyId || !currentUser || !editingAsset) return;
     setSaving(true);
     try {
-      const assetRef = doc(db, 'companies', companyId, 'assets', editingAsset.id);
       const payload = {
         name: editAssetForm.name.trim(),
         brand: editAssetForm.brand.trim() || '',
@@ -1156,7 +1138,7 @@ export default function Assets() {
           : null,
         notes: editAssetForm.notes.trim() || '',
       };
-      await withRetry(() => updateDoc(assetRef, payload), { companyId, action: 'editAsset' });
+      await updateAsset(companyId, editingAsset.id, payload);
       setAssets((prev) =>
         prev.map((a) => (a.id === editingAsset.id ? { ...a, ...payload } : a)),
       );
@@ -1173,11 +1155,7 @@ export default function Assets() {
     if (deleteConfirmText !== deletingAsset.assetId) return;
     setSaving(true);
     try {
-      const assetRef = doc(db, 'companies', companyId, 'assets', deletingAsset.id);
-      await withRetry(() => deleteDoc(assetRef), {
-        companyId,
-        action: 'deleteAsset',
-      });
+      await deleteAsset(companyId, deletingAsset.id);
       setAssets((prev) => prev.filter((a) => a.id !== deletingAsset.id));
       setShowDeleteAssetModal(false);
       setDeletingAsset(null);
@@ -1194,7 +1172,6 @@ export default function Assets() {
     if (!companyId || !currentUser || !statusAsset || !statusForm.newStatus) return;
     setSaving(true);
     try {
-      const assetRef = doc(db, 'companies', companyId, 'assets', statusAsset.id);
       const historyEntry = {
         action: statusForm.newStatus.toLowerCase().replace(/\s+/g, '_'),
         employeeId: null,
@@ -1213,7 +1190,7 @@ export default function Assets() {
         updatePayload.assignedToName = null;
         updatePayload.assignedToEmpId = null;
       }
-      await withRetry(() => updateDoc(assetRef, updatePayload), { companyId, action: 'changeAssetStatus' });
+      await updateAsset(companyId, statusAsset.id, updatePayload);
       setAssets((prev) =>
         prev.map((a) => (a.id === statusAsset.id ? { ...a, ...updatePayload } : a)),
       );
@@ -1247,16 +1224,15 @@ export default function Assets() {
     setSaving(true);
     try {
       await Promise.all(
-        [...selectedIds].map((id) => {
-          const assetRef = doc(db, 'companies', companyId, 'assets', id);
-          return updateDoc(assetRef, {
+        [...selectedIds].map((id) =>
+          updateAsset(companyId, id, {
             status: newStatus,
             history: [
               ...((assets.find((a) => a.id === id)?.history) || []),
               { action: newStatus.toLowerCase().replace(/\s+/g, '_'), date: Timestamp.now(), notes: 'Bulk status change', performedBy: currentUser.email || '' },
             ],
-          });
-        }),
+          }),
+        ),
       );
       setAssets((prev) =>
         prev.map((a) => (selectedIds.has(a.id) ? { ...a, status: newStatus } : a)),
@@ -1339,10 +1315,10 @@ export default function Assets() {
         notes: maintenanceForm.description.trim(),
       };
       const newStatus = maintenanceForm.type === 'Repair' ? 'In Repair' : assetData.status || 'Available';
-      await withRetry(() => updateDoc(assetRef, {
+      await updateAsset(companyId, maintenanceAsset.id, {
         status: newStatus,
         history: [...(Array.isArray(assetData.history) ? assetData.history : []), entry],
-      }), { companyId, action: 'logMaintenance' });
+      });
       setAssets((prev) =>
         prev.map((a) =>
           a.id === maintenanceAsset.id

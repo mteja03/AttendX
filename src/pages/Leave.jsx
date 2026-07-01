@@ -5,16 +5,13 @@ import {
   doc,
   getDoc,
   getDocs,
-  addDoc,
   updateDoc,
-  query,
-  orderBy,
-  where,
   increment,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { fetchLeaveRequests, updateLeaveStatus, addLeaveRequest } from '../services/leaveService';
 import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
 import { useToast } from '../contexts/ToastContext';
@@ -257,17 +254,9 @@ export default function Leave() {
       setLoading(true);
       try {
         const calendarYear = new Date().getFullYear();
-        const yearStart = Timestamp.fromDate(new Date(calendarYear, 0, 1));
-        const yearEnd = Timestamp.fromDate(new Date(calendarYear, 11, 31, 23, 59, 59, 999));
-        const leavesQuery = query(
-          collection(db, 'companies', companyId, 'leave'),
-          where('startDate', '>=', yearStart),
-          where('startDate', '<=', yearEnd),
-          orderBy('startDate', 'desc'),
-        );
-        const [companySnap, leaveSnap, empSnap] = await Promise.all([
+        const [companySnap, leaveRows, empSnap] = await Promise.all([
           getDoc(doc(db, 'companies', companyId)),
-          getDocs(leavesQuery),
+          fetchLeaveRequests(companyId, { year: calendarYear }),
           getDocs(collection(db, 'companies', companyId, 'employees')),
         ]);
         if (companySnap.exists()) {
@@ -276,7 +265,7 @@ export default function Leave() {
           setLeaveTypes(types);
           setLeavePolicy(buildAllowancesMapFromCompany(data, types));
         }
-        setLeaveList(leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setLeaveList(leaveRows);
         setLoadedYears([calendarYear]);
         setEmployees(empSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => (e.status || 'Active') !== 'Inactive'));
       } catch {
@@ -425,16 +414,7 @@ export default function Leave() {
     if (y < 2000) return;
     setLoadingOlderYear(true);
     try {
-      const yearStart = Timestamp.fromDate(new Date(y, 0, 1));
-      const yearEnd = Timestamp.fromDate(new Date(y, 11, 31, 23, 59, 59, 999));
-      const q = query(
-        collection(db, 'companies', companyId, 'leave'),
-        where('startDate', '>=', yearStart),
-        where('startDate', '<=', yearEnd),
-        orderBy('startDate', 'desc'),
-      );
-      const snap = await getDocs(q);
-      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const rows = await fetchLeaveRequests(companyId, { year: y });
       setLeaveList((prev) => mergeLeaveListsById(prev, rows));
       setLoadedYears((prev) => [...prev, y]);
     } catch {
@@ -495,10 +475,7 @@ export default function Leave() {
   const handleApprove = async (leaveDoc) => {
     setActioningId(leaveDoc.id);
     try {
-      await withRetry(() => updateDoc(doc(db, 'companies', companyId, 'leave', leaveDoc.id), {
-        status: 'Approved',
-        decidedAt: serverTimestamp(),
-      }), { companyId, action: 'approveLeave' });
+      await updateLeaveStatus(companyId, leaveDoc.id, 'Approved');
       const empRef = doc(db, 'companies', companyId, 'employees', leaveDoc.employeeId);
       const code = incrementKeyForLeaveType(leaveDoc.leaveType, leaveTypes);
       const key = `leaveUsed.${code}`;
@@ -515,9 +492,9 @@ export default function Leave() {
   const handleReject = async (leaveDoc, reason = '') => {
     setActioningId(leaveDoc.id);
     try {
-      const update = { status: 'Rejected', decidedAt: serverTimestamp() };
-      if (reason.trim()) update.rejectReason = reason.trim();
-      await withRetry(() => updateDoc(doc(db, 'companies', companyId, 'leave', leaveDoc.id), update),
+      const rejectUpdate = { status: 'Rejected', updatedAt: serverTimestamp() };
+      if (reason.trim()) rejectUpdate.rejectReason = reason.trim();
+      await withRetry(() => updateDoc(doc(db, 'companies', companyId, 'leave', leaveDoc.id), rejectUpdate),
         { companyId, action: 'rejectLeave' });
       setLeaveList((prev) => prev.map((l) =>
         l.id === leaveDoc.id ? { ...l, status: 'Rejected', ...(reason.trim() ? { rejectReason: reason.trim() } : {}) } : l,
@@ -541,7 +518,7 @@ export default function Leave() {
       const daysCount = getDaysBetween(form.startDate, form.endDate);
       const startTs = Timestamp.fromDate(new Date(form.startDate));
       const endTs = Timestamp.fromDate(new Date(form.endDate));
-      await withRetry(() => addDoc(collection(db, 'companies', companyId, 'leave'), {
+      await addLeaveRequest(companyId, {
         employeeId: form.employeeId,
         employeeName: emp.fullName,
         empId: emp.empId || '',
@@ -552,9 +529,8 @@ export default function Leave() {
         days: daysCount,
         reason: form.reason?.trim() || '',
         status: 'Approved',
-        appliedAt: serverTimestamp(),
         decidedAt: serverTimestamp(),
-      }), { companyId, action: 'addLeave' });
+      });
       setLeaveList((prev) => [
         {
           id: `leave_${Date.now()}`,

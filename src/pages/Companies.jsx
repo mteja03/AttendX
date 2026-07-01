@@ -5,19 +5,18 @@ import {
   doc,
   getDocs,
   onSnapshot,
-  setDoc,
   updateDoc,
   deleteDoc,
   query,
   orderBy,
   limit,
-  serverTimestamp,
 } from 'firebase/firestore';
 import { ref as storageRef, deleteObject, listAll } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { updateCompanyCounts } from '../utils/updateCompanyCounts';
+import { addCompany, updateCompany } from '../services/companyService';
 
 const COLOR_PRESETS = [
   { name: 'Teal', value: '#1B6B6B' },
@@ -398,7 +397,7 @@ export default function Companies() {
     setSaving(true);
     try {
       if (editingCompany) {
-        await updateDoc(doc(db, 'companies', editingCompany.id), {
+        await updateCompany(editingCompany.id, {
           name: payload.name,
           initials: payload.initials,
           color: payload.color,
@@ -414,11 +413,7 @@ export default function Companies() {
         );
         success('Company updated');
       } else {
-        const ref = doc(collection(db, 'companies'));
-        await setDoc(ref, {
-          ...payload,
-          createdAt: serverTimestamp(),
-        });
+        await addCompany(payload);
         success('Company added');
         // onSnapshot listener will update companies list automatically
       }
@@ -435,7 +430,7 @@ export default function Companies() {
     if (!company) return;
     setDeactivateConfirm(null);
     try {
-      await updateDoc(doc(db, 'companies', company.id), { isActive: false });
+      await updateCompany(company.id, { isActive: false });
       success('Company deactivated');
     } catch {
       showError('Failed to deactivate');
@@ -444,7 +439,7 @@ export default function Companies() {
 
   const handleActivate = async (company) => {
     try {
-      await updateDoc(doc(db, 'companies', company.id), { isActive: true });
+      await updateCompany(company.id, { isActive: true });
       success('Company activated');
     } catch {
       showError('Failed to activate');
